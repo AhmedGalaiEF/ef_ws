@@ -106,6 +106,7 @@ class WakeUpController:
         self.phase_start_ = 0.0
         self.phase_index_ = 0
         self.phase_plan_ = []
+        self.phase_from_ = None
 
     def LowStateHandler(self, msg: LowState_):
         self.low_state = msg
@@ -191,6 +192,7 @@ class WakeUpController:
             base_q = [self.low_state.motor_state[i].q for i in range(G1_NUM_MOTOR)]
             self.build_plan(base_q)
             self.phase_start_ = self.time_
+            self.phase_from_ = np.array(base_q, dtype=float)
 
         self.time_ += self.control_dt_
 
@@ -200,13 +202,24 @@ class WakeUpController:
         if elapsed > phase_dur:
             self.phase_index_ = min(self.phase_index_ + 1, len(self.phase_plan_) - 1)
             self.phase_start_ = self.time_
+            self.phase_from_ = np.array(
+                [self.low_state.motor_state[i].q for i in range(G1_NUM_MOTOR)],
+                dtype=float,
+            )
             elapsed = 0.0
             phase_dur, phase_target = self.phase_plan_[self.phase_index_]
 
-        # Interpolate from current to target
-        alpha = np.clip(elapsed / phase_dur, 0.0, 1.0)
-        current_q = np.array([self.low_state.motor_state[i].q for i in range(G1_NUM_MOTOR)], dtype=float)
-        desired_q = current_q * (1.0 - alpha) + phase_target * alpha
+        # Smooth interpolation using tanh (similar to stand_go2 example).
+        # About 1.2s is a good rise time; scale based on phase duration.
+        rise = max(0.6, min(1.2, phase_dur * 0.8))
+        alpha = np.tanh(elapsed / rise)
+        alpha = float(np.clip(alpha, 0.0, 1.0))
+        if self.phase_from_ is None:
+            self.phase_from_ = np.array(
+                [self.low_state.motor_state[i].q for i in range(G1_NUM_MOTOR)],
+                dtype=float,
+            )
+        desired_q = self.phase_from_ * (1.0 - alpha) + phase_target * alpha
 
         self.low_cmd.mode_pr = Mode.PR
         self.low_cmd.mode_machine = self.mode_machine_

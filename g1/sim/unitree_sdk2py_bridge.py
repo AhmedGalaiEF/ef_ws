@@ -47,6 +47,39 @@ TOPIC_DEX3_RIGHT_STATE = "rt/dex3/right/state"
 MOTOR_SENSOR_NUM = 3
 NUM_MOTOR_IDL_GO = 20
 NUM_MOTOR_IDL_HG = 35
+NUM_MOTOR_G1_BODY = 29
+
+G1_BODY_ACTUATORS = [
+    "left_hip_pitch_joint",
+    "left_hip_roll_joint",
+    "left_hip_yaw_joint",
+    "left_knee_joint",
+    "left_ankle_pitch_joint",
+    "left_ankle_roll_joint",
+    "right_hip_pitch_joint",
+    "right_hip_roll_joint",
+    "right_hip_yaw_joint",
+    "right_knee_joint",
+    "right_ankle_pitch_joint",
+    "right_ankle_roll_joint",
+    "waist_yaw_joint",
+    "waist_roll_joint",
+    "waist_pitch_joint",
+    "left_shoulder_pitch_joint",
+    "left_shoulder_roll_joint",
+    "left_shoulder_yaw_joint",
+    "left_elbow_joint",
+    "left_wrist_roll_joint",
+    "left_wrist_pitch_joint",
+    "left_wrist_yaw_joint",
+    "right_shoulder_pitch_joint",
+    "right_shoulder_roll_joint",
+    "right_shoulder_yaw_joint",
+    "right_elbow_joint",
+    "right_wrist_roll_joint",
+    "right_wrist_pitch_joint",
+    "right_wrist_yaw_joint",
+]
 
 class UnitreeSdk2Bridge:
 
@@ -56,10 +89,15 @@ class UnitreeSdk2Bridge:
 
         self.num_motor = self.mj_model.nu
         self.dim_motor_sensor = MOTOR_SENSOR_NUM * self.num_motor
-        self.have_imu = False
-        self.have_frame_sensor = False
+        self.have_imu_ = False
+        self.have_frame_sensor_ = False
         self.dt = self.mj_model.opt.timestep
         self.idl_type = (self.num_motor > NUM_MOTOR_IDL_GO) # 0: unitree_go, 1: unitree_hg
+
+        self._body_actuator_ids = []
+        self._body_joint_qposadr = []
+        self._body_joint_dofadr = []
+        self._use_body_mapping = False
 
         self.joystick = None
         self._sport_lock = threading.Lock()
@@ -77,6 +115,23 @@ class UnitreeSdk2Bridge:
                 self.have_imu_ = True
             if name == "frame_pos":
                 self.have_frame_sensor_ = True
+
+        # G1 models with dex hands include extra actuators. Build a stable
+        # mapping for the 29 body actuators so lowcmd is compatible.
+        if config.ROBOT == "g1":
+            try:
+                for name in G1_BODY_ACTUATORS:
+                    act_id = self.mj_model.actuator(name).id
+                    jid = self.mj_model.joint(name).id
+                    self._body_actuator_ids.append(act_id)
+                    self._body_joint_qposadr.append(int(self.mj_model.jnt_qposadr[jid]))
+                    self._body_joint_dofadr.append(int(self.mj_model.jnt_dofadr[jid]))
+                if len(self._body_actuator_ids) == NUM_MOTOR_G1_BODY:
+                    self._use_body_mapping = True
+                    self.num_motor = NUM_MOTOR_G1_BODY
+                    self.dim_motor_sensor = MOTOR_SENSOR_NUM * self.num_motor
+            except Exception:
+                self._use_body_mapping = False
 
         # Dex3 hand support (sim only, G1 models with hand joints).
         self.have_hand_ = False
@@ -212,17 +267,28 @@ class UnitreeSdk2Bridge:
 
     def LowCmdHandler(self, msg: LowCmd_):
         if self.mj_data != None:
-            for i in range(self.num_motor):
-                self.mj_data.ctrl[i] = (
-                    msg.motor_cmd[i].tau
-                    + msg.motor_cmd[i].kp
-                    * (msg.motor_cmd[i].q - self.mj_data.sensordata[i])
-                    + msg.motor_cmd[i].kd
-                    * (
-                        msg.motor_cmd[i].dq
-                        - self.mj_data.sensordata[i + self.num_motor]
+            if self._use_body_mapping:
+                for i in range(self.num_motor):
+                    act_id = self._body_actuator_ids[i]
+                    qpos = self.mj_data.qpos[self._body_joint_qposadr[i]]
+                    qvel = self.mj_data.qvel[self._body_joint_dofadr[i]]
+                    self.mj_data.ctrl[act_id] = (
+                        msg.motor_cmd[i].tau
+                        + msg.motor_cmd[i].kp * (msg.motor_cmd[i].q - qpos)
+                        + msg.motor_cmd[i].kd * (msg.motor_cmd[i].dq - qvel)
                     )
-                )
+            else:
+                for i in range(self.num_motor):
+                    self.mj_data.ctrl[i] = (
+                        msg.motor_cmd[i].tau
+                        + msg.motor_cmd[i].kp
+                        * (msg.motor_cmd[i].q - self.mj_data.sensordata[i])
+                        + msg.motor_cmd[i].kd
+                        * (
+                            msg.motor_cmd[i].dq
+                            - self.mj_data.sensordata[i + self.num_motor]
+                        )
+                    )
 
     def ApplySportCommand(self):
         if self.mj_data is None:
@@ -301,14 +367,31 @@ class UnitreeSdk2Bridge:
 
     def PublishLowState(self):
         if self.mj_data != None:
-            for i in range(self.num_motor):
-                self.low_state.motor_state[i].q = self.mj_data.sensordata[i]
-                self.low_state.motor_state[i].dq = self.mj_data.sensordata[
-                    i + self.num_motor
-                ]
-                self.low_state.motor_state[i].tau_est = self.mj_data.sensordata[
-                    i + 2 * self.num_motor
-                ]
+            if self._use_body_mapping:
+                for i in range(self.num_motor):
+                    qpos = self.mj_data.qpos[self._body_joint_qposadr[i]]
+                    qvel = self.mj_data.qvel[self._body_joint_dofadr[i]]
+                    act_id = self._body_actuator_ids[i]
+                    self.low_state.motor_state[i].q = float(qpos)
+                    self.low_state.motor_state[i].dq = float(qvel)
+                    self.low_state.motor_state[i].tau_est = float(
+                        self.mj_data.actuator_force[act_id]
+                    )
+            else:
+                if self.mj_data.sensordata.shape[0] >= 3 * self.num_motor:
+                    for i in range(self.num_motor):
+                        self.low_state.motor_state[i].q = self.mj_data.sensordata[i]
+                        self.low_state.motor_state[i].dq = self.mj_data.sensordata[
+                            i + self.num_motor
+                        ]
+                        self.low_state.motor_state[i].tau_est = self.mj_data.sensordata[
+                            i + 2 * self.num_motor
+                        ]
+                else:
+                    for i in range(self.num_motor):
+                        self.low_state.motor_state[i].q = 0.0
+                        self.low_state.motor_state[i].dq = 0.0
+                        self.low_state.motor_state[i].tau_est = 0.0
 
             if self.have_frame_sensor_:
 
@@ -402,25 +485,34 @@ class UnitreeSdk2Bridge:
     def PublishHighState(self):
 
         if self.mj_data != None:
-            self.high_state.position[0] = self.mj_data.sensordata[
-                self.dim_motor_sensor + 10
-            ]
-            self.high_state.position[1] = self.mj_data.sensordata[
-                self.dim_motor_sensor + 11
-            ]
-            self.high_state.position[2] = self.mj_data.sensordata[
-                self.dim_motor_sensor + 12
-            ]
+            if self.mj_data.sensordata.shape[0] >= self.dim_motor_sensor + 16:
+                self.high_state.position[0] = self.mj_data.sensordata[
+                    self.dim_motor_sensor + 10
+                ]
+                self.high_state.position[1] = self.mj_data.sensordata[
+                    self.dim_motor_sensor + 11
+                ]
+                self.high_state.position[2] = self.mj_data.sensordata[
+                    self.dim_motor_sensor + 12
+                ]
 
-            self.high_state.velocity[0] = self.mj_data.sensordata[
-                self.dim_motor_sensor + 13
-            ]
-            self.high_state.velocity[1] = self.mj_data.sensordata[
-                self.dim_motor_sensor + 14
-            ]
-            self.high_state.velocity[2] = self.mj_data.sensordata[
-                self.dim_motor_sensor + 15
-            ]
+                self.high_state.velocity[0] = self.mj_data.sensordata[
+                    self.dim_motor_sensor + 13
+                ]
+                self.high_state.velocity[1] = self.mj_data.sensordata[
+                    self.dim_motor_sensor + 14
+                ]
+                self.high_state.velocity[2] = self.mj_data.sensordata[
+                    self.dim_motor_sensor + 15
+                ]
+            elif self.mj_model.nq >= 7 and self.mj_model.nv >= 6:
+                # Fallback for models without the expected sensor block.
+                self.high_state.position[0] = self.mj_data.qpos[0]
+                self.high_state.position[1] = self.mj_data.qpos[1]
+                self.high_state.position[2] = self.mj_data.qpos[2]
+                self.high_state.velocity[0] = self.mj_data.qvel[3]
+                self.high_state.velocity[1] = self.mj_data.qvel[4]
+                self.high_state.velocity[2] = self.mj_data.qvel[5]
 
         self.high_state_puber.Write(self.high_state)
 
@@ -632,7 +724,11 @@ class ElasticBand:
         return f
 
     def MujuocoKeyCallback(self, key):
-        glfw = mujoco.glfw.glfw
+        try:
+            glfw = mujoco.glfw.glfw
+        except Exception:
+            # Fallback for MuJoCo builds without the glfw wrapper.
+            import glfw
         if key == glfw.KEY_7:
             self.length -= 0.1
         if key == glfw.KEY_8:

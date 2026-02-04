@@ -9,8 +9,8 @@ from unitree_sdk2py.core.channel import (
     ChannelSubscriber,
     ChannelPublisher,
 )
-from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_, LowCmd_
-from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
+from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_, LowCmd_, HandCmd_, HandState_
+from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_, unitree_hg_msg_dds__HandCmd_
 from unitree_sdk2py.utils.crc import CRC
 from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
 
@@ -20,15 +20,23 @@ INTERFACE = "enp2s0"
 
 TOPIC_LOWSTATE = "rt/lowstate"
 TOPIC_LOWCMD = "rt/lowcmd"
+TOPIC_DEX3_LEFT_CMD = "rt/dex3/left/cmd"
+TOPIC_DEX3_RIGHT_CMD = "rt/dex3/right/cmd"
+TOPIC_DEX3_LEFT_STATE = "rt/dex3/left/state"
+TOPIC_DEX3_RIGHT_STATE = "rt/dex3/right/state"
 
 NUM_MOTOR = 29
 
 state_lock = threading.Lock()
 last_lowstate = None
+last_left_hand = None
+last_right_hand = None
 mode_machine = 0
 mode_pr = 0
 
 low_cmd_pub = None
+hand_left_pub = None
+hand_right_pub = None
 low_level_enabled = False
 low_q = [0.0] * NUM_MOTOR
 low_kp = [20.0] * NUM_MOTOR
@@ -44,6 +52,16 @@ def lowstate_cb(msg: LowState_):
         last_lowstate = msg
         mode_machine = int(msg.mode_machine)
         mode_pr = int(msg.mode_pr)
+
+
+def hand_left_cb(msg: HandState_):
+    global last_left_hand
+    last_left_hand = msg
+
+
+def hand_right_cb(msg: HandState_):
+    global last_right_hand
+    last_right_hand = msg
 
 
 def serialize_lowstate(msg: LowState_):
@@ -94,6 +112,23 @@ def serialize_lowstate(msg: LowState_):
     }
 
 
+def serialize_handstate(msg: HandState_):
+    if msg is None:
+        return None
+    motors = []
+    for i, m in enumerate(msg.motor_state):
+        motors.append(
+            {
+                "id": i,
+                "q": float(m.q),
+                "dq": float(m.dq),
+                "tau_est": float(m.tau_est),
+                "temp": int(m.temperature[0]),
+            }
+        )
+    return {"motors": motors, "power_v": float(msg.power_v), "power_a": float(msg.power_a)}
+
+
 def set_low_level_enabled(enable: bool):
     global low_level_enabled
     low_level_enabled = enable
@@ -115,6 +150,22 @@ def low_level_loop():
             cmd.crc = crc.Crc(cmd)
             low_cmd_pub.Write(cmd)
         time.sleep(0.02)
+
+
+def hand_cmd(side, q, kp=1.5, kd=0.1):
+    msg = unitree_hg_msg_dds__HandCmd_()
+    for i in range(7):
+        cmd = msg.motor_cmd[i]
+        cmd.mode = 1
+        cmd.tau = 0.0
+        cmd.q = float(q)
+        cmd.dq = 0.0
+        cmd.kp = float(kp)
+        cmd.kd = float(kd)
+    if side in ("left", "both") and hand_left_pub is not None:
+        hand_left_pub.Write(msg)
+    if side in ("right", "both") and hand_right_pub is not None:
+        hand_right_pub.Write(msg)
 
 
 class UiServer(BaseHTTPRequestHandler):
@@ -147,6 +198,22 @@ class UiServer(BaseHTTPRequestHandler):
                     },
                 }
             self._send_json(data)
+            return
+        if path == "/api/dex3/state":
+            data = {
+                "left": serialize_handstate(last_left_hand),
+                "right": serialize_handstate(last_right_hand),
+            }
+            self._send_json(data)
+            return
+        if path == "/api/dex3/cmd":
+            params = urllib.parse.parse_qs(parsed.query)
+            side = params.get("side", ["both"])[0]
+            q = float(params.get("q", ["0.0"])[0])
+            kp = float(params.get("kp", ["1.5"])[0])
+            kd = float(params.get("kd", ["0.1"])[0])
+            hand_cmd(side, q, kp=kp, kd=kd)
+            self._send_json({"ok": True})
             return
         if path == "/api/cmd":
             params = urllib.parse.parse_qs(parsed.query)
@@ -564,8 +631,18 @@ if __name__ == "__main__":
     sub = ChannelSubscriber(TOPIC_LOWSTATE, LowState_)
     sub.Init(lowstate_cb, 10)
 
+    hand_left_sub = ChannelSubscriber(TOPIC_DEX3_LEFT_STATE, HandState_)
+    hand_left_sub.Init(hand_left_cb, 10)
+    hand_right_sub = ChannelSubscriber(TOPIC_DEX3_RIGHT_STATE, HandState_)
+    hand_right_sub.Init(hand_right_cb, 10)
+
     low_cmd_pub = ChannelPublisher(TOPIC_LOWCMD, LowCmd_)
     low_cmd_pub.Init()
+
+    hand_left_pub = ChannelPublisher(TOPIC_DEX3_LEFT_CMD, HandCmd_)
+    hand_left_pub.Init()
+    hand_right_pub = ChannelPublisher(TOPIC_DEX3_RIGHT_CMD, HandCmd_)
+    hand_right_pub.Init()
 
     loco_client = LocoClient()
     loco_client.SetTimeout(5.0)
