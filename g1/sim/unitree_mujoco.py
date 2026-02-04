@@ -50,6 +50,19 @@ if config.ENABLE_ELASTIC_BAND:
 else:
     viewer = mujoco.viewer.launch_passive(mj_model, mj_data)
 
+def _disable_opengl_effects(viewer_handle):
+    # Turn off costly visual effects by default.
+    try:
+        viewer_handle.opt.flags[mujoco.mjtVisFlag.mjVIS_SHADOW] = False
+        viewer_handle.opt.flags[mujoco.mjtVisFlag.mjVIS_REFLECTION] = False
+        viewer_handle.opt.flags[mujoco.mjtVisFlag.mjVIS_HAZE] = False
+        viewer_handle.opt.flags[mujoco.mjtVisFlag.mjVIS_SKYBOX] = False
+    except Exception:
+        # If flags are unavailable, fail silently to avoid breaking the viewer.
+        pass
+
+_disable_opengl_effects(viewer)
+
 mj_model.opt.timestep = config.SIMULATE_DT
 num_motor_ = mj_model.nu
 dim_motor_sensor_ = 3 * num_motor_
