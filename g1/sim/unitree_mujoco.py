@@ -93,6 +93,7 @@ def SimulationThread():
         locker.acquire()
 
         unitree.ApplySportCommand()
+        unitree.ApplyHandCommand()
 
         if config.ENABLE_ELASTIC_BAND:
             if elastic_band.enable:

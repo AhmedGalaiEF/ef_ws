@@ -27,6 +27,9 @@ if config.ROBOT=="g1":
     from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_
     from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
     from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowState_ as LowState_default
+    from unitree_sdk2py.idl.unitree_hg.msg.dds_ import HandCmd_
+    from unitree_sdk2py.idl.unitree_hg.msg.dds_ import HandState_
+    from unitree_sdk2py.idl.default import unitree_hg_msg_dds__HandState_ as HandState_default
 else:
     from unitree_sdk2py.idl.unitree_go.msg.dds_ import LowCmd_
     from unitree_sdk2py.idl.unitree_go.msg.dds_ import LowState_
@@ -36,6 +39,10 @@ TOPIC_LOWCMD = "rt/lowcmd"
 TOPIC_LOWSTATE = "rt/lowstate"
 TOPIC_HIGHSTATE = "rt/sportmodestate"
 TOPIC_WIRELESS_CONTROLLER = "rt/wirelesscontroller"
+TOPIC_DEX3_LEFT_CMD = "rt/dex3/left/cmd"
+TOPIC_DEX3_RIGHT_CMD = "rt/dex3/right/cmd"
+TOPIC_DEX3_LEFT_STATE = "rt/dex3/left/state"
+TOPIC_DEX3_RIGHT_STATE = "rt/dex3/right/state"
 
 MOTOR_SENSOR_NUM = 3
 NUM_MOTOR_IDL_GO = 20
@@ -71,6 +78,14 @@ class UnitreeSdk2Bridge:
             if name == "frame_pos":
                 self.have_frame_sensor_ = True
 
+        # Dex3 hand support (sim only, G1 models with hand joints).
+        self.have_hand_ = False
+        self._hand_joint_names = {}
+        self._hand_actuator_ids = {}
+        self._hand_qposadr = {}
+        self._hand_dofadr = {}
+        self._hand_cmd = {"left": None, "right": None}
+
         # Unitree sdk2 message
         self.low_state = LowState_default()
         self.low_state_puber = ChannelPublisher(TOPIC_LOWSTATE, LowState_)
@@ -103,6 +118,9 @@ class UnitreeSdk2Bridge:
         self.low_cmd_suber = ChannelSubscriber(TOPIC_LOWCMD, LowCmd_)
         self.low_cmd_suber.Init(self.LowCmdHandler, 10)
 
+        if config.ROBOT == "g1":
+            self._InitDex3Hand()
+
         # Sport RPC server (minimal support for Move/StopMove in sim).
         self.sport_server = _SportServer(self)
         self.sport_server.Init()
@@ -127,6 +145,70 @@ class UnitreeSdk2Bridge:
             "down": 14,
             "left": 15,
         }
+
+    def _InitDex3Hand(self):
+        left = [
+            "left_hand_thumb_0_joint",
+            "left_hand_thumb_1_joint",
+            "left_hand_thumb_2_joint",
+            "left_hand_middle_0_joint",
+            "left_hand_middle_1_joint",
+            "left_hand_index_0_joint",
+            "left_hand_index_1_joint",
+        ]
+        right = [
+            "right_hand_thumb_0_joint",
+            "right_hand_thumb_1_joint",
+            "right_hand_thumb_2_joint",
+            "right_hand_middle_0_joint",
+            "right_hand_middle_1_joint",
+            "right_hand_index_0_joint",
+            "right_hand_index_1_joint",
+        ]
+
+        for side, names in (("left", left), ("right", right)):
+            actuator_ids = []
+            qposadr = []
+            dofadr = []
+            try:
+                for name in names:
+                    jid = self.mj_model.joint(name).id
+                    act_id = self.mj_model.actuator(name).id
+                    actuator_ids.append(act_id)
+                    qposadr.append(int(self.mj_model.jnt_qposadr[jid]))
+                    dofadr.append(int(self.mj_model.jnt_dofadr[jid]))
+            except Exception:
+                return
+
+            self._hand_joint_names[side] = names
+            self._hand_actuator_ids[side] = actuator_ids
+            self._hand_qposadr[side] = qposadr
+            self._hand_dofadr[side] = dofadr
+
+        self.have_hand_ = True
+
+        self._hand_left_state = HandState_default()
+        self._hand_right_state = HandState_default()
+        self._hand_left_puber = ChannelPublisher(TOPIC_DEX3_LEFT_STATE, HandState_)
+        self._hand_right_puber = ChannelPublisher(TOPIC_DEX3_RIGHT_STATE, HandState_)
+        self._hand_left_puber.Init()
+        self._hand_right_puber.Init()
+
+        self._hand_left_suber = ChannelSubscriber(TOPIC_DEX3_LEFT_CMD, HandCmd_)
+        self._hand_right_suber = ChannelSubscriber(TOPIC_DEX3_RIGHT_CMD, HandCmd_)
+        self._hand_left_suber.Init(self.LeftHandCmdHandler, 10)
+        self._hand_right_suber.Init(self.RightHandCmdHandler, 10)
+
+        self.HandStateThread = RecurrentThread(
+            interval=self.dt, target=self.PublishHandState, name="sim_handstate"
+        )
+        self.HandStateThread.Start()
+
+    def LeftHandCmdHandler(self, msg: HandCmd_):
+        self._hand_cmd["left"] = msg
+
+    def RightHandCmdHandler(self, msg: HandCmd_):
+        self._hand_cmd["right"] = msg
 
     def LowCmdHandler(self, msg: LowCmd_):
         if self.mj_data != None:
@@ -162,6 +244,46 @@ class UnitreeSdk2Bridge:
         self.mj_data.qvel[3] = vx
         self.mj_data.qvel[4] = vy
         self.mj_data.qvel[5] = 0.0
+
+    def ApplyHandCommand(self):
+        if not self.have_hand_:
+            return
+
+        for side in ("left", "right"):
+            msg = self._hand_cmd.get(side)
+            if msg is None:
+                continue
+            actuator_ids = self._hand_actuator_ids[side]
+            qposadr = self._hand_qposadr[side]
+            dofadr = self._hand_dofadr[side]
+            for i in range(7):
+                cmd = msg.motor_cmd[i]
+                q = self.mj_data.qpos[qposadr[i]]
+                dq = self.mj_data.qvel[dofadr[i]]
+                tau = cmd.tau + cmd.kp * (cmd.q - q) + cmd.kd * (cmd.dq - dq)
+                act_id = actuator_ids[i]
+                fr = self.mj_model.actuator_forcerange[act_id]
+                if fr[0] < fr[1]:
+                    tau = np.clip(tau, fr[0], fr[1])
+                self.mj_data.ctrl[act_id] = tau
+
+    def PublishHandState(self):
+        if not self.have_hand_:
+            return
+
+        for side, state in (("left", self._hand_left_state), ("right", self._hand_right_state)):
+            actuator_ids = self._hand_actuator_ids[side]
+            qposadr = self._hand_qposadr[side]
+            dofadr = self._hand_dofadr[side]
+            for i in range(7):
+                motor = state.motor_state[i]
+                motor.q = float(self.mj_data.qpos[qposadr[i]])
+                motor.dq = float(self.mj_data.qvel[dofadr[i]])
+                motor.tau_est = float(self.mj_data.actuator_force[actuator_ids[i]])
+            if side == "left":
+                self._hand_left_puber.Write(state)
+            else:
+                self._hand_right_puber.Write(state)
 
     def _set_sport_cmd(self, vx, vy, vyaw, active=True):
         with self._sport_lock:
