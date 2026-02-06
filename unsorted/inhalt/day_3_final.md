@@ -15,7 +15,7 @@ Beginner focus:
 ---
 
 ## Complex motion
-![G1 component overview](https://www.docs.quadruped.de/projects/g1/html/_images/g1_component_overview.png)
+<video controls src="https://www.unitree.com/images/7e51cf20dc6145cf99ae0d0b6ea4d2c5.mp4"></video>
 
 **Hardcoded pick and place (known pose)**
 ```python

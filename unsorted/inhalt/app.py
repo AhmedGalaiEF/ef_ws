@@ -18,7 +18,16 @@ DAY_FILES = {
 
 def load_md(path: Path) -> str:
     try:
-        return path.read_text(encoding="utf-8")
+        content = path.read_text(encoding="utf-8")
+        # Render direct MP4 links as embedded videos.
+        lines = []
+        for line in content.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("http") and stripped.endswith(".mp4"):
+                lines.append(f'<video controls src="{stripped}"></video>')
+            else:
+                lines.append(line)
+        return "\n".join(lines)
     except FileNotFoundError:
         return f"# Missing file\n\nCould not find `{path.name}`."
 
@@ -35,7 +44,11 @@ for day, path in DAY_FILES.items():
             tab_id=day.lower().replace(" ", "-"),
             children=dbc.Card(
                 dbc.CardBody(
-                    dcc.Markdown(load_md(path), link_target="_blank"),
+                    dcc.Markdown(
+                        load_md(path),
+                        link_target="_blank",
+                        dangerously_allow_html=True,
+                    ),
                 ),
                 class_name="shadow-sm",
             ),
