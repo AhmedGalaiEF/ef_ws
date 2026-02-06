@@ -129,6 +129,16 @@ Beginner steps:
 - Identify your network interface name (e.g., `enp3s0`) before running SDK examples.
 - Start with small test scripts first, then expand.
 
+### AI CLI Agents (Codex and Friends)
+![Codex CLI](./codex.jpg)
+
+Use AI CLI agents to speed up repetitive work: generate small scripts, explain SDK snippets, and draft troubleshooting steps.
+
+Beginner tips:
+- Ask for tiny, specific tasks (e.g., "write a 3-second walk command").
+- Verify the output before running it on the robot.
+- Keep a human in the loop for safety checks and parameter review.
+
 ---
 
 ## SDK Basics
