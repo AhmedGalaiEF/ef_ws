@@ -8,6 +8,18 @@
 - Course design: Each day builds from simple, safe commands to more advanced behaviors so new learners can program the G1 with confidence.
 - What you will do by the end of Day 1: connect to the robot, send a basic motion command, and understand the safety modes.
 
+### Technical Specifications (Overview)
+![G1 overview run](https://docs.quadruped.de/projects/g1/html/_images/g1_run.png)
+
+**Body and Dimensions**
+
+| Item | Value |
+| --- | --- |
+| Weight | 35 kg |
+| Height | 1270 mm |
+| Total Degrees of Freedom | Up to 43 |
+| Max Joint Torque | 120 N.m |
+
 **Course Schedule**
 - 08:00-09:00 Welcome and setup
 - 09:00-12:00 Morning sessions (Intro, G1 Basics)
@@ -59,6 +71,10 @@ Beginner notes:
 | LiDAR | Mapping and navigation | MID-360 supported |
 | Depth camera | Perception | RealSense D435i supported |
 
+![G1 sensor overview 1](https://doc-cdn.unitree.com/static/2024/10/12/b7aab82da80940faa773f213baf13e32_13364x6401.png)
+![G1 sensor overview 2](https://doc-cdn.unitree.com/static/2024/7/30/4afc81d7c48c452aaa4fc078f90a859f_627x206.png)
+![G1 sensor overview 3](https://doc-cdn.unitree.com/static/2024/7/30/31b7d70c4ec1463a8143af70c43f33b9_592x897.png)
+
 Beginner notes:
 - IMU is the "balance sense"; LiDAR and camera are for mapping and perception.
 - For Day 1, you do not need to process sensor data yet; we only verify they are detected.
@@ -108,12 +124,16 @@ Beginner notes:
 - Practice entering and exiting debug mode before running scripts.
 - Keep one person focused on the controller while another runs code.
 
+Controller documentation: `https://marketing.unitree.com/article/en/G1/Remote_Control.html`
+
 ### Unitree App
 ![Unitree app overview](https://marketing.unitree.com/article/en/G1/Remote_Control.html)
 
 Beginner notes:
 - The app is used for quick checks (camera preview, status, battery).
 - We use the app for verification, not for programming.
+
+App documentation: `https://www.unitree.com/app/g1`
 
 ---
 
