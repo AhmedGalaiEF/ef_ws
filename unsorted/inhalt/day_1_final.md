@@ -139,7 +139,7 @@ App documentation: `https://www.unitree.com/app/g1`
 
 ## Workspace Setup
 - Ubuntu 24.04: Standard OS for labs and SDK tools.
-- Unitree repos: `unitree_sdk2_python`, `unitree_sdk2`, `unitree_mujoco`, `unitree_ros`.
+- Unitree repos: `unitree_sdk2_python`, `unitree_sdk2`, `unitree_mujoco`, `unitree_ros`, `https://github.com/ahmedgalaief/ef_ws.git`.
 - CycloneDDS setup: Configure DDS for reliable pub/sub on the LAN.
 - Python environment: Create a dedicated venv or conda env for SDKs.
 - AI CLIs: Use `codex`, `claude code`, `gemini cli` for scripting support.
