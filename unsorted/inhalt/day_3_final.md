@@ -14,6 +14,24 @@ Beginner focus:
 
 ---
 
+## Schedule (Tag 3 – Mi 18.02.2026)
+- 08.00 Uhr Crew
+- 08:30 Einfinden der Teilnehmer
+- 09:00 Schulungsblock 1
+- 10:30 Kaffee- und Teepause
+- 10:45 Schulungsblock 2
+- 12:00 Mittagessen
+- 13:00 Schulungsblock 3
+- 14:30 Kaffee- und Teepause mit Snacks
+- 15:00 Schulungsblock 4
+- 17:00 Ende Tag 3
+- 17:00 – 17:30 Podcast / Testimonials
+- 17:30 – 17:45 Puffer
+- 17:45 – 18:15 Tages‑Recap
+- 18:15 – 18:30 Tagesabschluss
+
+---
+
 ## Complex motion
 [https://www.unitree.com/images/7e51cf20dc6145cf99ae0d0b6ea4d2c5.mp4](https://www.unitree.com/images/7e51cf20dc6145cf99ae0d0b6ea4d2c5.mp4)
 
@@ -198,4 +216,13 @@ Beginner notes:
 
 Beginner notes:
 - Place one or two obstacles first, then increase complexity.
-- If avoidance oscillates, slow down and increase obstacle clearance.
+
+---
+
+## Implementation details (from repo scripts)
+- `g1/scripts/obstacle_avoidance/navigate.py` is the orchestration entry point. It initializes DDS, starts `LocoClient`, spins up `ObstacleDetector`, creates or loads an `OccupancyGrid`, then repeatedly plans (A*), smooths, and executes waypoints. It replans when `front_blocked()` is true or when a waypoint times out.
+- `g1/scripts/obstacle_avoidance/obstacle_detection.py` subscribes to `rt/sportmodestate` and reads `range_obstacle[4]` plus `imu_state.rpy` to compute pose and obstacle directions (front, right, rear, left). It exposes thread-safe getters and a stale-data check.
+- `g1/scripts/obstacle_avoidance/create_map.py` implements a 2D grid with world-to-grid conversion, obstacle marking from range data, and inflation (via binary dilation) for safe planning margins.
+- `g1/scripts/obstacle_avoidance/path_planner.py` runs A* on the inflated grid, then smooths the path using line-of-sight checks and converts it into world-coordinate waypoints spaced by `--spacing` (default 0.5 m).
+- `g1/scripts/obstacle_avoidance/locomotion.py` provides a proportional controller: turn-in-place until heading error is below `yaw_tolerance`, then move forward with bounded `vx` and `vyaw`. It accepts a `check_obstacle` callback so the planner can abort and replan cleanly.
+- `g1/scripts/obstacle_avoidance/map_viewer.py` renders a live OpenCV map (optional `--viz`) showing inflated cells, planned path, waypoints, and sensor rays for debug sessions.

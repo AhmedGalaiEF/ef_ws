@@ -20,11 +20,20 @@
 | Total Degrees of Freedom | Up to 43 |
 | Max Joint Torque | 120 N.m |
 
-**Course Schedule**
-- 08:00-09:00 Welcome and setup
-- 09:00-12:00 Morning sessions (Intro, G1 Basics)
-- 12:00-13:00 Lunch break
-- 13:00-17:00 Afternoon sessions (Workspace Setup, SDK Basics)
+**Course Schedule (Tag 1 – Mo 16.02.2026)**
+- 07:30 – 09:30 Aufbau / Technik
+- 09:30 Doors open Registrierung
+- 10:00 – 11:30 Schulungsblock
+- 11:30 – 11:45 Pause
+- 11:45 – 13:00 Schulungsblock
+- 13:00 – 14:00 Mittagessen
+- 14:00 – 15:30 Schulungsblock
+- 15:30 – 15:45 Pause
+- 15:45 – 17:00 Schulungsblock
+- 17:00 – 17:30 Podcast / Testimonials
+- 17:30 – 17:45 Puffer
+- 17:45 – 18:15 Tages‑Recap
+- 18:15 – 18:30 Tagesabschluss
 
 **Requirements (Laptop)**
 - RJ45 (Ethernet) or a docking station with RJ45
@@ -217,3 +226,11 @@ msc.SelectMode("stand");
 // ...
 msc.ReleaseMode();
 ```
+
+---
+
+## Implementation details (from repo scripts)
+- `g1/scripts/safety/hanger_boot_sequence.py` implements a repeatable boot path from hanger to balanced stand. It calls `ChannelFactoryInitialize(0, iface)`, creates a `LocoClient`, then sequences `Damp` → `SetFsmId(4)` → `SetStandHeight` sweep until `FSM mode == 0` (feet loaded) → `BalanceStand` → `Start`. If the robot is already in FSM 200 with loaded feet, it returns early to avoid re-running the sequence.
+- The same script polls `ROBOT_API_ID_LOCO_GET_FSM_ID` and `ROBOT_API_ID_LOCO_GET_FSM_MODE` to confirm the current state and to decide whether another height sweep is needed.
+- `g1/scripts/safety/keyboard_controller.py` provides a minimal teleop loop with `pynput` for key-hold detection and sends `Move(vx, vy, omega, continous_move=True)` at 10 Hz. Key mapping is W/S for forward/back, A/D for yaw, Q/E for lateral, Space for stop, `Z` for `Damp`, and `Esc` for `StopMove` + `ZeroTorque`.
+- `g1/scripts/unsorted/g1_loco_client_example.py` is the Day 1 interactive test harness. It initializes DDS, then lets you trigger actions like `Damp`, `Move`, `WaveHand`, `ZeroTorque`, and posture changes via a simple CLI menu.
