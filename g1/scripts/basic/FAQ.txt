@@ -1,0 +1,100 @@
+G1 High-Level Gait Measurement - FAQ
+===================================
+
+What is this script for?
+It measures how far the G1 travels during high-level gait and estimates step
+count from foot contact signals. It also reports displacement and gait activity.
+
+Which script does this FAQ cover?
+`g1/scripts/measurements/g1_hl_gait_measure.py`
+
+How does it measure distance?
+It subscribes to `rt/sportmodestate` and integrates changes in the reported
+`position` to compute path length and displacement.
+
+How are steps counted?
+If `foot_force` is present in the `SportModeState_` message, steps are counted
+on rising edges (contact transitions) for each foot. The total step count is
+the sum of those transitions across all feet.
+
+What if `foot_force` is missing?
+The script falls back to an estimated step count using:
+  estimated_steps = path_length / stride_length
+You can set `--stride-m` to match your expected gait.
+
+Does it command the robot to walk?
+By default, yes. It sends velocity commands at `--cmd-hz` using `LocoClient`.
+Use `--no-command` if the robot is already walking or you only want to measure.
+
+What gait does it use?
+It does not change the gait mode itself. It just sends high-level velocity
+commands (or not, if `--no-command`). Gait type is reported if the state message
+includes `gait_type`.
+
+How do I set the network interface?
+Use `--iface`, e.g.:
+  python3 g1/scripts/measurements/g1_hl_gait_measure.py --iface enp1s0
+
+How do I log a CSV?
+Pass `--csv` with a file path:
+  --csv /tmp/g1_gait_log.csv
+The CSV includes time, position, gait_type, total_dist, step_total, and foot_force.
+
+How do I tune the step detection threshold?
+Use `--force-threshold`. If step counts are too low, lower the threshold. If
+counts are noisy or too high, increase it.
+
+What if the script prints "No position source"?
+That means `rt/sportmodestate` is not delivering a `position` field. Confirm the
+SDK is running and the DDS network interface is correct.
+
+Is this safe to run?
+It uses the same high-level velocity commands as other G1 examples. Ensure the
+area is clear and the robot is stable before commanding movement.
+
+Can I measure without moving?
+Yes. Use `--no-command` and start/stop measurement while the robot is walking.
+
+How do I change walking speed and duration?
+Use `--vx` and `--duration`, for example:
+  --vx 0.4 --duration 15
+
+Where do I change lateral or turning motion?
+Use `--vy` (lateral) and `--vyaw` (yaw rate). Set them to 0 for straight walking.
+
+What should I do if `unitree_sdk2py` is not installed?
+Install it in editable mode as described in the error message:
+  pip install -e <path-to-unitree_sdk2_python>
+
+-----------------------------------
+
+G1 High-Level Motion Sequence - FAQ
+===================================
+
+What is this script for?
+It runs a simple multi-step motion sequence: walk 1 meter, wave the right hand,
+turn 180 degrees, then walk 1 meter.
+
+Which script does this FAQ cover?
+`g1_hl_motion_sequence.py`
+
+How do I run it on eth0?
+Use `--iface eth0`, for example:
+  python3 g1_hl_motion_sequence.py --iface eth0
+
+How do I change the walk distance or speed?
+Use `--walk-m` and `--walk-v`, for example:
+  --walk-m 1.5 --walk-v 0.4
+
+How do I change the turn angle or rate?
+Use `--turn-deg` and `--turn-vyaw`, for example:
+  --turn-deg 90 --turn-vyaw 0.6
+
+What if the right-hand wave does not happen?
+The script tries common high-level arm/hand clients. If your SDK build does not
+expose a wave method, it will print a message and skip the wave. You can also
+skip it explicitly with `--no-wave`.
+
+Is this safe to run?
+It uses high-level velocity commands. Make sure the area is clear and the robot
+is stable before running the sequence.
