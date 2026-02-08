@@ -1,0 +1,36 @@
+2026-02-08 16:42:47,647  ERROR     PySide6 is required – install via 'pip install pyside6 pyqtgraph'
+2026-02-08 16:42:47,647  ERROR     PySide6 is required for run_geoff_gui.py – install with:
+    pip install pyside6 pyqtgraph
+2026-02-08 16:45:11,578  INFO      No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2026-02-08 16:45:11,857  ERROR     [run_geoff_gui] Tele-op disabled:
+2026-02-08 16:45:11,857  ERROR     No module named 'hanger_boot_sequence'
+2026-02-08 16:45:12,026  ERROR     [run_geoff_gui] Arm control disabled:
+2026-02-08 16:45:12,034  ERROR     'NoneType' object has no attribute '_ref'
+2026-02-08 16:45:12,035  ERROR     [run_geoff_gui] Dex3 hand control disabled:
+2026-02-08 16:45:12,035  ERROR     No module named 'unitree_sdk2py.dex3'
+2026-02-08 16:45:12,035  ERROR     [run_geoff_stack] RealSense receiver disabled:
+2026-02-08 16:45:12,036  ERROR     No module named 'gi'
+2026-02-08 16:45:12,097  INFO      [ChannelFactory] create domain error. msg:
+2026-02-08 16:45:12,127  INFO      Occurred upon initialisation of a cyclonedds.domain.Domain
+2026-02-08 16:45:12,131  ERROR     [run_geoff_gui] Battery monitor disabled:
+2026-02-08 16:45:12,133  ERROR     Could not subscribe to any battery SOC topic
+2026-02-08 16:45:13,858  INFO      [INFO] livox2_python unavailable (
+2026-02-08 16:45:13,858  INFO      liblivox_lidar_sdk shared library not found.  Build & install Livox-SDK2 first (see wrapper docstring).
+2026-02-08 16:45:13,858  INFO      ) – falling back to SDK1.
+2026-02-08 16:45:13,858  ERROR     [run_geoff_gui] SLAM thread disabled:
+2026-02-08 16:45:13,858  ERROR     No module named 'livox_python'
+2026-02-08 16:45:42,265  INFO      No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2026-02-08 16:45:42,420  ERROR     [run_geoff_gui] Tele-op disabled:
+2026-02-08 16:45:42,420  ERROR     No module named 'hanger_boot_sequence'
+2026-02-08 16:45:42,581  ERROR     [run_geoff_gui] Arm control disabled:
+2026-02-08 16:45:42,588  ERROR     'NoneType' object has no attribute '_ref'
+2026-02-08 16:45:42,588  ERROR     [run_geoff_gui] Dex3 hand control disabled:
+2026-02-08 16:45:42,588  ERROR     No module named 'unitree_sdk2py.dex3'
+2026-02-08 16:45:42,589  ERROR     [run_geoff_stack] RealSense receiver disabled:
+2026-02-08 16:45:42,589  ERROR     No module named 'gi'
+2026-02-08 16:45:45,048  INFO      [INFO] livox2_python unavailable (
+2026-02-08 16:45:45,048  INFO      liblivox_lidar_sdk shared library not found.  Build & install Livox-SDK2 first (see wrapper docstring).
+2026-02-08 16:45:45,048  INFO      ) – falling back to SDK1.
+2026-02-08 16:45:45,048  ERROR     [run_geoff_gui] SLAM thread disabled:
+2026-02-08 16:45:45,048  ERROR     No module named 'livox_python'
+2026-02-08 16:45:58,296  INFO      [run_geoff_gui] Damp request – SDK unavailable

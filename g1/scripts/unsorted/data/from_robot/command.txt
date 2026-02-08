@@ -1,0 +1,1 @@
+py g1_poll_all.py --config g1_topics.example.yaml --profile g1_basic,g1_odom,g1_lidar --iface enp1s0
