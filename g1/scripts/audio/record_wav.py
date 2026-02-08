@@ -1,110 +1,48 @@
 #!/usr/bin/env python3
-"""Record a WAV file with Enter-to-start and Enter-to-stop controls."""
+"""Record a WAV file with Enter-to-start and Enter-to-stop controls (Windows/macOS/Linux)."""
+
 from __future__ import annotations
 
 import argparse
 import os
-import subprocess
+import queue
 import sys
-import time
+
+# pip install sounddevice soundfile
+import sounddevice as sd
+import soundfile as sf
 
 
-def _has_command(cmd: str) -> bool:
-    return (
-        subprocess.call(["/usr/bin/env", "which", cmd], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0
-    )
+def record_wav(out_path: str, rate: int, channels: int, subtype: str) -> int:
+    q: queue.Queue = queue.Queue()
 
+    def callback(indata, frames, time_info, status):
+        if status:
+            # Print warnings/errors from the audio backend
+            print(status, file=sys.stderr)
+        q.put(indata.copy())
 
-def _has_alsa_capture_device() -> bool:
-    if not _has_command("arecord"):
-        return False
-    proc = subprocess.run(["arecord", "-l"], capture_output=True, text=True)
-    if proc.returncode != 0:
-        return False
-    return "card" in proc.stdout.lower()
+    print("Recording... Press Enter to stop recording...")
 
-
-def _find_recorder() -> str | None:
-    for cmd in ("arecord", "parec", "ffmpeg"):
-        if _has_command(cmd):
-            return cmd
-    return None
-
-
-def _record_with_arecord(out_path: str, rate: int, channels: int, fmt: str, device: str | None) -> int:
-    cmd = ["arecord", "-q", "-f", fmt, "-r", str(rate), "-c", str(channels)]
-    if device:
-        cmd.extend(["-D", device])
-    cmd.append(out_path)
-    print(f"Recording with: {' '.join(cmd)}")
-    proc = subprocess.Popen(cmd)
     try:
-        input("Press Enter to stop recording... ")
-    finally:
-        proc.terminate()
-        try:
-            proc.wait(timeout=2.0)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-    return 0
+        with sf.SoundFile(out_path, mode="x", samplerate=rate, channels=channels, subtype=subtype) as f:
+            with sd.InputStream(samplerate=rate, channels=channels, callback=callback):
+                input()  # blocks until Enter
+                # Drain any remaining buffered chunks
+                while not q.empty():
+                    f.write(q.get_nowait())
 
+        return 0
 
-def _record_with_parec(out_path: str, rate: int, channels: int) -> int:
-    cmd = ["parec", "--raw", f"--rate={rate}", f"--channels={channels}"]
-    ffmpeg = [
-        "ffmpeg",
-        "-y",
-        "-f",
-        "s16le",
-        "-ar",
-        str(rate),
-        "-ac",
-        str(channels),
-        "-i",
-        "-",
-        out_path,
-    ]
-    print(f"Recording with: {' '.join(cmd)} | {' '.join(ffmpeg)}")
-    parec = subprocess.Popen(cmd, stdout=subprocess.PIPE)
-    ff = subprocess.Popen(ffmpeg, stdin=parec.stdout)
-    try:
-        input("Press Enter to stop recording... ")
-    finally:
-        parec.terminate()
-        ff.terminate()
-        for p in (parec, ff):
-            try:
-                p.wait(timeout=2.0)
-            except subprocess.TimeoutExpired:
-                p.kill()
-    return 0
-
-
-def _record_with_ffmpeg(out_path: str, rate: int, channels: int, device: str | None) -> int:
-    cmd = [
-        "ffmpeg",
-        "-y",
-        "-f",
-        "alsa",
-        "-i",
-        device or "default",
-        "-ar",
-        str(rate),
-        "-ac",
-        str(channels),
-        out_path,
-    ]
-    print(f"Recording with: {' '.join(cmd)}")
-    proc = subprocess.Popen(cmd)
-    try:
-        input("Press Enter to stop recording... ")
-    finally:
-        proc.terminate()
-        try:
-            proc.wait(timeout=2.0)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-    return 0
+    except FileExistsError:
+        print(f"Output already exists: {out_path}")
+        return 2
+    except sd.PortAudioError as e:
+        print(f"Audio device error: {e}", file=sys.stderr)
+        return 1
+    except Exception as e:
+        print(f"Recording failed: {e}", file=sys.stderr)
+        return 1
 
 
 def main() -> int:
@@ -112,8 +50,8 @@ def main() -> int:
     parser.add_argument("outfile", help="output WAV filename")
     parser.add_argument("--rate", type=int, default=16000, help="sample rate (Hz)")
     parser.add_argument("--channels", type=int, default=1, help="number of channels")
-    parser.add_argument("--format", default="S16_LE", help="arecord format (default: S16_LE)")
-    parser.add_argument("--device", default=None, help="input device (ALSA, e.g. hw:0,0)")
+    # WAV subtypes supported by soundfile/libsndfile (common ones: PCM_16, PCM_24, PCM_32, FLOAT)
+    parser.add_argument("--subtype", default="PCM_16", help="WAV subtype (default: PCM_16)")
     args = parser.parse_args()
 
     out_path = args.outfile
@@ -127,23 +65,7 @@ def main() -> int:
     print("Press Enter to start recording...")
     input()
 
-    recorder = _find_recorder()
-    if recorder == "arecord":
-        if not _has_alsa_capture_device():
-            print("No ALSA capture devices found (arecord -l returned none).")
-        else:
-            return _record_with_arecord(out_path, args.rate, args.channels, args.format, args.device)
-    if recorder == "parec":
-        return _record_with_parec(out_path, args.rate, args.channels)
-    if recorder == "ffmpeg":
-        if not _has_alsa_capture_device():
-            print("No ALSA capture devices found (arecord -l returned none).")
-        else:
-            return _record_with_ffmpeg(out_path, args.rate, args.channels, args.device)
-
-    print("No usable recorder found.")
-    print("Install and configure one of: 'arecord' (alsa-utils), 'parec' (pulseaudio-utils), or 'ffmpeg'.")
-    return 1
+    return record_wav(out_path, args.rate, args.channels, args.subtype)
 
 
 if __name__ == "__main__":
