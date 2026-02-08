@@ -28,6 +28,48 @@ def _find_player() -> list[str] | None:
     return None
 
 
+def _load_audio_client():
+    try:
+        from unitree_sdk2py.g1.audio.g1_audio_client import AudioClient  # type: ignore
+
+        return AudioClient
+    except Exception as exc:
+        raise SystemExit(
+            "unitree_sdk2py AudioClient is not available. Install unitree_sdk2_python and ensure AudioClient exists."
+        ) from exc
+
+
+def _parse_level(value: str) -> int:
+    try:
+        level = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("level must be an integer 0-100") from exc
+    if not 0 <= level <= 100:
+        raise argparse.ArgumentTypeError("level must be in range 0-100")
+    return level
+
+
+def _set_volume(level: int) -> None:
+    AudioClient = _load_audio_client()
+    client = AudioClient()
+    client.SetTimeout(3.0)
+    client.Init()
+    code = client.SetVolume(level)
+    if code != 0:
+        raise SystemExit(f"SetVolume failed: code={code}")
+
+
+def _set_brightness(level: int) -> None:
+    AudioClient = _load_audio_client()
+    client = AudioClient()
+    client.SetTimeout(3.0)
+    client.Init()
+    val = max(0, min(255, int(level * 255 / 100)))
+    code = client.LedControl(val, val, val)
+    if code != 0:
+        raise SystemExit(f"LedControl failed: code={code}")
+
+
 def _play_wav(wav_path: str) -> None:
     if not os.path.exists(wav_path):
         print(f"Missing wav file: {wav_path}")
@@ -188,6 +230,8 @@ def main() -> None:
     parser.add_argument("--iface", default="eth0", help="network interface for DDS")
     parser.add_argument("--arm", choices=["left", "right"], default="right", help="which arm to move")
     parser.add_argument("--file", default="huddle.wav", help="path to wav file")
+    parser.add_argument("--volume", type=_parse_level, default=None, help="set robot speaker volume (0-10)")
+    parser.add_argument("--brightness", type=_parse_level, default=None, help="set headlight brightness (0-10)")
     parser.add_argument("--cmd-hz", type=float, default=50.0, help="command rate for arm SDK")
     parser.add_argument("--kp", type=float, default=40.0, help="arm joint kp")
     parser.add_argument("--kd", type=float, default=1.0, help="arm joint kd")
@@ -211,6 +255,10 @@ def main() -> None:
     arm.hold_pose(poses["extend"], args.hold_extend)
 
     print("Step 2: play audio.")
+    if args.brightness is not None:
+        _set_brightness(args.brightness)
+    if args.volume is not None:
+        _set_volume(args.volume)
     _play_wav(wav_path)
 
     print("Step 3: lift hand (rotate shoulder).")
