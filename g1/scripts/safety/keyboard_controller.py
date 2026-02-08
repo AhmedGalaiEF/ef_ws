@@ -6,6 +6,13 @@ The script:
 1. Runs the hanger boot sequence so the robot starts balancing.
 2. Enters a curses UI where you can drive with the keys below.
 
+Input mode
+----------
+By default this script uses the `pynput` backend to get true key-up events,
+so releasing a key immediately stops motion on that axis. You can switch to
+`--input curses` to use the built-in curses key polling (legacy behavior:
+no key-up events, velocities persist until changed).
+
 Controls
 ---------
     W / S : forward / backward velocity
@@ -49,20 +56,6 @@ import time
 
 import curses
 
-# We now use the cross-platform `pynput` library which reads key events via the
-# X server / Win32 API / Quartz, so it works unprivileged on desktop Linux,
-# macOS and Windows.  On Wayland sessions `pynput` falls back to /dev/input and
-# may again need the permissions discussed earlier—but on X11 (the default on
-# many distros) it works out-of-the-box.
-
-try:
-    from pynput.keyboard import Listener, Key, KeyCode  # type: ignore
-except ModuleNotFoundError as exc:  # pragma: no cover
-    raise SystemExit(
-        "The 'pynput' package is required for keyboard_controller.py.\n"
-        "Install with:  pip install pynput"
-    ) from exc
-
 from hanger_boot_sequence import hanger_boot_sequence
 
 
@@ -80,7 +73,20 @@ def clamp(value: float, limit: float = 0.6) -> float:
     return max(-limit, min(limit, value))
 
 
-def drive_loop(stdscr: "curses._CursesWindow", bot) -> None:
+def drive_loop_pynput(stdscr: "curses._CursesWindow", bot) -> None:
+    # We now use the cross-platform `pynput` library which reads key events via the
+    # X server / Win32 API / Quartz, so it works unprivileged on desktop Linux,
+    # macOS and Windows.  On Wayland sessions `pynput` falls back to /dev/input and
+    # may again need the permissions discussed earlier—but on X11 (the default on
+    # many distros) it works out-of-the-box.
+    try:
+        from pynput.keyboard import Listener, Key, KeyCode  # type: ignore
+    except ModuleNotFoundError as exc:  # pragma: no cover
+        raise SystemExit(
+            "The 'pynput' package is required for keyboard_controller.py when using "
+            "--input pynput.\nInstall with:  pip install pynput"
+        ) from exc
+
     # Curses setup for a tiny on–screen HUD.
     curses.cbreak()
     stdscr.nodelay(True)  # Make getch() non-blocking so the UI stays alive.
@@ -186,15 +192,74 @@ def drive_loop(stdscr: "curses._CursesWindow", bot) -> None:
         listener.stop()
 
 
+def drive_loop_curses(stdscr: "curses._CursesWindow", bot) -> None:
+    # Curses setup for a tiny on–screen HUD.
+    curses.cbreak()
+    stdscr.nodelay(True)
+
+    vx = vy = omega = 0.0
+    last_send = 0.0
+
+    try:
+        while True:
+            ch = stdscr.getch()
+            if ch != -1:
+                if ch in (ord("w"), ord("W")):
+                    vx = clamp(vx + LIN_STEP)
+                elif ch in (ord("s"), ord("S")):
+                    vx = clamp(vx - LIN_STEP)
+                elif ch in (ord("q"), ord("Q")):
+                    vy = clamp(vy + LIN_STEP)
+                elif ch in (ord("e"), ord("E")):
+                    vy = clamp(vy - LIN_STEP)
+                elif ch in (ord("a"), ord("A")):
+                    omega = clamp(omega + ANG_STEP)
+                elif ch in (ord("d"), ord("D")):
+                    omega = clamp(omega - ANG_STEP)
+                elif ch == ord(" "):
+                    vx = vy = omega = 0.0
+                elif ch in (ord("z"), ord("Z")):
+                    bot.Damp()
+                    break
+                elif ch == 27:  # ESC
+                    bot.StopMove()
+                    bot.ZeroTorque()
+                    break
+
+            now = time.time()
+            if now - last_send >= SEND_PERIOD:
+                bot.Move(vx, vy, omega, continous_move=True)
+                last_send = now
+
+                stdscr.erase()
+                stdscr.addstr(0, 0, "Press keys to drive – Z: quit  ESC: e-stop")
+                stdscr.addstr(2, 0, f"vx: {vx:+.2f}  vy: {vy:+.2f}  omega: {omega:+.2f}")
+                stdscr.refresh()
+
+            time.sleep(0.005)
+
+    finally:
+        pass
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--iface", default="enp68s0f1", help="network interface connected to robot")
+    parser.add_argument(
+        "--input",
+        choices=("pynput", "curses"),
+        default="pynput",
+        help="keyboard input backend (default: pynput)",
+    )
     args = parser.parse_args()
 
     # Boot sequence – returns initialised LocoClient in FSM-200
     bot = hanger_boot_sequence(iface=args.iface)
 
-    curses.wrapper(drive_loop, bot)
+    if args.input == "curses":
+        curses.wrapper(drive_loop_curses, bot)
+    else:
+        curses.wrapper(drive_loop_pynput, bot)
 
 
 if __name__ == "__main__":

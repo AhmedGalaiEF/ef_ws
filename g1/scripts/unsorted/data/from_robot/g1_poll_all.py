@@ -4,7 +4,7 @@ Best-effort polling and discovery for Unitree G1 DDS topics and SDK clients.
 
 - Discovers DDS topics via Cyclone DDS built-in topics.
 - Tries to map discovered DDS type names to unitree_sdk2py IDL classes.
-- Subscribes to configured topics (from JSON/YAML) and logs received samples.
+- Subscribes to configured topics (from JSON/YAML or built-in profiles) and logs received samples.
 - Optionally scans SDK client classes and logs which ones can be imported/instantiated.
 """
 
@@ -24,6 +24,13 @@ from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 try:
     from rich.logging import RichHandler  # type: ignore
+    from rich.console import Console
+    from rich.live import Live
+    from rich.panel import Panel
+    from rich.columns import Columns
+    from rich.text import Text
+
+    RICH_AVAILABLE = True
 
     def _configure_logging(level: int) -> None:
         logging.basicConfig(
@@ -34,6 +41,12 @@ try:
         )
 
 except Exception:
+    RICH_AVAILABLE = False
+    Console = None  # type: ignore
+    Live = None  # type: ignore
+    Panel = None  # type: ignore
+    Columns = None  # type: ignore
+    Text = None  # type: ignore
 
     def _configure_logging(level: int) -> None:
         logging.basicConfig(
@@ -43,6 +56,25 @@ except Exception:
 
 
 LOG = logging.getLogger("g1_poll_all")
+RGBD_TOPIC_KEYWORDS = ("rgbd", "depth", "rgb", "color", "image", "camera")
+
+
+class TopicStats:
+    def __init__(self) -> None:
+        self.sample_count: int = 0
+        self.last_sample: str = ""
+        self.last_ts: float = 0.0
+        self.last_error: str = ""
+
+    def update_sample(self, sample: Any) -> None:
+        self.sample_count += 1
+        self.last_sample = _truncate(_format_sample(sample), 400)
+        self.last_ts = time.time()
+        self.last_error = ""
+
+    def update_error(self, exc: Exception) -> None:
+        self.last_error = str(exc)
+        self.last_ts = time.time()
 
 
 def _try_import(module_path: str) -> Optional[ModuleType]:
@@ -157,12 +189,13 @@ class DdsDiscovery:
 
 
 class TopicReader:
-    def __init__(self, participant: Any, topic_name: str, msg_type: Any) -> None:
+    def __init__(self, participant: Any, topic_name: str, msg_type: Any, type_label: str) -> None:
         from cyclonedds.topic import Topic
         from cyclonedds.sub import DataReader
 
         self.topic_name = topic_name
         self.msg_type = msg_type
+        self.type_label = type_label
         self.topic = Topic(participant, topic_name, msg_type)
         self.reader = DataReader(participant, self.topic)
 
@@ -183,6 +216,64 @@ def _resolve_type(type_path: str) -> Any:
     return getattr(module, class_name)
 
 
+def _type_path_candidates(type_path: str) -> List[str]:
+    """
+    Return candidate python type paths for a given DDS type name or python path.
+    """
+    candidates: List[str] = []
+    if "::" not in type_path:
+        return [type_path]
+
+    # Primary mapping based on DDS namespace
+    mapped = _type_name_to_idl_module(type_path)
+    if mapped:
+        module_path, class_name = mapped
+        candidates.append(f"{module_path}:{class_name}")
+
+    # Common ROS2 IDL location in unitree_sdk2py
+    if type_path.startswith("sensor_msgs::msg::dds_::"):
+        class_name = type_path.split("::")[-1]
+        candidates.append(f"unitree_sdk2py.idl.ros2._{class_name}:{class_name}")
+
+    # Fallback to raw input (may already be a python path even if it contains ::)
+    candidates.append(type_path)
+    return candidates
+
+
+def _build_profiles() -> Dict[str, Dict[str, Any]]:
+    # Canonical profiles based on provided G1 docs
+    return {
+        "g1_basic": {
+            "topics": [
+                {"topic": "rt/lowstate", "type": "unitree_hg::msg::dds_::LowState_"},
+                # Publish topics included for inspection only
+                {"topic": "rt/lowcmd", "type": "unitree_hg::msg::dds_::LowCmd_"},
+                {"topic": "rt/dex3/left/state", "type": "unitree_hg::msg::dds_::HandState_"},
+                {"topic": "rt/dex3/right/state", "type": "unitree_hg::msg::dds_::HandState_"},
+                {"topic": "rt/dex3/left/cmd", "type": "unitree_hg::msg::dds_::HandCmd_"},
+                {"topic": "rt/dex3/right/cmd", "type": "unitree_hg::msg::dds_::HandCmd_"},
+            ],
+        },
+        "g1_sport": {
+            "topics": [
+                {"topic": "rt/arm_sdk", "type": "unitree_hg::msg::dds_::LowCmd_"},
+            ],
+        },
+        "g1_odom": {
+            "topics": [
+                {"topic": "rt/odommodestate", "type": "unitree_go::msg::dds_::SportModeState_"},
+                {"topic": "rt/lf/odommodestate", "type": "unitree_go::msg::dds_::SportModeState_"},
+            ],
+        },
+        "g1_lidar": {
+            "topics": [
+                {"topic": "rt/utlidar/cloud_livox_mid360", "type": "sensor_msgs::msg::dds_::PointCloud2_"},
+                {"topic": "rt/utlidar/imu_livox_mid360", "type": "sensor_msgs::msg::dds_::Imu_"},
+            ],
+        },
+    }
+
+
 def _build_readers_from_config(
     participant: Any,
     config: Dict[str, Any],
@@ -195,11 +286,29 @@ def _build_readers_from_config(
             LOG.warning("Skipping topic entry missing 'topic' or 'type': %s", item)
             continue
         try:
-            msg_type = _resolve_type(type_path)
-            readers[topic] = TopicReader(participant, topic, msg_type)
+            last_exc: Optional[Exception] = None
+            msg_type = None
+            for candidate in _type_path_candidates(type_path):
+                try:
+                    msg_type = _resolve_type(candidate)
+                    break
+                except Exception as exc:
+                    last_exc = exc
+            if msg_type is None:
+                raise last_exc or RuntimeError("No candidate types resolved")
+            readers[topic] = TopicReader(participant, topic, msg_type, type_path)
             LOG.info("Subscribed (config): %s -> %s", topic, type_path)
-        except Exception:
-            LOG.exception("Failed to subscribe (config) to %s with %s", topic, type_path)
+        except Exception as exc:
+            if isinstance(exc, ModuleNotFoundError):
+                missing = getattr(exc, "name", None) or str(exc)
+                LOG.warning(
+                    "Skipping topic %s (%s). Missing module: %s. Update config or install the IDL module.",
+                    topic,
+                    type_path,
+                    missing,
+                )
+            else:
+                LOG.exception("Failed to subscribe (config) to %s with %s", topic, type_path)
     return readers
 
 
@@ -223,7 +332,7 @@ def _try_add_reader_for_discovered(
         LOG.info("Discovered %s (%s) but import failed: %s.%s", topic_name, type_name, module_path, class_name)
         return
     try:
-        readers[topic_name] = TopicReader(participant, topic_name, msg_type)
+        readers[topic_name] = TopicReader(participant, topic_name, msg_type, type_name)
         LOG.info("Subscribed (discovered): %s -> %s", topic_name, type_name)
     except Exception:
         LOG.exception("Failed to subscribe to discovered topic %s (%s)", topic_name, type_name)
@@ -264,11 +373,47 @@ def _scan_rpc_clients() -> None:
                     LOG.info("Instantiation failed: %s.%s", modinfo.name, name, exc_info=True)
 
 
+def _truncate(value: str, limit: int) -> str:
+    if len(value) <= limit:
+        return value
+    return value[: limit - 3] + "..."
+
+
+def _format_timestamp(ts: float) -> str:
+    if ts <= 0.0:
+        return "never"
+    return time.strftime("%H:%M:%S", time.localtime(ts))
+
+
+def _build_panels(readers: Dict[str, TopicReader], stats: Dict[str, TopicStats]) -> Any:
+    panels: List[Any] = []
+    for topic_name in sorted(readers.keys()):
+        reader = readers[topic_name]
+        stat = stats.get(topic_name) or TopicStats()
+        stats[topic_name] = stat
+        body = Text()
+        body.append(f"type: {reader.type_label}\n")
+        body.append(f"samples: {stat.sample_count}\n")
+        body.append(f"last: {_format_timestamp(stat.last_ts)}\n")
+        if stat.last_error:
+            body.append(f"error: {stat.last_error}\n")
+        body.append("\n")
+        body.append(stat.last_sample or "<no data yet>")
+        panels.append(Panel(body, title=topic_name, border_style="cyan"))
+    return Columns(panels, expand=True)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Poll Unitree G1 DDS topics and SDK clients.")
     parser.add_argument("--domain", type=int, default=0, help="DDS domain id (default: 0)")
     parser.add_argument("--iface", type=str, default="", help="Network interface name (for unitree_sdk2py ChannelFactoryInitialize)")
     parser.add_argument("--config", type=str, default="", help="Path to JSON/YAML config with topics list")
+    parser.add_argument(
+        "--profile",
+        type=str,
+        default="",
+        help="Built-in topic profile: g1_basic, g1_sport, g1_odom, g1_lidar (comma-separated)",
+    )
     parser.add_argument("--poll", type=float, default=0.05, help="Polling interval seconds")
     parser.add_argument("--no-discover", action="store_true", help="Disable DDS discovery")
     parser.add_argument("--rpc-scan", action="store_true", help="Scan SDK modules for RPC client classes")
@@ -312,23 +457,59 @@ def main() -> int:
             discovery = None
 
     config = _load_config(args.config) if args.config else {}
+    profiles = _build_profiles()
+    if args.profile:
+        combined: Dict[str, Any] = {"topics": []}
+        for name in [p.strip() for p in args.profile.split(",") if p.strip()]:
+            if name not in profiles:
+                LOG.warning("Unknown profile %s (available: %s)", name, ", ".join(sorted(profiles.keys())))
+                continue
+            combined["topics"].extend(profiles[name].get("topics", []))
+        if combined["topics"]:
+            if config:
+                config = {"topics": (config.get("topics", []) or []) + combined["topics"]}
+            else:
+                config = combined
     readers = _build_readers_from_config(participant, config)
 
     LOG.info("Polling started. Press Ctrl+C to stop.")
     try:
-        while True:
-            if discovery:
-                for topic_name, type_name in discovery.poll():
-                    LOG.info("Discovered topic: %s (%s)", topic_name, type_name)
-                    _try_add_reader_for_discovered(participant, readers, topic_name, type_name)
+        stats: Dict[str, TopicStats] = {}
+        if RICH_AVAILABLE:
+            console = Console()
+            with Live(console=console, auto_refresh=False, transient=False) as live:
+                while True:
+                    if discovery:
+                        for topic_name, type_name in discovery.poll():
+                            LOG.info("Discovered topic: %s (%s)", topic_name, type_name)
+                            if any(key in topic_name.lower() for key in RGBD_TOPIC_KEYWORDS):
+                                LOG.info("Possible RGBD topic discovered: %s (%s)", topic_name, type_name)
+                            _try_add_reader_for_discovered(participant, readers, topic_name, type_name)
 
-            for topic_name, reader in list(readers.items()):
-                try:
-                    for sample in reader.read(8):
-                        LOG.info("%s: %s", topic_name, _format_sample(sample))
-                except Exception:
-                    LOG.exception("Read failed for topic %s", topic_name)
-            time.sleep(args.poll)
+                    for topic_name, reader in list(readers.items()):
+                        stat = stats.setdefault(topic_name, TopicStats())
+                        try:
+                            for sample in reader.read(8):
+                                stat.update_sample(sample)
+                        except Exception as exc:
+                            stat.update_error(exc)
+                            LOG.exception("Read failed for topic %s", topic_name)
+                    live.update(_build_panels(readers, stats), refresh=True)
+                    time.sleep(args.poll)
+        else:
+            while True:
+                if discovery:
+                    for topic_name, type_name in discovery.poll():
+                        LOG.info("Discovered topic: %s (%s)", topic_name, type_name)
+                        _try_add_reader_for_discovered(participant, readers, topic_name, type_name)
+
+                for topic_name, reader in list(readers.items()):
+                    try:
+                        for sample in reader.read(8):
+                            LOG.info("%s: %s", topic_name, _format_sample(sample))
+                    except Exception:
+                        LOG.exception("Read failed for topic %s", topic_name)
+                time.sleep(args.poll)
     except KeyboardInterrupt:
         LOG.info("Stopping...")
 

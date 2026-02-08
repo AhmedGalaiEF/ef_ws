@@ -1,0 +1,36 @@
+# Example topic config for g1_poll_all.py
+# Use with: ./g1_poll_all.py --config g1_topics.example.yaml
+# You can also use --profile g1_basic,g1_odom,g1_lidar
+
+topics:
+  # Basic low-level state
+  - topic: rt/lowstate
+    type: unitree_hg::msg::dds_::LowState_
+
+  # Dex3-1 hand state (left/right)
+  - topic: rt/dex3/left/state
+    type: unitree_hg::msg::dds_::HandState_
+  - topic: rt/dex3/right/state
+    type: unitree_hg::msg::dds_::HandState_
+
+  # Odometry (high and low frequency)
+  - topic: rt/odommodestate
+    type: unitree_go::msg::dds_::SportModeState_
+  - topic: rt/lf/odommodestate
+    type: unitree_go::msg::dds_::SportModeState_
+
+  # Lidar point cloud and IMU
+  - topic: rt/utlidar/cloud_livox_mid360
+    type: sensor_msgs::msg::dds_::PointCloud2_
+  - topic: rt/utlidar/imu_livox_mid360
+    type: sensor_msgs::msg::dds_::Imu_
+
+  # Publish topics (included only if you want to inspect samples)
+  - topic: rt/lowcmd
+    type: unitree_hg::msg::dds_::LowCmd_
+  - topic: rt/dex3/left/cmd
+    type: unitree_hg::msg::dds_::HandCmd_
+  - topic: rt/dex3/right/cmd
+    type: unitree_hg::msg::dds_::HandCmd_
+  - topic: rt/arm_sdk
+    type: unitree_hg::msg::dds_::LowCmd_
