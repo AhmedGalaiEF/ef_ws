@@ -1,8 +1,10 @@
-\documentclass{beamer}
+\documentclass[10pt]{beamer}
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage{graphicx}
 \usepackage{xcolor}
+\usepackage{listings}
+\usepackage{fancyvrb}
 \usepackage{hyperref}
 \usepackage{booktabs}
 \usepackage{array}
@@ -20,9 +22,25 @@
 \setbeamercolor{title}{bg=AccentColor1,fg=white}
 \setbeamercolor{frametitle}{bg=AccentColor1,fg=white}
 \setbeamercolor{structure}{fg=AccentColor2}
+\setbeamertemplate{footline}[frame number]{}
+\setbeamercolor{block body}{bg=gray!10}
+\setbeamercolor{block title}{use=structure,fg=white,bg=structure.fg!75!black}
+\setbeamersize{text margin left=0.6cm,text margin right=0.6cm}
+\setbeamertemplate{itemize/enumerate body begin}{\small}
+\setbeamertemplate{itemize/enumerate subbody begin}{\small}
+
+\lstset{
+    basicstyle=\ttfamily\scriptsize,
+    backgroundcolor=\color{gray!10},
+    frame=single,
+    breaklines=true,
+    keywordstyle=\color{blue},
+    commentstyle=\color{gray},
+    stringstyle=\color{red},
+}
 
 % Paths for local images
-\graphicspath{{../inhalt/}{../inhalt/assets/}}
+\graphicspath{{./}{imgs/}{../inhalt/}{../inhalt/assets/}}
 
 \title[Bring robot to a safe stop and balanced stand]{Bring robot to a safe stop and balanced stand}
 \author{Unitree G1 Academy}
@@ -69,7 +87,8 @@ Beginner focus:
 \vfill
 \end{frame}
 
-\begin{frame}{Schedule (Tag 2 -- Di 17.02.2026)}
+\begin{frame}[allowframebreaks,t]{Schedule (Tag 2 -- Di 17.02.2026)}
+\small
 \begin{itemize}
 \item 08.00 Crew
 \item 08:30 Einfinden der Teilnehmer
@@ -96,7 +115,9 @@ Beginner focus:
 \end{frame}
 
 \begin{frame}{High Level Gait}
-\href{https://doc-cdn.unitree.com/static/2024/9/19/66d93f622b6a4ce2a962be2dc2c91054\_830x986.jpg}{Basic motor control overview}
+\begin{center}
+\includegraphics[width=0.85\linewidth,height=0.45\textheight,keepaspectratio]{imgs/66d93f622b6a4ce2a962be2dc2c91054_830x986.jpg}
+\end{center}
 Measurement: define target speed, distance, time, or number of steps before commanding motion.
 Beginner notes:
 \begin{itemize}
@@ -112,7 +133,7 @@ Beginner notes:
 \item The script supports \texttt{--no-command} for measurement-only runs, \texttt{--force-threshold} to tune contact detection, and \texttt{--csv} to log time, pose, gait type, and foot force for analysis.
 \end{itemize}
 \textbf{Parametrized walk example}
-\begin{verbatim}
+\begin{lstlisting}
 from unitree_sdk2py.rpc import LocoClient
 from unitree_sdk2py.dds import ChannelFactory
 
@@ -123,14 +144,14 @@ loco.Init()
 
 loco.SetVelocity(0.2, 0.0, 0.0, 3.0)
 loco.StopMove()
-\end{verbatim}
+\end{lstlisting}
 \textbf{Video: Basic motor control (Day 2)}
 \begin{center}
 \includegraphics[width=0.8\linewidth]{./placeholder.jpg}
 \end{center}
 Video file: \href{https://doc-cdn.unitree.com/static/2024/9/23/982715b4258a4acda666792ac8c964f6.mp4}{https://doc-cdn.unitree.com/static/2024/9/23/982715b4258a4acda666792ac8c964f6.mp4}
 \textbf{Parametrized turn example}
-\begin{verbatim}
+\begin{lstlisting}
 from unitree_sdk2py.rpc import LocoClient
 from unitree_sdk2py.dds import ChannelFactory
 
@@ -141,7 +162,7 @@ loco.Init()
 
 loco.SetVelocity(0.0, 0.0, 0.6, 2.0)
 loco.StopMove()
-\end{verbatim}
+\end{lstlisting}
 \end{frame}
 
 \begin{frame}[plain]
@@ -184,7 +205,7 @@ Beginner notes:
 \begin{center}
 \includegraphics[width=0.8\linewidth]{./placeholder.jpg}
 \end{center}
-\begin{verbatim}
+\begin{lstlisting}
 from unitree_sdk2py.rpc import LocoClient, ArmActionClient
 from unitree_sdk2py.dds import ChannelFactory
 
@@ -209,7 +230,7 @@ loco.SetVelocity(0.0, 0.0, 0.6, 1.5)
 loco.SetVelocity(0.2, 0.0, 0.0, 3.0)
 
 loco.StopMove()
-\end{verbatim}
+\end{lstlisting}
 Beginner notes:
 \begin{itemize}
 \item Sequence each action clearly: walk, stop, turn, stop, walk.
@@ -233,9 +254,12 @@ Beginner notes:
 \end{frame}
 
 \begin{frame}[fragile]{Troubleshooting}
-\href{https://doc-cdn.unitree.com/static/2024/9/29/236fa93a8fae4eaa8815004f42e87ede\_1065x1419.jpg}{Debug mode on controller}
+\small
+\begin{center}
+\includegraphics[width=0.85\linewidth,height=0.45\textheight,keepaspectratio]{imgs/236fa93a8fae4eaa8815004f42e87ede_1065x1419.jpg}
+\end{center}
 \textbf{Recovery procedure (balanced stand)}
-\begin{verbatim}
+\begin{lstlisting}
 from unitree_sdk2py.rpc import LocoClient
 from unitree_sdk2py.dds import ChannelFactory
 
@@ -245,7 +269,7 @@ loco = LocoClient()
 loco.Init()
 
 loco.StopMove()
-\end{verbatim}
+\end{lstlisting}
 \textbf{Intentional error handling}
 \begin{itemize}
 \item Try an invalid parameter range and observe errors.

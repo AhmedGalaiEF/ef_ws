@@ -1,8 +1,10 @@
-\documentclass{beamer}
+\documentclass[10pt]{beamer}
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage{graphicx}
 \usepackage{xcolor}
+\usepackage{listings}
+\usepackage{fancyvrb}
 \usepackage{hyperref}
 \usepackage{booktabs}
 \usepackage{array}
@@ -20,9 +22,25 @@
 \setbeamercolor{title}{bg=AccentColor1,fg=white}
 \setbeamercolor{frametitle}{bg=AccentColor1,fg=white}
 \setbeamercolor{structure}{fg=AccentColor2}
+\setbeamertemplate{footline}[frame number]{}
+\setbeamercolor{block body}{bg=gray!10}
+\setbeamercolor{block title}{use=structure,fg=white,bg=structure.fg!75!black}
+\setbeamersize{text margin left=0.6cm,text margin right=0.6cm}
+\setbeamertemplate{itemize/enumerate body begin}{\small}
+\setbeamertemplate{itemize/enumerate subbody begin}{\small}
+
+\lstset{
+    basicstyle=\ttfamily\scriptsize,
+    backgroundcolor=\color{gray!10},
+    frame=single,
+    breaklines=true,
+    keywordstyle=\color{blue},
+    commentstyle=\color{gray},
+    stringstyle=\color{red},
+}
 
 % Paths for local images
-\graphicspath{{../inhalt/}{../inhalt/assets/}}
+\graphicspath{{./}{imgs/}{../inhalt/}{../inhalt/assets/}}
 
 \title[Day 3: Navigation and Environment Awareness]{Day 3: Navigation and Environment Awareness}
 \author{Unitree G1 Academy}
@@ -69,7 +87,8 @@ Beginner focus:
 \vfill
 \end{frame}
 
-\begin{frame}{Schedule (Tag 3 -- Mi 18.02.2026)}
+\begin{frame}[allowframebreaks,t]{Schedule (Tag 3 -- Mi 18.02.2026)}
+\small
 \begin{itemize}
 \item 08.00 Uhr Crew
 \item 08:30 Einfinden der Teilnehmer
@@ -98,7 +117,7 @@ Beginner focus:
 \begin{frame}[fragile]{Complex motion}
 \href{https://www.unitree.com/images/7e51cf20dc6145cf99ae0d0b6ea4d2c5.mp4}{https://www.unitree.com/images/7e51cf20dc6145cf99ae0d0b6ea4d2c5.mp4}
 \textbf{Hardcoded pick and place (known pose)}
-\begin{verbatim}
+\begin{lstlisting}
 from unitree_sdk2py.arm import ArmSdk  # Replace with actual SDK module
 
 arm = ArmSdk(side="right")
@@ -110,7 +129,7 @@ arm.MoveToPose(pick_pose)
 arm.CloseGripper()
 arm.MoveToPose(place_pose)
 arm.OpenGripper()
-\end{verbatim}
+\end{lstlisting}
 Beginner notes:
 \begin{itemize}
 \item Start with a known object pose and slow arm motion.
@@ -133,6 +152,7 @@ Beginner notes:
 \end{frame}
 
 \begin{frame}{SLAM Navigation Service Interface (Beginner Flow)}
+\small
 Before you start:
 \begin{itemize}
 \item Ensure your PC and the robot are on the same LAN segment.
@@ -157,13 +177,15 @@ Before you start:
 \item Set your PC to \texttt{192.168.123.XXX} (no IP conflicts).
 \item Test connections:
 \end{enumerate}
-\begin{verbatim}
+\begin{lstlisting}
 ssh unitree@192.168.123.164
 ping 192.168.123.120
-\end{verbatim}
+\end{lstlisting}
 \end{frame}
 
 \begin{frame}{Core API IDs}
+\small
+\scriptsize
 \begin{tabular}{lll}
 \toprule
 Action & API ID & Purpose \\
@@ -177,32 +199,33 @@ Resume navigation & 1202 & Resume current nav \\
 Close SLAM & 1901 & Stop SLAM service \\
 \bottomrule
 \end{tabular}
+\small
 \end{frame}
 
 \begin{frame}[fragile]{Create a map (start → explore → save)}
 \textbf{1) Start mapping}
-\begin{verbatim}
+\begin{lstlisting}
 {
   "api_id": 1801,
   "data": {
     "slam_type": "indoor"
   }
 }
-\end{verbatim}
+\end{lstlisting}
 \textbf{2) Explore slowly}
 \begin{itemize}
 \item Walk the robot around the space at low speed.
 \item Try to close a loop for a clean map.
 \end{itemize}
 \textbf{3) End mapping and save}
-\begin{verbatim}
+\begin{lstlisting}
 {
   "api_id": 1802,
   "data": {
     "address": "/home/unitree/test1.pcd"
   }
 }
-\end{verbatim}
+\end{lstlisting}
 Note:
 \begin{itemize}
 \item Reuse file names like \texttt{test1.pcd} to \texttt{test10.pcd} to avoid filling disk.
@@ -211,7 +234,7 @@ Note:
 
 \begin{frame}[fragile]{Use a saved map (localize → navigate)}
 \textbf{1) Initialize pose with the map}
-\begin{verbatim}
+\begin{lstlisting}
 {
   "api_id": 1804,
   "data": {
@@ -225,9 +248,9 @@ Note:
     "address": "/home/unitree/test1.pcd"
   }
 }
-\end{verbatim}
+\end{lstlisting}
 \textbf{2) Send a navigation goal}
-\begin{verbatim}
+\begin{lstlisting}
 {
   "api_id": 1102,
   "data": {
@@ -243,7 +266,7 @@ Note:
     "mode": 1
   }
 }
-\end{verbatim}
+\end{lstlisting}
 Notes:
 \begin{itemize}
 \item Target distance must be within 10 m.
@@ -253,6 +276,8 @@ Notes:
 \end{frame}
 
 \begin{frame}{Topics to watch (optional, for debugging)}
+\small
+\scriptsize
 \begin{tabular}{ll}
 \toprule
 Topic & Data \\
@@ -265,6 +290,7 @@ Topic & Data \\
 \texttt{rt/slam\_key\_info} & Task result (JSON) \\
 \bottomrule
 \end{tabular}
+\small
 Beginner notes:
 \begin{itemize}
 \item Start in a simple room before trying corridors or clutter.
@@ -285,7 +311,7 @@ Beginner notes:
 \includegraphics[width=0.8\linewidth]{./placeholder.jpg}
 \end{center}
 \textbf{Example goal}
-\begin{verbatim}
+\begin{lstlisting}
 {
   "api_id": 1102,
   "data": {
@@ -301,7 +327,7 @@ Beginner notes:
     "mode": 1
   }
 }
-\end{verbatim}
+\end{lstlisting}
 Beginner notes:
 \begin{itemize}
 \item Use short, easy goals first (1--2 meters).
@@ -318,7 +344,9 @@ Beginner notes:
 \end{frame}
 
 \begin{frame}{Obstacle avoidance}
-\href{https://doc-cdn.unitree.com/static/2025/7/23/ea38cdd7418e4b81852c819a55e7aa2e\_1164x1000.jpg}{SLAM overview}
+\begin{center}
+\includegraphics[width=0.85\linewidth,height=0.45\textheight,keepaspectratio]{imgs/ea38cdd7418e4b81852c819a55e7aa2e_1164x1000.jpg}
+\end{center}
 \begin{itemize}
 \item Enable obstacle avoidance in the same navigation task after map initialization.
 \item Use the navigation stack to replan when new obstacles appear.

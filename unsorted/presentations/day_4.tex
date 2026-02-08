@@ -1,8 +1,10 @@
-\documentclass{beamer}
+\documentclass[10pt]{beamer}
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage{graphicx}
 \usepackage{xcolor}
+\usepackage{listings}
+\usepackage{fancyvrb}
 \usepackage{hyperref}
 \usepackage{booktabs}
 \usepackage{array}
@@ -20,9 +22,25 @@
 \setbeamercolor{title}{bg=AccentColor1,fg=white}
 \setbeamercolor{frametitle}{bg=AccentColor1,fg=white}
 \setbeamercolor{structure}{fg=AccentColor2}
+\setbeamertemplate{footline}[frame number]{}
+\setbeamercolor{block body}{bg=gray!10}
+\setbeamercolor{block title}{use=structure,fg=white,bg=structure.fg!75!black}
+\setbeamersize{text margin left=0.6cm,text margin right=0.6cm}
+\setbeamertemplate{itemize/enumerate body begin}{\small}
+\setbeamertemplate{itemize/enumerate subbody begin}{\small}
+
+\lstset{
+    basicstyle=\ttfamily\scriptsize,
+    backgroundcolor=\color{gray!10},
+    frame=single,
+    breaklines=true,
+    keywordstyle=\color{blue},
+    commentstyle=\color{gray},
+    stringstyle=\color{red},
+}
 
 % Paths for local images
-\graphicspath{{../inhalt/}{../inhalt/assets/}}
+\graphicspath{{./}{imgs/}{../inhalt/}{../inhalt/assets/}}
 
 \title[Day 4: Perception and Project Challenge]{Day 4: Perception and Project Challenge}
 \author{Unitree G1 Academy}
@@ -69,7 +87,8 @@ Beginner focus:
 \vfill
 \end{frame}
 
-\begin{frame}{Schedule (Tag 4 -- Do 19.02.2026)}
+\begin{frame}[allowframebreaks,t]{Schedule (Tag 4 -- Do 19.02.2026)}
+\small
 \begin{itemize}
 \item 08.00 Uhr Crew
 \item 08:30 Einfinden der Teilnehmer
@@ -153,7 +172,9 @@ Beginner notes:
 \end{frame}
 
 \begin{frame}{Reinforcement Learning}
-\href{https://doc-cdn.unitree.com/static/2024/6/20/ad293ca6260b4c09b915e4adc39637e6\_1590x924.png}{RL and simulators}
+\begin{center}
+\includegraphics[width=0.85\linewidth,height=0.45\textheight,keepaspectratio]{imgs/ad293ca6260b4c09b915e4adc39637e6_1590x924.png}
+\end{center}
 \begin{itemize}
 \item Short theory: policy, reward, and sim-to-real transfer.
 \item IsaacLab/Isaac Gym intro and example workflow for G1.
