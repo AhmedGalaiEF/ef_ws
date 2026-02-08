@@ -39,6 +39,8 @@ import numpy as np
 # sys.path setup -- sibling directories
 # ---------------------------------------------------------------------------
 _SCRIPTS_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
 for _subdir in ("obstacle_avoidance", "obj_detection", "pick_and_place"):
     _path = os.path.join(_SCRIPTS_DIR, _subdir)
     if _path not in sys.path:
@@ -49,7 +51,6 @@ for _subdir in ("obstacle_avoidance", "obj_detection", "pick_and_place"):
 # ---------------------------------------------------------------------------
 try:
     from unitree_sdk2py.core.channel import (
-        ChannelFactoryInitialize,
         ChannelPublisher,
     )
     from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
@@ -94,6 +95,8 @@ from g1_pick_place_hardcoded import (
     G1_NUM_MOTOR,
     ARM_ENABLE_IDX,
 )
+
+from safety.hanger_boot_sequence import hanger_boot_sequence
 
 # Optional live viewer (may not be installed)
 try:
@@ -356,13 +359,10 @@ def main() -> None:
     args = parse_args()
 
     # --- 1. SDK init (once for entire process) ------------------------------
-    print(f"Initialising SDK on interface '{args.iface}' ...")
-    ChannelFactoryInitialize(0, args.iface)
+    print(f"Initialising SDK on interface '{args.iface}' (safe boot) ...")
+    loco = hanger_boot_sequence(iface=args.iface)
 
     # --- 2. Subsystems ------------------------------------------------------
-    loco = LocoClient()
-    loco.SetTimeout(10.0)
-    loco.Init()
 
     detector = ObstacleDetector(warn_distance=0.8, stop_distance=0.4)
     detector.start()

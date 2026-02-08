@@ -95,6 +95,10 @@ class MapViewer:
     # Coordinate helpers
     # ------------------------------------------------------------------
 
+    def world_to_pixel(self, wx: float, wy: float) -> tuple[int, int]:
+        """World (x, y) -> display pixel (px, py)."""
+        return self._world_to_pixel(wx, wy)
+
     def _world_to_pixel(self, wx: float, wy: float) -> tuple[int, int]:
         """World (x, y) -> display pixel (px, py).
 
@@ -104,6 +108,14 @@ class MapViewer:
         px = col * self.scale + self.scale // 2
         py = (self.grid.height_cells - 1 - row) * self.scale + self.scale // 2
         return (px, py)
+
+    def pixel_to_world(self, px: int, py: int) -> tuple[float, float]:
+        """Display pixel (px, py) -> world (x, y) at the cell centre."""
+        col = int(px // self.scale)
+        row = int((self.grid.height_cells - 1) - (py // self.scale))
+        row = max(0, min(self.grid.height_cells - 1, row))
+        col = max(0, min(self.grid.width_cells - 1, col))
+        return self.grid.grid_to_world(row, col)
 
     # ------------------------------------------------------------------
     # Main render + display
@@ -135,6 +147,16 @@ class MapViewer:
         img = self._render(robot_x, robot_y, robot_yaw, ranges)
         cv2.imshow(self.window_name, img)
         cv2.waitKey(1)
+
+    def render_image(
+        self,
+        robot_x: float,
+        robot_y: float,
+        robot_yaw: float,
+        ranges: list[float] | None = None,
+    ) -> np.ndarray:
+        """Return a rendered map image without showing it."""
+        return self._render(robot_x, robot_y, robot_yaw, ranges)
 
     def _render(
         self,

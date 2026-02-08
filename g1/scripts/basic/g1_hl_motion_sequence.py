@@ -9,6 +9,7 @@ Sequence:
   4) Walk forward N meters
 
 Connects over DDS using --iface (default: eth0).
+Uses hanger_boot_sequence for safe FSM-200 initialization.
 """
 from __future__ import annotations
 
@@ -18,13 +19,14 @@ import time
 from typing import Optional
 
 try:
-    from unitree_sdk2py.core.channel import ChannelFactoryInitialize
     from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
 except ImportError as exc:
     raise SystemExit(
         "unitree_sdk2py is not installed. Install it with:\n"
         "  pip install -e <path-to-unitree_sdk2_python>"
     ) from exc
+
+from safety.hanger_boot_sequence import hanger_boot_sequence
 
 
 def _command_velocity(client: LocoClient, vx: float, vy: float, vyaw: float) -> None:
@@ -120,12 +122,7 @@ def main() -> None:
     parser.add_argument("--no-wave", action="store_true", help="skip right-hand wave")
     args = parser.parse_args()
 
-    ChannelFactoryInitialize(0, args.iface)
-
-    loco = LocoClient()
-    if hasattr(loco, "SetTimeout"):
-        loco.SetTimeout(5.0)
-    loco.Init()
+    loco = hanger_boot_sequence(iface=args.iface)
 
     wave = _WaveHelper()
 
