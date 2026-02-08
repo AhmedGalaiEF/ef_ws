@@ -3,7 +3,8 @@
 Measure steps and distance for G1 high-level locomotion.
 
 Subscribes to rt/sportmodestate for position + foot_force, and optionally
-commands high-level gait via LocoClient.
+commands high-level gait via LocoClient. When commanding motion, the
+hanger boot sequence is used to ensure a safe FSM-200 state.
 """
 from __future__ import annotations
 
@@ -24,6 +25,8 @@ except ImportError as exc:
         "unitree_sdk2py is not installed. Install it with:\n"
         "  pip install -e <path-to-unitree_sdk2_python>"
     ) from exc
+
+from safety.hanger_boot_sequence import hanger_boot_sequence
 
 
 @dataclass
@@ -118,17 +121,16 @@ def main() -> None:
     parser.add_argument("--csv", help="optional CSV log path")
     args = parser.parse_args()
 
-    ChannelFactoryInitialize(0, args.iface)
+    # If commanding motion, use the safety boot sequence.
+    loco = None
+    if not args.no_command:
+        loco = hanger_boot_sequence(iface=args.iface)
+    else:
+        ChannelFactoryInitialize(0, args.iface)
 
     cache = SportCache()
     sub = ChannelSubscriber("rt/sportmodestate", SportModeState_)
     sub.Init(cache.cb, 10)
-
-    loco = None
-    if not args.no_command:
-        loco = LocoClient()
-        loco.SetTimeout(5.0)
-        loco.Init()
 
     dt = 1.0 / max(1e-6, args.sample_hz)
     cmd_dt = 1.0 / max(1e-6, args.cmd_hz)

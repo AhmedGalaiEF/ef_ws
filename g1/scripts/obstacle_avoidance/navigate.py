@@ -4,25 +4,9 @@ navigate.py
 
 Main orchestrator for obstacle-avoidance navigation on the Unitree G1.
 
-Connects to the robot over the network via the Unitree SDK2 Python library,
-builds (or loads) an occupancy grid map, plans an A* path from the robot's
-current position to a goal, divides the path into ~0.5 m waypoints, and
-walks the robot along them.  At each step the robot checks for obstacles --
-if one is detected it is added to a "dynamic" map and the path is replanned.
-
-Prerequisites
--------------
-* Robot powered on, standing (FSM-200), and reachable on the network.
-* ``ChannelFactoryInitialize`` is called once here; do NOT call it elsewhere
-  in the same process.
-
-Usage
------
-::
-
-    python navigate.py --iface eth0 --goal_x 3.0 --goal_y 2.0
-    python navigate.py --iface eth0 --goal_x 3.0 --goal_y 2.0 --goal_yaw 1.57
-    python navigate.py --iface eth0 --goal_x 5.0 --goal_y 0.0 --load_map saved.npz
+Uses the robot's built-in SLAM (utlidar map_state) to create an occupancy
+map, lets the operator pick start + goal points with the mouse, then plans
+and executes a path with dynamic replanning when obstacles are detected.
 """
 from __future__ import annotations
 
@@ -30,11 +14,14 @@ import argparse
 import math
 import sys
 import time
-
-import numpy as np
+from typing import Optional
 
 try:
-    from unitree_sdk2py.core.channel import ChannelFactoryInitialize
+    import cv2  # type: ignore
+except Exception:
+    cv2 = None  # type: ignore
+
+try:
     from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
 except ImportError as exc:
     raise SystemExit(
@@ -47,6 +34,8 @@ from path_planner import astar, smooth_path, grid_path_to_world_waypoints
 from obstacle_detection import ObstacleDetector
 from locomotion import Locomotion
 from map_viewer import MapViewer
+from slam_map import SlamMapSubscriber, LidarSwitch
+from safety.hanger_boot_sequence import hanger_boot_sequence
 
 
 # ---------------------------------------------------------------------------
@@ -56,25 +45,25 @@ from map_viewer import MapViewer
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="G1 obstacle-avoidance navigation (A* + dynamic replanning)",
+        description="G1 obstacle-avoidance navigation (SLAM map + A* + replanning)",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("--iface", default="eth0",
                         help="Network interface connected to the robot")
-    parser.add_argument("--goal_x", type=float, required=True,
-                        help="Goal X position in metres")
-    parser.add_argument("--goal_y", type=float, required=True,
-                        help="Goal Y position in metres")
+    parser.add_argument("--goal_x", type=float, default=None,
+                        help="Goal X position in metres (optional if using mouse pick)")
+    parser.add_argument("--goal_y", type=float, default=None,
+                        help="Goal Y position in metres (optional if using mouse pick)")
     parser.add_argument("--goal_yaw", type=float, default=None,
                         help="Optional final heading in radians")
     parser.add_argument("--map_width", type=float, default=10.0,
-                        help="Map width in metres")
+                        help="Map width in metres (fallback if SLAM unavailable)")
     parser.add_argument("--map_height", type=float, default=10.0,
-                        help="Map height in metres")
+                        help="Map height in metres (fallback if SLAM unavailable)")
     parser.add_argument("--resolution", type=float, default=0.1,
-                        help="Map resolution in metres per cell")
+                        help="Map resolution in metres per cell (fallback)")
     parser.add_argument("--load_map", type=str, default=None,
-                        help="Path to a saved .npz map file")
+                        help="Path to a saved .npz map file to load instead of SLAM")
     parser.add_argument("--max_speed", type=float, default=0.3,
                         help="Maximum forward speed (m/s)")
     parser.add_argument("--inflation", type=int, default=3,
@@ -85,7 +74,150 @@ def parse_args() -> argparse.Namespace:
                         help="Maximum replan attempts before giving up")
     parser.add_argument("--viz", action="store_true",
                         help="Show a live map window (OpenCV) while navigating")
+    parser.add_argument("--no-pick", action="store_true",
+                        help="Disable mouse picking of start/goal")
+    parser.add_argument("--no-slam", action="store_true",
+                        help="Disable built-in SLAM map (use empty or loaded map)")
+    parser.add_argument("--slam-timeout", type=float, default=6.0,
+                        help="Seconds to wait for SLAM map before fallback")
+    parser.add_argument("--slam-height-threshold", type=float, default=0.15,
+                        help="Height (m) above which a cell is marked obstacle")
+    parser.add_argument("--slam-max-height", type=float, default=None,
+                        help="Optional max height clamp for SLAM map")
+    parser.add_argument("--slam-origin-centered", action="store_true",
+                        help="Center SLAM map at (0,0)")
+    parser.add_argument("--slam-no-lidar-switch", action="store_true",
+                        help="Do not publish rt/utlidar/switch ON")
     return parser.parse_args()
+
+
+# ---------------------------------------------------------------------------
+# SLAM map helpers
+# ---------------------------------------------------------------------------
+
+
+def _wait_for_slam_map(
+    sub: SlamMapSubscriber,
+    timeout: float,
+    height_threshold: float,
+    max_height: Optional[float],
+    origin_centered: bool,
+) -> tuple[OccupancyGrid | None, float]:
+    t0 = time.time()
+    last_ts = 0.0
+    while time.time() - t0 < timeout:
+        grid, meta = sub.to_occupancy(
+            height_threshold=height_threshold,
+            max_height=max_height,
+            origin_centered=origin_centered,
+        )
+        if grid is not None and meta is not None:
+            return grid, meta.timestamp
+        time.sleep(0.05)
+    return None, last_ts
+
+
+def _refresh_slam_map(
+    sub: SlamMapSubscriber,
+    occ_grid: OccupancyGrid,
+    height_threshold: float,
+    max_height: Optional[float],
+    origin_centered: bool,
+    last_ts: float,
+) -> tuple[OccupancyGrid, float, bool]:
+    grid, meta = sub.to_occupancy(
+        height_threshold=height_threshold,
+        max_height=max_height,
+        origin_centered=origin_centered,
+    )
+    if grid is None or meta is None:
+        return occ_grid, last_ts, False
+    if meta.timestamp <= last_ts:
+        return occ_grid, last_ts, False
+    last_ts = meta.timestamp
+
+    # If the SLAM map dimensions change, replace the grid object.
+    if (grid.width_cells != occ_grid.width_cells
+            or grid.height_cells != occ_grid.height_cells
+            or abs(grid.resolution - occ_grid.resolution) > 1e-6):
+        return grid, last_ts, True
+
+    # Update in-place to keep viewer references.
+    occ_grid.grid = grid.grid
+    occ_grid.resolution = grid.resolution
+    occ_grid.origin = grid.origin
+    occ_grid.width_cells = grid.width_cells
+    occ_grid.height_cells = grid.height_cells
+    return occ_grid, last_ts, False
+
+
+# ---------------------------------------------------------------------------
+# Mouse picking
+# ---------------------------------------------------------------------------
+
+
+def _pick_start_goal(
+    viewer: MapViewer,
+    detector: ObstacleDetector,
+) -> tuple[tuple[float, float], tuple[float, float]]:
+    if cv2 is None:
+        raise SystemExit("OpenCV is required for mouse picking. Install opencv-python.")
+
+    picked_start: Optional[tuple[float, float]] = None
+    picked_goal: Optional[tuple[float, float]] = None
+
+    def _on_mouse(event, x, y, _flags, _param):
+        nonlocal picked_start, picked_goal
+        if event == cv2.EVENT_LBUTTONDOWN:
+            wx, wy = viewer.pixel_to_world(int(x), int(y))
+            if picked_start is None:
+                picked_start = (wx, wy)
+            elif picked_goal is None:
+                picked_goal = (wx, wy)
+            else:
+                picked_start = (wx, wy)
+                picked_goal = None
+        elif event == cv2.EVENT_RBUTTONDOWN:
+            picked_start = None
+            picked_goal = None
+
+    cv2.namedWindow(viewer.window_name, cv2.WINDOW_NORMAL)
+    cv2.setMouseCallback(viewer.window_name, _on_mouse)
+
+    print("Click START then GOAL on the map window. Right-click to reset.")
+    print("Press 'c' or Enter to confirm when both are set. Press 'q' to cancel.")
+
+    while True:
+        rx, ry, ryaw = detector.get_pose()
+        ranges = detector.get_ranges()
+        img = viewer.render_image(rx, ry, ryaw, ranges)
+
+        # Overlay selections
+        if picked_start is not None:
+            sx, sy = viewer.world_to_pixel(*picked_start)  # noqa: SLF001
+            cv2.drawMarker(img, (sx, sy), (0, 180, 255), cv2.MARKER_DIAMOND, 18, 2)
+        if picked_goal is not None:
+            gx, gy = viewer.world_to_pixel(*picked_goal)  # noqa: SLF001
+            cv2.drawMarker(img, (gx, gy), (0, 0, 255), cv2.MARKER_STAR, 22, 2)
+
+        cv2.putText(
+            img,
+            "Click START then GOAL | Right-click reset | c/Enter confirm | q cancel",
+            (8, 16),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.45,
+            (60, 60, 60),
+            1,
+            cv2.LINE_AA,
+        )
+
+        cv2.imshow(viewer.window_name, img)
+        key = cv2.waitKey(30) & 0xFF
+        if key in (ord("q"), 27):
+            raise SystemExit("Cancelled by user.")
+        if picked_start is not None and picked_goal is not None:
+            if key in (ord("c"), ord(" "), 13):
+                return picked_start, picked_goal
 
 
 # ---------------------------------------------------------------------------
@@ -96,16 +228,11 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
-    # --- 1. SDK initialisation ---------------------------------------------
-    print(f"Initialising SDK on interface '{args.iface}' ...")
-    ChannelFactoryInitialize(0, args.iface)
+    # --- 1. Safe boot + LocoClient ----------------------------------------
+    print(f"Initialising SDK on interface '{args.iface}' (safe boot) ...")
+    loco: LocoClient = hanger_boot_sequence(iface=args.iface)
 
-    # --- 2. LocoClient (robot must already be standing / FSM-200) ----------
-    loco = LocoClient()
-    loco.SetTimeout(10.0)
-    loco.Init()
-
-    # --- 3. Obstacle detector (subscribes to rt/sportmodestate) ------------
+    # --- 2. Obstacle detector (subscribes to rt/sportmodestate) ------------
     detector = ObstacleDetector(warn_distance=0.8, stop_distance=0.4)
     detector.start()
 
@@ -116,11 +243,43 @@ def main() -> None:
         sys.exit("ERROR: no SportModeState_ data received.  "
                  "Is the robot connected and standing?")
 
+    # --- 3. SLAM map subscriber -------------------------------------------
+    slam_sub: Optional[SlamMapSubscriber] = None
+    slam_ts: float = 0.0
+    if not args.no_slam and args.load_map is None:
+        slam_sub = SlamMapSubscriber()
+        slam_sub.start()
+        if not args.slam_no_lidar_switch:
+            try:
+                LidarSwitch().set("ON")
+            except Exception:
+                print("WARN: failed to publish utlidar switch ON")
+
     # --- 4. Map ------------------------------------------------------------
     if args.load_map:
         occ_grid = OccupancyGrid.load(args.load_map)
         print(f"Loaded map from {args.load_map}  "
               f"({occ_grid.width_cells}x{occ_grid.height_cells} cells)")
+    elif slam_sub is not None:
+        occ_grid, slam_ts = _wait_for_slam_map(
+            slam_sub,
+            timeout=args.slam_timeout,
+            height_threshold=args.slam_height_threshold,
+            max_height=args.slam_max_height,
+            origin_centered=args.slam_origin_centered,
+        )
+        if occ_grid is None:
+            print("WARN: no SLAM map received; using empty map fallback.")
+            occ_grid = create_empty_map(
+                width_m=args.map_width,
+                height_m=args.map_height,
+                resolution=args.resolution,
+                origin_x=-args.map_width / 2,
+                origin_y=-args.map_height / 2,
+            )
+        else:
+            print(f"SLAM map received: {occ_grid.width_cells}x{occ_grid.height_cells} "
+                  f"cells @ {occ_grid.resolution:.3f} m")
     else:
         occ_grid = create_empty_map(
             width_m=args.map_width,
@@ -133,43 +292,78 @@ def main() -> None:
               f"resolution={args.resolution} m "
               f"({occ_grid.width_cells}x{occ_grid.height_cells} cells)")
 
-    # --- 5. Locomotion wrapper ---------------------------------------------
+    # --- 5. Locomotion wrapper --------------------------------------------
     walker = Locomotion(loco, detector, max_vx=args.max_speed)
 
-    # --- 5b. Optional live map viewer -------------------------------------
-    viewer: MapViewer | None = None
-    if args.viz:
+    # --- 6. Viewer (also used for mouse-pick) -----------------------------
+    viewer: Optional[MapViewer] = None
+    if args.viz or not args.no_pick:
         viewer = MapViewer(occ_grid, scale=4, inflation_radius=args.inflation)
-        print("Live map viewer enabled (press 'q' in the window to quit).")
+        print("Map viewer enabled (press 'q' in the window to quit).")
 
-    # --- 6. Starting pose --------------------------------------------------
+    # --- 7. Start + Goal selection ----------------------------------------
     sx, sy, syaw = detector.get_pose()
-    print(f"Start : ({sx:+.2f}, {sy:+.2f}), yaw={math.degrees(syaw):+.1f} deg")
-    print(f"Goal  : ({args.goal_x:+.2f}, {args.goal_y:+.2f})"
+    print(f"Robot pose: ({sx:+.2f}, {sy:+.2f}), yaw={math.degrees(syaw):+.1f} deg")
+
+    if not args.no_pick:
+        if viewer is None:
+            viewer = MapViewer(occ_grid, scale=4, inflation_radius=args.inflation)
+        picked_start, picked_goal = _pick_start_goal(viewer, detector)
+        psx, psy = picked_start
+        goal_x, goal_y = picked_goal
+
+        # Safety: prevent planning from a start far away from the robot.
+        dist_to_robot = math.hypot(psx - sx, psy - sy)
+        if dist_to_robot > 0.5:
+            print("WARN: picked start is far from robot pose; using robot pose instead.")
+            psx, psy = sx, sy
+    else:
+        if args.goal_x is None or args.goal_y is None:
+            sys.exit("ERROR: goal_x and goal_y are required when --no-pick is set.")
+        goal_x, goal_y = args.goal_x, args.goal_y
+        psx, psy = sx, sy
+
+    if args.goal_x is not None and args.goal_y is not None and args.no_pick:
+        goal_x, goal_y = args.goal_x, args.goal_y
+
+    print(f"Start : ({psx:+.2f}, {psy:+.2f})")
+    print(f"Goal  : ({goal_x:+.2f}, {goal_y:+.2f})"
           + (f", yaw={math.degrees(args.goal_yaw):.1f} deg" if args.goal_yaw else ""))
 
-    # --- 7. Navigation loop ------------------------------------------------
-    goal_x, goal_y = args.goal_x, args.goal_y
+    # --- 8. Navigation loop ------------------------------------------------
     replan_count = 0
     goal_reached = False
 
     try:
         while replan_count < args.max_replans and not goal_reached:
-            # 7a. Current pose
+            # 8a. Current pose
             cx, cy, cyaw = detector.get_pose()
 
-            # 7b. Update map with latest obstacle readings
+            # 8b. Update map from SLAM (if available)
+            if slam_sub is not None:
+                occ_grid, slam_ts, replaced = _refresh_slam_map(
+                    slam_sub,
+                    occ_grid,
+                    height_threshold=args.slam_height_threshold,
+                    max_height=args.slam_max_height,
+                    origin_centered=args.slam_origin_centered,
+                    last_ts=slam_ts,
+                )
+                if replaced and viewer is not None:
+                    viewer = MapViewer(occ_grid, scale=4, inflation_radius=args.inflation)
+
+            # 8c. Add near-field obstacles from range sensors (safety)
             ranges = detector.get_ranges()
             occ_grid.mark_obstacle_from_range(cx, cy, cyaw, ranges)
 
-            # 7c. Inflate for planning
+            # 8d. Inflate for planning
             inflated = occ_grid.inflate(radius_cells=args.inflation)
 
-            # 7d. Grid coordinates
+            # 8e. Grid coordinates
             start_cell = occ_grid.world_to_grid(cx, cy)
             goal_cell = occ_grid.world_to_grid(goal_x, goal_y)
 
-            # 7e. A*
+            # 8f. A*
             print(f"\nPlanning (attempt {replan_count + 1}/{args.max_replans}) ...")
             print(f"  From cell {start_cell} to {goal_cell}")
             raw_path = astar(inflated, start_cell, goal_cell)
@@ -178,7 +372,7 @@ def main() -> None:
                 print("ERROR: no path found.  Goal may be unreachable.")
                 break
 
-            # 7f. Smooth + world waypoints
+            # 8g. Smooth + world waypoints
             smoothed = smooth_path(raw_path, inflated)
             waypoints = grid_path_to_world_waypoints(
                 smoothed, occ_grid, spacing_m=args.spacing
@@ -186,15 +380,14 @@ def main() -> None:
             print(f"  {len(raw_path)} cells -> {len(smoothed)} smoothed "
                   f"-> {len(waypoints)} waypoints")
 
-            # 7f-viz. Update viewer overlays with the new plan
+            # 8g-viz. Update viewer overlays with the new plan
             if viewer is not None:
                 viewer.set_goal(goal_x, goal_y)
-                # Full smoothed path in world coords for display
                 full_world_path = [occ_grid.grid_to_world(r, c) for r, c in smoothed]
                 viewer.set_path(full_world_path)
                 viewer.set_waypoints(waypoints)
 
-            # 7g. Walk each waypoint
+            # 8h. Walk each waypoint
             aborted = False
             for i, (wx, wy) in enumerate(waypoints):
                 dist_to_goal = math.hypot(wx - goal_x, wy - goal_y)
@@ -235,7 +428,7 @@ def main() -> None:
             if not aborted:
                 goal_reached = True
 
-        # --- 8. Result -----------------------------------------------------
+        # --- 9. Result -----------------------------------------------------
         print()
         if goal_reached:
             fx, fy, fyaw = detector.get_pose()
@@ -249,7 +442,7 @@ def main() -> None:
         print("\nInterrupted by user.")
 
     finally:
-        # --- 9. Cleanup ----------------------------------------------------
+        # --- 10. Cleanup ---------------------------------------------------
         walker.stop()
         if viewer is not None:
             viewer.close()

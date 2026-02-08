@@ -35,6 +35,7 @@ Contents
  28.  What dependencies need to be installed?
  29.  What would I change for simulation vs. real robot?
  30.  What are good next steps / improvements?
+ 31.  How does SLAM mapping + mouse picking work?
 
 
 ================================================================================
@@ -112,6 +113,9 @@ through the unitree_sdk2py library.
 ================================================================================
 
 Minimal example -- walk 3 metres forward on X:
+
+Note: navigate.py now uses safety/hanger_boot_sequence.py to ensure the
+robot is in FSM-200 before sending motion commands.
 
     python navigate.py --iface eth0 --goal_x 3.0 --goal_y 0.0
 
@@ -717,3 +721,26 @@ accept Move commands on the LocoClient RPC service for the system to work.
     in place, or requesting human assistance.
 
 ================================================================================
+
+
+================================================================================
+31. How does SLAM mapping + mouse picking work?
+================================================================================
+
+navigate.py now prefers the built-in utlidar SLAM map (HeightMap_ on
+"rt/utlidar/map_state") as the occupancy grid. It converts height values into
+obstacles using a configurable threshold (see --slam-height-threshold).
+
+At startup, navigate.py opens the map viewer and lets you click START and
+GOAL directly on the map:
+  - Left click: set START, then GOAL.
+  - Right click: reset selections.
+  - Press 'c' or Enter to confirm.
+
+Safety notes:
+  - The robot pose is still taken from SportModeState_. If you click a start
+    point far from the robot (>0.5 m), the planner will warn and use the
+    robot's actual pose instead.
+  - The navigation loop continues to use range_obstacle for immediate
+    near-field avoidance while following the SLAM-derived map.
+

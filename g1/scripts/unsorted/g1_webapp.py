@@ -1,18 +1,23 @@
 import json
+import os
 import threading
+import sys
 import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+_SCRIPTS_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
+from safety.hanger_boot_sequence import hanger_boot_sequence
+
 from unitree_sdk2py.core.channel import (
-    ChannelFactoryInitialize,
     ChannelSubscriber,
     ChannelPublisher,
 )
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_, LowCmd_, HandCmd_, HandState_
 from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_, unitree_hg_msg_dds__HandCmd_
 from unitree_sdk2py.utils.crc import CRC
-from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
 
 HOST = "0.0.0.0"
 PORT = 8020
@@ -626,7 +631,7 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=PORT)
     args = parser.parse_args()
 
-    ChannelFactoryInitialize(0, args.iface)
+    loco_client = hanger_boot_sequence(iface=args.iface)
 
     sub = ChannelSubscriber(TOPIC_LOWSTATE, LowState_)
     sub.Init(lowstate_cb, 10)
@@ -643,10 +648,6 @@ if __name__ == "__main__":
     hand_left_pub.Init()
     hand_right_pub = ChannelPublisher(TOPIC_DEX3_RIGHT_CMD, HandCmd_)
     hand_right_pub.Init()
-
-    loco_client = LocoClient()
-    loco_client.SetTimeout(5.0)
-    loco_client.Init()
 
     t = threading.Thread(target=low_level_loop, daemon=True)
     t.start()

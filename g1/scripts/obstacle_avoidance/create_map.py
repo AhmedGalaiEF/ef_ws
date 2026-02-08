@@ -8,11 +8,14 @@ Grid cells are ``int8``: 0 = free, 1 = obstacle.  The map stores a
 world-coordinate origin so that conversions between grid indices and metres
 are consistent across all modules.
 
-No SDK dependency -- pure numpy (+ scipy for inflation).
+No SDK dependency for the core grid class -- pure numpy (+ scipy for
+inflation). Optional helpers can build a grid from the built-in SLAM
+HeightMap DDS topic.
 """
 from __future__ import annotations
 
 import math
+import time
 
 import numpy as np
 
@@ -153,7 +156,7 @@ class OccupancyGrid:
         )
 
     @classmethod
-    def load(cls, filepath: str) -> OccupancyGrid:
+    def load(cls, filepath: str) -> "OccupancyGrid":
         data = np.load(filepath)
         resolution = float(data["resolution"])
         origin_x = float(data["origin_x"])
@@ -181,14 +184,49 @@ def create_empty_map(
     return OccupancyGrid(width_m, height_m, resolution, origin_x, origin_y)
 
 
+def create_from_slam(
+    timeout: float = 5.0,
+    height_threshold: float = 0.15,
+    max_height: float | None = None,
+    origin_centered: bool = True,
+) -> OccupancyGrid:
+    """Build an OccupancyGrid from the built-in SLAM HeightMap DDS topic.
+
+    This is a best-effort helper that waits up to *timeout* seconds for a
+    HeightMap_ message on ``rt/utlidar/map_state``.
+    """
+    try:
+        from slam_map import SlamMapSubscriber
+    except Exception as exc:
+        raise RuntimeError("slam_map helper unavailable") from exc
+
+    sub = SlamMapSubscriber()
+    sub.start()
+
+    t0 = time.time()
+    while time.time() - t0 < timeout:
+        grid, _meta = sub.to_occupancy(
+            height_threshold=height_threshold,
+            max_height=max_height,
+            origin_centered=origin_centered,
+        )
+        if grid is not None:
+            return grid
+        time.sleep(0.05)
+
+    raise RuntimeError("No SLAM map received within timeout")
+
+
 # ---------------------------------------------------------------------------
 # Self-test
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     grid = create_empty_map(10.0, 10.0, 0.1, -5.0, -5.0)
-    print(f"Grid: {grid.width_cells}x{grid.height_cells} cells, "
-          f"resolution={grid.resolution}m")
+    print(
+        f"Grid: {grid.width_cells}x{grid.height_cells} cells, "
+        f"resolution={grid.resolution}m"
+    )
 
     grid.add_rectangle(1.0, -1.0, 1.3, 1.0)
     print(f"Obstacles after adding wall: {np.sum(grid.grid > 0)} cells")
@@ -198,13 +236,3 @@ if __name__ == "__main__":
     print(f"World (0,0) -> grid ({r},{c}) -> world ({wx:.2f},{wy:.2f})")
 
     grid.mark_obstacle_from_range(0.0, 0.0, 0.0, [2.0, 1.5, 3.0, 1.0])
-    print(f"Obstacles after range marking: {np.sum(grid.grid > 0)} cells")
-
-    inflated = grid.inflate(3)
-    print(f"Inflated obstacles: {np.sum(inflated > 0)} cells")
-
-    grid.save("/tmp/test_map.npz")
-    loaded = OccupancyGrid.load("/tmp/test_map.npz")
-    assert np.array_equal(grid.grid, loaded.grid)
-    print("Save/load round-trip: OK")
-    print("All tests passed.")

@@ -1,11 +1,17 @@
 import time
 import sys
-from unitree_sdk2py.core.channel import ChannelSubscriber, ChannelFactoryInitialize
+import os
+from unitree_sdk2py.core.channel import ChannelSubscriber
 from unitree_sdk2py.idl.default import unitree_go_msg_dds__SportModeState_
 from unitree_sdk2py.idl.unitree_go.msg.dds_ import SportModeState_
 from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
 import math
 from dataclasses import dataclass
+
+_SCRIPTS_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
+from safety.hanger_boot_sequence import hanger_boot_sequence
 
 @dataclass
 class TestOption:
@@ -65,15 +71,11 @@ if __name__ == "__main__":
     print("WARNING: Please ensure there are no obstacles around the robot while running this example.")
     input("Press Enter to continue...")
 
-    ChannelFactoryInitialize(0, sys.argv[1])
+    sport_client = hanger_boot_sequence(iface=sys.argv[1])
 
     test_option = TestOption(name=None, id=None) 
     user_interface = UserInterface()
     user_interface.test_option_ = test_option
-
-    sport_client = LocoClient()  
-    sport_client.SetTimeout(10.0)
-    sport_client.Init()
 
     print("Input \"list\" to list all test option ...")
     while True:
