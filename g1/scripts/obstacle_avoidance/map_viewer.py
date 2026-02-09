@@ -281,24 +281,22 @@ class MapViewer:
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
+    import argparse
     import sys
     import time
 
-    if len(sys.argv) < 2:
-        print(f"Usage: python {sys.argv[0]} <networkInterface>")
-        print("  e.g.: python map_viewer.py eth0")
-        print()
-        print("Connects to the robot and displays a live obstacle map.")
-        print("The robot does NOT move -- this is observation only.")
-        print("Press 'q' or ESC to quit.")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description="Live obstacle map viewer.")
+    parser.add_argument("--iface", default="eth0", help="network interface for DDS")
+    parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id")
+    parser.add_argument("--sport-topic", default="rt/odommodestate", help="SportModeState topic name")
+    args = parser.parse_args()
 
     from unitree_sdk2py.core.channel import ChannelFactoryInitialize
     from obstacle_detection import ObstacleDetector
 
-    ChannelFactoryInitialize(0, sys.argv[1])
+    ChannelFactoryInitialize(args.domain_id, args.iface)
 
-    detector = ObstacleDetector(warn_distance=0.8, stop_distance=0.4)
+    detector = ObstacleDetector(warn_distance=0.8, stop_distance=0.4, topic=args.sport_topic)
     detector.start()
 
     print("Waiting for SportModeState_ ...")

@@ -166,18 +166,19 @@ class ObstacleDetector:
 
 
 if __name__ == "__main__":
-    import sys
+    import argparse
 
-    if len(sys.argv) < 2:
-        print(f"Usage: python {sys.argv[0]} <networkInterface>")
-        print("  e.g.: python obstacle_detection.py eth0")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description="Listen to SportModeState_ and print ranges/pose.")
+    parser.add_argument("--iface", default="eth0", help="network interface for DDS")
+    parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id")
+    parser.add_argument("--sport-topic", default="rt/odommodestate", help="SportModeState topic name")
+    args = parser.parse_args()
 
     from unitree_sdk2py.core.channel import ChannelFactoryInitialize
 
-    ChannelFactoryInitialize(0, sys.argv[1])
+    ChannelFactoryInitialize(args.domain_id, args.iface)
 
-    detector = ObstacleDetector()
+    detector = ObstacleDetector(topic=args.sport_topic)
     detector.start()
 
     print("Listening for SportModeState_ ... (Ctrl-C to stop)")

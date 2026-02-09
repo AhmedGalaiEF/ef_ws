@@ -213,7 +213,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Locomotion quick test (walk 1m forward).")
     parser.add_argument("--iface", default="enp1s0", help="network interface for DDS")
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id")
-    parser.add_argument("--sport-topic", default="rt/sportmodestate", help="SportModeState topic name")
+    parser.add_argument("--sport-topic", default="rt/odommodestate", help="SportModeState topic name")
     parser.add_argument("--stale-timeout", type=float, default=1.0, help="stop if sensor data is stale (s)")
     args = parser.parse_args()
 
