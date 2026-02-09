@@ -34,3 +34,65 @@
 2026-02-08 16:45:45,048  ERROR     [run_geoff_gui] SLAM thread disabled:
 2026-02-08 16:45:45,048  ERROR     No module named 'livox_python'
 2026-02-08 16:45:58,296  INFO      [run_geoff_gui] Damp request – SDK unavailable
+2026-02-09 10:03:16,043  INFO      No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2026-02-09 10:03:16,273  ERROR     [run_geoff_gui] Tele-op disabled:
+2026-02-09 10:03:16,273  ERROR     No module named 'hanger_boot_sequence'
+2026-02-09 10:03:16,456  ERROR     [run_geoff_gui] Arm control disabled:
+2026-02-09 10:03:16,457  ERROR     'NoneType' object has no attribute '_ref'
+2026-02-09 10:03:16,457  ERROR     [run_geoff_gui] Dex3 hand control disabled:
+2026-02-09 10:03:16,457  ERROR     No module named 'unitree_sdk2py.dex3'
+2026-02-09 10:03:16,458  ERROR     [run_geoff_stack] RealSense receiver disabled:
+2026-02-09 10:03:16,458  ERROR     No module named 'gi'
+2026-02-09 10:03:19,440  INFO      [INFO] livox2_python unavailable (
+2026-02-09 10:03:19,441  INFO      liblivox_lidar_sdk shared library not found.  Build & install Livox-SDK2 first (see wrapper docstring).
+2026-02-09 10:03:19,441  INFO      ) – falling back to SDK1.
+2026-02-09 10:03:19,444  ERROR     [run_geoff_gui] SLAM thread disabled:
+2026-02-09 10:03:19,444  ERROR     Could not locate Livox shared library (liblivox_sdk.so / LivoxSdk.dll). Build the Livox-SDK first, or add its folder to LD_LIBRARY_PATH / PATH.
+2026-02-09 10:12:48,232  INFO      No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2026-02-09 10:12:48,563  ERROR     [run_geoff_gui] Arm control disabled:
+2026-02-09 10:12:48,568  ERROR     'NoneType' object has no attribute '_ref'
+2026-02-09 10:12:48,569  ERROR     [run_geoff_gui] Dex3 hand control disabled:
+2026-02-09 10:12:48,569  ERROR     No module named 'unitree_sdk2py.dex3'
+2026-02-09 10:12:48,570  ERROR     [run_geoff_stack] RealSense receiver disabled:
+2026-02-09 10:12:48,573  ERROR     No module named 'gi'
+2026-02-09 10:12:48,643  ERROR     [run_geoff_gui] Keyboard controller disabled:
+2026-02-09 10:12:48,645  ERROR     No module named 'hanger_boot_sequence'
+2026-02-09 10:12:50,499  INFO      [INFO] livox2_python unavailable (
+2026-02-09 10:12:50,499  INFO      liblivox_lidar_sdk shared library not found.  Build & install Livox-SDK2 first (see wrapper docstring).
+2026-02-09 10:12:50,499  INFO      ) – falling back to SDK1.
+2026-02-09 10:12:50,500  ERROR     [run_geoff_gui] SLAM thread disabled:
+2026-02-09 10:12:50,500  ERROR     Could not locate Livox shared library (liblivox_sdk.so / LivoxSdk.dll). Build the Livox-SDK first, or add its folder to LD_LIBRARY_PATH / PATH.
+2026-02-09 10:12:58,675  INFO      [run_geoff_gui] Damp request – SDK unavailable
+2026-02-09 10:12:59,159  INFO      [run_geoff_gui] Damp request – SDK unavailable
+2026-02-09 10:13:01,650  INFO      [run_geoff_gui] Damp request – SDK unavailable
+2026-02-09 10:13:04,024  INFO      [run_geoff_gui] Damp request – SDK unavailable
+2026-02-09 10:13:04,163  INFO      [run_geoff_gui] Damp request – SDK unavailable
+2026-02-09 10:13:04,296  INFO      [run_geoff_gui] Damp request – SDK unavailable
+2026-02-09 10:13:04,551  INFO      [run_geoff_gui] Damp request – SDK unavailable
+2026-02-09 10:13:04,691  INFO      [run_geoff_gui] Damp request – SDK unavailable
+2026-02-09 10:13:04,883  INFO      [run_geoff_gui] Damp request – SDK unavailable
+2026-02-09 10:13:07,239  INFO      [run_geoff_gui] Damp request – SDK unavailable
+2026-02-09 10:13:07,414  INFO      [run_geoff_gui] Damp request – SDK unavailable
+2026-02-09 10:13:10,132  ERROR     Traceback (most recent call last):
+2026-02-09 10:13:10,132  ERROR       File "/home/ag/academy/academy_content/ef_ws/g1/scripts/unsorted/run_geoff_gui_input.py", line 2405, in _on_quit
+2026-02-09 10:13:10,133  ERROR     self._drive_timer.stop()
+2026-02-09 10:13:10,133  ERROR     ^
+2026-02-09 10:13:10,133  ERROR     ^
+2026-02-09 10:13:10,133  ERROR     ^
+2026-02-09 10:13:10,133  ERROR     ^
+2026-02-09 10:13:10,133  ERROR     ^
+2026-02-09 10:13:10,134  ERROR     ^
+2026-02-09 10:13:10,134  ERROR     ^
+2026-02-09 10:13:10,134  ERROR     ^
+2026-02-09 10:13:10,134  ERROR     ^
+2026-02-09 10:13:10,134  ERROR     ^
+2026-02-09 10:13:10,134  ERROR     ^
+2026-02-09 10:13:10,134  ERROR     ^
+2026-02-09 10:13:10,134  ERROR     ^
+2026-02-09 10:13:10,134  ERROR     ^
+2026-02-09 10:13:10,134  ERROR     ^
+2026-02-09 10:13:10,134  ERROR     ^
+2026-02-09 10:13:10,134  ERROR     ^
+2026-02-09 10:13:10,135  ERROR     AttributeError
+2026-02-09 10:13:10,135  ERROR     :
+2026-02-09 10:13:10,135  ERROR     'GeoffWindow' object has no attribute '_drive_timer'

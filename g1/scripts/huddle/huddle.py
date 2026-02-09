@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 import os
 import subprocess
 import sys
@@ -129,8 +130,13 @@ class ArmSdkController:
         self._cmd.crc = self._crc.Crc(self._cmd)
         self._pub.Write(self._cmd)
 
-    def ramp_to_pose(self, pose: List[Tuple[int, float]], duration: float) -> None:
-        """Linearly ramp the arm joints to the target pose over duration seconds."""
+    def ramp_to_pose(
+        self,
+        pose: List[Tuple[int, float]],
+        duration: float,
+        easing: str = "smooth",
+    ) -> None:
+        """Ramp the arm joints to the target pose over duration seconds."""
         target = {j: q for j, q in pose}
         start = {j: self._cmd_q.get(j, 0.0) for j in target}
 
@@ -139,6 +145,8 @@ class ArmSdkController:
 
         for step in range(1, steps + 1):
             alpha = step / steps
+            if easing == "smooth":
+                alpha = 0.5 - 0.5 * math.cos(math.pi * alpha)
             cur = {j: start[j] + (target[j] - start[j]) * alpha for j in target}
             self._apply_targets(cur)
             time.sleep(dt)
@@ -172,17 +180,17 @@ def _default_poses(arm: str) -> Dict[str, List[Tuple[int, float]]]:
         ]
         extend = [
             (12, 0.0),
-            (15, +0.320),
-            (16, +0.120),
-            (17, -0.220),
-            (18, +0.520),
-            (19, -0.420),
-            (20, -0.900),
+            (15, +0.380),
+            (16, +0.060),
+            (17, -0.240),
+            (18, +0.420),
+            (19, -0.500),
+            (20, -1.000),
             (21, -0.050),
         ]
         lift = [
             (12, 0.0),
-            (15, -0.050),
+            (15, -0.300),
             (16, +0.080),
             (17, -0.200),
             (18, +0.520),
@@ -203,17 +211,17 @@ def _default_poses(arm: str) -> Dict[str, List[Tuple[int, float]]]:
         ]
         extend = [
             (12, 0.0),
-            (22, +0.087),
-            (23, -0.271),
-            (24, +0.323),
-            (25, +0.691),
-            (26, +0.240),
-            (27, -0.771),
+            (22, +0.200),
+            (23, -0.300),
+            (24, +0.280),
+            (25, +0.520),
+            (26, +0.050),
+            (27, -1.050),
             (28, -0.176),
         ]
         lift = [
             (12, 0.0),
-            (22, -0.250),
+            (22, -0.550),
             (23, -0.320),
             (24, +0.280),
             (25, +0.691),
@@ -235,11 +243,17 @@ def main() -> None:
     parser.add_argument("--cmd-hz", type=float, default=50.0, help="command rate for arm SDK")
     parser.add_argument("--kp", type=float, default=40.0, help="arm joint kp")
     parser.add_argument("--kd", type=float, default=1.0, help="arm joint kd")
-    parser.add_argument("--extend-sec", type=float, default=1.5, help="seconds to extend hand")
+    parser.add_argument("--extend-sec", type=float, default=2.5, help="seconds to extend hand")
     parser.add_argument("--hold-extend", type=float, default=0.3, help="seconds to hold extend pose")
-    parser.add_argument("--lift-sec", type=float, default=1.0, help="seconds to lift hand")
+    parser.add_argument("--lift-sec", type=float, default=1.5, help="seconds to lift hand")
     parser.add_argument("--hold-lift", type=float, default=0.3, help="seconds to hold lift pose")
     parser.add_argument("--lower-sec", type=float, default=2.5, help="seconds to lower back to side")
+    parser.add_argument(
+        "--easing",
+        choices=["linear", "smooth"],
+        default="smooth",
+        help="easing profile for arm ramps",
+    )
     args = parser.parse_args()
 
     wav_path = args.file
@@ -251,7 +265,7 @@ def main() -> None:
     arm = ArmSdkController(args.iface, args.arm, args.cmd_hz, args.kp, args.kd)
 
     print("Step 1: extend hand in front (palm down).")
-    arm.ramp_to_pose(poses["extend"], args.extend_sec)
+    arm.ramp_to_pose(poses["extend"], args.extend_sec, easing=args.easing)
     arm.hold_pose(poses["extend"], args.hold_extend)
 
     print("Step 2: play audio.")
@@ -262,11 +276,11 @@ def main() -> None:
     _play_wav(wav_path)
 
     print("Step 3: lift hand (rotate shoulder).")
-    arm.ramp_to_pose(poses["lift"], args.lift_sec)
+    arm.ramp_to_pose(poses["lift"], args.lift_sec, easing=args.easing)
     arm.hold_pose(poses["lift"], args.hold_lift)
 
     print("Step 4: lower arm back to side (slow).")
-    arm.ramp_to_pose(poses["side"], args.lower_sec)
+    arm.ramp_to_pose(poses["side"], args.lower_sec, easing=args.easing)
 
 
 if __name__ == "__main__":
