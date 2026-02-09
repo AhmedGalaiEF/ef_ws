@@ -50,6 +50,10 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--iface", default="eth0",
                         help="Network interface connected to the robot")
+    parser.add_argument("--domain-id", type=int, default=0,
+                        help="DDS domain id")
+    parser.add_argument("--sport-topic", default="rt/odommodestate",
+                        help="SportModeState topic name")
     parser.add_argument("--goal_x", type=float, default=None,
                         help="Goal X position in metres (optional if using mouse pick)")
     parser.add_argument("--goal_y", type=float, default=None,
@@ -233,7 +237,7 @@ def main() -> None:
     loco: LocoClient = hanger_boot_sequence(iface=args.iface)
 
     # --- 2. Obstacle detector (subscribes to rt/sportmodestate) ------------
-    detector = ObstacleDetector(warn_distance=0.8, stop_distance=0.4)
+    detector = ObstacleDetector(warn_distance=0.8, stop_distance=0.4, topic=args.sport_topic)
     detector.start()
 
     # Wait for first pose reading
