@@ -22,37 +22,11 @@ from dataclasses import is_dataclass, asdict
 from types import ModuleType
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
-try:
-    from rich.logging import RichHandler  # type: ignore
-    from rich.console import Console
-    from rich.live import Live
-    from rich.panel import Panel
-    from rich.columns import Columns
-    from rich.text import Text
-
-    RICH_AVAILABLE = True
-
-    def _configure_logging(level: int) -> None:
-        logging.basicConfig(
-            level=level,
-            format="%(message)s",
-            datefmt="[%H:%M:%S]",
-            handlers=[RichHandler(rich_tracebacks=True)],
-        )
-
-except Exception:
-    RICH_AVAILABLE = False
-    Console = None  # type: ignore
-    Live = None  # type: ignore
-    Panel = None  # type: ignore
-    Columns = None  # type: ignore
-    Text = None  # type: ignore
-
-    def _configure_logging(level: int) -> None:
-        logging.basicConfig(
-            level=level,
-            format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-        )
+def _configure_logging(level: int) -> None:
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
 
 
 LOG = logging.getLogger("g1_poll_all")
@@ -379,30 +353,6 @@ def _truncate(value: str, limit: int) -> str:
     return value[: limit - 3] + "..."
 
 
-def _format_timestamp(ts: float) -> str:
-    if ts <= 0.0:
-        return "never"
-    return time.strftime("%H:%M:%S", time.localtime(ts))
-
-
-def _build_panels(readers: Dict[str, TopicReader], stats: Dict[str, TopicStats]) -> Any:
-    panels: List[Any] = []
-    for topic_name in sorted(readers.keys()):
-        reader = readers[topic_name]
-        stat = stats.get(topic_name) or TopicStats()
-        stats[topic_name] = stat
-        body = Text()
-        body.append(f"type: {reader.type_label}\n")
-        body.append(f"samples: {stat.sample_count}\n")
-        body.append(f"last: {_format_timestamp(stat.last_ts)}\n")
-        if stat.last_error:
-            body.append(f"error: {stat.last_error}\n")
-        body.append("\n")
-        body.append(stat.last_sample or "<no data yet>")
-        panels.append(Panel(body, title=topic_name, border_style="cyan"))
-    return Columns(panels, expand=True)
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description="Poll Unitree G1 DDS topics and SDK clients.")
     parser.add_argument("--domain", type=int, default=0, help="DDS domain id (default: 0)")
@@ -475,41 +425,24 @@ def main() -> int:
     LOG.info("Polling started. Press Ctrl+C to stop.")
     try:
         stats: Dict[str, TopicStats] = {}
-        if RICH_AVAILABLE:
-            console = Console()
-            with Live(console=console, auto_refresh=False, transient=False) as live:
-                while True:
-                    if discovery:
-                        for topic_name, type_name in discovery.poll():
-                            LOG.info("Discovered topic: %s (%s)", topic_name, type_name)
-                            if any(key in topic_name.lower() for key in RGBD_TOPIC_KEYWORDS):
-                                LOG.info("Possible RGBD topic discovered: %s (%s)", topic_name, type_name)
-                            _try_add_reader_for_discovered(participant, readers, topic_name, type_name)
+        while True:
+            if discovery:
+                for topic_name, type_name in discovery.poll():
+                    LOG.info("Discovered topic: %s (%s)", topic_name, type_name)
+                    if any(key in topic_name.lower() for key in RGBD_TOPIC_KEYWORDS):
+                        LOG.info("Possible RGBD topic discovered: %s (%s)", topic_name, type_name)
+                    _try_add_reader_for_discovered(participant, readers, topic_name, type_name)
 
-                    for topic_name, reader in list(readers.items()):
-                        stat = stats.setdefault(topic_name, TopicStats())
-                        try:
-                            for sample in reader.read(8):
-                                stat.update_sample(sample)
-                        except Exception as exc:
-                            stat.update_error(exc)
-                            LOG.exception("Read failed for topic %s", topic_name)
-                    live.update(_build_panels(readers, stats), refresh=True)
-                    time.sleep(args.poll)
-        else:
-            while True:
-                if discovery:
-                    for topic_name, type_name in discovery.poll():
-                        LOG.info("Discovered topic: %s (%s)", topic_name, type_name)
-                        _try_add_reader_for_discovered(participant, readers, topic_name, type_name)
-
-                for topic_name, reader in list(readers.items()):
-                    try:
-                        for sample in reader.read(8):
-                            LOG.info("%s: %s", topic_name, _format_sample(sample))
-                    except Exception:
-                        LOG.exception("Read failed for topic %s", topic_name)
-                time.sleep(args.poll)
+            for topic_name, reader in list(readers.items()):
+                stat = stats.setdefault(topic_name, TopicStats())
+                try:
+                    for sample in reader.read(8):
+                        stat.update_sample(sample)
+                        LOG.info("%s: %s", topic_name, stat.last_sample)
+                except Exception as exc:
+                    stat.update_error(exc)
+                    LOG.exception("Read failed for topic %s", topic_name)
+            time.sleep(args.poll)
     except KeyboardInterrupt:
         LOG.info("Stopping...")
 

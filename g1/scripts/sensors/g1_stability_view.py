@@ -1,23 +1,92 @@
+from __future__ import annotations
+
 import argparse
+import importlib
+import logging
 import math
 import threading
 import time
 from collections import deque
+from typing import Any, List, Optional
 
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
-from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelSubscriber
-from unitree_sdk2py.idl.nav_msgs.msg.dds_ import Odometry_
-
-try:
-    from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
-except Exception:
-    from unitree_sdk2py.idl.unitree_go.msg.dds_ import LowState_
-
-
 TOPIC_LOWSTATE = "rt/lowstate"
 TOPIC_ODOM = "rt/odom"
+
+LOG = logging.getLogger("g1_stability_view")
+
+
+def _configure_logging(level: int) -> None:
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+
+
+def _try_import(module_path: str):
+    try:
+        return importlib.import_module(module_path)
+    except Exception:
+        LOG.debug("Failed to import %s", module_path, exc_info=True)
+        return None
+
+
+def _resolve_type(type_path: str) -> Any:
+    """Resolve a python type from a dotted path like package.module:ClassName or package.module.ClassName."""
+    if ":" in type_path:
+        module_path, class_name = type_path.split(":", 1)
+    else:
+        module_path, class_name = type_path.rsplit(".", 1)
+    module = importlib.import_module(module_path)
+    return getattr(module, class_name)
+
+
+def _type_path_candidates(type_path: str) -> List[str]:
+    """
+    Return candidate python type paths for a given DDS type name or python path.
+    """
+    if "::" not in type_path:
+        return [type_path]
+
+    parts = type_path.split("::")
+    class_name = parts[-1]
+    namespace = parts[:-1]
+    candidates = [
+        f"unitree_sdk2py.idl.{'.'.join(namespace)}._{class_name}:{class_name}",
+        f"unitree_sdk2py.idl.{'.'.join(namespace)}:{class_name}",
+    ]
+
+    # Common ROS2 IDL location in unitree_sdk2py
+    if namespace[:1] in (["sensor_msgs"], ["nav_msgs"]):
+        candidates.append(f"unitree_sdk2py.idl.ros2._{class_name}:{class_name}")
+
+    candidates.append(type_path)
+    return candidates
+
+
+def _resolve_lowstate_type() -> Optional[type]:
+    for module_path in (
+        "unitree_sdk2py.idl.unitree_hg.msg.dds_",
+        "unitree_sdk2py.idl.unitree_go.msg.dds_",
+    ):
+        module = _try_import(module_path)
+        if module and hasattr(module, "LowState_"):
+            return getattr(module, "LowState_")
+    return None
+
+
+def _resolve_odom_type(type_path: str) -> Optional[type]:
+    last_exc: Optional[Exception] = None
+    for candidate in _type_path_candidates(type_path):
+        try:
+            return _resolve_type(candidate)
+        except Exception as exc:
+            last_exc = exc
+    if last_exc:
+        LOG.debug("Odom type resolve failed for %s", type_path, exc_info=last_exc)
+    return None
 
 
 class StabilityStream:
@@ -39,7 +108,7 @@ class StabilityStream:
         self.odom_x = deque()
         self.odom_y = deque()
 
-    def lowstate_cb(self, msg: LowState_):
+    def lowstate_cb(self, msg: Any):
         now = time.time()
         imu = msg.imu_state
         roll = float(imu.rpy[0])
@@ -59,7 +128,7 @@ class StabilityStream:
             self.stability.append(stability)
             self._trim(now)
 
-    def odom_cb(self, msg: Odometry_):
+    def odom_cb(self, msg: Any):
         with self.lock:
             self.last_odom = msg
             try:
@@ -122,18 +191,46 @@ def main():
         default=TOPIC_ODOM,
         help="Odometry topic name",
     )
+    parser.add_argument(
+        "--odom-type",
+        default="nav_msgs::msg::dds_::Odometry_",
+        help="Odometry DDS type or python path",
+    )
+    parser.add_argument("--log-level", type=str, default="INFO", help="Log level (DEBUG, INFO, WARNING)")
     args = parser.parse_args()
 
-    print(f"Connecting via iface={args.iface} domain_id={args.domain_id}")
-    ChannelFactoryInitialize(args.domain_id, args.iface)
+    level = getattr(logging, args.log_level.upper(), logging.INFO)
+    _configure_logging(level)
+
+    chan = _try_import("unitree_sdk2py.core.channel")
+    if not chan or not hasattr(chan, "ChannelFactoryInitialize") or not hasattr(chan, "ChannelSubscriber"):
+        LOG.error("unitree_sdk2py.core.channel not available; cannot start subscribers")
+        return 2
+
+    LowState = _resolve_lowstate_type()
+    if LowState is None:
+        LOG.error("LowState_ type not found in unitree_sdk2py (unitree_hg or unitree_go)")
+        return 2
+
+    LOG.info("Connecting via iface=%s domain_id=%s", args.iface, args.domain_id)
+    chan.ChannelFactoryInitialize(args.domain_id, args.iface)
 
     stream = StabilityStream(args.history, args.max_tilt_deg)
 
-    lowstate_sub = ChannelSubscriber(args.lowstate_topic, LowState_)
+    lowstate_sub = chan.ChannelSubscriber(args.lowstate_topic, LowState)
     lowstate_sub.Init(stream.lowstate_cb, 10)
 
-    odom_sub = ChannelSubscriber(args.odom_topic, Odometry_)
-    odom_sub.Init(stream.odom_cb, 10)
+    odom_type = _resolve_odom_type(args.odom_type)
+    if odom_type:
+        odom_sub = chan.ChannelSubscriber(args.odom_topic, odom_type)
+        odom_sub.Init(stream.odom_cb, 10)
+        LOG.info("Subscribed to odom: %s (%s)", args.odom_topic, args.odom_type)
+    else:
+        odom_sub = None
+        LOG.warning(
+            "Odom type not resolved for %s. Skipping odom subscriber.",
+            args.odom_type,
+        )
 
     fig, axes = plt.subplots(2, 1, figsize=(10, 7))
     fig.canvas.manager.set_window_title("G1 Stability")
@@ -192,10 +289,17 @@ def main():
         status.set_text(status_text)
         return line_roll, line_pitch, line_yaw, line_tilt, line_stab, status
 
-    FuncAnimation(fig, _update, interval=100, blit=False)
+    anim = FuncAnimation(fig, _update, interval=100, blit=False, cache_frame_data=False)
     plt.tight_layout()
-    plt.show()
+    try:
+        plt.show()
+    except KeyboardInterrupt:
+        LOG.info("Interrupted; exiting")
+    finally:
+        # Keep reference alive through show() for some backends
+        _ = anim
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
