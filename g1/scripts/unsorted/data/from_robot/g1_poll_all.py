@@ -22,6 +22,19 @@ from dataclasses import is_dataclass, asdict
 from types import ModuleType
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
+try:
+    import pandas as pd  # type: ignore
+except Exception:
+    pd = None
+
+try:
+    from rich import pretty  # type: ignore
+except Exception:
+    pretty = None
+
+if pretty is not None:
+    pretty.install()
+
 def _configure_logging(level: int) -> None:
     logging.basicConfig(
         level=level,
@@ -39,12 +52,15 @@ class TopicStats:
         self.last_sample: str = ""
         self.last_ts: float = 0.0
         self.last_error: str = ""
+        self.samples: List[Dict[str, Any]] = []
+        self.last_print_count: int = 0
 
     def update_sample(self, sample: Any) -> None:
         self.sample_count += 1
         self.last_sample = _truncate(_format_sample(sample), 400)
         self.last_ts = time.time()
         self.last_error = ""
+        self.samples.append(_sample_to_record(sample))
 
     def update_error(self, exc: Exception) -> None:
         self.last_error = str(exc)
@@ -115,6 +131,36 @@ def _format_sample(sample: Any) -> str:
         return repr(sample)
     except Exception:
         return "<unprintable sample>"
+
+
+def _sample_to_record(sample: Any) -> Dict[str, Any]:
+    try:
+        if is_dataclass(sample):
+            record = asdict(sample)
+            if isinstance(record, dict):
+                record["_ts"] = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+                return record
+    except Exception:
+        pass
+    try:
+        if hasattr(sample, "to_dict"):
+            record = sample.to_dict()
+            if isinstance(record, dict):
+                record["_ts"] = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+                return record
+    except Exception:
+        pass
+    try:
+        if hasattr(sample, "__dict__"):
+            record = {k: v for k, v in vars(sample).items() if not k.startswith("_")}
+            record["_ts"] = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+            return record
+    except Exception:
+        pass
+    return {
+        "_ts": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
+        "value": _format_sample(sample),
+    }
 
 
 class DdsDiscovery:
@@ -353,6 +399,100 @@ def _truncate(value: str, limit: int) -> str:
     return value[: limit - 3] + "..."
 
 
+MAX_LIST_EXPAND = 32
+MAX_BYTES_PREVIEW = 64
+UNIT_HINTS: Dict[str, str] = {
+    "x": "m",
+    "y": "m",
+    "z": "m",
+    "vx": "m/s",
+    "vy": "m/s",
+    "vz": "m/s",
+    "yaw": "rad",
+    "pitch": "rad",
+    "roll": "rad",
+    "vyaw": "rad/s",
+    "yaw_speed": "rad/s",
+}
+
+
+def _summarize_large_value(value: Any) -> Optional[str]:
+    if isinstance(value, (bytes, bytearray)):
+        return f"<{type(value).__name__} len={len(value)}>"
+    if isinstance(value, list) and len(value) > MAX_LIST_EXPAND:
+        return f"<list len={len(value)}>"
+    if isinstance(value, tuple) and len(value) > MAX_LIST_EXPAND:
+        return f"<tuple len={len(value)}>"
+    return None
+
+
+def _flatten_record(value: Any, prefix: str = "") -> Iterable[Tuple[str, Any]]:
+    summary = _summarize_large_value(value)
+    if summary is not None:
+        yield (prefix, summary)
+        return
+
+    if isinstance(value, dict):
+        for key, inner in value.items():
+            path = f"{prefix}.{key}" if prefix else str(key)
+            yield from _flatten_record(inner, path)
+        return
+
+    if isinstance(value, (list, tuple)):
+        for idx, inner in enumerate(value):
+            path = f"{prefix}[{idx}]"
+            yield from _flatten_record(inner, path)
+        return
+
+    yield (prefix, value)
+
+
+def _unit_for_path(topic_name: str, path: str) -> str:
+    if not path:
+        return ""
+    key = path.split(".")[-1]
+    key = key.split("[", 1)[0]
+    return UNIT_HINTS.get(key, "")
+
+
+def _record_to_rows(topic_name: str, record: Dict[str, Any]) -> List[Dict[str, Any]]:
+    ts = record.get("_ts", "")
+    rows: List[Dict[str, Any]] = []
+    for path, value in _flatten_record(record):
+        if not path or path == "_ts":
+            continue
+        rows.append(
+            {
+                "topic": topic_name,
+                "ts": ts,
+                "name": path,
+                "value": value,
+                "unit": _unit_for_path(topic_name, path),
+            }
+        )
+    return rows
+
+
+def _print_topic_df(topic_name: str, stat: TopicStats, max_rows: int) -> None:
+    if pd is None:
+        return
+    if not stat.samples:
+        return
+    if stat.sample_count == stat.last_print_count:
+        return
+    rows: List[Dict[str, Any]] = []
+    for record in stat.samples[-max_rows:]:
+        if not isinstance(record, dict):
+            continue
+        rows.extend(_record_to_rows(topic_name, record))
+    df = pd.DataFrame(rows)
+    tail = df.tail(max_rows * 20) if not df.empty else df
+    print()
+    print(f"Topic: {topic_name} (samples: {stat.sample_count}, showing last {len(tail)})")
+    print(tail.to_string(index=False))
+    stat.last_print_count = stat.sample_count
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Poll Unitree G1 DDS topics and SDK clients.")
     parser.add_argument("--domain", type=int, default=0, help="DDS domain id (default: 0)")
@@ -365,6 +505,7 @@ def main() -> int:
         help="Built-in topic profile: g1_basic, g1_sport, g1_odom, g1_lidar (comma-separated)",
     )
     parser.add_argument("--poll", type=float, default=0.05, help="Polling interval seconds")
+    parser.add_argument("--df-rows", type=int, default=5, help="Rows to show in dataframe output (default: 5)")
     parser.add_argument("--no-discover", action="store_true", help="Disable DDS discovery")
     parser.add_argument("--rpc-scan", action="store_true", help="Scan SDK modules for RPC client classes")
     parser.add_argument("--log-level", type=str, default="INFO", help="Log level (DEBUG, INFO, WARNING)")
@@ -422,6 +563,11 @@ def main() -> int:
                 config = combined
     readers = _build_readers_from_config(participant, config)
 
+    if pd is None:
+        LOG.warning("pandas not installed; falling back to log output")
+    else:
+        LOG.info("pandas dataframe output enabled")
+
     LOG.info("Polling started. Press Ctrl+C to stop.")
     try:
         stats: Dict[str, TopicStats] = {}
@@ -438,10 +584,12 @@ def main() -> int:
                 try:
                     for sample in reader.read(8):
                         stat.update_sample(sample)
-                        LOG.info("%s: %s", topic_name, stat.last_sample)
+                        if pd is None:
+                            LOG.info("%s: %s", topic_name, stat.last_sample)
                 except Exception as exc:
                     stat.update_error(exc)
                     LOG.exception("Read failed for topic %s", topic_name)
+                _print_topic_df(topic_name, stat, args.df_rows)
             time.sleep(args.poll)
     except KeyboardInterrupt:
         LOG.info("Stopping...")
