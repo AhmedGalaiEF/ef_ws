@@ -22,12 +22,13 @@ Can be used in two ways:
 from __future__ import annotations
 
 import math
-from typing import Sequence
+from typing import Sequence, Optional
 
 import cv2
 import numpy as np
 
 from create_map import OccupancyGrid
+from slam_map import SlamOdomSubscriber
 
 
 # ---------------------------------------------------------------------------
@@ -44,6 +45,7 @@ _COL_GOAL = np.array([0, 0, 255], dtype=np.uint8)           # red
 _COL_RANGE_OK = (0, 180, 0)                                 # green line
 _COL_RANGE_WARN = (0, 180, 255)                             # orange line
 _COL_RANGE_BLOCK = (0, 0, 255)                              # red line
+_COL_SLAM_POINTS = np.array([0, 120, 255], dtype=np.uint8)  # orange
 
 # Scale: how many display pixels per grid cell.  Increase for a larger window.
 _DEFAULT_SCALE = 4
@@ -127,6 +129,7 @@ class MapViewer:
         robot_y: float,
         robot_yaw: float,
         ranges: list[float] | None = None,
+        slam_points: Optional[np.ndarray] = None,
     ) -> None:
         """Render the current map state and display it.
 
@@ -144,7 +147,7 @@ class MapViewer:
         if len(self._trail) > self._max_trail:
             self._trail.pop(0)
 
-        img = self._render(robot_x, robot_y, robot_yaw, ranges)
+        img = self._render(robot_x, robot_y, robot_yaw, ranges, slam_points)
         cv2.imshow(self.window_name, img)
         cv2.waitKey(1)
 
@@ -154,9 +157,10 @@ class MapViewer:
         robot_y: float,
         robot_yaw: float,
         ranges: list[float] | None = None,
+        slam_points: Optional[np.ndarray] = None,
     ) -> np.ndarray:
         """Return a rendered map image without showing it."""
-        return self._render(robot_x, robot_y, robot_yaw, ranges)
+        return self._render(robot_x, robot_y, robot_yaw, ranges, slam_points)
 
     def _render(
         self,
@@ -164,6 +168,7 @@ class MapViewer:
         ry: float,
         ryaw: float,
         ranges: list[float] | None,
+        slam_points: Optional[np.ndarray],
     ) -> np.ndarray:
         H = self.grid.height_cells
         W = self.grid.width_cells
@@ -233,6 +238,13 @@ class MapViewer:
                     col = _COL_RANGE_OK
                 cv2.line(img, (rpx, rpy), (epx, epy), col, 1, cv2.LINE_AA)
 
+        # --- SLAM points overlay ---
+        if slam_points is not None and len(slam_points) > 0:
+            for px, py in slam_points:
+                pxi, pyi = self._world_to_pixel(float(px), float(py))
+                if 0 <= pxi < img.shape[1] and 0 <= pyi < img.shape[0]:
+                    img[pyi, pxi] = _COL_SLAM_POINTS
+
         # --- robot marker (circle + heading arrow) ---
         rpx, rpy = self._world_to_pixel(rx, ry)
         radius = max(s, 5)
@@ -289,15 +301,79 @@ if __name__ == "__main__":
     parser.add_argument("--iface", default="eth0", help="network interface for DDS")
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id")
     parser.add_argument("--sport-topic", default="rt/odommodestate", help="SportModeState topic name")
+    parser.add_argument("--slam-odom-topic", default="rt/unitree/slam_mapping/odom", help="SLAM odom topic (optional)")
+    parser.add_argument("--slam-points-topic", default="", help="SLAM points topic (optional)")
+    parser.add_argument("--slam-points-stride", type=int, default=4, help="Subsample SLAM points")
+    parser.add_argument("--lidar-topic", default="rt/utlidar/cloud_livox_mid360", help="Lidar PointCloud2 DDS topic")
+    parser.add_argument("--lidar-stride", type=int, default=6, help="Subsample lidar points")
+    parser.add_argument("--lidar-z-min", type=float, default=-0.5, help="Min Z for lidar overlay")
+    parser.add_argument("--lidar-z-max", type=float, default=1.5, help="Max Z for lidar overlay")
     args = parser.parse_args()
 
-    from unitree_sdk2py.core.channel import ChannelFactoryInitialize
+    from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelSubscriber
     from obstacle_detection import ObstacleDetector
+    from unitree_sdk2py.idl.sensor_msgs.msg.dds_ import PointCloud2_
 
     ChannelFactoryInitialize(args.domain_id, args.iface)
 
     detector = ObstacleDetector(warn_distance=0.8, stop_distance=0.4, topic=args.sport_topic)
     detector.start()
+
+    slam_odom = SlamOdomSubscriber(args.slam_odom_topic) if args.slam_odom_topic else None
+    if slam_odom is not None:
+        slam_odom.start()
+
+    slam_points: list[tuple[float, float]] = []
+    lidar_points: list[tuple[float, float]] = []
+
+    def _decode_xy(msg: PointCloud2_, stride: int, zmin: float, zmax: float) -> list[tuple[float, float]]:
+        try:
+            fields = {f.name: f for f in msg.fields}
+            if "x" not in fields or "y" not in fields:
+                return []
+            point_step = int(msg.point_step)
+            if point_step <= 0:
+                return []
+            data = bytes(msg.data)
+            if not data:
+                return []
+            xoff = int(fields["x"].offset)
+            yoff = int(fields["y"].offset)
+            zoff = int(fields["z"].offset) if "z" in fields else xoff + 8
+            dtype = np.dtype(
+                {
+                    "names": ["x", "y", "z"],
+                    "formats": ["<f4", "<f4", "<f4"],
+                    "offsets": [xoff, yoff, zoff],
+                    "itemsize": point_step,
+                }
+            )
+            arr = np.frombuffer(data, dtype=dtype, count=len(data) // point_step)
+            xs = arr["x"][:: stride]
+            ys = arr["y"][:: stride]
+            zs = arr["z"][:: stride]
+            pts = []
+            for x, y, z in zip(xs, ys, zs):
+                if z < zmin or z > zmax:
+                    continue
+                pts.append((float(x), float(y)))
+            return pts
+        except Exception:
+            return []
+
+    def _slam_points_cb(msg: PointCloud2_) -> None:
+        slam_points[:] = _decode_xy(msg, args.slam_points_stride, args.lidar_z_min, args.lidar_z_max)
+
+    def _lidar_points_cb(msg: PointCloud2_) -> None:
+        lidar_points[:] = _decode_xy(msg, args.lidar_stride, args.lidar_z_min, args.lidar_z_max)
+
+    if args.slam_points_topic:
+        slam_sub = ChannelSubscriber(args.slam_points_topic, PointCloud2_)
+        slam_sub.Init(_slam_points_cb, 10)
+
+    if args.lidar_topic:
+        lidar_sub = ChannelSubscriber(args.lidar_topic, PointCloud2_)
+        lidar_sub.Init(_lidar_points_cb, 10)
 
     print("Waiting for SportModeState_ ...")
     time.sleep(1.0)
@@ -321,14 +397,18 @@ if __name__ == "__main__":
                 time.sleep(0.1)
                 continue
 
-            x, y, yaw = detector.get_pose()
+            if slam_odom is not None and not slam_odom.is_stale():
+                x, y, yaw = slam_odom.get_pose()
+            else:
+                x, y, yaw = detector.get_pose()
             ranges = detector.get_ranges()
 
             # Mark obstacles on the grid
             occ_grid.mark_obstacle_from_range(x, y, yaw, ranges)
 
             # Render
-            viewer.update(x, y, yaw, ranges)
+            overlay = slam_points if slam_points else lidar_points
+            viewer.update(x, y, yaw, ranges, np.array(overlay) if overlay else None)
 
             key = cv2.waitKey(50) & 0xFF
             if key in (ord("q"), 27):
