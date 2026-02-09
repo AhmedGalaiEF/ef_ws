@@ -54,6 +54,7 @@ class ObstacleDetector:
         self,
         warn_distance: float = 0.8,
         stop_distance: float = 0.4,
+        topic: str = "rt/sportmodestate",
     ):
         """
         Args:
@@ -62,6 +63,7 @@ class ObstacleDetector:
         """
         self.warn_distance = warn_distance
         self.stop_distance = stop_distance
+        self.topic = topic
 
         self._lock = threading.Lock()
         self._range_obstacle: list[float] = [float("inf")] * 4
@@ -76,7 +78,7 @@ class ObstacleDetector:
 
     def start(self) -> None:
         """Create and initialise the DDS subscriber."""
-        self._sub = ChannelSubscriber("rt/sportmodestate", SportModeState_)
+        self._sub = ChannelSubscriber(self.topic, SportModeState_)
         self._sub.Init(self._callback, 10)
 
     # ------------------------------------------------------------------
