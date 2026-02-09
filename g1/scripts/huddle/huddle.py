@@ -8,6 +8,7 @@ import os
 import subprocess
 import sys
 import time
+import threading
 from typing import Dict, List, Tuple
 
 try:
@@ -71,7 +72,7 @@ def _set_brightness(level: int) -> None:
         raise SystemExit(f"LedControl failed: code={code}")
 
 
-def _play_wav(wav_path: str) -> None:
+def _play_wav_async(wav_path: str) -> subprocess.Popen:
     if not os.path.exists(wav_path):
         print(f"Missing wav file: {wav_path}")
         raise SystemExit(1)
@@ -83,10 +84,10 @@ def _play_wav(wav_path: str) -> None:
 
     cmd = player + [wav_path]
     try:
-        subprocess.run(cmd, check=True)
-    except subprocess.CalledProcessError as exc:
-        print(f"Audio player failed: {exc}")
-        raise SystemExit(exc.returncode)
+        return subprocess.Popen(cmd)
+    except OSError as exc:
+        print(f"Audio player failed to start: {exc}")
+        raise SystemExit(2)
 
 
 class ArmSdkController:
@@ -119,6 +120,60 @@ class ArmSdkController:
         for idx in self._joint_idx:
             self._cmd_q[idx] = 0.0
         self._cmd_q[self._WAIST_YAW_IDX] = 0.0
+
+        self._joint_cur: Dict[int, float] = {}
+        self._state_ready = threading.Event()
+        self._initialised_from_state = False
+        self._ls_sub = None
+
+        threading.Thread(target=self._init_lowstate_sub, daemon=True).start()
+
+    def _init_lowstate_sub(self) -> None:
+        """Subscribe to LowState to seed initial joint angles and avoid snap."""
+        try:
+            from unitree_sdk2py.core.channel import ChannelSubscriber
+        except Exception:
+            return
+
+        candidates = [
+            "unitree_sdk2py.idl.unitree_hg.msg.dds_.LowState_",
+            "unitree_sdk2py.idl.unitree_go.msg.dds_.LowState_",
+        ]
+
+        for dotted in candidates:
+            try:
+                mod_path, cls_name = dotted.rsplit(".", 1)
+                mod = __import__(mod_path, fromlist=[cls_name])
+                LowState_ = getattr(mod, cls_name)
+
+                def _ls_cb(msg):
+                    for j_idx in (*self._joint_idx, self._WAIST_YAW_IDX):
+                        try:
+                            self._joint_cur[j_idx] = msg.motor_state[j_idx].q
+                        except Exception:
+                            pass
+                    if self._joint_cur:
+                        self._state_ready.set()
+
+                sub = ChannelSubscriber("rt/lowstate", LowState_)
+                sub.Init(_ls_cb, 200)
+                self._ls_sub = sub
+                return
+            except Exception:
+                continue
+
+    def seed_from_lowstate(self, timeout_s: float = 0.6) -> bool:
+        """Seed commanded joints from measured angles to avoid a sudden jump."""
+        if self._initialised_from_state:
+            return True
+        self._state_ready.wait(timeout=max(0.0, timeout_s))
+        if not self._joint_cur:
+            return False
+        for j_idx, q_val in self._joint_cur.items():
+            if j_idx in self._cmd_q:
+                self._cmd_q[j_idx] = float(q_val)
+        self._initialised_from_state = True
+        return True
 
     def _apply_targets(self, targets: Dict[int, float]) -> None:
         for j_idx, q_val in targets.items():
@@ -163,6 +218,15 @@ class ArmSdkController:
             self._apply_targets(target)
             time.sleep(dt)
 
+    def hold_pose_until_done(self, pose: List[Tuple[int, float]], proc: subprocess.Popen) -> None:
+        target = {j: q for j, q in pose}
+        dt = 1.0 / self._cmd_hz
+        while True:
+            if proc.poll() is not None:
+                break
+            self._apply_targets(target)
+            time.sleep(dt)
+
 
 def _default_poses(arm: str) -> Dict[str, List[Tuple[int, float]]]:
     # These are conservative poses based on existing scripts (run_geoff_gui.py).
@@ -184,8 +248,8 @@ def _default_poses(arm: str) -> Dict[str, List[Tuple[int, float]]]:
             (16, +0.060),
             (17, -0.240),
             (18, +0.420),
-            (19, -0.500),
-            (20, -1.000),
+            (19, -0.379),
+            (20, -0.852),
             (21, -0.050),
         ]
         lift = [
@@ -194,8 +258,8 @@ def _default_poses(arm: str) -> Dict[str, List[Tuple[int, float]]]:
             (16, +0.080),
             (17, -0.200),
             (18, +0.520),
-            (19, -0.420),
-            (20, -0.650),
+            (19, -0.379),
+            (20, -0.852),
             (21, -0.050),
         ]
     else:
@@ -215,8 +279,8 @@ def _default_poses(arm: str) -> Dict[str, List[Tuple[int, float]]]:
             (23, -0.300),
             (24, +0.280),
             (25, +0.520),
-            (26, +0.050),
-            (27, -1.050),
+            (26, +0.240),
+            (27, -0.771),
             (28, -0.176),
         ]
         lift = [
@@ -225,8 +289,8 @@ def _default_poses(arm: str) -> Dict[str, List[Tuple[int, float]]]:
             (23, -0.320),
             (24, +0.280),
             (25, +0.691),
-            (26, +0.160),
-            (27, -0.650),
+            (26, +0.240),
+            (27, -0.771),
             (28, -0.176),
         ]
 
@@ -238,16 +302,16 @@ def main() -> None:
     parser.add_argument("--iface", default="eth0", help="network interface for DDS")
     parser.add_argument("--arm", choices=["left", "right"], default="right", help="which arm to move")
     parser.add_argument("--file", default="huddle.wav", help="path to wav file")
-    parser.add_argument("--volume", type=_parse_level, default=None, help="set robot speaker volume (0-10)")
-    parser.add_argument("--brightness", type=_parse_level, default=None, help="set headlight brightness (0-10)")
+    parser.add_argument("--volume", type=_parse_level, default=None, help="set robot speaker volume (0-100)")
+    parser.add_argument("--brightness", type=_parse_level, default=None, help="set headlight brightness (0-100)")
     parser.add_argument("--cmd-hz", type=float, default=50.0, help="command rate for arm SDK")
     parser.add_argument("--kp", type=float, default=40.0, help="arm joint kp")
     parser.add_argument("--kd", type=float, default=1.0, help="arm joint kd")
-    parser.add_argument("--extend-sec", type=float, default=2.5, help="seconds to extend hand")
+    parser.add_argument("--extend-sec", type=float, default=3.5, help="seconds to extend hand")
     parser.add_argument("--hold-extend", type=float, default=0.3, help="seconds to hold extend pose")
     parser.add_argument("--lift-sec", type=float, default=1.5, help="seconds to lift hand")
     parser.add_argument("--hold-lift", type=float, default=0.3, help="seconds to hold lift pose")
-    parser.add_argument("--lower-sec", type=float, default=2.5, help="seconds to lower back to side")
+    parser.add_argument("--lower-sec", type=float, default=3.0, help="seconds to lower back to side")
     parser.add_argument(
         "--easing",
         choices=["linear", "smooth"],
@@ -263,17 +327,21 @@ def main() -> None:
     poses = _default_poses(args.arm)
 
     arm = ArmSdkController(args.iface, args.arm, args.cmd_hz, args.kp, args.kd)
+    arm.seed_from_lowstate()
 
     print("Step 1: extend hand in front (palm down).")
     arm.ramp_to_pose(poses["extend"], args.extend_sec, easing=args.easing)
     arm.hold_pose(poses["extend"], args.hold_extend)
 
-    print("Step 2: play audio.")
+    print("Step 2: play audio (hold palm-down pose).")
     if args.brightness is not None:
         _set_brightness(args.brightness)
-    if args.volume is not None:
-        _set_volume(args.volume)
-    _play_wav(wav_path)
+    volume_level = 100 if args.volume is None else args.volume
+    _set_volume(volume_level)
+    audio_proc = _play_wav_async(wav_path)
+    arm.hold_pose_until_done(poses["extend"], audio_proc)
+    if audio_proc.poll() not in (0, None):
+        raise SystemExit(f"Audio player failed: exit code {audio_proc.returncode}")
 
     print("Step 3: lift hand (rotate shoulder).")
     arm.ramp_to_pose(poses["lift"], args.lift_sec, easing=args.easing)
