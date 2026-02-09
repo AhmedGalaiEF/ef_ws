@@ -34,7 +34,14 @@ from path_planner import astar, smooth_path, grid_path_to_world_waypoints
 from obstacle_detection import ObstacleDetector
 from locomotion import Locomotion
 from map_viewer import MapViewer
-from slam_map import SlamMapSubscriber, LidarSwitch
+from slam_map import (
+    SlamMapSubscriber,
+    LidarSwitch,
+    SlamOdomSubscriber,
+    SlamInfoSubscriber,
+    SlamPointCloudSubscriber,
+)
+from slam_service import SlamOperateClient
 from safety.hanger_boot_sequence import hanger_boot_sequence
 
 
@@ -54,6 +61,49 @@ def parse_args() -> argparse.Namespace:
                         help="DDS domain id")
     parser.add_argument("--sport-topic", default="rt/odommodestate",
                         help="SportModeState topic name")
+    parser.add_argument("--pose-source", choices=["slam", "sport"], default="slam",
+                        help="Pose source for navigation")
+    parser.add_argument("--slam-odom-topic", default="rt/unitree/slam_mapping/odom",
+                        help="SLAM odom topic (used when pose-source=slam)")
+    parser.add_argument("--slam-points-topic", default="",
+                        help="SLAM points topic (for mapping overlay)")
+    parser.add_argument("--slam-points-stride", type=int, default=6,
+                        help="Subsample SLAM points (1=all)")
+    parser.add_argument("--slam-points-z-min", type=float, default=-0.5,
+                        help="Min Z for SLAM points to use")
+    parser.add_argument("--slam-points-z-max", type=float, default=1.5,
+                        help="Max Z for SLAM points to use")
+    parser.add_argument("--lidar-topic", default="rt/utlidar/cloud_livox_mid360",
+                        help="Lidar PointCloud2 DDS topic (fallback overlay)")
+    parser.add_argument("--lidar-stride", type=int, default=6,
+                        help="Subsample lidar points (1=all)")
+    parser.add_argument("--slam-info-topic", default="rt/slam_info",
+                        help="SLAM info topic")
+    parser.add_argument("--slam-key-topic", default="rt/slam_key_info",
+                        help="SLAM key info topic")
+    parser.add_argument("--slam-start-mapping", action="store_true",
+                        help="Start SLAM mapping via slam_operate service")
+    parser.add_argument("--slam-end-map", type=str, default="",
+                        help="End mapping and save PCD to this path")
+    parser.add_argument("--slam-init-map", type=str, default="",
+                        help="Initialize pose using this PCD path")
+    parser.add_argument("--slam-init-x", type=float, default=0.0, help="Init pose x")
+    parser.add_argument("--slam-init-y", type=float, default=0.0, help="Init pose y")
+    parser.add_argument("--slam-init-z", type=float, default=0.0, help="Init pose z")
+    parser.add_argument("--slam-init-qx", type=float, default=0.0, help="Init pose qx")
+    parser.add_argument("--slam-init-qy", type=float, default=0.0, help="Init pose qy")
+    parser.add_argument("--slam-init-qz", type=float, default=0.0, help="Init pose qz")
+    parser.add_argument("--slam-init-qw", type=float, default=1.0, help="Init pose qw")
+    parser.add_argument("--slam-nav", action="store_true",
+                        help="Use slam_operate pose navigation instead of local A*")
+    parser.add_argument("--slam-nav-timeout", type=float, default=60.0,
+                        help="Timeout for slam pose navigation (seconds)")
+    parser.add_argument("--slam-pause", action="store_true",
+                        help="Pause SLAM navigation (api 1201) and exit")
+    parser.add_argument("--slam-resume", action="store_true",
+                        help="Resume SLAM navigation (api 1202) and exit")
+    parser.add_argument("--slam-status", action="store_true",
+                        help="Print live slam_info / slam_key_info and exit")
     parser.add_argument("--goal_x", type=float, default=None,
                         help="Goal X position in metres (optional if using mouse pick)")
     parser.add_argument("--goal_y", type=float, default=None,
@@ -240,6 +290,175 @@ def main() -> None:
     detector = ObstacleDetector(warn_distance=0.8, stop_distance=0.4, topic=args.sport_topic)
     detector.start()
 
+    slam_odom = None
+    if args.pose_source == "slam" and args.slam_odom_topic:
+        slam_odom = SlamOdomSubscriber(args.slam_odom_topic)
+        slam_odom.start()
+
+    slam_points_sub = None
+    slam_points: list[tuple[float, float]] = []
+    if args.slam_points_topic:
+        slam_points_sub = SlamPointCloudSubscriber(args.slam_points_topic)
+        slam_points_sub.start()
+
+        def _decode_slam_xy() -> list[tuple[float, float]]:
+            msg, _ts = slam_points_sub.get_latest()
+            if msg is None:
+                return []
+            try:
+                fields = {f.name: f for f in msg.fields}
+                if "x" not in fields or "y" not in fields:
+                    return []
+                point_step = int(msg.point_step)
+                if point_step <= 0:
+                    return []
+                data = bytes(msg.data)
+                if not data:
+                    return []
+                xoff = int(fields["x"].offset)
+                yoff = int(fields["y"].offset)
+                zoff = int(fields["z"].offset) if "z" in fields else xoff + 8
+                import numpy as np
+                dtype = np.dtype(
+                    {
+                        "names": ["x", "y", "z"],
+                        "formats": ["<f4", "<f4", "<f4"],
+                        "offsets": [xoff, yoff, zoff],
+                        "itemsize": point_step,
+                    }
+                )
+                arr = np.frombuffer(data, dtype=dtype, count=len(data) // point_step)
+                xs = arr["x"][:: args.slam_points_stride]
+                ys = arr["y"][:: args.slam_points_stride]
+                zs = arr["z"][:: args.slam_points_stride]
+                pts = []
+                for x, y, z in zip(xs, ys, zs):
+                    if z < args.slam_points_z_min or z > args.slam_points_z_max:
+                        continue
+                    pts.append((float(x), float(y)))
+                return pts
+            except Exception:
+                return []
+
+        def _refresh_slam_points() -> None:
+            nonlocal slam_points
+            slam_points = _decode_slam_xy()
+    else:
+        slam_points_sub = None
+        slam_points = []
+
+        def _refresh_slam_points() -> None:
+            return
+
+    # Lidar overlay fallback (when SLAM points are unavailable)
+    lidar_points: list[tuple[float, float]] = []
+    if args.lidar_topic:
+        lidar_sub = SlamPointCloudSubscriber(args.lidar_topic)
+        lidar_sub.start()
+
+        def _refresh_lidar_points() -> None:
+            nonlocal lidar_points
+            msg, _ts = lidar_sub.get_latest()
+            if msg is None:
+                lidar_points = []
+                return
+            try:
+                fields = {f.name: f for f in msg.fields}
+                if "x" not in fields or "y" not in fields:
+                    lidar_points = []
+                    return
+                point_step = int(msg.point_step)
+                if point_step <= 0:
+                    lidar_points = []
+                    return
+                data = bytes(msg.data)
+                if not data:
+                    lidar_points = []
+                    return
+                xoff = int(fields["x"].offset)
+                yoff = int(fields["y"].offset)
+                zoff = int(fields["z"].offset) if "z" in fields else xoff + 8
+                import numpy as np
+                dtype = np.dtype(
+                    {
+                        "names": ["x", "y", "z"],
+                        "formats": ["<f4", "<f4", "<f4"],
+                        "offsets": [xoff, yoff, zoff],
+                        "itemsize": point_step,
+                    }
+                )
+                arr = np.frombuffer(data, dtype=dtype, count=len(data) // point_step)
+                xs = arr["x"][:: args.lidar_stride]
+                ys = arr["y"][:: args.lidar_stride]
+                zs = arr["z"][:: args.lidar_stride]
+                pts = []
+                for x, y, z in zip(xs, ys, zs):
+                    if z < args.slam_points_z_min or z > args.slam_points_z_max:
+                        continue
+                    pts.append((float(x), float(y)))
+                lidar_points = pts
+            except Exception:
+                lidar_points = []
+    else:
+        def _refresh_lidar_points() -> None:
+            return
+
+    def _get_pose():
+        if slam_odom is not None and not slam_odom.is_stale():
+            return slam_odom.get_pose()
+        return detector.get_pose()
+
+    # --- 2.1 SLAM service client -----------------------------------------
+    need_slam_service = any([
+        args.slam_start_mapping,
+        bool(args.slam_end_map),
+        bool(args.slam_init_map),
+        args.slam_nav,
+        args.slam_pause,
+        args.slam_resume,
+    ])
+    slam_client = None
+    slam_info = None
+    if need_slam_service:
+        slam_client = SlamOperateClient()
+        slam_client.Init()
+        slam_client.SetTimeout(5.0)
+        slam_info = SlamInfoSubscriber(args.slam_info_topic, args.slam_key_topic)
+        slam_info.start()
+
+        if args.slam_start_mapping:
+            resp = slam_client.start_mapping()
+            print(f"SLAM start mapping: code={resp.code} raw={resp.raw}")
+        if args.slam_init_map:
+            resp = slam_client.init_pose(
+                args.slam_init_x, args.slam_init_y, args.slam_init_z,
+                args.slam_init_qx, args.slam_init_qy, args.slam_init_qz, args.slam_init_qw,
+                args.slam_init_map,
+            )
+            print(f"SLAM init pose: code={resp.code} raw={resp.raw}")
+        if args.slam_pause:
+            resp = slam_client.pause_nav()
+            print(f"SLAM pause nav: code={resp.code} raw={resp.raw}")
+            return
+        if args.slam_resume:
+            resp = slam_client.resume_nav()
+            print(f"SLAM resume nav: code={resp.code} raw={resp.raw}")
+            return
+        if args.slam_status:
+            print("SLAM status (Ctrl+C to stop)...")
+            try:
+                while True:
+                    time.sleep(0.5)
+                    info = slam_info.get_info() if slam_info else None
+                    key = slam_info.get_key() if slam_info else None
+                    if info:
+                        print(f"[slam_info] {info}")
+                    if key:
+                        print(f"[slam_key_info] {key}")
+            except KeyboardInterrupt:
+                print("SLAM status stopped.")
+            return
+
     # Wait for first pose reading
     print("Waiting for SportModeState_ ...")
     time.sleep(1.0)
@@ -306,13 +525,20 @@ def main() -> None:
         print("Map viewer enabled (press 'q' in the window to quit).")
 
     # --- 7. Start + Goal selection ----------------------------------------
-    sx, sy, syaw = detector.get_pose()
+    sx, sy, syaw = _get_pose()
     print(f"Robot pose: ({sx:+.2f}, {sy:+.2f}), yaw={math.degrees(syaw):+.1f} deg")
 
     if not args.no_pick:
         if viewer is None:
             viewer = MapViewer(occ_grid, scale=4, inflation_radius=args.inflation)
-        picked_start, picked_goal = _pick_start_goal(viewer, detector)
+        try:
+            picked_start, picked_goal = _pick_start_goal(viewer, detector)
+        except KeyboardInterrupt:
+            print("\nInterrupted by user.")
+            if slam_client is not None and args.slam_end_map:
+                resp = slam_client.end_mapping(args.slam_end_map)
+                print(f"SLAM end mapping: code={resp.code} raw={resp.raw}")
+            return
         psx, psy = picked_start
         goal_x, goal_y = picked_goal
 
@@ -334,6 +560,51 @@ def main() -> None:
     print(f"Goal  : ({goal_x:+.2f}, {goal_y:+.2f})"
           + (f", yaw={math.degrees(args.goal_yaw):.1f} deg" if args.goal_yaw else ""))
 
+    # --- 7.5 SLAM pose navigation (optional) ------------------------------
+    if args.slam_nav:
+        if slam_client is None:
+            sys.exit("ERROR: slam_operate client not initialised.")
+
+        def _yaw_to_quat(yaw: float) -> tuple[float, float, float, float]:
+            half = yaw / 2.0
+            return (0.0, 0.0, math.sin(half), math.cos(half))
+
+        qx, qy, qz, qw = _yaw_to_quat(args.goal_yaw or 0.0)
+        resp = slam_client.pose_nav(goal_x, goal_y, 0.0, qx, qy, qz, qw, mode=1)
+        print(f"SLAM pose nav: code={resp.code} raw={resp.raw}")
+
+        t0 = time.time()
+        arrived = False
+        while time.time() - t0 < args.slam_nav_timeout:
+            time.sleep(0.2)
+            if slam_info is None:
+                continue
+            key = slam_info.get_key()
+            info = slam_info.get_info()
+            for payload in (key, info):
+                if not payload:
+                    continue
+                try:
+                    import json
+                    data = json.loads(payload)
+                    if data.get("type") in ("task_result", "ctrl_info"):
+                        if data.get("data", {}).get("is_arrived"):
+                            arrived = True
+                            break
+                except Exception:
+                    continue
+            if arrived:
+                break
+
+        print("SLAM nav arrived." if arrived else "SLAM nav timeout.")
+        walker.stop()
+        if viewer is not None:
+            viewer.close()
+        if slam_client is not None and args.slam_end_map:
+            resp = slam_client.end_mapping(args.slam_end_map)
+            print(f"SLAM end mapping: code={resp.code} raw={resp.raw}")
+        return
+
     # --- 8. Navigation loop ------------------------------------------------
     replan_count = 0
     goal_reached = False
@@ -341,7 +612,7 @@ def main() -> None:
     try:
         while replan_count < args.max_replans and not goal_reached:
             # 8a. Current pose
-            cx, cy, cyaw = detector.get_pose()
+            cx, cy, cyaw = _get_pose()
 
             # 8b. Update map from SLAM (if available)
             if slam_sub is not None:
@@ -359,6 +630,14 @@ def main() -> None:
             # 8c. Add near-field obstacles from range sensors (safety)
             ranges = detector.get_ranges()
             occ_grid.mark_obstacle_from_range(cx, cy, cyaw, ranges)
+
+            # 8c.1 Add SLAM pointcloud obstacles (if available)
+            _refresh_slam_points()
+            _refresh_lidar_points()
+            overlay_points = slam_points if slam_points else lidar_points
+            if overlay_points:
+                for ox, oy in overlay_points:
+                    occ_grid.set_obstacle_world(ox, oy)
 
             # 8d. Inflate for planning
             inflated = occ_grid.inflate(radius_cells=args.inflation)
@@ -407,7 +686,8 @@ def main() -> None:
                         vx, vy, vyaw = detector.get_pose()
                         vranges = detector.get_ranges()
                         occ_grid.mark_obstacle_from_range(vx, vy, vyaw, vranges)
-                        viewer.update(vx, vy, vyaw, vranges)
+                        overlay_points = slam_points if slam_points else lidar_points
+                        viewer.update(vx, vy, vyaw, vranges, overlay_points)
                     return detector.front_blocked()
 
                 reached = walker.walk_to(
@@ -453,6 +733,9 @@ def main() -> None:
         save_path = "/tmp/final_obstacle_map.npz"
         occ_grid.save(save_path)
         print(f"Robot stopped.  Map saved to {save_path}")
+        if slam_client is not None and args.slam_end_map:
+            resp = slam_client.end_mapping(args.slam_end_map)
+            print(f"SLAM end mapping: code={resp.code} raw={resp.raw}")
 
 
 if __name__ == "__main__":
