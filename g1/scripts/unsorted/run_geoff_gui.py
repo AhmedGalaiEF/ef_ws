@@ -32,6 +32,7 @@ Requirements
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import threading
 import time
@@ -2612,6 +2613,8 @@ class GeoffWindow(QtCore.QObject):  # type: ignore[misc]  # pylint: disable=too-
 def main() -> None:  # noqa: D401
     parser = argparse.ArgumentParser()
     parser.add_argument("--iface", default="enp68s0f1", help="NIC connected to the Unitree G-1")
+    parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id")
+    parser.add_argument("--slam-topic", default="rt/utlidar/cloud_livox_mid360", help="DDS pointcloud topic for SLAM view")
     parser.add_argument(
         "--clear",
         type=float,
@@ -2642,6 +2645,11 @@ def main() -> None:  # noqa: D401
         help="Feed-forward torque (approx. N·m) applied during continuous grabs (default: 0.3)",
     )
     args = parser.parse_args()
+
+    # Pass DDS settings to run_geoff_stack SLAM worker via env vars.
+    os.environ["G1_SLAM_IFACE"] = args.iface
+    os.environ["G1_SLAM_DOMAIN"] = str(args.domain_id)
+    os.environ["G1_SLAM_TOPIC"] = args.slam_topic
 
     window = GeoffWindow(
         args.iface,
