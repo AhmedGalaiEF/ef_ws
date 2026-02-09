@@ -34,13 +34,13 @@ from slam_map import SlamOdomSubscriber
 # ---------------------------------------------------------------------------
 # Colour palette (BGR)
 # ---------------------------------------------------------------------------
-_COL_FREE = np.array([255, 255, 255], dtype=np.uint8)      # white
-_COL_OBSTACLE = np.array([40, 40, 40], dtype=np.uint8)      # near-black
-_COL_INFLATED = np.array([200, 200, 200], dtype=np.uint8)   # light grey
+_COL_FREE = np.array([18, 18, 18], dtype=np.uint8)          # dark background
+_COL_OBSTACLE = np.array([230, 230, 230], dtype=np.uint8)   # bright obstacles
+_COL_INFLATED = np.array([90, 90, 90], dtype=np.uint8)      # mid grey
 _COL_PATH = np.array([255, 180, 80], dtype=np.uint8)        # light blue
 _COL_WAYPOINT = np.array([255, 120, 0], dtype=np.uint8)     # blue
-_COL_TRAIL = np.array([200, 220, 200], dtype=np.uint8)      # faint green
-_COL_ROBOT = np.array([0, 200, 0], dtype=np.uint8)          # green
+_COL_TRAIL = np.array([80, 140, 80], dtype=np.uint8)        # faint green
+_COL_ROBOT = np.array([0, 220, 0], dtype=np.uint8)          # green
 _COL_GOAL = np.array([0, 0, 255], dtype=np.uint8)           # red
 _COL_RANGE_OK = (0, 180, 0)                                 # green line
 _COL_RANGE_WARN = (0, 180, 255)                             # orange line
@@ -391,6 +391,7 @@ if __name__ == "__main__":
     viewer = MapViewer(occ_grid, window_name="Live Obstacle Map", scale=4)
 
     print("Displaying live map.  Press 'q' or ESC to quit.")
+    last_log = time.time()
     try:
         while True:
             if detector.is_stale():
@@ -407,8 +408,26 @@ if __name__ == "__main__":
             occ_grid.mark_obstacle_from_range(x, y, yaw, ranges)
 
             # Render
-            overlay = slam_points if slam_points else lidar_points
+            if slam_points:
+                overlay = slam_points
+            else:
+                # Lidar points are in the robot frame; transform to world.
+                overlay = []
+                cy = math.cos(yaw)
+                sy = math.sin(yaw)
+                for lx, ly in lidar_points:
+                    wx = x + (lx * cy - ly * sy)
+                    wy = y + (lx * sy + ly * cy)
+                    overlay.append((wx, wy))
             viewer.update(x, y, yaw, ranges, np.array(overlay) if overlay else None)
+
+            now = time.time()
+            if now - last_log > 2.0:
+                print(
+                    f"overlay points: slam={len(slam_points)} lidar={len(lidar_points)} "
+                    f"(using {'slam' if slam_points else 'lidar'})"
+                )
+                last_log = now
 
             key = cv2.waitKey(50) & 0xFF
             if key in (ord("q"), 27):

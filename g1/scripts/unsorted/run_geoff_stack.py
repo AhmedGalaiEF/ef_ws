@@ -55,6 +55,7 @@ additional boiler-plate.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import threading
 import time
@@ -244,7 +245,104 @@ def _monkey_patch_slam_viewer() -> None:  # pragma: no cover – small helper
         print("[run_geoff_stack] SLAM viewer patch failed:", exc, file=sys.stderr)
 
 
+def _run_slam_dds(stop: threading.Event) -> None:  # pragma: no cover – HW req.
+    """DDS-based SLAM preview using live pointclouds (no Open3D)."""
+    try:
+        import numpy as np  # type: ignore
+        cv2 = _import_cv2()
+        from unitree_sdk2py.core.channel import ChannelSubscriber, ChannelFactoryInitialize  # type: ignore
+        from unitree_sdk2py.idl.sensor_msgs.msg.dds_ import PointCloud2_  # type: ignore
+
+        iface = os.environ.get("G1_SLAM_IFACE", "")
+        domain = int(os.environ.get("G1_SLAM_DOMAIN", "0"))
+        topic = os.environ.get("G1_SLAM_TOPIC", "rt/utlidar/cloud_livox_mid360")
+        zmin = float(os.environ.get("G1_SLAM_ZMIN", "-0.5"))
+        zmax = float(os.environ.get("G1_SLAM_ZMAX", "1.5"))
+        stride = int(os.environ.get("G1_SLAM_STRIDE", "4"))
+        span = float(os.environ.get("G1_SLAM_RANGE", "12.0"))
+
+        if iface:
+            ChannelFactoryInitialize(domain, iface)
+        else:
+            ChannelFactoryInitialize(domain)
+
+        latest: dict[str, Any] = {"msg": None}
+
+        def _cb(msg: Any) -> None:
+            latest["msg"] = msg
+
+        sub = ChannelSubscriber(topic, PointCloud2_)
+        sub.Init(_cb, 10)
+
+        while not stop.is_set():
+            msg = latest["msg"]
+            if msg is None:
+                time.sleep(0.02)
+                continue
+
+            try:
+                fields = {f.name: f for f in msg.fields}
+                if "x" not in fields or "y" not in fields:
+                    time.sleep(0.02)
+                    continue
+                point_step = int(msg.point_step)
+                if point_step <= 0:
+                    time.sleep(0.02)
+                    continue
+                data = bytes(msg.data)
+                if not data:
+                    time.sleep(0.02)
+                    continue
+                xoff = int(fields["x"].offset)
+                yoff = int(fields["y"].offset)
+                zoff = int(fields["z"].offset) if "z" in fields else xoff + 8
+
+                dtype = np.dtype(
+                    {
+                        "names": ["x", "y", "z"],
+                        "formats": ["<f4", "<f4", "<f4"],
+                        "offsets": [xoff, yoff, zoff],
+                        "itemsize": point_step,
+                    }
+                )
+                arr = np.frombuffer(data, dtype=dtype, count=len(data) // point_step)
+                xs = arr["x"][::stride]
+                ys = arr["y"][::stride]
+                zs = arr["z"][::stride]
+
+                img = np.zeros((480, 480, 3), dtype=np.uint8)
+                center = 240
+                scale = 480.0 / (2.0 * span)
+                for x, y, z in zip(xs, ys, zs):
+                    if z < zmin or z > zmax:
+                        continue
+                    if abs(x) > span or abs(y) > span:
+                        continue
+                    px = int(center + x * scale)
+                    py = int(center - y * scale)
+                    if 0 <= px < 480 and 0 <= py < 480:
+                        img[py, px] = (0, 200, 255)
+
+                cv2.rectangle(img, (0, 0), (479, 479), (255, 255, 255), 1)
+
+                with _state_lock:
+                    _state["slam"] = img
+            except Exception:
+                pass
+
+            time.sleep(0.02)
+
+    except Exception as exc:  # pylint: disable=broad-except
+        print("[run_geoff_stack] DDS SLAM disabled:", exc, file=sys.stderr)
+
+
 def _run_slam(stop: threading.Event) -> None:  # pragma: no cover – HW req.
+    """Default to DDS SLAM preview to avoid Open3D crashes."""
+    use_open3d = os.environ.get("G1_SLAM_OPEN3D", "0") == "1"
+    if not use_open3d:
+        _run_slam_dds(stop)
+        return
+
     try:
         # Guard: Open3D CUDA builds can hard-crash the process on import if
         # the system driver is too old. Probe in a subprocess first.
@@ -411,7 +509,16 @@ def _compose_canvas() -> "Optional['np.ndarray']":  # type: ignore[name-defined]
 def main() -> None:  # noqa: D401
     parser = argparse.ArgumentParser()
     parser.add_argument("--iface", default="enp68s0f1", help="network interface connected to Unitree G-1")
+    parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id")
+    parser.add_argument("--slam-topic", default="rt/utlidar/cloud_livox_mid360", help="DDS pointcloud topic for SLAM view")
+    parser.add_argument("--slam-open3d", action="store_true", help="Use Open3D live_slam instead of DDS viewer")
     args = parser.parse_args()
+
+    os.environ["G1_SLAM_IFACE"] = args.iface
+    os.environ["G1_SLAM_DOMAIN"] = str(args.domain_id)
+    os.environ["G1_SLAM_TOPIC"] = args.slam_topic
+    if args.slam_open3d:
+        os.environ["G1_SLAM_OPEN3D"] = "1"
 
     stop = threading.Event()
 

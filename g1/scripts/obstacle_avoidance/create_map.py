@@ -222,17 +222,115 @@ def create_from_slam(
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    grid = create_empty_map(10.0, 10.0, 0.1, -5.0, -5.0)
-    print(
-        f"Grid: {grid.width_cells}x{grid.height_cells} cells, "
-        f"resolution={grid.resolution}m"
-    )
+    import argparse
 
-    grid.add_rectangle(1.0, -1.0, 1.3, 1.0)
-    print(f"Obstacles after adding wall: {np.sum(grid.grid > 0)} cells")
+    parser = argparse.ArgumentParser(description="Create occupancy maps.")
+    parser.add_argument("--source", choices=["empty", "slam_map", "slam_points", "lidar"], default="empty")
+    parser.add_argument("--iface", default="enp1s0", help="network interface for DDS")
+    parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id")
+    parser.add_argument("--width-m", type=float, default=10.0, help="map width (m)")
+    parser.add_argument("--height-m", type=float, default=10.0, help="map height (m)")
+    parser.add_argument("--resolution", type=float, default=0.1, help="map resolution (m)")
+    parser.add_argument("--origin-x", type=float, default=-5.0, help="map origin x")
+    parser.add_argument("--origin-y", type=float, default=-5.0, help="map origin y")
+    parser.add_argument("--duration", type=float, default=5.0, help="seconds to accumulate points")
+    parser.add_argument("--z-min", type=float, default=-0.5, help="min z for points")
+    parser.add_argument("--z-max", type=float, default=1.5, help="max z for points")
+    parser.add_argument("--stride", type=int, default=6, help="subsample points")
+    parser.add_argument("--topic", type=str, default="", help="override DDS topic")
+    parser.add_argument("--save", type=str, default="/tmp/occ_map.npz", help="output .npz path")
+    args = parser.parse_args()
 
-    r, c = grid.world_to_grid(0.0, 0.0)
-    wx, wy = grid.grid_to_world(r, c)
-    print(f"World (0,0) -> grid ({r},{c}) -> world ({wx:.2f},{wy:.2f})")
+    if args.source == "empty":
+        grid = create_empty_map(args.width_m, args.height_m, args.resolution, args.origin_x, args.origin_y)
+        grid.add_rectangle(1.0, -1.0, 1.3, 1.0)
+        print(
+            f"Grid: {grid.width_cells}x{grid.height_cells} cells, "
+            f"resolution={grid.resolution}m"
+        )
+        print(f"Obstacles after adding wall: {np.sum(grid.grid > 0)} cells")
+    elif args.source == "slam_map":
+        try:
+            from unitree_sdk2py.core.channel import ChannelFactoryInitialize
+        except Exception as exc:
+            raise SystemExit("unitree_sdk2py required for DDS SLAM map") from exc
+        ChannelFactoryInitialize(args.domain_id, args.iface)
+        grid = create_from_slam(
+            timeout=args.duration,
+            height_threshold=0.15,
+            max_height=None,
+            origin_centered=True,
+        )
+        print(f"SLAM map received: {grid.width_cells}x{grid.height_cells} cells")
+    else:
+        # DDS pointcloud accumulation (slam_points or lidar)
+        try:
+            from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelSubscriber
+            from unitree_sdk2py.idl.sensor_msgs.msg.dds_ import PointCloud2_
+        except Exception as exc:
+            raise SystemExit("unitree_sdk2py required for DDS pointcloud sources") from exc
 
-    grid.mark_obstacle_from_range(0.0, 0.0, 0.0, [2.0, 1.5, 3.0, 1.0])
+        if args.source == "slam_points":
+            topic = args.topic or "rt/unitree/slam_mapping/points"
+        else:
+            topic = args.topic or "rt/utlidar/cloud_livox_mid360"
+
+        ChannelFactoryInitialize(args.domain_id, args.iface)
+        grid = create_empty_map(args.width_m, args.height_m, args.resolution, args.origin_x, args.origin_y)
+
+        latest = {"msg": None}
+
+        def _cb(msg):
+            latest["msg"] = msg
+
+        sub = ChannelSubscriber(topic, PointCloud2_)
+        sub.Init(_cb, 10)
+
+        t0 = time.time()
+        print(f"Accumulating points from {topic} for {args.duration:.1f}s ...")
+        while time.time() - t0 < args.duration:
+            msg = latest["msg"]
+            if msg is None:
+                time.sleep(0.05)
+                continue
+            try:
+                fields = {f.name: f for f in msg.fields}
+                if "x" not in fields or "y" not in fields:
+                    time.sleep(0.05)
+                    continue
+                point_step = int(msg.point_step)
+                if point_step <= 0:
+                    time.sleep(0.05)
+                    continue
+                data = bytes(msg.data)
+                if not data:
+                    time.sleep(0.05)
+                    continue
+                xoff = int(fields["x"].offset)
+                yoff = int(fields["y"].offset)
+                zoff = int(fields["z"].offset) if "z" in fields else xoff + 8
+                dtype = np.dtype(
+                    {
+                        "names": ["x", "y", "z"],
+                        "formats": ["<f4", "<f4", "<f4"],
+                        "offsets": [xoff, yoff, zoff],
+                        "itemsize": point_step,
+                    }
+                )
+                arr = np.frombuffer(data, dtype=dtype, count=len(data) // point_step)
+                xs = arr["x"][:: args.stride]
+                ys = arr["y"][:: args.stride]
+                zs = arr["z"][:: args.stride]
+                for x, y, z in zip(xs, ys, zs):
+                    if z < args.z_min or z > args.z_max:
+                        continue
+                    # Points are assumed to be in the robot frame (lidar) or world frame (slam_points).
+                    grid.set_obstacle_world(float(x), float(y))
+            except Exception:
+                pass
+            time.sleep(0.05)
+
+        print(f"Obstacles after accumulation: {np.sum(grid.grid > 0)} cells")
+
+    grid.save(args.save)
+    print(f"Saved map to {args.save}")

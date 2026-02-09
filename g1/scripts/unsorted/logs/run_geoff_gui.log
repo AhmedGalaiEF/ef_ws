@@ -114,3 +114,21 @@
 2026-02-09 10:49:50,391  INFO      [INFO] livox2_python unavailable (
 2026-02-09 10:49:50,392  INFO      liblivox_lidar_sdk shared library not found.  Build & install Livox-SDK2 first (see wrapper docstring).
 2026-02-09 10:49:50,392  INFO      ) – falling back to SDK1.
+2026-02-09 19:30:35,465  INFO      No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2026-02-09 19:30:36,580  INFO      Robot already in balanced stand (FSM 200, mode 0) – skipping boot sequence.
+2026-02-09 19:30:36,797  ERROR     [run_geoff_gui] Dex3 hand control disabled:
+2026-02-09 19:30:36,797  ERROR     No module named 'unitree_sdk2py.dex3'
+2026-02-09 19:30:40,120  INFO      [INFO] livox2_python unavailable (
+2026-02-09 19:30:40,120  INFO      liblivox_lidar_sdk shared library not found.  Build & install Livox-SDK2 first (see wrapper docstring).
+2026-02-09 19:30:40,120  INFO      ) – falling back to SDK1.
+2026-02-09 19:38:43,609  INFO      No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2026-02-09 19:38:44,640  INFO      Robot already in balanced stand (FSM 200, mode 0) – skipping boot sequence.
+2026-02-09 19:38:44,855  ERROR     [run_geoff_gui] Dex3 hand control disabled:
+2026-02-09 19:38:44,856  ERROR     No module named 'unitree_sdk2py.dex3'
+2026-02-09 19:38:47,711  INFO      [INFO] livox2_python unavailable (
+2026-02-09 19:38:47,711  INFO      liblivox_lidar_sdk shared library not found.  Build & install Livox-SDK2 first (see wrapper docstring).
+2026-02-09 19:38:47,711  INFO      ) – falling back to SDK1.
+2026-02-09 19:38:55,541  ERROR     [run_geoff_gui] Arm inference failed:
+2026-02-09 19:38:55,545  ERROR     No module named 'data.inference_arm'
+2026-02-09 19:38:55,552  ERROR     [run_geoff_gui] Arm inference failed:
+2026-02-09 19:38:55,553  ERROR     No module named 'data.inference_arm'

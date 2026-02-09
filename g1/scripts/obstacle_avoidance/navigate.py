@@ -634,7 +634,16 @@ def main() -> None:
             # 8c.1 Add SLAM pointcloud obstacles (if available)
             _refresh_slam_points()
             _refresh_lidar_points()
-            overlay_points = slam_points if slam_points else lidar_points
+            if slam_points:
+                overlay_points = slam_points
+            else:
+                overlay_points = []
+                cyaw = math.cos(cyaw)
+                syaw = math.sin(cyaw)
+                for lx, ly in lidar_points:
+                    wx = cx + (lx * cyaw - ly * syaw)
+                    wy = cy + (lx * syaw + ly * cyaw)
+                    overlay_points.append((wx, wy))
             if overlay_points:
                 for ox, oy in overlay_points:
                     occ_grid.set_obstacle_world(ox, oy)
@@ -686,7 +695,16 @@ def main() -> None:
                         vx, vy, vyaw = detector.get_pose()
                         vranges = detector.get_ranges()
                         occ_grid.mark_obstacle_from_range(vx, vy, vyaw, vranges)
-                        overlay_points = slam_points if slam_points else lidar_points
+                        if slam_points:
+                            overlay_points = slam_points
+                        else:
+                            overlay_points = []
+                            cyaw = math.cos(vyaw)
+                            syaw = math.sin(vyaw)
+                            for lx, ly in lidar_points:
+                                wx = vx + (lx * cyaw - ly * syaw)
+                                wy = vy + (lx * syaw + ly * cyaw)
+                                overlay_points.append((wx, wy))
                         viewer.update(vx, vy, vyaw, vranges, overlay_points)
                     return detector.front_blocked()
 
