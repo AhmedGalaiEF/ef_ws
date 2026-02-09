@@ -102,6 +102,7 @@ class Locomotion:
         timeout: float = 30.0,
         tick: float = 0.1,
         check_obstacle: Callable[[], bool] | None = None,
+        stale_timeout: float = 1.0,
     ) -> bool:
         """Walk the robot to ``(target_x, target_y)`` in world coordinates.
 
@@ -131,6 +132,9 @@ class Locomotion:
         while not self._aborted:
             elapsed = time.time() - t0
             if elapsed > timeout:
+                self.client.StopMove()
+                return False
+            if self.detector.is_stale(max_age=stale_timeout):
                 self.client.StopMove()
                 return False
 
@@ -203,22 +207,25 @@ class Locomotion:
 
 
 if __name__ == "__main__":
+    import argparse
     import sys
 
-    if len(sys.argv) < 2:
-        print(f"Usage: python {sys.argv[0]} <networkInterface>")
-        print("  Walks the robot 1 metre forward as a quick test.")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description="Locomotion quick test (walk 1m forward).")
+    parser.add_argument("--iface", default="enp1s0", help="network interface for DDS")
+    parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id")
+    parser.add_argument("--sport-topic", default="rt/sportmodestate", help="SportModeState topic name")
+    parser.add_argument("--stale-timeout", type=float, default=1.0, help="stop if sensor data is stale (s)")
+    args = parser.parse_args()
 
     from unitree_sdk2py.core.channel import ChannelFactoryInitialize
 
-    ChannelFactoryInitialize(0, sys.argv[1])
+    ChannelFactoryInitialize(args.domain_id, args.iface)
 
     loco = LocoClient()
     loco.SetTimeout(10.0)
     loco.Init()
 
-    detector = ObstacleDetector()
+    detector = ObstacleDetector(topic=args.sport_topic)
     detector.start()
     time.sleep(0.5)
 
@@ -232,5 +239,10 @@ if __name__ == "__main__":
     target_y = y0 + 1.0 * math.sin(yaw0)
 
     print(f"Walking 1m forward: ({x0:.2f},{y0:.2f}) -> ({target_x:.2f},{target_y:.2f})")
-    ok = walker.walk_to(target_x, target_y, timeout=15.0)
-    print("Reached!" if ok else "Aborted / timed out.")
+    try:
+        ok = walker.walk_to(target_x, target_y, timeout=15.0, stale_timeout=args.stale_timeout)
+        print("Reached!" if ok else "Aborted / timed out.")
+    except KeyboardInterrupt:
+        print("\nInterrupted; stopping.")
+    finally:
+        walker.stop()
