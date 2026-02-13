@@ -152,3 +152,16 @@
 2026-02-13 19:51:47,643  ERROR     No module named 'open3d'
 2026-02-13 19:51:47,662  ERROR     [run_geoff_stack] RealSense receiver disabled:
 2026-02-13 19:51:47,666  ERROR     cannot import name '_gi' from partially initialized module 'gi' (most likely due to a circular import) (/usr/lib/python3/dist-packages/gi/__init__.py)
+2026-02-13 22:04:27,942  INFO      No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2026-02-13 22:04:28,453  INFO      [ChannelFactory] create domain error. msg:
+2026-02-13 22:04:28,453  INFO      Occurred upon initialisation of a cyclonedds.domain.Domain
+2026-02-13 22:04:28,453  ERROR     [run_geoff_gui] Tele-op disabled:
+2026-02-13 22:04:28,453  ERROR     channel factory init error.
+2026-02-13 22:04:28,512  ERROR     [run_geoff_gui] Arm control disabled:
+2026-02-13 22:04:28,525  ERROR     'NoneType' object has no attribute '_ref'
+2026-02-13 22:04:28,526  ERROR     [run_geoff_gui] Dex3 hand control disabled:
+2026-02-13 22:04:28,526  ERROR     No module named 'unitree_sdk2py.dex3'
+2026-02-13 22:04:28,534  INFO      [ChannelFactory] create domain error. msg:
+2026-02-13 22:04:28,646  INFO      Occurred upon initialisation of a cyclonedds.domain.Domain
+2026-02-13 22:04:28,656  ERROR     [run_geoff_gui] Battery monitor disabled:
+2026-02-13 22:04:28,657  ERROR     Could not subscribe to any battery SOC topic
