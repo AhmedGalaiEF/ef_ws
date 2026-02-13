@@ -124,7 +124,7 @@ class SlamMapCreatorUI:
         self.log_text.configure(state=tk.DISABLED)
 
     def _init_backend(self) -> None:
-        ChannelFactoryInitialize(self.args.domain_id, self.args.iface)
+        self._init_channel_factory()
 
         self.slam_sub = SlamMapSubscriber(self.args.slam_map_topic)
         self.slam_sub.start()
@@ -147,25 +147,66 @@ class SlamMapCreatorUI:
 
         self._start_mapping()
 
+    def _init_channel_factory(self) -> None:
+        """Initialize DDS and fall back to autodetect if iface init fails."""
+        iface = (self.args.iface or "").strip()
+        if iface.lower() in {"", "auto", "autodetect", "none"}:
+            ChannelFactoryInitialize(self.args.domain_id, None)
+            self._log(f"DDS initialized (domain={self.args.domain_id}, iface=autodetect)")
+            return
+
+        try:
+            ChannelFactoryInitialize(self.args.domain_id, iface)
+            self._log(f"DDS initialized (domain={self.args.domain_id}, iface={iface})")
+        except Exception as exc:
+            self._log(
+                "WARN: DDS init failed with explicit interface "
+                f"'{iface}' ({exc}). Retrying with autodetect."
+            )
+            ChannelFactoryInitialize(self.args.domain_id, None)
+            self._log(f"DDS initialized (domain={self.args.domain_id}, iface=autodetect)")
+
     def _decode_resp(self, resp: SlamResponse) -> str:
-        raw = resp.raw
-        payload = None
-        if isinstance(raw, (str, bytes)):
-            try:
-                payload = json.loads(raw.decode() if isinstance(raw, bytes) else raw)
-            except Exception:
-                payload = None
+        payload = self._parse_resp_payload(resp)
         if isinstance(payload, dict):
             succ = payload.get("succeed")
             err = payload.get("errorCode")
             info = payload.get("info", "")
             return f"code={resp.code}, succeed={succ}, errorCode={err}, info={info}"
-        return f"code={resp.code}, raw={raw}"
+        return f"code={resp.code}, raw={resp.raw}"
+
+    def _parse_resp_payload(self, resp: SlamResponse) -> dict | None:
+        raw = resp.raw
+        payload: dict | None = None
+        if isinstance(raw, (str, bytes)):
+            try:
+                payload = json.loads(raw.decode() if isinstance(raw, bytes) else raw)
+            except Exception:
+                payload = None
+        return payload if isinstance(payload, dict) else None
+
+    def _resp_ok(self, resp: SlamResponse) -> bool:
+        if resp.code != 0:
+            return False
+        payload = self._parse_resp_payload(resp)
+        if payload is None:
+            return True
+        if payload.get("succeed") is False:
+            return False
+        err = payload.get("errorCode")
+        if isinstance(err, int) and err != 0:
+            return False
+        return True
 
     def _start_mapping(self) -> None:
         if self.slam_client is None:
             return
         resp = self.slam_client.start_mapping("indoor")
+        self._log(f"Start mapping (api 1801): {self._decode_resp(resp)}")
+        if not self._resp_ok(resp):
+            self.mapping_active = False
+            self.status_var.set("Start mapping failed (see logs)")
+            return
         self.mapping_active = True
         self.map_start_ts = time.time()
         self.last_map_ts = 0.0
@@ -173,7 +214,6 @@ class SlamMapCreatorUI:
         self.changed_cells_total = 0
         self.total_updates = 0
         self.status_var.set("Mapping active")
-        self._log(f"Start mapping (api 1801): {self._decode_resp(resp)}")
 
     def _save_map(self) -> None:
         if self.slam_client is None:
@@ -184,21 +224,33 @@ class SlamMapCreatorUI:
             return
         if not path.endswith(".pcd"):
             self._log("WARN: recommended extension is .pcd")
+        if not os.path.isabs(path):
+            self._log("WARN: save path should be absolute on robot filesystem (e.g. /home/unitree/test.pcd)")
+        elif not path.startswith("/home/unitree/"):
+            self._log("WARN: non-standard robot path; prefer /home/unitree/*.pcd")
         resp = self.slam_client.end_mapping(path)
-        self.mapping_active = False
-        self.status_var.set("Mapping stopped (saved)")
         self._log(f"End mapping + save (api 1802, {path}): {self._decode_resp(resp)}")
+        if not self._resp_ok(resp):
+            self.status_var.set("Save failed (see logs)")
+            return
+        self.mapping_active = False
+        self.status_var.set("Mapping stopped (save requested)")
+        self._log("Save request accepted. The .pcd is written on the robot at the path above.")
 
     def _reset_map(self) -> None:
         if self.slam_client is None:
             return
         close_resp = self.slam_client.close_slam()
         self._log(f"Close SLAM (api 1901): {self._decode_resp(close_resp)}")
+        if not self._resp_ok(close_resp):
+            self.status_var.set("Reset failed (close slam error)")
+            return
         time.sleep(0.2)
         self.map_canvas.delete("all")
         self.latest_grid = None
         self._start_mapping()
-        self._log("Map reset complete: cleared preview and restarted mapping")
+        if self.mapping_active:
+            self._log("Map reset complete: cleared preview and restarted mapping")
 
     def _resolve_keyboard_controller(self) -> tuple[str, str] | None:
         here = os.path.dirname(os.path.abspath(__file__))
@@ -424,6 +476,7 @@ class SlamMapCreatorUI:
             f"Started GUI with iface={self.args.iface}, domain_id={self.args.domain_id}, "
             f"save_path={self.args.save_path}"
         )
+        self._log("NOTE: save path is on robot storage, not this workstation.")
         self._log("Use 'Start Teleop' and drive the robot to build map coverage.")
         self.root.mainloop()
 
@@ -442,7 +495,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--height-threshold", type=float, default=0.15, help="Obstacle threshold for HeightMap")
     p.add_argument("--max-height", type=float, default=None, help="Optional max height clamp")
     p.add_argument("--origin-centered", action="store_true", help="Center map origin around (0,0)")
-    p.add_argument("--save-path", default="/home/unitree/test1.pcd", help="Default map save path used by Save Map")
+    p.add_argument("--save-path", default="/home/unitree/test1.pcd", help="Default map save path on robot used by Save Map")
     p.add_argument("--target-seconds", type=float, default=180.0, help="Soft mapping time target shown in progress bar")
     p.add_argument("--update-ms", type=int, default=300, help="GUI update period in milliseconds")
     p.add_argument("--teleop-input", choices=("pynput", "curses"), default="pynput", help="keyboard_controller input backend")
