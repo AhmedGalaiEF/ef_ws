@@ -132,3 +132,23 @@
 2026-02-09 19:38:55,545  ERROR     No module named 'data.inference_arm'
 2026-02-09 19:38:55,552  ERROR     [run_geoff_gui] Arm inference failed:
 2026-02-09 19:38:55,553  ERROR     No module named 'data.inference_arm'
+2026-02-13 19:49:42,983  ERROR     PySide6 is required – install via 'pip install pyside6 pyqtgraph'
+2026-02-13 19:49:42,984  ERROR     PySide6 is required for run_geoff_gui.py – install with:
+    pip install pyside6 pyqtgraph
+2026-02-13 19:51:46,199  INFO      No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2026-02-13 19:51:47,420  INFO      [ChannelFactory] create domain error. msg:
+2026-02-13 19:51:47,420  INFO      Occurred upon initialisation of a cyclonedds.domain.Domain
+2026-02-13 19:51:47,420  ERROR     [run_geoff_gui] Tele-op disabled:
+2026-02-13 19:51:47,420  ERROR     channel factory init error.
+2026-02-13 19:51:47,460  ERROR     [run_geoff_gui] Arm control disabled:
+2026-02-13 19:51:47,476  ERROR     'NoneType' object has no attribute '_ref'
+2026-02-13 19:51:47,492  ERROR     [run_geoff_gui] Dex3 hand control disabled:
+2026-02-13 19:51:47,493  ERROR     No module named 'unitree_sdk2py.dex3'
+2026-02-13 19:51:47,581  INFO      [ChannelFactory] create domain error. msg:
+2026-02-13 19:51:47,625  INFO      Occurred upon initialisation of a cyclonedds.domain.Domain
+2026-02-13 19:51:47,639  ERROR     [run_geoff_gui] Battery monitor disabled:
+2026-02-13 19:51:47,640  ERROR     Could not subscribe to any battery SOC topic
+2026-02-13 19:51:47,641  ERROR     [run_geoff_gui] SLAM thread disabled:
+2026-02-13 19:51:47,643  ERROR     No module named 'open3d'
+2026-02-13 19:51:47,662  ERROR     [run_geoff_stack] RealSense receiver disabled:
+2026-02-13 19:51:47,666  ERROR     cannot import name '_gi' from partially initialized module 'gi' (most likely due to a circular import) (/usr/lib/python3/dist-packages/gi/__init__.py)
