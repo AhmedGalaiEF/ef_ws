@@ -7,6 +7,9 @@ classification against a small prompt set to produce a short text description.
 from __future__ import annotations
 
 import argparse
+import os
+import subprocess
+import tempfile
 import sys
 import time
 from typing import List, Tuple
@@ -62,6 +65,26 @@ def _classify_frame(
     return best_idx, best_prob
 
 
+def _describe_caption(caption: str) -> str:
+    text = caption.strip()
+    if text.startswith("a photo of "):
+        text = text[len("a photo of ") :]
+    return f"I see {text}."
+
+
+def _speak_on_robot(text: str, text_to_wav_path: str, greeting_path: str) -> None:
+    with tempfile.TemporaryDirectory(prefix="g1_caption_") as tmpdir:
+        wav_path = os.path.join(tmpdir, "caption.wav")
+        subprocess.run(
+            [sys.executable, text_to_wav_path, text, "-o", wav_path],
+            check=True,
+        )
+        subprocess.run(
+            [sys.executable, greeting_path, "--robot", "--file", wav_path],
+            check=True,
+        )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="GStreamer RGB receiver with periodic CLIP text description",
@@ -72,7 +95,13 @@ def main() -> None:
     parser.add_argument("--height", type=int, default=480, help="RGB height")
     parser.add_argument("--fps", type=int, default=30, help="Stream FPS")
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
-    parser.add_argument("--interval", type=float, default=20.0, help="Seconds between descriptions")
+    parser.add_argument("--interval", type=float, default=30.0, help="Seconds between descriptions")
+    parser.add_argument(
+        "--speak-interval",
+        type=float,
+        default=30.0,
+        help="Seconds between robot speech announcements",
+    )
     parser.add_argument("--downscale", type=float, default=0.5, help="Downscale RGB for detection (0.1-1.0)")
     parser.add_argument(
         "--prompts",
@@ -111,6 +140,17 @@ def main() -> None:
     last_caption_time = 0.0
     last_caption = "waiting..."
     last_prob = 0.0
+    last_speech_time = 0.0
+
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    audio_dir = os.path.abspath(os.path.join(script_dir, "..", "..", "basic", "audio"))
+    text_to_wav_path = os.path.join(audio_dir, "text_to_wav.py")
+    greeting_path = os.path.join(audio_dir, "greeting.py")
+
+    if not os.path.exists(text_to_wav_path):
+        raise SystemExit(f"Missing text_to_wav.py at {text_to_wav_path}")
+    if not os.path.exists(greeting_path):
+        raise SystemExit(f"Missing greeting.py at {greeting_path}")
 
     scale = max(0.1, min(1.0, args.downscale))
     det_w = int(args.width * scale)
@@ -145,6 +185,15 @@ def main() -> None:
                 last_prob = best_prob
                 last_caption_time = now
                 print(f"[caption] {last_caption} ({last_prob:.2f})")
+
+            if last_caption_time > 0.0 and now - last_speech_time >= max(1.0, args.speak_interval):
+                try:
+                    spoken = _describe_caption(last_caption)
+                    _speak_on_robot(spoken, text_to_wav_path, greeting_path)
+                    last_speech_time = now
+                    print(f"[speech] {spoken}")
+                except subprocess.CalledProcessError as exc:
+                    print(f"[speech] failed: {exc}")
 
             fps = 1.0 / max(1e-6, now - last)
             last = now
