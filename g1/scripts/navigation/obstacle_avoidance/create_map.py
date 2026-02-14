@@ -157,7 +157,14 @@ class OccupancyGrid:
 
     @classmethod
     def load(cls, filepath: str) -> "OccupancyGrid":
-        data = np.load(filepath)
+        try:
+            data = np.load(filepath)
+        except ValueError as exc:
+            # Some legacy maps were saved with object arrays; allow pickle for those.
+            if "pickled" in str(exc):
+                data = np.load(filepath, allow_pickle=True)
+            else:
+                raise
         resolution = float(data["resolution"])
         origin_x = float(data["origin_x"])
         origin_y = float(data["origin_y"])
@@ -166,6 +173,67 @@ class OccupancyGrid:
         obj = cls(w * resolution, h * resolution, resolution, origin_x, origin_y)
         obj.grid = grid_data.astype(np.int8)
         return obj
+
+
+def load_from_point_cloud(
+    map_path: str,
+    resolution: float = 0.1,
+    padding_m: float = 0.5,
+    height_threshold: float | None = 0.15,
+    max_height: float | None = None,
+    origin_centered: bool = False,
+) -> OccupancyGrid:
+    """Load a PCD/PLY point cloud into an OccupancyGrid."""
+    try:
+        import open3d as o3d  # type: ignore
+    except Exception as exc:
+        raise RuntimeError("open3d is required to load PCD/PLY maps.") from exc
+
+    cloud = o3d.io.read_point_cloud(map_path)
+    if len(cloud.points) == 0:
+        raise RuntimeError(f"Loaded point cloud is empty: {map_path}")
+
+    pts = np.asarray(cloud.points)
+    if pts.ndim != 2 or pts.shape[1] != 3:
+        raise RuntimeError(f"Unexpected point cloud shape: {pts.shape}")
+
+    if max_height is not None:
+        pts = pts[pts[:, 2] <= max_height]
+        if pts.size == 0:
+            raise RuntimeError("All points filtered by max_height.")
+
+    min_xy = pts[:, :2].min(axis=0) - padding_m
+    max_xy = pts[:, :2].max(axis=0) + padding_m
+    width_m = float(max_xy[0] - min_xy[0])
+    height_m = float(max_xy[1] - min_xy[1])
+    if width_m <= 0 or height_m <= 0 or resolution <= 0:
+        raise RuntimeError("Invalid map bounds/resolution.")
+
+    if origin_centered:
+        origin_x = -width_m / 2.0
+        origin_y = -height_m / 2.0
+    else:
+        origin_x = float(min_xy[0])
+        origin_y = float(min_xy[1])
+
+    occ_grid = OccupancyGrid(width_m, height_m, resolution, origin_x, origin_y)
+    grid = np.zeros((occ_grid.height_cells, occ_grid.width_cells), dtype=np.int8)
+
+    if height_threshold is not None:
+        pts = pts[pts[:, 2] >= height_threshold]
+    if pts.size > 0:
+        gx = ((pts[:, 0] - origin_x) / resolution).astype(int)
+        gy = ((pts[:, 1] - origin_y) / resolution).astype(int)
+        valid = (
+            (gx >= 0) & (gx < occ_grid.width_cells) &
+            (gy >= 0) & (gy < occ_grid.height_cells)
+        )
+        gx = gx[valid]
+        gy = gy[valid]
+        grid[gy, gx] = 1
+
+    occ_grid.grid = grid
+    return occ_grid
 
 
 # ---------------------------------------------------------------------------
