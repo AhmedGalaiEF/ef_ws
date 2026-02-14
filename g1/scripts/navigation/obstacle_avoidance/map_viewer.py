@@ -27,6 +27,7 @@ Can be used in two ways:
 from __future__ import annotations
 
 import math
+import json
 import os
 from pathlib import Path
 from typing import Optional
@@ -51,6 +52,7 @@ _COL_WAYPOINT = np.array([255, 120, 0], dtype=np.uint8)     # blue
 _COL_TRAIL = np.array([80, 140, 80], dtype=np.uint8)        # faint green
 _COL_ROBOT = np.array([0, 220, 0], dtype=np.uint8)          # green
 _COL_GOAL = np.array([0, 0, 255], dtype=np.uint8)           # red
+_COL_START = np.array([0, 220, 220], dtype=np.uint8)        # cyan
 _COL_RANGE_OK = (0, 180, 0)                                 # green line
 _COL_RANGE_WARN = (0, 180, 255)                             # orange line
 _COL_RANGE_BLOCK = (0, 0, 255)                              # red line
@@ -86,6 +88,7 @@ class MapViewer:
         self._path: list[tuple[float, float]] = []
         self._waypoints: list[tuple[float, float]] = []
         self._goal: tuple[float, float] | None = None
+        self._start: tuple[float, float, float] | None = None
 
     # ------------------------------------------------------------------
     # Overlay setters (call once per replan)
@@ -101,6 +104,9 @@ class MapViewer:
 
     def set_goal(self, gx: float, gy: float) -> None:
         self._goal = (gx, gy)
+
+    def set_start(self, sx: float, sy: float, syaw: float = 0.0) -> None:
+        self._start = (sx, sy, syaw)
 
     # ------------------------------------------------------------------
     # Coordinate helpers
@@ -225,6 +231,18 @@ class MapViewer:
             cv2.drawMarker(img, (gx, gy), _COL_GOAL.tolist(),
                            cv2.MARKER_STAR, max(12, s * 3), 2, cv2.LINE_AA)
 
+        # --- start pose ---
+        if self._start is not None:
+            sx, sy, syaw = self._start
+            spx, spy = self._world_to_pixel(sx, sy)
+            cv2.drawMarker(img, (spx, spy), _COL_START.tolist(),
+                           cv2.MARKER_TRIANGLE_UP, max(10, s * 3), 2, cv2.LINE_AA)
+            arrow_len = max(10, s * 3)
+            ax = int(spx + arrow_len * math.cos(syaw))
+            ay = int(spy - arrow_len * math.sin(syaw))
+            cv2.arrowedLine(img, (spx, spy), (ax, ay), _COL_START.tolist(), 2,
+                            cv2.LINE_AA, tipLength=0.3)
+
         # --- range sensor lines ---
         if ranges is not None:
             offsets = [0.0, -math.pi / 2, math.pi, math.pi / 2]
@@ -329,6 +347,8 @@ if __name__ == "__main__":
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id")
     parser.add_argument("--sport-topic", default="rt/odommodestate", help="SportModeState topic name")
     parser.add_argument("--slam-odom-topic", default="rt/unitree/slam_mapping/odom", help="SLAM odom topic (optional)")
+    parser.add_argument("--slam-info-topic", default="rt/slam_info", help="SLAM info topic (optional)")
+    parser.add_argument("--slam-key-topic", default="rt/slam_key_info", help="SLAM key info topic (optional)")
     parser.add_argument("--slam-points-topic", default="", help="SLAM points topic (optional)")
     parser.add_argument("--slam-points-stride", type=int, default=4, help="Subsample SLAM points")
     parser.add_argument("--lidar-topic", default="rt/utlidar/cloud_livox_mid360", help="Lidar PointCloud2 DDS topic")
@@ -371,6 +391,12 @@ if __name__ == "__main__":
             scale=args.scale,
             inflation_radius=args.inflation_radius,
         )
+        if occ_grid.start_pose is not None:
+            sx, sy, syaw = occ_grid.start_pose
+            viewer.set_start(sx, sy, syaw)
+        if occ_grid.goal_pose is not None:
+            gx, gy, _ = occ_grid.goal_pose
+            viewer.set_goal(gx, gy)
 
         mouse_state = {"lx": 0, "ly": 0}
 
@@ -394,7 +420,8 @@ if __name__ == "__main__":
 
         save_path = args.save or "/tmp/offline_obstacle_map.npz"
         print("Offline map viewer/editor.")
-        print("Left-drag: add obstacle | Right-drag: clear | s: save | q/ESC: quit")
+        print("Left-drag: add obstacle | Right-drag: clear")
+        print("1: set start_pose | 2: set end_pose | s: save | q/ESC: quit")
         print(f"Save path: {save_path}")
 
         try:
@@ -415,6 +442,16 @@ if __name__ == "__main__":
                 key = cv2.waitKey(30) & 0xFF
                 if key in (ord("q"), 27):
                     break
+                if key == ord("1"):
+                    sx, sy = viewer.pixel_to_world(mouse_state["lx"], mouse_state["ly"])
+                    occ_grid.start_pose = (float(sx), float(sy), 0.0)
+                    viewer.set_start(sx, sy, 0.0)
+                    print(f"Start pose set: x={sx:+.2f}, y={sy:+.2f}")
+                if key == ord("2"):
+                    gx, gy = viewer.pixel_to_world(mouse_state["lx"], mouse_state["ly"])
+                    occ_grid.goal_pose = (float(gx), float(gy), 0.0)
+                    viewer.set_goal(gx, gy)
+                    print(f"End pose set: x={gx:+.2f}, y={gy:+.2f}")
                 if key == ord("s"):
                     occ_grid.save(save_path)
                     print(f"Saved map to {save_path}")
@@ -424,7 +461,7 @@ if __name__ == "__main__":
 
     from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelSubscriber
     from obstacle_detection import ObstacleDetector
-    from slam_map import SlamOdomSubscriber
+    from slam_map import SlamInfoSubscriber, SlamOdomSubscriber
     from unitree_sdk2py.idl.sensor_msgs.msg.dds_ import PointCloud2_
 
     ChannelFactoryInitialize(args.domain_id, args.iface)
@@ -435,6 +472,8 @@ if __name__ == "__main__":
     slam_odom = SlamOdomSubscriber(args.slam_odom_topic) if args.slam_odom_topic else None
     if slam_odom is not None:
         slam_odom.start()
+    slam_info = SlamInfoSubscriber(args.slam_info_topic, args.slam_key_topic)
+    slam_info.start()
 
     slam_points: list[tuple[float, float]] = []
     lidar_points: list[tuple[float, float]] = []
@@ -507,6 +546,55 @@ if __name__ == "__main__":
         scale=args.scale,
         inflation_radius=args.inflation_radius,
     )
+    if occ_grid.start_pose is not None:
+        sx, sy, syaw = occ_grid.start_pose
+        viewer.set_start(sx, sy, syaw)
+    if occ_grid.goal_pose is not None:
+        gx, gy, _ = occ_grid.goal_pose
+        viewer.set_goal(gx, gy)
+
+    def _pose_from_dict(data: dict) -> tuple[float, float, float] | None:
+        try:
+            x = float(data.get("x", 0.0))
+            y = float(data.get("y", 0.0))
+        except Exception:
+            return None
+        if {"q_x", "q_y", "q_z", "q_w"}.issubset(data.keys()):
+            try:
+                qx = float(data["q_x"])
+                qy = float(data["q_y"])
+                qz = float(data["q_z"])
+                qw = float(data["q_w"])
+            except Exception:
+                return None
+            siny_cosp = 2.0 * (qw * qz + qx * qy)
+            cosy_cosp = 1.0 - 2.0 * (qy * qy + qz * qz)
+            yaw = math.atan2(siny_cosp, cosy_cosp)
+            return (x, y, yaw)
+        if "yaw" in data:
+            try:
+                yaw = float(data["yaw"])
+            except Exception:
+                yaw = 0.0
+            return (x, y, yaw)
+        return (x, y, 0.0)
+
+    def _extract_poses_from_info(payload: str) -> tuple[tuple[float, float, float] | None, tuple[float, float, float] | None]:
+        try:
+            data = json.loads(payload)
+        except Exception:
+            return (None, None)
+        cur = None
+        init = None
+        if isinstance(data, dict):
+            if data.get("type") == "pos_info":
+                cur = _pose_from_dict(data.get("data", {}).get("currentPose", {}))
+            init_keys = ("initPose", "init_pose", "initialPose", "startPose")
+            for key in init_keys:
+                if key in data.get("data", {}):
+                    init = _pose_from_dict(data.get("data", {}).get(key, {}))
+                    break
+        return (cur, init)
 
     print("Displaying live map.  Press 'q' or ESC to quit.")
     last_log = time.time()
@@ -521,6 +609,19 @@ if __name__ == "__main__":
             else:
                 x, y, yaw = detector.get_pose()
             ranges = detector.get_ranges()
+
+            info = slam_info.get_info()
+            if info:
+                cur_pose, init_pose = _extract_poses_from_info(info)
+                if init_pose is not None and occ_grid.start_pose is None:
+                    occ_grid.start_pose = init_pose
+                    viewer.set_start(*init_pose)
+                if init_pose is None and occ_grid.start_pose is None and cur_pose is not None:
+                    occ_grid.start_pose = cur_pose
+                    viewer.set_start(*cur_pose)
+                if cur_pose is not None:
+                    occ_grid.goal_pose = cur_pose
+                    viewer.set_goal(cur_pose[0], cur_pose[1])
 
             # Mark obstacles on the grid
             occ_grid.mark_obstacle_from_range(x, y, yaw, ranges)

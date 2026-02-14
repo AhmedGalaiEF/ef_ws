@@ -44,6 +44,9 @@ class OccupancyGrid:
         self.width_cells = int(width_m / resolution)
         self.height_cells = int(height_m / resolution)
         self.grid = np.zeros((self.height_cells, self.width_cells), dtype=np.int8)
+        # Optional annotations (world x, y, yaw in radians)
+        self.start_pose: tuple[float, float, float] | None = None
+        self.goal_pose: tuple[float, float, float] | None = None
 
     # ------------------------------------------------------------------
     # Coordinate conversion
@@ -147,13 +150,17 @@ class OccupancyGrid:
         return self.grid.copy()
 
     def save(self, filepath: str) -> None:
-        np.savez(
-            filepath,
-            grid=self.grid,
-            resolution=np.float64(self.resolution),
-            origin_x=np.float64(self.origin[0]),
-            origin_y=np.float64(self.origin[1]),
-        )
+        payload = {
+            "grid": self.grid,
+            "resolution": np.float64(self.resolution),
+            "origin_x": np.float64(self.origin[0]),
+            "origin_y": np.float64(self.origin[1]),
+        }
+        if self.start_pose is not None:
+            payload["start_pose"] = np.array(self.start_pose, dtype=np.float64)
+        if self.goal_pose is not None:
+            payload["goal_pose"] = np.array(self.goal_pose, dtype=np.float64)
+        np.savez(filepath, **payload)
 
     @classmethod
     def load(cls, filepath: str) -> "OccupancyGrid":
@@ -172,6 +179,17 @@ class OccupancyGrid:
         h, w = grid_data.shape
         obj = cls(w * resolution, h * resolution, resolution, origin_x, origin_y)
         obj.grid = grid_data.astype(np.int8)
+        try:
+            if "start_pose" in data:
+                sp = np.array(data["start_pose"]).astype(np.float64).flatten()
+                if sp.size >= 3:
+                    obj.start_pose = (float(sp[0]), float(sp[1]), float(sp[2]))
+            if "goal_pose" in data:
+                gp = np.array(data["goal_pose"]).astype(np.float64).flatten()
+                if gp.size >= 3:
+                    obj.goal_pose = (float(gp[0]), float(gp[1]), float(gp[2]))
+        except Exception:
+            pass
         return obj
 
 
