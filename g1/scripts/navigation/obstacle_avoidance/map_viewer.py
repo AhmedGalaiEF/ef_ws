@@ -14,21 +14,30 @@ Can be used in two ways:
    robot navigates.  The viewer's ``update()`` method is injected into the
    ``check_obstacle`` callback so it refreshes at control-loop rate.
 
-2. **Standalone** -- connects to the robot, builds a live obstacle map, and
-   displays it without commanding any motion::
+2. **Standalone (live)** -- connects to the robot, builds a live obstacle map,
+   and displays it without commanding any motion::
 
-       python map_viewer.py eth0
+       python map_viewer.py --iface eth0
+
+3. **Standalone (offline)** -- view/edit a saved map without connecting to a
+   robot::
+
+       python map_viewer.py --offline --map /tmp/live_obstacle_map.npz
 """
 from __future__ import annotations
 
 import math
-from typing import Sequence, Optional
+import os
+from pathlib import Path
+from typing import Optional
+
+# Suppress Qt font warnings from OpenCV's highgui backend.
+os.environ.setdefault("QT_LOGGING_RULES", "qt.qpa.*=false")
 
 import cv2
 import numpy as np
 
-from create_map import OccupancyGrid
-from slam_map import SlamOdomSubscriber
+from create_map import OccupancyGrid, load_from_point_cloud
 
 
 # ---------------------------------------------------------------------------
@@ -297,7 +306,25 @@ if __name__ == "__main__":
     import sys
     import time
 
-    parser = argparse.ArgumentParser(description="Live obstacle map viewer.")
+    parser = argparse.ArgumentParser(description="Obstacle map viewer (live or offline).")
+    parser.add_argument("--offline", action="store_true", help="Run without robot connection")
+    parser.add_argument("--map", default="", help="Path to saved map (.npz/.pcd/.ply) to view/edit")
+    parser.add_argument("--save", default="", help="Path to save edited map (.npz)")
+    parser.add_argument("--width-m", type=float, default=10.0, help="offline map width (m)")
+    parser.add_argument("--height-m", type=float, default=10.0, help="offline map height (m)")
+    parser.add_argument("--resolution", type=float, default=0.1, help="offline map resolution (m)")
+    parser.add_argument("--origin-x", type=float, default=-5.0, help="offline map origin x")
+    parser.add_argument("--origin-y", type=float, default=-5.0, help="offline map origin y")
+    parser.add_argument("--map-resolution", type=float, default=0.1, help="PCD/PLY map resolution (m)")
+    parser.add_argument("--map-padding", type=float, default=0.5, help="PCD/PLY map padding (m)")
+    parser.add_argument("--map-origin-centered", action="store_true", help="Center PCD/PLY map around (0,0)")
+    parser.add_argument("--map-height-threshold", type=float, default=0.15, help="PCD/PLY height threshold (m)")
+    parser.add_argument("--map-max-height", type=float, default=None, help="PCD/PLY max height (m)")
+    parser.add_argument("--robot-x", type=float, default=None, help="offline robot x for display")
+    parser.add_argument("--robot-y", type=float, default=None, help="offline robot y for display")
+    parser.add_argument("--robot-yaw", type=float, default=0.0, help="offline robot yaw (rad)")
+    parser.add_argument("--scale", type=int, default=_DEFAULT_SCALE, help="display scale (px/cell)")
+    parser.add_argument("--inflation-radius", type=int, default=3, help="inflate radius (cells)")
     parser.add_argument("--iface", default="eth0", help="network interface for DDS")
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id")
     parser.add_argument("--sport-topic", default="rt/odommodestate", help="SportModeState topic name")
@@ -310,8 +337,94 @@ if __name__ == "__main__":
     parser.add_argument("--lidar-z-max", type=float, default=1.5, help="Max Z for lidar overlay")
     args = parser.parse_args()
 
+    if args.offline or args.map:
+        if args.map:
+            suffix = Path(args.map).suffix.lower()
+            if suffix in {".pcd", ".ply"}:
+                occ_grid = load_from_point_cloud(
+                    args.map,
+                    resolution=args.map_resolution,
+                    padding_m=args.map_padding,
+                    height_threshold=args.map_height_threshold,
+                    max_height=args.map_max_height,
+                    origin_centered=args.map_origin_centered,
+                )
+            else:
+                occ_grid = OccupancyGrid.load(args.map)
+        else:
+            occ_grid = OccupancyGrid(
+                width_m=args.width_m,
+                height_m=args.height_m,
+                resolution=args.resolution,
+                origin_x=args.origin_x,
+                origin_y=args.origin_y,
+            )
+
+        if args.robot_x is None:
+            args.robot_x = occ_grid.origin[0] + occ_grid.width_cells * occ_grid.resolution / 2.0
+        if args.robot_y is None:
+            args.robot_y = occ_grid.origin[1] + occ_grid.height_cells * occ_grid.resolution / 2.0
+
+        viewer = MapViewer(
+            occ_grid,
+            window_name="Offline Obstacle Map",
+            scale=args.scale,
+            inflation_radius=args.inflation_radius,
+        )
+
+        mouse_state = {"lx": 0, "ly": 0}
+
+        def _paint(event, x, y, flags, _param):
+            mouse_state["lx"] = x
+            mouse_state["ly"] = y
+            if event in (cv2.EVENT_LBUTTONDOWN, cv2.EVENT_MOUSEMOVE):
+                if event == cv2.EVENT_MOUSEMOVE and not (flags & cv2.EVENT_FLAG_LBUTTON):
+                    return
+                wx, wy = viewer.pixel_to_world(int(x), int(y))
+                occ_grid.set_obstacle_world(wx, wy)
+            elif event in (cv2.EVENT_RBUTTONDOWN, cv2.EVENT_MOUSEMOVE):
+                if event == cv2.EVENT_MOUSEMOVE and not (flags & cv2.EVENT_FLAG_RBUTTON):
+                    return
+                wx, wy = viewer.pixel_to_world(int(x), int(y))
+                row, col = occ_grid.world_to_grid(wx, wy)
+                occ_grid.set_free(row, col)
+
+        cv2.namedWindow(viewer.window_name, cv2.WINDOW_NORMAL)
+        cv2.setMouseCallback(viewer.window_name, _paint)
+
+        save_path = args.save or "/tmp/offline_obstacle_map.npz"
+        print("Offline map viewer/editor.")
+        print("Left-drag: add obstacle | Right-drag: clear | s: save | q/ESC: quit")
+        print(f"Save path: {save_path}")
+
+        try:
+            while True:
+                img = viewer.render_image(args.robot_x, args.robot_y, args.robot_yaw)
+                wx, wy = viewer.pixel_to_world(mouse_state["lx"], mouse_state["ly"])
+                cv2.putText(
+                    img,
+                    f"mouse: ({wx:+.2f}, {wy:+.2f})",
+                    (8, 16),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.45,
+                    (80, 80, 80),
+                    1,
+                    cv2.LINE_AA,
+                )
+                cv2.imshow(viewer.window_name, img)
+                key = cv2.waitKey(30) & 0xFF
+                if key in (ord("q"), 27):
+                    break
+                if key == ord("s"):
+                    occ_grid.save(save_path)
+                    print(f"Saved map to {save_path}")
+        finally:
+            viewer.close()
+        raise SystemExit(0)
+
     from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelSubscriber
     from obstacle_detection import ObstacleDetector
+    from slam_map import SlamOdomSubscriber
     from unitree_sdk2py.idl.sensor_msgs.msg.dds_ import PointCloud2_
 
     ChannelFactoryInitialize(args.domain_id, args.iface)
@@ -388,7 +501,12 @@ if __name__ == "__main__":
     )
     print(f"Map centred on robot start ({sx:.2f}, {sy:.2f})")
 
-    viewer = MapViewer(occ_grid, window_name="Live Obstacle Map", scale=4)
+    viewer = MapViewer(
+        occ_grid,
+        window_name="Live Obstacle Map",
+        scale=args.scale,
+        inflation_radius=args.inflation_radius,
+    )
 
     print("Displaying live map.  Press 'q' or ESC to quit.")
     last_log = time.time()

@@ -1,0 +1,37 @@
+Steps taken to get Livox SDK2 + Open3D/GLFW working (interactive window)
+
+1) Disabled SDK1 fallback in live_slam.py so SDK2 is required
+   - File: /home/ag/ef_ws/g1/scripts/navigation/slam/live_slam.py
+   - Change: if livox2_python import fails, exit with a clear error instead of using SDK1
+
+2) Built Livox-SDK2 locally (no system install required)
+   - Repo: ~/Livox-SDK2
+   - Build dir: ~/Livox-SDK2/build
+   - CMake flags used:
+     -DCMAKE_BUILD_TYPE=Release
+     -DCMAKE_CXX_STANDARD=11
+     -DCMAKE_CXX_STANDARD_REQUIRED=ON
+     -DCMAKE_CXX_FLAGS="-include cstdint"
+   - Note: these flags work around missing <cstdint> usage in SDK2 headers
+
+3) Fixed build directory ownership (caused by running sudo inside build dir)
+   - Command: sudo chown -R ag:ag /home/ag/Livox-SDK2/build
+
+4) Pointed the wrapper at the local SDK2 build (no install needed)
+   - env: LIVOX_SDK2_DIR=~/Livox-SDK2
+
+5) Forced Open3D/GLFW to use X11 instead of Wayland, to get an interactive window
+   - In the same terminal before running live_slam.py:
+     export QT_QPA_PLATFORM=xcb
+     export GDK_BACKEND=x11
+     export SDL_VIDEODRIVER=x11
+     export GLFW_PLATFORM=x11
+     export XDG_SESSION_TYPE=x11
+     unset WAYLAND_DISPLAY
+     export DISPLAY=:0
+
+6) Verified GLX/X11 availability
+   - Command: glxinfo -B
+
+7) Ran the app
+   - Command: py live_slam.py

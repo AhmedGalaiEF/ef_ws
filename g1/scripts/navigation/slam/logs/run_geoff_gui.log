@@ -211,3 +211,329 @@ options:
 2026-02-14 15:48:27,044  ERROR     AttributeError
 2026-02-14 15:48:27,044  ERROR     :
 2026-02-14 15:48:27,044  ERROR     'GeoffWindow' object has no attribute '_drive_timer'
+2026-02-14 18:16:22,946  INFO      No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2026-02-14 18:16:24,021  INFO      damp         → FSM 0   mode 0
+2026-02-14 18:16:24,025  INFO      stand_up     → FSM 4   mode 0
+2026-02-14 18:16:24,028  INFO      height 0.02 m → FSM 4   mode 0
+2026-02-14 18:16:24,033  INFO      height 0.04 m → FSM 4   mode 0
+2026-02-14 18:16:24,036  INFO      height 0.06 m → FSM 4   mode 1
+2026-02-14 18:16:24,039  INFO      height 0.08 m → FSM 4   mode 1
+2026-02-14 18:16:24,042  INFO      height 0.10 m → FSM 4   mode 1
+2026-02-14 18:16:24,044  INFO      height 0.12 m → FSM 4   mode 1
+2026-02-14 18:16:24,047  INFO      height 0.14 m → FSM 4   mode 1
+2026-02-14 18:16:24,050  INFO      height 0.16 m → FSM 4   mode 1
+2026-02-14 18:16:24,052  INFO      height 0.18 m → FSM 4   mode 1
+2026-02-14 18:16:24,055  INFO      height 0.20 m → FSM 4   mode 1
+2026-02-14 18:16:24,058  INFO      height 0.22 m → FSM 4   mode 1
+2026-02-14 18:16:24,061  INFO      height 0.24 m → FSM 4   mode 1
+2026-02-14 18:16:24,064  INFO      height 0.26 m → FSM 4   mode 1
+2026-02-14 18:16:24,067  INFO      height 0.28 m → FSM 4   mode 1
+2026-02-14 18:16:24,070  INFO      height 0.30 m → FSM 4   mode 1
+2026-02-14 18:16:24,073  INFO      height 0.32 m → FSM 4   mode 1
+2026-02-14 18:16:24,076  INFO      height 0.34 m → FSM 4   mode 1
+2026-02-14 18:16:24,080  INFO      height 0.36 m → FSM 4   mode 1
+2026-02-14 18:16:24,084  INFO      height 0.38 m → FSM 4   mode 1
+2026-02-14 18:16:24,087  INFO      height 0.40 m → FSM 4   mode 1
+2026-02-14 18:16:24,090  INFO      height 0.42 m → FSM 4   mode 1
+2026-02-14 18:16:24,093  INFO      height 0.44 m → FSM 4   mode 1
+2026-02-14 18:16:24,096  INFO      height 0.46 m → FSM 4   mode 1
+2026-02-14 18:16:24,099  INFO      height 0.48 m → FSM 4   mode 1
+2026-02-14 18:16:24,102  INFO      height 0.50 m → FSM 4   mode 1
+2026-02-14 18:16:24,105  WARNING   Feet still unloaded (mode 1) after reaching 0.50 m.
+Adjust hanger height (raise/lower until the soles are just in
+contact with the ground) then press <Enter> to try again…
+2026-02-14 18:16:24,107  INFO      reset        → FSM 4   mode 1
+2026-02-14 18:16:26,465  INFO      height 0.02 m → FSM 4   mode 1
+2026-02-14 18:16:26,469  INFO      height 0.04 m → FSM 4   mode 1
+2026-02-14 18:16:26,473  INFO      height 0.06 m → FSM 4   mode 1
+2026-02-14 18:16:26,476  INFO      height 0.08 m → FSM 4   mode 1
+2026-02-14 18:16:26,480  INFO      height 0.10 m → FSM 4   mode 1
+2026-02-14 18:16:26,482  INFO      height 0.12 m → FSM 4   mode 1
+2026-02-14 18:16:26,487  INFO      height 0.14 m → FSM 4   mode 1
+2026-02-14 18:16:26,489  INFO      height 0.16 m → FSM 4   mode 1
+2026-02-14 18:16:26,493  INFO      height 0.18 m → FSM 4   mode 1
+2026-02-14 18:16:26,496  INFO      height 0.20 m → FSM 4   mode 1
+2026-02-14 18:16:26,499  INFO      height 0.22 m → FSM 4   mode 1
+2026-02-14 18:16:26,502  INFO      height 0.24 m → FSM 4   mode 1
+2026-02-14 18:16:26,505  INFO      height 0.26 m → FSM 4   mode 1
+2026-02-14 18:16:26,508  INFO      height 0.28 m → FSM 4   mode 1
+2026-02-14 18:16:26,510  INFO      height 0.30 m → FSM 4   mode 1
+2026-02-14 18:16:26,513  INFO      height 0.32 m → FSM 4   mode 1
+2026-02-14 18:16:26,517  INFO      height 0.34 m → FSM 4   mode 1
+2026-02-14 18:16:26,520  INFO      height 0.36 m → FSM 4   mode 1
+2026-02-14 18:16:26,525  INFO      height 0.38 m → FSM 4   mode 1
+2026-02-14 18:16:26,529  INFO      height 0.40 m → FSM 4   mode 1
+2026-02-14 18:16:26,532  INFO      height 0.42 m → FSM 4   mode 1
+2026-02-14 18:16:26,535  INFO      height 0.44 m → FSM 4   mode 1
+2026-02-14 18:16:26,538  INFO      height 0.46 m → FSM 4   mode 1
+2026-02-14 18:16:26,541  INFO      height 0.48 m → FSM 4   mode 1
+2026-02-14 18:16:26,545  INFO      height 0.50 m → FSM 4   mode 1
+2026-02-14 18:16:26,547  WARNING   Feet still unloaded (mode 1) after reaching 0.50 m.
+Adjust hanger height (raise/lower until the soles are just in
+contact with the ground) then press <Enter> to try again…
+2026-02-14 18:16:26,549  INFO      reset        → FSM 4   mode 1
+2026-02-14 18:16:32,368  INFO      height 0.02 m → FSM 4   mode 0
+2026-02-14 18:16:32,371  INFO      height 0.04 m → FSM 4   mode 0
+2026-02-14 18:16:32,375  INFO      height 0.06 m → FSM 4   mode 0
+2026-02-14 18:16:32,379  INFO      height 0.08 m → FSM 4   mode 0
+2026-02-14 18:16:32,383  INFO      height 0.10 m → FSM 4   mode 0
+2026-02-14 18:16:32,386  INFO      height 0.12 m → FSM 4   mode 0
+2026-02-14 18:16:32,389  INFO      height 0.14 m → FSM 4   mode 0
+2026-02-14 18:16:32,392  INFO      height 0.16 m → FSM 4   mode 0
+2026-02-14 18:16:32,395  INFO      height 0.18 m → FSM 4   mode 0
+2026-02-14 18:16:32,398  INFO      height 0.20 m → FSM 4   mode 0
+2026-02-14 18:16:32,400  INFO      height 0.22 m → FSM 4   mode 0
+2026-02-14 18:16:32,404  INFO      balance      → FSM 4   mode 0
+2026-02-14 18:16:32,406  INFO      height✔      → FSM 4   mode 0
+2026-02-14 18:16:32,409  INFO      start        → FSM 4   mode 0
+2026-02-14 18:16:32,623  ERROR     [run_geoff_gui] Dex3 hand control disabled:
+2026-02-14 18:16:32,626  ERROR     No module named 'unitree_sdk2py.dex3'
+2026-02-14 18:16:33,478  ERROR     
+A module that was compiled using NumPy 1.x cannot be run in
+NumPy 2.4.1 as it may crash. To support both 1.x and 2.x
+versions of NumPy, modules must be compiled with NumPy 2.0.
+Some module may need to rebuild instead e.g. with 'pybind11>=2.12'.
+
+If you are a user of the module, the easiest solution will be to
+downgrade to 'numpy<2' or try to upgrade the affected module.
+We expect that some modules will need time to support NumPy 2.
+
+Traceback (most recent call last):  File "/usr/lib/python3.12/threading.py", line 1030, in _bootstrap
+    self._bootstrap_inner()
+  File "/usr/lib/python3.12/threading.py", line 1073, in _bootstrap_inner
+    self.run()
+  File "/usr/lib/python3.12/threading.py", line 1010, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/ag/ef_ws/g1/scripts/navigation/slam/run_geoff_stack.py", line 112, in _rx_realsense
+    cv2 = _import_cv2()
+  File "/home/ag/ef_ws/g1/scripts/navigation/slam/run_geoff_stack.py", line 71, in _import_cv2
+    import cv2  # type: ignore
+2026-02-14 18:16:33,479  ERROR     Traceback (most recent call last):
+2026-02-14 18:16:33,481  ERROR       File "/home/ag/.guv/envs/unitree/lib/python3.12/site-packages/numpy/core/_multiarray_umath.py", line 46, in __getattr__
+2026-02-14 18:16:33,482  ERROR     raise ImportError(msg)
+2026-02-14 18:16:33,484  ERROR     ImportError
+2026-02-14 18:16:33,484  ERROR     :
+2026-02-14 18:16:33,485  ERROR     
+A module that was compiled using NumPy 1.x cannot be run in
+NumPy 2.4.1 as it may crash. To support both 1.x and 2.x
+versions of NumPy, modules must be compiled with NumPy 2.0.
+Some module may need to rebuild instead e.g. with 'pybind11>=2.12'.
+
+If you are a user of the module, the easiest solution will be to
+downgrade to 'numpy<2' or try to upgrade the affected module.
+We expect that some modules will need time to support NumPy 2.
+2026-02-14 18:16:33,486  ERROR     [run_geoff_stack] RealSense receiver disabled:
+2026-02-14 18:16:33,487  ERROR     numpy.core.multiarray failed to import
+2026-02-14 18:16:34,264  ERROR     /usr/lib/python3/dist-packages/scipy/__init__.py:132: UserWarning: A NumPy version >=1.21.6 and <1.28.0 is required for this version of SciPy (detected version 2.4.1)
+  warnings.warn(f"A NumPy version >={np_minversion} and <{np_maxversion}"
+2026-02-14 18:16:34,280  ERROR     
+A module that was compiled using NumPy 1.x cannot be run in
+NumPy 2.4.1 as it may crash. To support both 1.x and 2.x
+versions of NumPy, modules must be compiled with NumPy 2.0.
+Some module may need to rebuild instead e.g. with 'pybind11>=2.12'.
+
+If you are a user of the module, the easiest solution will be to
+downgrade to 'numpy<2' or try to upgrade the affected module.
+We expect that some modules will need time to support NumPy 2.
+
+Traceback (most recent call last):  File "/usr/lib/python3.12/threading.py", line 1030, in _bootstrap
+    self._bootstrap_inner()
+  File "/usr/lib/python3.12/threading.py", line 1073, in _bootstrap_inner
+    self.run()
+  File "/usr/lib/python3.12/threading.py", line 1010, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/ag/ef_ws/g1/scripts/navigation/slam/run_geoff_gui.py", line 343, in _run_slam
+    _patch_live_slam_for_pyqt()
+  File "/home/ag/ef_ws/g1/scripts/navigation/slam/run_geoff_gui.py", line 294, in _patch_live_slam_for_pyqt
+    import live_slam as _ls  # type: ignore
+  File "/home/ag/ef_ws/g1/scripts/navigation/slam/live_slam.py", line 32, in <module>
+    import open3d as o3d
+  File "/home/ag/.guv/envs/unitree/lib/python3.12/site-packages/open3d/__init__.py", line 163, in <module>
+    import open3d.ml
+  File "/home/ag/.guv/envs/unitree/lib/python3.12/site-packages/open3d/ml/__init__.py", line 16, in <module>
+    from . import datasets
+  File "/home/ag/.guv/envs/unitree/lib/python3.12/site-packages/open3d/ml/datasets.py", line 15, in <module>
+    from open3d._ml3d.datasets import *
+  File "/home/ag/.guv/envs/unitree/lib/python3.12/site-packages/open3d/_ml3d/datasets/__init__.py", line 3, in <module>
+    from .semantickitti import SemanticKITTI
+  File "/home/ag/.guv/envs/unitree/lib/python3.12/site-packages/open3d/_ml3d/datasets/semantickitti.py", line 6, in <module>
+    from sklearn.neighbors import KDTree
+  File "/home/ag/.guv/envs/unitree/lib/python3.12/site-packages/sklearn/__init__.py", line 73, in <module>
+    from .base import clone  # noqa: E402
+  File "/home/ag/.guv/envs/unitree/lib/python3.12/site-packages/sklearn/base.py", line 19, in <module>
+    from .utils._metadata_requests import _MetadataRequester, _routing_enabled
+  File "/home/ag/.guv/envs/unitree/lib/python3.12/site-packages/sklearn/utils/__init__.py", line 9, in <module>
+    from ._chunking import gen_batches, gen_even_slices
+  File "/home/ag/.guv/envs/unitree/lib/python3.12/site-packages/sklearn/utils/_chunking.py", line 11, in <module>
+    from ._param_validation import Interval, validate_params
+  File "/home/ag/.guv/envs/unitree/lib/python3.12/site-packages/sklearn/utils/_param_validation.py", line 14, in <module>
+    from scipy.sparse import csr_matrix, issparse
+  File "/usr/lib/python3/dist-packages/scipy/sparse/__init__.py", line 274, in <module>
+    from ._csr import *
+  File "/usr/lib/python3/dist-packages/scipy/sparse/_csr.py", line 11, in <module>
+    from ._sparsetools import (csr_tocsc, csr_tobsr, csr_count_blocks,
+2026-02-14 18:16:34,280  ERROR     Traceback (most recent call last):
+2026-02-14 18:16:34,280  ERROR       File "/home/ag/.guv/envs/unitree/lib/python3.12/site-packages/numpy/core/_multiarray_umath.py", line 46, in __getattr__
+2026-02-14 18:16:34,280  ERROR     raise ImportError(msg)
+2026-02-14 18:16:34,280  ERROR     ImportError
+2026-02-14 18:16:34,280  ERROR     :
+2026-02-14 18:16:34,280  ERROR     
+A module that was compiled using NumPy 1.x cannot be run in
+NumPy 2.4.1 as it may crash. To support both 1.x and 2.x
+versions of NumPy, modules must be compiled with NumPy 2.0.
+Some module may need to rebuild instead e.g. with 'pybind11>=2.12'.
+
+If you are a user of the module, the easiest solution will be to
+downgrade to 'numpy<2' or try to upgrade the affected module.
+We expect that some modules will need time to support NumPy 2.
+2026-02-14 18:16:34,281  ERROR     [run_geoff_gui] SLAM thread disabled:
+2026-02-14 18:16:34,281  ERROR     numpy.core.multiarray failed to import
+2026-02-14 20:52:06,471  INFO      No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2026-02-14 20:52:07,498  INFO      damp         → FSM 0   mode 0
+2026-02-14 20:52:07,502  INFO      stand_up     → FSM 4   mode 0
+2026-02-14 20:52:07,505  INFO      height 0.02 m → FSM 4   mode 0
+2026-02-14 20:52:07,508  INFO      height 0.04 m → FSM 4   mode 0
+2026-02-14 20:52:07,511  INFO      height 0.06 m → FSM 4   mode 1
+2026-02-14 20:52:07,514  INFO      height 0.08 m → FSM 4   mode 1
+2026-02-14 20:52:07,517  INFO      height 0.10 m → FSM 4   mode 1
+2026-02-14 20:52:07,520  INFO      height 0.12 m → FSM 4   mode 1
+2026-02-14 20:52:07,522  INFO      height 0.14 m → FSM 4   mode 1
+2026-02-14 20:52:07,525  INFO      height 0.16 m → FSM 4   mode 1
+2026-02-14 20:52:07,527  INFO      height 0.18 m → FSM 4   mode 1
+2026-02-14 20:52:07,531  INFO      height 0.20 m → FSM 4   mode 1
+2026-02-14 20:52:07,533  INFO      height 0.22 m → FSM 4   mode 1
+2026-02-14 20:52:07,537  INFO      height 0.24 m → FSM 4   mode 1
+2026-02-14 20:52:07,541  INFO      height 0.26 m → FSM 4   mode 1
+2026-02-14 20:52:07,545  INFO      height 0.28 m → FSM 4   mode 1
+2026-02-14 20:52:07,548  INFO      height 0.30 m → FSM 4   mode 1
+2026-02-14 20:52:07,550  INFO      height 0.32 m → FSM 4   mode 1
+2026-02-14 20:52:07,553  INFO      height 0.34 m → FSM 4   mode 1
+2026-02-14 20:52:07,556  INFO      height 0.36 m → FSM 4   mode 1
+2026-02-14 20:52:07,560  INFO      height 0.38 m → FSM 4   mode 1
+2026-02-14 20:52:07,564  INFO      height 0.40 m → FSM 4   mode 1
+2026-02-14 20:52:07,567  INFO      height 0.42 m → FSM 4   mode 1
+2026-02-14 20:52:07,571  INFO      height 0.44 m → FSM 4   mode 1
+2026-02-14 20:52:07,574  INFO      height 0.46 m → FSM 4   mode 1
+2026-02-14 20:52:07,577  INFO      height 0.48 m → FSM 4   mode 1
+2026-02-14 20:52:07,579  INFO      height 0.50 m → FSM 4   mode 1
+2026-02-14 20:52:07,581  WARNING   Feet still unloaded (mode 1) after reaching 0.50 m.
+Adjust hanger height (raise/lower until the soles are just in
+contact with the ground) then press <Enter> to try again…
+2026-02-14 20:52:07,582  INFO      reset        → FSM 4   mode 1
+2026-02-14 20:52:16,911  INFO      height 0.02 m → FSM 4   mode 0
+2026-02-14 20:52:16,914  INFO      height 0.04 m → FSM 4   mode 0
+2026-02-14 20:52:16,918  INFO      height 0.06 m → FSM 4   mode 0
+2026-02-14 20:52:16,920  INFO      height 0.08 m → FSM 4   mode 0
+2026-02-14 20:52:16,923  INFO      height 0.10 m → FSM 4   mode 0
+2026-02-14 20:52:16,926  INFO      height 0.12 m → FSM 4   mode 0
+2026-02-14 20:52:16,928  INFO      height 0.14 m → FSM 4   mode 0
+2026-02-14 20:52:16,930  INFO      height 0.16 m → FSM 4   mode 0
+2026-02-14 20:52:16,933  INFO      height 0.18 m → FSM 4   mode 0
+2026-02-14 20:52:16,936  INFO      height 0.20 m → FSM 4   mode 0
+2026-02-14 20:52:16,939  INFO      height 0.22 m → FSM 4   mode 0
+2026-02-14 20:52:16,942  INFO      balance      → FSM 4   mode 0
+2026-02-14 20:52:16,944  INFO      height✔      → FSM 4   mode 0
+2026-02-14 20:52:16,947  INFO      start        → FSM 4   mode 0
+2026-02-14 20:52:16,954  INFO      [Reader] take sample error
+2026-02-14 20:52:17,156  ERROR     [run_geoff_gui] Dex3 hand control disabled:
+2026-02-14 20:52:17,156  ERROR     No module named 'unitree_sdk2py.dex3'
+2026-02-14 20:52:17,843  ERROR     
+A module that was compiled using NumPy 1.x cannot be run in
+NumPy 2.4.1 as it may crash. To support both 1.x and 2.x
+versions of NumPy, modules must be compiled with NumPy 2.0.
+Some module may need to rebuild instead e.g. with 'pybind11>=2.12'.
+
+If you are a user of the module, the easiest solution will be to
+downgrade to 'numpy<2' or try to upgrade the affected module.
+We expect that some modules will need time to support NumPy 2.
+
+Traceback (most recent call last):  File "/usr/lib/python3.12/threading.py", line 1030, in _bootstrap
+    self._bootstrap_inner()
+  File "/usr/lib/python3.12/threading.py", line 1073, in _bootstrap_inner
+    self.run()
+  File "/usr/lib/python3.12/threading.py", line 1010, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/ag/ef_ws/g1/scripts/navigation/slam/run_geoff_stack.py", line 112, in _rx_realsense
+    cv2 = _import_cv2()
+  File "/home/ag/ef_ws/g1/scripts/navigation/slam/run_geoff_stack.py", line 71, in _import_cv2
+    import cv2  # type: ignore
+2026-02-14 20:52:17,845  ERROR     Traceback (most recent call last):
+2026-02-14 20:52:17,845  ERROR       File "/home/ag/.guv/envs/unitree/lib/python3.12/site-packages/numpy/core/_multiarray_umath.py", line 46, in __getattr__
+2026-02-14 20:52:17,848  ERROR     raise ImportError(msg)
+2026-02-14 20:52:17,849  ERROR     ImportError
+2026-02-14 20:52:17,850  ERROR     :
+2026-02-14 20:52:17,853  ERROR     
+A module that was compiled using NumPy 1.x cannot be run in
+NumPy 2.4.1 as it may crash. To support both 1.x and 2.x
+versions of NumPy, modules must be compiled with NumPy 2.0.
+Some module may need to rebuild instead e.g. with 'pybind11>=2.12'.
+
+If you are a user of the module, the easiest solution will be to
+downgrade to 'numpy<2' or try to upgrade the affected module.
+We expect that some modules will need time to support NumPy 2.
+2026-02-14 20:52:17,855  ERROR     [run_geoff_stack] RealSense receiver disabled:
+2026-02-14 20:52:17,856  ERROR     numpy.core.multiarray failed to import
+2026-02-14 20:52:18,658  ERROR     /usr/lib/python3/dist-packages/scipy/__init__.py:132: UserWarning: A NumPy version >=1.21.6 and <1.28.0 is required for this version of SciPy (detected version 2.4.1)
+  warnings.warn(f"A NumPy version >={np_minversion} and <{np_maxversion}"
+2026-02-14 20:52:18,667  ERROR     
+A module that was compiled using NumPy 1.x cannot be run in
+NumPy 2.4.1 as it may crash. To support both 1.x and 2.x
+versions of NumPy, modules must be compiled with NumPy 2.0.
+Some module may need to rebuild instead e.g. with 'pybind11>=2.12'.
+
+If you are a user of the module, the easiest solution will be to
+downgrade to 'numpy<2' or try to upgrade the affected module.
+We expect that some modules will need time to support NumPy 2.
+
+Traceback (most recent call last):  File "/usr/lib/python3.12/threading.py", line 1030, in _bootstrap
+    self._bootstrap_inner()
+  File "/usr/lib/python3.12/threading.py", line 1073, in _bootstrap_inner
+    self.run()
+  File "/usr/lib/python3.12/threading.py", line 1010, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/ag/ef_ws/g1/scripts/navigation/slam/slam_gui.py", line 342, in _run_slam
+    _patch_live_slam_for_pyqt()
+  File "/home/ag/ef_ws/g1/scripts/navigation/slam/slam_gui.py", line 293, in _patch_live_slam_for_pyqt
+    import live_slam as _ls  # type: ignore
+  File "/home/ag/ef_ws/g1/scripts/navigation/slam/live_slam.py", line 32, in <module>
+    import open3d as o3d
+  File "/home/ag/.guv/envs/unitree/lib/python3.12/site-packages/open3d/__init__.py", line 163, in <module>
+    import open3d.ml
+  File "/home/ag/.guv/envs/unitree/lib/python3.12/site-packages/open3d/ml/__init__.py", line 16, in <module>
+    from . import datasets
+  File "/home/ag/.guv/envs/unitree/lib/python3.12/site-packages/open3d/ml/datasets.py", line 15, in <module>
+    from open3d._ml3d.datasets import *
+  File "/home/ag/.guv/envs/unitree/lib/python3.12/site-packages/open3d/_ml3d/datasets/__init__.py", line 3, in <module>
+    from .semantickitti import SemanticKITTI
+  File "/home/ag/.guv/envs/unitree/lib/python3.12/site-packages/open3d/_ml3d/datasets/semantickitti.py", line 6, in <module>
+    from sklearn.neighbors import KDTree
+  File "/home/ag/.guv/envs/unitree/lib/python3.12/site-packages/sklearn/__init__.py", line 73, in <module>
+    from .base import clone  # noqa: E402
+  File "/home/ag/.guv/envs/unitree/lib/python3.12/site-packages/sklearn/base.py", line 19, in <module>
+    from .utils._metadata_requests import _MetadataRequester, _routing_enabled
+  File "/home/ag/.guv/envs/unitree/lib/python3.12/site-packages/sklearn/utils/__init__.py", line 9, in <module>
+    from ._chunking import gen_batches, gen_even_slices
+  File "/home/ag/.guv/envs/unitree/lib/python3.12/site-packages/sklearn/utils/_chunking.py", line 11, in <module>
+    from ._param_validation import Interval, validate_params
+  File "/home/ag/.guv/envs/unitree/lib/python3.12/site-packages/sklearn/utils/_param_validation.py", line 14, in <module>
+    from scipy.sparse import csr_matrix, issparse
+  File "/usr/lib/python3/dist-packages/scipy/sparse/__init__.py", line 274, in <module>
+    from ._csr import *
+  File "/usr/lib/python3/dist-packages/scipy/sparse/_csr.py", line 11, in <module>
+    from ._sparsetools import (csr_tocsc, csr_tobsr, csr_count_blocks,
+2026-02-14 20:52:18,667  ERROR     Traceback (most recent call last):
+2026-02-14 20:52:18,667  ERROR       File "/home/ag/.guv/envs/unitree/lib/python3.12/site-packages/numpy/core/_multiarray_umath.py", line 46, in __getattr__
+2026-02-14 20:52:18,668  ERROR     raise ImportError(msg)
+2026-02-14 20:52:18,668  ERROR     ImportError
+2026-02-14 20:52:18,668  ERROR     :
+2026-02-14 20:52:18,668  ERROR     
+A module that was compiled using NumPy 1.x cannot be run in
+NumPy 2.4.1 as it may crash. To support both 1.x and 2.x
+versions of NumPy, modules must be compiled with NumPy 2.0.
+Some module may need to rebuild instead e.g. with 'pybind11>=2.12'.
+
+If you are a user of the module, the easiest solution will be to
+downgrade to 'numpy<2' or try to upgrade the affected module.
+We expect that some modules will need time to support NumPy 2.
+2026-02-14 20:52:18,668  ERROR     [run_geoff_gui] SLAM thread disabled:
+2026-02-14 20:52:18,668  ERROR     numpy.core.multiarray failed to import

@@ -23,6 +23,7 @@ import math
 import threading
 import time
 import tkinter as tk
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from tkinter import filedialog, ttk
@@ -34,9 +35,24 @@ from create_map import OccupancyGrid, create_empty_map
 from locomotion import Locomotion
 from obstacle_detection import ObstacleDetector
 from path_planner import astar, smooth_path, grid_path_to_world_waypoints
-from slam_map import SlamMapSubscriber, SlamOdomSubscriber, SlamPointCloudSubscriber, LidarSwitch
+from slam_map import (
+    SlamMapSubscriber,
+    SlamOdomSubscriber,
+    SlamPointCloudSubscriber,
+    SlamInfoSubscriber,
+    LidarSwitch,
+)
 from slam_service import SlamOperateClient, SlamResponse
 from safety.hanger_boot_sequence import hanger_boot_sequence
+
+# Force CPU-only Open3D to avoid CUDA driver/runtime mismatch crashes.
+os.environ.setdefault("OPEN3D_CPU_ONLY", "1")
+os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")
+
+try:
+    import open3d as o3d  # type: ignore
+except Exception:
+    o3d = None  # type: ignore
 
 try:
     from unitree_sdk2py.core.channel import ChannelFactoryInitialize
@@ -53,6 +69,70 @@ class OverlayStats:
     lidar_pts: int = 0
 
 
+class _Open3DViewer:
+    """Open3D visualiser for live point-cloud + pose frame."""
+
+    def __init__(self) -> None:
+        if o3d is None:
+            raise RuntimeError("open3d is not available")
+        self._vis = o3d.visualization.Visualizer()
+        ok = self._vis.create_window(window_name="SLAM Point Cloud", width=1280, height=720)
+        if not ok:
+            raise RuntimeError("Open3D failed to create window")
+
+        self._pcd = o3d.geometry.PointCloud()
+        self._vis.add_geometry(self._pcd)
+
+        self._pose_frame: Optional[o3d.geometry.TriangleMesh] = None
+        self._latest_pts: Optional[np.ndarray] = None
+        self._latest_pose: Optional[np.ndarray] = None
+        self._first = True
+
+    def push(self, xyz: np.ndarray, pose: Optional[np.ndarray]) -> None:
+        self._latest_pts = xyz
+        self._latest_pose = pose
+
+    def tick(self) -> bool:
+        updated = False
+        if self._latest_pts is not None:
+            self._pcd.points = o3d.utility.Vector3dVector(self._latest_pts)
+            self._vis.update_geometry(self._pcd)
+            self._latest_pts = None
+            updated = True
+
+        if self._latest_pose is not None:
+            self._update_pose_vis(self._latest_pose)
+            self._latest_pose = None
+            updated = True
+
+        if self._first and updated:
+            self._vis.reset_view_point(True)
+            self._first = False
+
+        alive = self._vis.poll_events()
+        self._vis.update_renderer()
+        return alive
+
+    def _update_pose_vis(self, pose: np.ndarray) -> None:
+        if self._pose_frame is not None:
+            self._vis.remove_geometry(self._pose_frame, reset_bounding_box=False)
+
+        size = 0.5
+        if len(self._pcd.points) > 0:
+            bbox = self._pcd.get_axis_aligned_bounding_box()
+            extent = bbox.get_max_bound() - bbox.get_min_bound()
+            size = float(np.linalg.norm(extent)) * 0.03
+            size = max(0.2, min(size, 2.0))
+
+        self._pose_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size)
+        self._pose_frame.transform(pose)
+        self._vis.add_geometry(self._pose_frame, reset_bounding_box=False)
+        self._vis.update_geometry(self._pose_frame)
+
+    def close(self) -> None:
+        self._vis.destroy_window()
+
+
 class SlamAllApp:
     def __init__(self, args: argparse.Namespace) -> None:
         self.args = args
@@ -61,12 +141,16 @@ class SlamAllApp:
         self.root.title("G1 SLAM All-In-One")
         self.root.geometry("1300x860")
 
+        self.log_text: tk.Text | None = None
+
         self.status_var = tk.StringVar(value="Initializing...")
         self.map_var = tk.StringVar(value="Map: waiting")
         self.pose_var = tk.StringVar(value="Pose: waiting")
         self.sel_var = tk.StringVar(value="Start/Goal: not set")
         self.health_var = tk.StringVar(value="DDS: waiting")
+        self.topic_var = tk.StringVar(value="Topics: waiting")
         self.overlay_var = tk.StringVar(value="Overlay: slam=0 lidar=0")
+        self.task_var = tk.StringVar(value="SLAM tasks: 0")
         self.save_path_var = tk.StringVar(value=args.save_path)
         self.export_var = tk.StringVar(value=args.export_npz)
         self.load_var = tk.StringVar(value="")
@@ -84,15 +168,35 @@ class SlamAllApp:
         self.odom_sub: SlamOdomSubscriber | None = None
         self.slam_pts_sub: SlamPointCloudSubscriber | None = None
         self.lidar_pts_sub: SlamPointCloudSubscriber | None = None
+        self.slam_info_sub: SlamInfoSubscriber | None = None
         self.slam_client: SlamOperateClient | None = None
 
         self.detector: ObstacleDetector | None = None
         self.walker: Locomotion | None = None
         self.nav_thread: threading.Thread | None = None
         self.nav_stop = threading.Event()
+        self.slam_task_thread: threading.Thread | None = None
+        self.slam_task_stop = threading.Event()
+        self.slam_task_list: list[dict] = []
+        self.slam_pose: dict | None = None
+        self.slam_task_arrived = False
+        self.slam_task_last_ts = 0.0
 
         self._build_ui()
         self._init_backend()
+
+        self.o3d_viewer: _Open3DViewer | None = None
+        if not self.args.no_open3d and o3d is not None:
+            try:
+                self.o3d_viewer = _Open3DViewer()
+            except Exception:
+                self.o3d_viewer = None
+        if self.args.no_open3d:
+            self._log("Open3D viewer disabled via --no-open3d")
+        elif o3d is None:
+            self._log("Open3D not available; point cloud viewer disabled")
+        elif self.o3d_viewer is None:
+            self._log("Open3D failed to initialize; point cloud viewer disabled")
 
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.after(self.args.update_ms, self._periodic_update)
@@ -108,6 +212,8 @@ class SlamAllApp:
         ttk.Label(top, textvariable=self.sel_var).grid(row=1, column=2, sticky="w", padx=6)
         ttk.Label(top, textvariable=self.overlay_var).grid(row=1, column=3, sticky="w", padx=6)
         ttk.Label(top, textvariable=self.health_var).grid(row=1, column=4, sticky="w", padx=6)
+        ttk.Label(top, textvariable=self.task_var).grid(row=1, column=5, sticky="w", padx=6)
+        ttk.Label(top, textvariable=self.topic_var).grid(row=2, column=0, columnspan=8, sticky="w")
 
         c1 = ttk.Frame(self.root, padding=8)
         c1.pack(fill=tk.X)
@@ -137,6 +243,9 @@ class SlamAllApp:
         ttk.Entry(c3, textvariable=self.goal_yaw_var, width=8).pack(side=tk.LEFT)
         ttk.Button(c3, text="Navigate A -> B", command=self._navigate).pack(side=tk.LEFT, padx=10)
         ttk.Button(c3, text="Stop Navigation", command=self._stop_navigation).pack(side=tk.LEFT, padx=4)
+        ttk.Button(c3, text="Add SLAM Goal", command=self._add_slam_goal).pack(side=tk.LEFT, padx=4)
+        ttk.Button(c3, text="Run SLAM Tasks", command=self._run_slam_tasks).pack(side=tk.LEFT, padx=4)
+        ttk.Button(c3, text="Clear SLAM Tasks", command=self._clear_slam_tasks).pack(side=tk.LEFT, padx=4)
         ttk.Button(c3, text="Clear Start/Goal", command=self._clear_selection).pack(side=tk.LEFT, padx=4)
 
         self.map_canvas = tk.Canvas(self.root, width=self.canvas_w, height=self.canvas_h, bg="#0f1116", highlightthickness=0)
@@ -158,6 +267,8 @@ class SlamAllApp:
         self.slam_sub.start()
         self.odom_sub = SlamOdomSubscriber(self.args.slam_odom_topic)
         self.odom_sub.start()
+        self.slam_info_sub = SlamInfoSubscriber(self.args.slam_info_topic, self.args.slam_key_topic)
+        self.slam_info_sub.start()
 
         if self.args.slam_points_topic:
             self.slam_pts_sub = SlamPointCloudSubscriber(self.args.slam_points_topic)
@@ -235,7 +346,10 @@ class SlamAllApp:
             self.mapping_active = True
             self.status_var.set("Mapping active")
         else:
-            self.status_var.set("Start mapping failed")
+            # Some firmware versions return non-zero codes even when mapping starts.
+            # Keep the UI alive and show SLAM data if it arrives.
+            self.mapping_active = True
+            self.status_var.set("Mapping requested (service returned error)")
 
     def _end_mapping(self) -> None:
         if self.slam_client is None:
@@ -250,6 +364,7 @@ class SlamAllApp:
             self.mapping_active = False
             self.status_var.set("Mapping stopped (save requested)")
             self._log("NOTE: PCD path is on robot filesystem.")
+            self._auto_export_latest_map()
         else:
             self.status_var.set("Save failed")
 
@@ -279,6 +394,15 @@ class SlamAllApp:
         except Exception as exc:
             self._log(f"ERROR: export failed: {exc}")
 
+    def _load_map_path(self, p: str) -> None:
+        try:
+            grid = OccupancyGrid.load(p)
+            self.latest_grid = grid
+            self._log(f"Loaded map {p} ({grid.width_cells}x{grid.height_cells} @ {grid.resolution:.3f}m)")
+            self.status_var.set("Loaded map from file")
+        except Exception as exc:
+            self._log(f"ERROR: failed to load map: {exc}")
+
     def _load_map(self) -> None:
         p = self.load_var.get().strip()
         if not p:
@@ -289,14 +413,33 @@ class SlamAllApp:
             if not p:
                 return
             self.load_var.set(p)
+        self._load_map_path(p)
 
+    def _auto_export_latest_map(self) -> None:
+        if self.latest_grid is None:
+            if self.slam_sub is not None:
+                grid, _meta = self.slam_sub.to_occupancy(
+                    height_threshold=self.args.slam_height_threshold,
+                    max_height=self.args.slam_max_height,
+                    origin_centered=self.args.slam_origin_centered,
+                )
+                if grid is not None:
+                    self.latest_grid = grid
+        if self.latest_grid is None:
+            self._log("WARN: no SLAM map available to auto-export")
+            return
+        ts = time.strftime("%Y%m%d_%H%M%S")
+        out_dir = Path(self.args.export_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / f"slam_all_{ts}.npz"
         try:
-            grid = OccupancyGrid.load(p)
-            self.latest_grid = grid
-            self._log(f"Loaded map {p} ({grid.width_cells}x{grid.height_cells} @ {grid.resolution:.3f}m)")
-            self.status_var.set("Loaded map from file")
+            self.latest_grid.save(str(out_path))
+            self.export_var.set(str(out_path))
+            self.load_var.set(str(out_path))
+            self._log(f"Auto-exported map to {out_path}")
+            self._load_map_path(str(out_path))
         except Exception as exc:
-            self._log(f"ERROR: failed to load map: {exc}")
+            self._log(f"ERROR: auto-export failed: {exc}")
 
     def _clear_selection(self) -> None:
         self.start_xy = None
@@ -320,6 +463,85 @@ class SlamAllApp:
         s = f"start={self.start_xy}" if self.start_xy else "start=unset"
         g = f"goal={self.goal_xy}" if self.goal_xy else "goal=unset"
         self.sel_var.set(f"Start/Goal: {s}, {g}")
+
+    def _add_slam_goal(self) -> None:
+        if self.goal_xy is None:
+            self._log("ERROR: set GOAL first (left click map)")
+            return
+        try:
+            goal_yaw = float(self.goal_yaw_var.get().strip())
+        except Exception:
+            goal_yaw = 0.0
+        half = goal_yaw / 2.0
+        qx, qy, qz, qw = 0.0, 0.0, math.sin(half), math.cos(half)
+        gx, gy = self.goal_xy
+        self.slam_task_list.append(
+            {
+                "x": float(gx),
+                "y": float(gy),
+                "z": 0.0,
+                "q_x": qx,
+                "q_y": qy,
+                "q_z": qz,
+                "q_w": qw,
+            }
+        )
+        self.task_var.set(f"SLAM tasks: {len(self.slam_task_list)}")
+        self._log(f"Added SLAM goal ({gx:+.2f}, {gy:+.2f}, yaw={goal_yaw:+.2f})")
+
+    def _clear_slam_tasks(self) -> None:
+        self.slam_task_stop.set()
+        self.slam_task_list.clear()
+        self.task_var.set("SLAM tasks: 0")
+        self._log("Cleared SLAM task list")
+
+    def _run_slam_tasks(self) -> None:
+        if self.slam_client is None:
+            self._log("ERROR: slam client unavailable")
+            return
+        if not self.slam_task_list:
+            self._log("ERROR: no SLAM tasks queued (use 'Add SLAM Goal')")
+            return
+        if self.slam_task_thread is not None and self.slam_task_thread.is_alive():
+            self._log("WARN: SLAM task runner already active")
+            return
+        self.slam_task_stop.clear()
+        self.slam_task_thread = threading.Thread(target=self._slam_task_worker, daemon=True)
+        self.slam_task_thread.start()
+
+    def _slam_task_worker(self) -> None:
+        for idx, pose in enumerate(list(self.slam_task_list)):
+            if self.slam_task_stop.is_set():
+                self._log("SLAM task runner stopped")
+                return
+            self.slam_task_arrived = False
+            self.slam_task_last_ts = time.time()
+            resp = self.slam_client.pose_nav(
+                pose["x"],
+                pose["y"],
+                pose["z"],
+                pose["q_x"],
+                pose["q_y"],
+                pose["q_z"],
+                pose["q_w"],
+                mode=1,
+            )
+            self._log(f"SLAM task {idx+1}/{len(self.slam_task_list)} pose_nav: {self._decode_resp(resp)}")
+            if not self._resp_ok(resp):
+                self._log("ERROR: SLAM pose_nav rejected, aborting task list")
+                return
+            t0 = time.time()
+            while time.time() - t0 < self.args.slam_nav_timeout:
+                if self.slam_task_stop.is_set():
+                    self._log("SLAM task runner stopped")
+                    return
+                if self.slam_task_arrived:
+                    break
+                time.sleep(0.1)
+            if not self.slam_task_arrived:
+                self._log("WARN: SLAM task timeout")
+                return
+        self._log("SLAM task list complete")
 
     def _ensure_local_nav_ready(self) -> bool:
         if self.walker is not None and self.detector is not None:
@@ -512,6 +734,45 @@ class SlamAllApp:
         except Exception:
             return []
 
+    def _decode_points_xyz(self, sub: SlamPointCloudSubscriber | None, stride: int, zmin: float, zmax: float) -> Optional[np.ndarray]:
+        if sub is None:
+            return None
+        msg, _ts = sub.get_latest()
+        if msg is None:
+            return None
+        try:
+            fields = {f.name: f for f in msg.fields}
+            if "x" not in fields or "y" not in fields or "z" not in fields:
+                return None
+            point_step = int(msg.point_step)
+            if point_step <= 0:
+                return None
+            data = bytes(msg.data)
+            if not data:
+                return None
+            xoff = int(fields["x"].offset)
+            yoff = int(fields["y"].offset)
+            zoff = int(fields["z"].offset)
+            dtype = np.dtype(
+                {
+                    "names": ["x", "y", "z"],
+                    "formats": ["<f4", "<f4", "<f4"],
+                    "offsets": [xoff, yoff, zoff],
+                    "itemsize": point_step,
+                }
+            )
+            arr = np.frombuffer(data, dtype=dtype, count=len(data) // point_step)
+            xs = arr["x"][:: max(1, stride)]
+            ys = arr["y"][:: max(1, stride)]
+            zs = arr["z"][:: max(1, stride)]
+            mask = (zs >= zmin) & (zs <= zmax)
+            if not np.any(mask):
+                return None
+            pts = np.stack([xs[mask], ys[mask], zs[mask]], axis=1).astype(np.float64)
+            return pts
+        except Exception:
+            return None
+
     def _periodic_update(self) -> None:
         try:
             if self.slam_sub is not None:
@@ -534,7 +795,6 @@ class SlamAllApp:
                 self.pose_var.set(f"Pose: x={pose[0]:+.2f}, y={pose[1]:+.2f}, yaw={math.degrees(pose[2]):+.1f}deg")
             else:
                 self.pose_var.set("Pose: stale/no data")
-
             slam_pts = self._decode_points(
                 self.slam_pts_sub,
                 stride=self.args.slam_points_stride,
@@ -549,12 +809,115 @@ class SlamAllApp:
             )
             self.overlay_var.set(f"Overlay: slam={len(slam_pts)} lidar={len(lidar_pts)}")
 
+            if self.slam_info_sub is not None:
+                info = self.slam_info_sub.get_info()
+                if info:
+                    try:
+                        payload = json.loads(info)
+                        if payload.get("type") == "pos_info":
+                            cur = payload.get("data", {}).get("currentPose", {})
+                            self.slam_pose = {
+                                "x": float(cur.get("x", 0.0)),
+                                "y": float(cur.get("y", 0.0)),
+                                "z": float(cur.get("z", 0.0)),
+                                "q_x": float(cur.get("q_x", 0.0)),
+                                "q_y": float(cur.get("q_y", 0.0)),
+                                "q_z": float(cur.get("q_z", 0.0)),
+                                "q_w": float(cur.get("q_w", 1.0)),
+                            }
+                    except Exception:
+                        pass
+
+                key = self.slam_info_sub.get_key()
+                if key:
+                    try:
+                        payload = json.loads(key)
+                        if payload.get("type") == "task_result":
+                            arrived = bool(payload.get("data", {}).get("is_arrived", False))
+                            if arrived and (time.time() - self.slam_task_last_ts) < self.args.slam_nav_timeout:
+                                self.slam_task_arrived = True
+                    except Exception:
+                        pass
+
+            if self.o3d_viewer is not None:
+                slam_xyz = self._decode_points_xyz(
+                    self.slam_pts_sub,
+                    stride=self.args.slam_points_stride,
+                    zmin=self.args.points_z_min,
+                    zmax=self.args.points_z_max,
+                )
+                lidar_xyz = None
+                if slam_xyz is None:
+                    lidar_xyz = self._decode_points_xyz(
+                        self.lidar_pts_sub,
+                        stride=self.args.lidar_stride,
+                        zmin=self.args.points_z_min,
+                        zmax=self.args.points_z_max,
+                    )
+                cloud = slam_xyz if slam_xyz is not None else lidar_xyz
+                pose_mat = None
+                if self.latest_pose is not None:
+                    x, y, yaw = self.latest_pose
+                    c = math.cos(yaw)
+                    s = math.sin(yaw)
+                    pose_mat = np.array(
+                        [
+                            [c, -s, 0.0, x],
+                            [s, c, 0.0, y],
+                            [0.0, 0.0, 1.0, 0.0],
+                            [0.0, 0.0, 0.0, 1.0],
+                        ],
+                        dtype=float,
+                    )
+                if cloud is not None:
+                    self.o3d_viewer.push(cloud, pose_mat)
+                if not self.o3d_viewer.tick():
+                    self.o3d_viewer.close()
+                    self.o3d_viewer = None
+
             stale_bits = []
             if self.slam_sub is not None and self.slam_sub.is_stale(1.5):
                 stale_bits.append("map stale")
             if self.odom_sub is not None and self.odom_sub.is_stale(1.5):
                 stale_bits.append("odom stale")
             self.health_var.set("DDS: OK" if not stale_bits else "DDS: " + ", ".join(stale_bits))
+
+            def _topic_status(sub: SlamPointCloudSubscriber | None, label: str) -> str:
+                if sub is None:
+                    return f"{label}=off"
+                msg, ts = sub.get_latest()
+                if msg is None or ts == 0.0:
+                    return f"{label}=empty"
+                age = time.time() - ts
+                if age > 1.5:
+                    return f"{label}=stale"
+                return f"{label}=ok"
+
+            def _topic_status_map(sub: SlamMapSubscriber | None, label: str) -> str:
+                if sub is None:
+                    return f"{label}=off"
+                _msg, ts = sub.get_latest()
+                if ts == 0.0:
+                    return f"{label}=empty"
+                age = time.time() - ts
+                if age > 1.5:
+                    return f"{label}=stale"
+                return f"{label}=ok"
+
+            def _topic_status_odom(sub: SlamOdomSubscriber | None, label: str) -> str:
+                if sub is None:
+                    return f"{label}=off"
+                if sub.is_stale(1.5):
+                    return f"{label}=stale"
+                return f"{label}=ok"
+
+            topic_bits = [
+                _topic_status_map(self.slam_sub, "map"),
+                _topic_status_odom(self.odom_sub, "odom"),
+                _topic_status(self.slam_pts_sub, "slam_pts"),
+                _topic_status(self.lidar_pts_sub, "lidar_pts"),
+            ]
+            self.topic_var.set("Topics: " + ", ".join(topic_bits))
 
             if self.latest_grid is not None:
                 self._draw(self.latest_grid, self.latest_pose, slam_pts, lidar_pts)
@@ -634,6 +997,9 @@ class SlamAllApp:
     def _log(self, msg: str) -> None:
         stamp = time.strftime("%H:%M:%S")
         line = f"[{stamp}] {msg}\n"
+        if self.log_text is None:
+            print(line, end="")
+            return
         self.log_text.configure(state=tk.NORMAL)
         self.log_text.insert(tk.END, line)
         self.log_text.see(tk.END)
@@ -646,6 +1012,11 @@ class SlamAllApp:
                 self.walker.stop()
         except Exception:
             pass
+        if self.o3d_viewer is not None:
+            try:
+                self.o3d_viewer.close()
+            except Exception:
+                pass
         self.root.destroy()
 
     def run(self) -> None:
@@ -671,9 +1042,12 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--slam-odom-topic", default="rt/unitree/slam_mapping/odom", help="SLAM odom topic")
     p.add_argument("--slam-points-topic", default="rt/unitree/slam_mapping/points", help="SLAM points topic")
     p.add_argument("--lidar-topic", default="rt/utlidar/cloud_livox_mid360", help="Lidar points topic")
+    p.add_argument("--slam-info-topic", default="rt/slam_info", help="SLAM info topic")
+    p.add_argument("--slam-key-topic", default="rt/slam_key_info", help="SLAM key info topic")
 
     p.add_argument("--save-path", default="/home/unitree/test1.pcd", help="PCD save path on robot")
     p.add_argument("--export-npz", default="/tmp/slam_all_map.npz", help="Export path for local NPZ map")
+    p.add_argument("--export-dir", default="./maps", help="Directory for auto-exported NPZ maps")
 
     p.add_argument("--slam-height-threshold", type=float, default=0.15, help="HeightMap obstacle threshold")
     p.add_argument("--slam-max-height", type=float, default=None, help="Optional max height clamp")
@@ -683,6 +1057,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--lidar-stride", type=int, default=6, help="Lidar points stride")
     p.add_argument("--points-z-min", type=float, default=-0.5, help="Min z for points")
     p.add_argument("--points-z-max", type=float, default=1.5, help="Max z for points")
+    p.add_argument("--no-open3d", action="store_true", help="Disable Open3D point cloud viewer")
 
     p.add_argument("--inflation", type=int, default=3, help="Local planning inflation radius (cells)")
     p.add_argument("--spacing", type=float, default=0.5, help="Local planning waypoint spacing (m)")

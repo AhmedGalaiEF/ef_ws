@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import threading
 import time
 from typing import Dict, List
 
@@ -73,8 +74,12 @@ def main() -> None:
     parser.add_argument("--out", default="/tmp/pbd_motion.npz", help="output file (.npz)")
     args = parser.parse_args()
 
-    # Ensure balanced stand (FSM-200)
-    hanger_boot_sequence(iface=args.iface)
+    # Ensure balanced stand (FSM-200), then switch to ZeroTorque for teaching
+    bot = hanger_boot_sequence(iface=args.iface)
+    try:
+        bot.ZeroTorque()
+    except Exception:
+        pass
     ChannelFactoryInitialize(0, args.iface)
 
     LowState_ = _resolve_lowstate_type()
@@ -92,11 +97,26 @@ def main() -> None:
     sub = ChannelSubscriber("rt/lowstate", LowState_)
     sub.Init(recorder.cb, 200)
 
-    print(f"Recording joints {joints} for {args.duration}s (Ctrl+C to stop)...")
+    print("Robot set to ZeroTorque. Move joints freely to demonstrate.")
+    print("Press <Enter> when finished (Ctrl+C also stops).")
+    stop_event = threading.Event()
+
+    def _wait_for_enter() -> None:
+        try:
+            input()
+        except Exception:
+            pass
+        stop_event.set()
+
+    threading.Thread(target=_wait_for_enter, daemon=True).start()
+
+    print(f"Recording joints {joints} (duration limit: {args.duration}s)")
     t0 = time.time()
     try:
         while True:
             time.sleep(0.02)
+            if stop_event.is_set():
+                break
             if args.duration > 0 and (time.time() - t0) >= args.duration:
                 break
     except KeyboardInterrupt:
