@@ -1,0 +1,1000 @@
+ 1026  ls
+ 1027  py g1_hl_gait_measure.py --help
+ 1028  py g1_hl_gait_measure.py --iface enp1s0
+ 1029  #ls
+ 1030  ls
+ 1031  py g1_hl_motion_sequence.py --iface enp1s0
+ 1032  cd safety/
+ 1033  ls
+ 1034  py keyboard_controller.py --iface enp1s0 --input curses
+ 1035  py keyboard_controller.py --input curses
+ 1036  py keyboard_controller.py --input curses --iface enp1s0
+ 1037  ls
+ 1038  cd ..
+ 1039  ls
+ 1040  cd huddle/
+ 1041  ls
+ 1042  py huddle.py 
+ 1043  py huddle.py --iface enp1s0
+ 1044  ls
+ 1045  cd ..
+ 1046  ls
+ 1047  cd pick_and_place/
+ 1048  ls
+ 1049  py g1_pick_place_hardcoded.py --iface enp1s0
+ 1050  ls
+ 1051  cd ..
+ 1052  ls
+ 1053  cd troubleshooting/
+ 1054  ls
+ 1055  ipy
+ 1056  ls
+ 1057  cd ..
+ 1058  cd safety/
+ 1059  py keyboard_controller.py --iface enp1s0 --input curses
+ 1060  ls
+ 1061  cd ..
+ 1062  ls
+ 1063  ls to_run_on_g1/
+ 1064  cd lamp/
+ 1065  ls
+ 1066  py headlight.py --help
+ 1067  py headlight.py --color yellow --intensity 50 --iface enp1s0
+ 1068  py headlight.py --color yellow --intensity 100 --iface enp1s0
+ 1069  py headlight.py --color green --intensity 100 --iface enp1s0
+ 1070  cd ..
+ 1071  ls
+ 1072  cd ..
+ 1073  ls
+ 1074  cd unsorted/
+ 1075  ls
+ 1076  cd inhalt/
+ 1077  ls
+ 1078  py app.py 
+ 1079  ls
+ 1080  cd ..
+ 1081  ls
+ 1082  cd presentations/
+ 1083  ls
+ 1084  cd ..
+ 1085  ls
+ 1086  cd g1/
+ 1087  ls
+ 1088  cd scripts/
+ 1089  ls
+ 1090  cd unsorted/
+ 1091  ls
+ 1092  py run_geoff_gui.py --iface enp1s0
+ 1093  codex
+ 1094  ls
+ 1095  py run_geoff_gui_input.py --input curses --iface enp1s0
+ 1096  ls
+ 1097  pwd
+ 1098  ls
+ 1099  py run_geoff_stack.py --iface enp1s0
+ 1100  sudo apt install -y python3-gi gir1.2-gstreamer-1.0 gstreamer1.0-plugins-base gstreamer1.0-plugins-good
+ 1101  py run_geoff_stack.py --iface enp1s0
+ 1102  uv pip install PyObject
+ 1103  py run_geoff_stack.py --iface enp1s0
+ 1104  wtr
+ 1105  py run_geoff_stack.py --iface enp1s0
+ 1106  py run_geoff_gui.py --iface enp1s0
+ 1107  ls
+ 1108  ls imes-g1/
+ 1109  ls imes-g1/src/
+ 1110  ls imes-g1/src/ros/
+ 1111  ls imes-g1/src/ros/g1_host/
+ 1112  ls imes-g1/src/ros/g1_host/scripts/
+ 1113  ls imes-g1/src/ros/g1_lidar/
+ 1114  ls imes-g1/src/ros/g1_lidar/launch/
+ 1115  py run_geoff_gui.py --iface enp1s0
+ 1116  py run_geoff_stack.py --iface enp1s0
+ 1117  coredumpctl info --no-pager | head -n 80
+ 1118  sudo apt install systemd-coredump
+ 1119  coredumpctl info --no-pager | head -n 80
+ 1120  coredumpctl gdb -1 --batch -ex "bt"
+ 1121  py run_geoff_stack.py --iface enp1s0
+ 1122  coredumpctl info --no-pager | head -n 80
+ 1123  coredumpctl gdb -1 --batch -ex "bt"
+ 1124  coredumpctl gdb -1 -- -batch -ex "bt"
+ 1125  QT_QPA_PLATFORM=xcb py run_geoff_stack.py --iface enp1s0
+ 1126  QT_QPA_PLATFORM=wayland py run_geoff_stack.py --iface enp1s0
+ 1127  QT_QPA_PLATFORM=xcb py run_geoff_stack.py --iface enp1s0
+ 1128  py run_geoff_stack.py --iface enp1s0
+ 1129  gs
+ 1130  git add hanger_boot_sequence.py 
+ 1131  cd ..
+ 1132  cd scripts/
+ 1133  ls
+ 1134  cd sensors/
+ 1135  ls
+ 1136  touch lidar_points.py
+ 1137  touch rgbd_cam.py
+ 1138  git add lidar_points.py 
+ 1139  git add rgbd_cam.py 
+ 1140  gs
+ 1141  cd ../unsorted/
+ 1142  ls
+ 1143  py run_geoff_stack.py --iface enp1s0
+ 1144  wtr
+ 1145  py run_geoff_stack.py --iface enp1s0
+ 1146  QT_QPA_PLATFORM=xcb py run_geoff_stack.py --iface enp1s0
+ 1147  py run_geoff_stack.py --iface enp1s0
+ 1148  ls
+ 1149  py live_slam.py --help
+ 1150  nano live_slam.py 
+ 1151  py live_slam.py --help
+ 1152  py live_slam.py
+ 1153  wtr
+ 1154  py live_slam.py
+ 1155  LIVOX_SDK_LIB=/home/ag/Livox-SDK/build/sdk_core/liblivox_sdk.so py run_geoff_stack.py --iface enp1s0
+ 1156  g@EF-Robotics:~/academy/academy_content/ef_ws/g1/scripts/unsorted$ LIVOX_SDK_LIB=/home/ag/Livox-SDK/build/sdk_core/liblivox_sdk.so py run_geoff_stack.py --iface enp1s0
+ 1157  Robot already in balanced stand (FSM 200, mode 0) – skipping boot sequence.
+ 1158  Aborted (core dumped)
+ 1159  ssh unitree@192.168.123.164
+ 1160  ros2 service list
+ 1161  ls
+ 1162  cd data/
+ 1163  ls
+ 1164  cd from_robot/
+ 1165  ls
+ 1166  py g1_poll_all.py --iface enp1s0
+ 1167  cat command.txt 
+ 1168  py g1_poll_all.py --config g1_topics.example.yaml --profile g1_basic,g1_odom,g1_lidar --iface enp1s0 --poll 5 --df-rows 10
+ 1169  ls
+ 1170  cd ..
+ 1171  ls
+ 1172  cd ..
+ 1173  ls
+ 1174  cd ..
+ 1175  ls
+ 1176  cd troubleshooting/
+ 1177  ls
+ 1178  py ef_client.py --iface enp1s0
+ 1179  ls
+ 1180  cd ..
+ 1181  ls
+ 1182  cd huddle/
+ 1183  ls
+ 1184  py huddle.py --iface enp1s0
+ 1185  ls
+ 1186  cd ..
+ 1187  ls
+ 1188  ping 192.168.123.164
+ 1189  ls
+ 1190  cd academy/
+ 1191  ls
+ 1192  cd academy_content/
+ 1193  ls
+ 1194  cd ed
+ 1195  cd ef_ws/
+ 1196  ls
+ 1197  cd g1/
+ 1198  ls
+ 1199  cd scripts/
+ 1200  ls
+ 1201  cd safety/
+ 1202  ls
+ 1203  py keyboard_controller.py --input curses --iface enp1s0
+ 1204  ssh unitree@192.168.123.164
+ 1205  ifconfig
+ 1206  ssh unitree@192.168.12.164
+ 1207  ping 192.168.12.164
+ 1208  ping 192.168.123.164
+ 1209  ping 192.168.12.164
+ 1210  ping 192.168.12.161
+ 1211  ifconfig
+ 1212  ping 192.168.12.110
+ 1213  ssh unitree@192.168.12.110
+ 1214  nmap -sp 192.168.12.0/24
+ 1215  nmap -Sp 192.168.12.0/24
+ 1216  nmap -S 192.168.12.0/24
+ 1217  nmap -p 192.168.12.0/24
+ 1218  ls
+ 1219  cd ..
+ 1220  ls
+ 1221  cd unsorted/
+ 1222  ls
+ 1223  cd wireless_controller/
+ 1224  ls
+ 1225  ifconfig
+ 1226  py wireless_controller.py wlp2s0:
+ 1227  py wireless_controller.py wlp2s0
+ 1228  ssh unitree@192.168.12.110
+ 1229  ifconfig
+ 1230  ssh unitree@192.168.12.46
+ 1231  nmap -sn 192.168.12.0/24
+ 1232  ssh unitree@192.168.12.45
+ 1233  ssh unitree@192.168.12.1
+ 1234  codex
+ 1235  cd academy/academy_content/docs/repos/
+ 1236  ls
+ 1237  cd unitree_sdk2
+ 1238  ls
+ 1239  cd example/
+ 1240  ls
+ 1241  cd g1/
+ 1242  ls
+ 1243  cd ..
+ 1244  cd build/
+ 1245  ls
+ 1246  cd bin/
+ 1247  ls
+ 1248  ./g1_agv_client_example enp1s0
+ 1249  ./g1_ankle_swing_example enp1s0
+ 1250  ./reset_and_stand enp1s0
+ 1251  ./state_machine_example enp1s0
+ 1252  ./g1_loco_client enp1s0
+ 1253  ./g1_loco_client --help
+ 1254  cd ..
+ 1255  ls
+ 1256  cd ..
+ 1257  ls
+ 1258  ccd example/g1/
+ 1259  ls
+ 1260  cd build/
+ 1261  cd example/
+ 1262  ls
+ 1263  cd g1/
+ 1264  ls
+ 1265  cd ..
+ 1266  ls
+ 1267  cd bin/
+ 1268  ls
+ 1269  cd ..
+ 1270  ls
+ 1271  cd ..
+ 1272  ls
+ 1273  cd ..
+ 1274  ls
+ 1275  cd unitree_g1_vibes/
+ 1276  ös
+ 1277  ls
+ 1278  ./fsm_cheatsheet.html
+ 1279  sudo open ./fsm_cheatsheet.html
+ 1280  g1_loco_client_example.py enp1s0
+ 1281  py g1_loco_client_example.py enp1s0
+ 1282  open fsm_cheatsheet.html
+ 1283  py g1_loco_client_example.py enp1s0
+ 1284  ls
+ 1285  cd ..
+ 1286  ls
+ 1287  ifconfig
+ 1288  cd academy/academy_content/ef_ws/
+ 1289  cd g1/scripts/unsorted/
+ 1290  ls
+ 1291  cd ..
+ 1292  cd troubleshooting/
+ 1293  ls
+ 1294  ipy
+ 1295  ls
+ 1296  py ef_client.py --iface enp1s0
+ 1297  nmap -sn 192.168.123.0/24
+ 1298  ssh unitree@192.168.123.164
+ 1299  ssh unitree@192.168.12.1
+ 1300  ssh unitree@192.168.123.164
+ 1301  ifconfig
+ 1302  ssh unitree@192.168.123.164
+ 1303  ls
+ 1304  cd academy/academy_content/ef_ws/
+ 1305  ls
+ 1306  cd g1/scripts/safety/
+ 1307  clear
+ 1308  ls
+ 1309  python3 keyboard_controller.py --iface enp1s0
+ 1310  python3 keyboard_controller.py --iface enp1s0 --input curses
+ 1311  clear
+ 1312  ifconfig
+ 1313  ping google.com
+ 1314  sudo apt-get install rdesktop
+ 1315  rdesktop
+ 1316  exit
+ 1317  ls
+ 1318  cd Livox-SDK/
+ 1319  ls
+ 1320  cd build/
+ 1321  ls
+ 1322  cmake ..
+ 1323  make -j$(nproc)
+ 1324  sudo make install
+ 1325  sudo ldconfig
+ 1326  ls ~/ros2_humble/
+ 1327  ls ~/ros2_humble/install/
+ 1328  source ~/ros2_humble/install/setup.bash 
+ 1329  cd ..
+ 1330  cd ef_ws/g1/scripts/
+ 1331  ls
+ 1332  cd navigation/slam/
+ 1333  ls
+ 1334  nano visualize_map.py 
+ 1335  mkdir maps
+ 1336  cp /tmp/live_obstacle_map.npz maps/
+ 1337  py visualize_map.py 
+ 1338  ls maps/
+ 1339  cd ..
+ 1340  ls
+ 1341  cd slam/
+ 1342  cd ..
+ 1343  cd obstacle_avoidance/
+ 1344  ls
+ 1345  cd slam_sdk_example/
+ 1346  ls
+ 1347  cd example/
+ 1348  ls
+ 1349  cd build/
+ 1350  ls
+ 1351  ./keyDemo enp1s0
+ 1352  ./keyDemo 
+ 1353  ./keyDemo enp1s0
+ 1354  ls
+ 1355  exit
+ 1356  ssh unitree@192.168.123.164
+ 1357  cd ef_ws/g1/scripts/basic/safety/
+ 1358  py keyboard_controller.py --input curses --iface enp1s0
+ 1359  nano keyboard_controller.py 
+ 1360  cd ..
+ 1361  cd other/
+ 1362  ls
+ 1363  ipy
+ 1364  ls
+ 1365  exit
+ 1366  ls
+ 1367  git clone https://github.com/EF-Robotics-Academy/wf_ws.git
+ 1368  git clone https://github.com/EF-Robotics-Humanoid-Academy/wf_ws.git
+ 1369  git clone https://github.com/EF-Robotics-Humanoid-Academy/ef_ws.git
+ 1370  cd ef_ws/
+ 1371  ls
+ 1372  cd g1/
+ 1373  ls
+ 1374  cd scripts/navigation/
+ 1375  ls
+ 1376  cd slam/
+ 1377  ls
+ 1378  py run_geoff_stack.py --iface enp1s0
+ 1379  ls
+ 1380  cp ../../basic/safety/hanger_boot_sequence.py .
+ 1381  py run_geoff_stack.py --iface enp1s0
+ 1382  ls
+ 1383  py run_geoff_gui_input.py --help
+ 1384  py run_geoff_gui_input.py --input curses --iface enp1s0
+ 1385  ls
+ 1386  py 'run_geoff_gui (copy).py' --iface enp1s0
+ 1387  ls
+ 1388  py live_slam.py --iface enp1s0
+ 1389  ls
+ 1390  py live_slam_safe.py --iface enp1s0
+ 1391  ls
+ 1392  cd ..
+ 1393  ls
+ 1394  cd slam/
+ 1395  ls
+ 1396  cd ..
+ 1397  ls
+ 1398  cd obstacle_avoidance/
+ 1399  ls
+ 1400  cd slam_sdk_example/
+ 1401  ls
+ 1402  cd example/
+ 1403  ls
+ 1404  mkdir build
+ 1405  cd build/
+ 1406  cmake ..
+ 1407  make
+ 1408  ./keyDemo enp1s0
+ 1409  ls
+ 1410  cd ..
+ 1411  ls
+ 1412  cd ..
+ 1413  ls
+ 1414  cd ..
+ 1415  ls
+ 1416  py create_slam_map.py --iface enp1s0
+ 1417  ls
+ 1418  py slam_all.py --iface enp1s0
+ 1419  ls
+ 1420  nano slam_service.py 
+ 1421  ls
+ 1422  py create_map.py --help
+ 1423  py create_map.py --source slam_map --iface enp1s0
+ 1424  py create_map.py --source slam_points --iface enp1s0
+ 1425  ls /tmp/occ_map.npz 
+ 1426  ls
+ 1427  py map_viewer.py --help
+ 1428  py map_viewer.py --iface enp1s0
+ 1429  py create_map.py --help
+ 1430  py create_map.py --source lidar --iface enp1s0
+ 1431  ls
+ 1432  cd ..
+ 1433  ls
+ 1434  cd ..
+ 1435  ls
+ 1436  ls troubleshooting/
+ 1437  ls other/
+ 1438  ls sensors/
+ 1439  cd sensors/
+ 1440  ls
+ 1441  py rgbd_cam.py --iface enp1s0
+ 1442  py rgbd_cam.py --iface enp1s0 --help
+ 1443  py rgbd_cam.py --iface enp1s0
+ 1444  nano rgbd_cam.py 
+ 1445  codex
+ 1446  codex resume 019c5cbc-a763-71c1-8ca9-8c8b5dca23af
+ 1447  ipy
+ 1448  ls
+ 1449  cd ..
+ 1450  cd navigation/slam/
+ 1451  ls
+ 1452  cd ..
+ 1453  cd obstacle_avoidance/
+ 1454  ls
+ 1455  ipy
+ 1456  exit
+ 1457  ls
+ 1458  cd Desktop/
+ 1459  ls
+ 1460  cd repo/
+ 1461  ös
+ 1462  ls
+ 1463  cd ..
+ 1464  rm -r repo/
+ 1465  rm -rf repo/
+ 1466  ls
+ 1467  cd dev/
+ 1468  ls
+ 1469  ls gitrepo/
+ 1470  cd ..
+ 1471  ls
+ 1472  cd other/
+ 1473  ls
+ 1474  cd ..
+ 1475  rm -rf other/
+ 1476  ls
+ 1477  ls repo/
+ 1478  rm -rf repo/
+ 1479  sudo rm -rf repo/
+ 1480  ls
+ 1481  cd ..
+ 1482  ls
+ 1483  cd academy/
+ 1484  ls
+ 1485  cd academy_content/
+ 1486  ls
+ 1487  cd docs/repos/
+ 1488  ls
+ 1489  cd unitree_sdk2
+ 1490  ls
+ 1491  cd build/
+ 1492  ls
+ 1493  cd bin/
+ 1494  ls
+ 1495  ./g1_dual_arm_example enp1s0
+ 1496  ls
+ 1497  exit
+ 1498  cd Livox-SDK/
+ 1499  ls
+ 1500  cd build/
+ 1501  ls
+ 1502  cmake ..
+ 1503  make -j$(nproc)
+ 1504  sudo make install
+ 1505  sudo ldconfig
+ 1506  cd /home/ag/ef_ws/g1/scripts/navigation/slam
+ 1507  ls
+ 1508  py live_slam.py
+ 1509  pwd
+ 1510  codex
+ 1511  exit
+ 1512  ls
+ 1513  cd ef_ws/
+ 1514  cd g1/scripts/sensors/manual_streaming/
+ 1515  ls
+ 1516  py receive_realsense_gst.py 
+ 1517  cd ef_ws/g1/scripts/navigation/slam/
+ 1518  ls
+ 1519  export QT_QPA_PLATFORM=xcb
+ 1520  $XDG_SESSION_TYPE
+ 1521  export GDK_BACKEND=x11
+ 1522  export SDL_VIDEODRIVER=x11
+ 1523  export GLFW_PLATFORM=x11
+ 1524  export XDG_SESSION_TYPE=x11
+ 1525  unset WAYLAND_DISPLAY
+ 1526  export DISPLAY=:0
+ 1527  py live_slam.py 
+ 1528  nano env_vars.txt
+ 1529  gs
+ 1530  git add ../..
+ 1531  gs
+ 1532  git commit -a -m "mapping visualization working"
+ 1533  git push
+ 1534  cd ..
+ 1535  ls
+ 1536  cd obstacle_avoidance/
+ 1537  ls
+ 1538  cd ..
+ 1539  cd slam/
+ 1540  ls
+ 1541  py run_geoff_gui.py --iface enp1s0
+ 1542  ls
+ 1543  py run_geoff_stack.py --iface enp1s0
+ 1544  ls
+ 1545  py 'run_geoff_gui (copy).py' --iface enp1s0
+ 1546  ls
+ 1547  py live_slam.py
+ 1548  ls
+ 1549  nano live_slam.py 
+ 1550  codex
+ 1551  python /home/ag/ef_ws/g1/scripts/navigation/obstacle_avoidance/test_navigation.py --goal-x 1.0 --goal-y 2.0 --with-avoidance
+ 1552  python /home/ag/ef_ws/g1/scripts/navigation/obstacle_avoidance/test_navigation.py --goal-x 1.0 --goal-y 2.0 --with-avoidance --IFACE ENP1S0
+ 1553  python /home/ag/ef_ws/g1/scripts/navigation/obstacle_avoidance/test_navigation.py --goal-x 1.0 --goal-y 2.0 --with-avoidance --iface enp1s0
+ 1554  ls
+ 1555  cd ..
+ 1556  ls
+ 1557  cd obstacle_avoidance/
+ 1558  py slam_all.py --iface enp1s0
+ 1559  gs
+ 1560  codex resume 019c5d2c-3ae6-7f73-b220-372871a31ec4
+ 1561  ls ef_ws/g1/scripts/navigation/obstacle_avoidance/map
+ 1562  ls ef_ws/g1/scripts/navigation/obstacle_avoidance/maps
+ 1563  cd ef_ws/g1/scripts/navigation/obstacle_avoidance/
+ 1564  ls map
+ 1565  ls maps
+ 1566  py ../../basic/safety/keyboard_controller.py --input curses --iface enp1s0
+ 1567  ls -l maps/
+ 1568  cd ef_ws/g1/scripts/basic/safety/
+ 1569  py keyboard_controller.py --input curses --iface enp1s0
+ 1570  cd
+ 1571  clear
+ 1572  cd /home/ag/ef_ws/g1/scripts/navigation/obstacle_avoidance/
+ 1573  clear
+ 1574  ls
+ 1575  python3 api_util.py --iface enp1s0
+ 1576  python3 api_util.py 
+ 1577  clear
+ 1578  python3 api_util.py
+ 1579  clear
+ 1580  python3 api_util.py --iface enp1s0
+ 1581  clear
+ 1582  python3 api_util.py --iface enp1s0
+ 1583  python3 api_util.py     --iface enp1s0 --only start_mapping
+ 1584  python3 api_util.py --iface enp1s0 --only init_pose --load-path /home/unitree/test1.pcd
+ 1585  clear
+ 1586  python3 api_util.py     --iface enp1s0 --only start_mapping --wait-pos-info
+ 1587  python3 api_util.py     --iface enp1s0 --only init_pose --load-path /home/unitree/test1.pcd --wait-pos-info
+ 1588  python3 api_util.py    --iface enp1s0 --only pose_nav --goal-x 2.0 --goal-y 0.0 --wait-task-result
+ 1589  mkdir maps
+ 1590  py live_slam_save.py --save-dir ./maps --save-latest --iface enp1s0
+ 1591  cp ../slam/livox2_python.py .
+ 1592  py live_slam_save.py --save-dir ./maps --save-latest --iface enp1s0
+ 1593  py live_slam_save.py --save-dir ./maps --save-latest
+ 1594  cp ../slam/*.json .
+ 1595  py live_slam_save.py --save-dir ./maps --save-latest
+ 1596  source ../slam/env_vars.txt 
+ 1597  py live_slam_save.py --save-dir ./maps --save-latest
+ 1598  ls
+ 1599  py view_map.py 
+ 1600  py view_map.py maps/live_slam_latest.pcd 
+ 1601  ls
+ 1602  chmod a+rwx maps/
+ 1603  py view_map.py maps/live_slam_latest.pcd 
+ 1604  source ../slam/env_vars.txt 
+ 1605  py view_map.py maps/live_slam_latest.pcd 
+ 1606  ifconfig
+ 1607  ls
+ 1608  cd ef_ws/
+ 1609  ls
+ 1610  cd g1/
+ 1611  ls
+ 1612  cd scripts/
+ 1613  cd basic/safety/
+ 1614  py keyboard_controller.py --iface enp1s0 --input curses
+ 1615  ls
+ 1616  cd ..
+ 1617  ls
+ 1618  py test_finger_motion.py --iface enp1s0
+ 1619  ls
+ 1620  py g1_loco_client_example.py --iface enp1s0
+ 1621  py g1_loco_client_example.py --iface enp1s0 --help
+ 1622  py g1_loco_client_example.py enp1s0
+ 1623  py g1_hl_motion_sequence.py --iface enp1s0
+ 1624  ls
+ 1625  cd headlight_client/
+ 1626  ls
+ 1627  py headlight.py --iface enp1s0 --color RED
+ 1628  py headlight.py --iface enp1s0 --color red
+ 1629  py headlight.py --iface enp1s0 --color red --help
+ 1630  ls
+ 1631  cd ..
+ 1632  cd audio/
+ 1633  ls
+ 1634  py greeting.py --help
+ 1635  py greeting.py --file wilkommen.wav --iface enp1s0
+ 1636  cls
+ 1637  py greeting.py --file greeting.py --iface enp1s0
+ 1638  py greeting.py --file greeting.py --iface enp1s0 --help
+ 1639  py greeting.py --file greeting.py --iface enp1s0 --volume 100
+ 1640  py greeting.py --file wilkommen.wav --iface enp1s0 --volume 100
+ 1641  ls
+ 1642  cd ..
+ 1643  ls
+ 1644  cd ..
+ 1645  ls
+ 1646  cd other/
+ 1647  ls
+ 1648  py basic_loco.py --help
+ 1649  cp -r ../basic/safety/ .
+ 1650  py basic_loco.py --help
+ 1651  py basic_loco.py enp1s0
+ 1652  ls
+ 1653  cd ..
+ 1654  ls
+ 1655  cd other/huddle/
+ 1656  ls
+ 1657  py huddle.py --iface enp1s0
+ 1658  cd ..
+ 1659  ls
+ 1660  cd ..
+ 1661  ls
+ 1662  cd sensors/
+ 1663  ls
+ 1664  py lidar_points.py --iface enp1s0
+ 1665  ls
+ 1666  py imu_plot.py --iface enp1s0
+ 1667  ls
+ 1668  cd manual_streaming/
+ 1669  ls
+ 1670  cd ,,
+ 1671  ls
+ 1672  cd ..
+ 1673  ls
+ 1674  cd ..
+ 1675  ls
+ 1676  cd obj_detection/
+ 1677  ls
+ 1678  cd ..
+ 1679  ls
+ 1680  cd arm_motion/
+ 1681  ls
+ 1682  py wave.py --iface enp1s0
+ 1683  ls
+ 1684  py high_five.py --iface enp1s0
+ 1685  ls
+ 1686  cd ..
+ 1687  ls
+ 1688  cd pbd/
+ 1689  ls
+ 1690  cd ..
+ 1691  ls
+ 1692  ls usecases/
+ 1693  ls
+ 1694  cd sensors/
+ 1695  ls
+ 1696  scp -r manual_streaming/ unitree@192.168.123.164:/home/unitree
+ 1697  ifconfig
+ 1698  sudo apt install -y python3-gi gir1.2-gst-plugins-base-1.0   gir1.2-gstreamer-1.0 gstreamer1.0-plugins-good   gstreamer1.0-plugins-bad gstreamer1.0-libav
+ 1699  ls
+ 1700  cd manual_streaming/
+ 1701  ls
+ 1702  py receive_realsense_gst.py
+ 1703  uv pip install pycairo
+ 1704  py receive_realsense_gst
+ 1705  py receive_realsense_gst.py 
+ 1706  sudo apt install libcairo2-dev libxt-dev libgirepository-2.0-dev
+ 1707  uv pip install pycairo PyGObject
+ 1708  py receive_realsense_gst.py 
+ 1709  py receive_realsense_gst.py --help
+ 1710  mkdir -p ~/catkin_ws/src && cd ~/catkin_ws/src
+ 1711  git clone https://github.com/Livox-SDK/livox_ros_driver2.git
+ 1712  cd livox_ros_driver2
+ 1713  ./build.sh ROS1  
+ 1714  cd ..
+ 1715  cd ~
+ 1716  cd ef_ws/
+ 1717  ls
+ 1718  cd g1/scripts/navigation/slam/
+ 1719  ls
+ 1720  py view_slam_data.py --iface enp1s0
+ 1721  nano view_slam_data.py 
+ 1722  py view_slam_data.py --iface enp1s0
+ 1723  ls
+ 1724  locate view_slam_data.py
+ 1725  sudo apt install plocate
+ 1726  locate view_slam_data.py
+ 1727  clear
+ 1728  python3 - <<'PY'
+ 1729    from unitree_sdk2py.core.channel import ChannelFactoryInitialize,
+ 1730    ChannelSubscriber
+ 1731    from unitree_sdk2py.idl.std_msgs.msg.dds_ import String_
+ 1732    import time
+ 1733    ChannelFactoryInitialize(0, "eth0")  # change iface if needed
+ 1734    def cb(msg):
+ 1735        print("slam_info:", str(msg.data)[:200])
+ 1736    sub = ChannelSubscriber("rt/slam_info", String_)
+ 1737    sub.Init(cb, 10)
+ 1738    time.sleep(5)
+ 1739    PY
+ 1740  python3 - <<'PY'
+ 1741  from unitree_sdk2py.core.channel import ChannelFactoryInitialize,
+ 1742  ChannelSubscriber
+ 1743  from unitree_sdk2py.idl.std_msgs.msg.dds_ import String_
+ 1744  import time
+ 1745  ChannelFactoryInitialize(0, "eth0")  # change iface if needed
+ 1746  def cb(msg):
+ 1747      print("slam_info:", str(msg.data)[:200])
+ 1748  sub = ChannelSubscriber("rt/slam_info", String_)
+ 1749  sub.Init(cb, 10)
+ 1750  time.sleep(5)
+ 1751  PY
+ 1752  python3 - <<'PY'
+ 1753    from unitree_sdk2py.core.channel import ChannelFactoryInitialize,
+ 1754    ChannelSubscriber
+ 1755    from unitree_sdk2py.idl.std_msgs.msg.dds_ import String_
+ 1756    import time
+ 1757    ChannelFactoryInitialize(0, "eth0")  # change iface if needed
+ 1758    def cb(msg):
+ 1759        print("slam_info:", str(msg.data)[:200])
+ 1760    sub = ChannelSubscriber("rt/slam_info", String_)
+ 1761    sub.Init(cb, 10)
+ 1762    time.sleep(5)
+ 1763    PY
+ 1764  python3 - <<'PY'
+ 1765  from unitree_sdk2py.core.channel import ChannelFactoryInitialize,
+ 1766  ChannelSubscriber
+ 1767  from unitree_sdk2py.idl.std_msgs.msg.dds_ import String_
+ 1768  import time
+ 1769  ChannelFactoryInitialize(0, "enp1s0")  # change iface if needed
+ 1770  def cb(msg):
+ 1771      print("slam_info:", str(msg.data)[:200])
+ 1772  sub = ChannelSubscriber("rt/slam_info", String_)
+ 1773  sub.Init(cb, 10)
+ 1774  time.sleep(5)
+ 1775  PY
+ 1776  python3 - <<'PY'
+ 1777    from unitree_sdk2py.core.channel import ChannelFactoryInitialize,
+ 1778    ChannelSubscriber
+ 1779    from unitree_sdk2py.idl.std_msgs.msg.dds_ import String_
+ 1780    import time
+ 1781    ChannelFactoryInitialize(0, "eth0")  # change iface if needed
+ 1782    def cb(msg):
+ 1783        print("slam_info:", str(msg.data)[:200])
+ 1784    sub = ChannelSubscriber("rt/slam_info", String_)
+ 1785    sub.Init(cb, 10)
+ 1786    time.sleep(5)
+ 1787    PY
+ 1788  python3 - <<'PY'
+ 1789  from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelSubscriber
+ 1790  from unitree_sdk2py.idl.std_msgs.msg.dds_ import String_
+ 1791  import time
+ 1792  ChannelFactoryInitialize(0, "enp1s0")  # change iface if needed
+ 1793  def cb(msg):
+ 1794      print("slam_info:", str(msg.data)[:200])
+ 1795  sub = ChannelSubscriber("rt/slam_info", String_)
+ 1796  sub.Init(cb, 10)
+ 1797  time.sleep(5)
+ 1798  PY
+ 1799  python3 - <<'PY'
+ 1800    from unitree_sdk2py.core.channel import ChannelFactoryInitialize,
+ 1801    ChannelSubscriber
+ 1802    from unitree_sdk2py.idl.std_msgs.msg.dds_ import String_
+ 1803    import time
+ 1804    ChannelFactoryInitialize(0, "eth0")  # change iface if needed
+ 1805    def cb(msg):
+ 1806        print("slam_info:", str(msg.data)[:200])
+ 1807    sub = ChannelSubscriber("rt/slam_info", String_)
+ 1808    sub.Init(cb, 10)
+ 1809    time.sleep(5)
+ 1810    PY
+ 1811  python3 - <<'PY'
+ 1812  from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelSubscriber
+ 1813  from unitree_sdk2py.idl.std_msgs.msg.dds_import String_
+ 1814  import time
+ 1815  ChannelFactoryInitialize(0, "enp1s0")  # change iface if needed
+ 1816  def cb(msg):
+ 1817      print("slam_info:", str(msg.data)[:200])
+ 1818  sub = ChannelSubscriber("rt/slam_info", String_)
+ 1819  sub.Init(cb, 10)
+ 1820  time.sleep(5)
+ 1821  PY
+ 1822  python3 - <<'PY'
+ 1823    from unitree_sdk2py.core.channel import ChannelFactoryInitialize,
+ 1824    ChannelSubscriber
+ 1825    from unitree_sdk2py.idl.std_msgs.msg.dds_ import String_
+ 1826    import time
+ 1827    ChannelFactoryInitialize(0, "eth0")  # change iface if needed
+ 1828    def cb(msg):
+ 1829        print("slam_info:", str(msg.data)[:200])
+ 1830    sub = ChannelSubscriber("rt/slam_info", String_)
+ 1831    sub.Init(cb, 10)
+ 1832    time.sleep(5)
+ 1833    PY
+ 1834  python3 - <<'PY'
+ 1835  from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelSubscriber
+ 1836  from unitree_sdk2py.idl.std_msgs.msg.dds_import String_
+ 1837  import time
+ 1838  ChannelFactoryInitialize(0, "enp1s0")  # change iface if needed
+ 1839  def cb(msg):
+ 1840      print("slam_info:", str(msg.data)[:200])
+ 1841  sub = ChannelSubscriber("rt/slam_info", String_)
+ 1842  sub.Init(cb, 10)
+ 1843  time.sleep(5)
+ 1844  PY
+ 1845  cls
+ 1846  nano test.py
+ 1847  py test.py 
+ 1848  nano test.py
+ 1849  cat test.py 
+ 1850  nano test.py
+ 1851  py test.py 
+ 1852  ls
+ 1853  py live_slam_safe.py --iface enp1s0
+ 1854  ls
+ 1855  py view_slam_data.py --iface enp1s0
+ 1856  py live_slam.py --iface enp1s0
+ 1857  sudo apt install libdecor-gtk
+ 1858  pwd
+ 1859  cd ~
+ 1860  git clone https://github.com/Livox-SDK/openpylivox.git
+ 1861  ls
+ 1862  cd openpylivox/
+ 1863  ls
+ 1864  uv pip install -e .
+ 1865  cd -
+ 1866  cd /home/ag/ef_ws/g1/scripts/navigation/slam
+ 1867  ls
+ 1868  py live_slam.py
+ 1869  ls ~/Livox-SDK/build/
+ 1870  rsp
+ 1871  wtr
+ 1872  py live_slam.py
+ 1873  ls ~/Livox-SDK/build/
+ 1874  ls ~/Livox-SDK/build/sample
+ 1875  xhost +SI:localuser:ag
+ 1876  ls ~/Livox-SDK/build/sample
+ 1877  py live_slam.py
+ 1878  export LIVOX_SDK2_LIB=~/Livox-SDK2/build/liblivox_lidar_sdk_shared.so
+ 1879  export LIVOX_SDK2_DIR=~/Livox-SDK2
+ 1880  py live_slam.py
+ 1881  cd ~/Livox-SDK2/build
+ 1882  ls ~
+ 1883  cd ~
+ 1884  git clone cd ~/Livox-SDK2/build
+ 1885  git clone https://github.com/Livox-SDK/Livox-SDK2.git
+ 1886  ls
+ 1887  cd Livox-SDK2/
+ 1888  ls
+ 1889  mkdir build
+ 1890  cd build/
+ 1891  sudo cmake ..
+ 1892  make -j
+ 1893  sudo make -j
+ 1894  sudo make install
+ 1895  ls
+ 1896  cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_STANDARD=11 -DCMAKE_CXX_STANDARD_REQUIRED=ON -DCMAKE_CXX_FLAGS="-include cstdint"
+ 1897  sudo cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_STANDARD=11 -DCMAKE_CXX_STANDARD_REQUIRED=ON -DCMAKE_CXX_FLAGS="-include cstdint"
+ 1898  make -j$(nproc)
+ 1899  sudo make -j$(nproc)
+ 1900  sudo make instal
+ 1901  sudo make install
+ 1902  cat ~/.gtk 
+ 1903  cd ..
+ 1904  cd ef_ws/g1/scripts/basic/safety/
+ 1905  py keyboard_controller.py --input curses --iface enp1s0
+ 1906  cd ..
+ 1907  cd navigation/
+ 1908  ls
+ 1909  cd obstacle_avoidance/
+ 1910  ls
+ 1911  pwd
+ 1912  py slam_all.py 
+ 1913  py slam_all.py --iface enp1s0
+ 1914  py slam_all.py --help
+ 1915  py slam_all.py --iface enp1s0
+ 1916  source /home/ag/ef_ws/g1/scripts/navigation/slam/env_vars.txt
+ 1917  py slam_all.py --iface enp1s0
+ 1918  cd ..
+ 1919  cd basic/
+ 1920  ls
+ 1921  cd safety/
+ 1922  ls
+ 1923  py keyboard_controller.py  --iface enp1s0 --input curses
+ 1924  cd ..
+ 1925  cd other/
+ 1926  ipy
+ 1927  ls
+ 1928  cd ..
+ 1929  ls
+ 1930  cd arm_motion/
+ 1931  ls
+ 1932  cd ..
+ 1933  ls
+ 1934  cd pbd/
+ 1935  ls
+ 1936  py pbd_demonstrate.py --iface enp1s0
+ 1937  cp -r ../basic/safety/ .
+ 1938  py pbd_demonstrate.py --iface enp1s0
+ 1939  py pbd_reproduce.py --iface enp1s0
+ 1940  codex
+ 1941  cd ef_ws/g1/scripts/navigation/obstacle_avoidance/maps/
+ 1942  ls
+ 1943  cd ..
+ 1944  ls
+ 1945  py test_navigation.py --nav-json navigation.json
+ 1946  py test_navigation.py --nav-json navigation.json --iface enp1s0
+ 1947  cd ...
+ 1948  cd ..
+ 1949  ls
+ 1950  cd basic/
+ 1951  ls
+ 1952  cd safety/
+ 1953  ls
+ 1954  python3 keyboard_controller.py --iface enp1s0
+ 1955  clear
+ 1956  python3 keyboard_controller.py --iface enp1s0
+ 1957  cd ..
+ 1958  ls
+ 1959  cd .
+ 1960  cd ..
+ 1961  cd navigation/
+ 1962  ls
+ 1963  cd obstacle_avoidance/
+ 1964  ls
+ 1965  ls m*
+ 1966  cls
+ 1967  py map_viewer.py maps/live_slam_latest.pcd
+ 1968  codex
+ 1969  py map_viewer.py maps/live_slam_latest.pcd --offline
+ 1970  py map_viewer.py --offline maps/live_slam_latest.pcd
+ 1971  py map_viewer.py --offline maps/live_slam_latest.pcd --iface enp1s0
+ 1972  py map_viewer.py maps/live_slam_latest.pcd --iface enp1s0 --offline
+ 1973  py map_viewer.py --map maps/live_slam_latest.pcd --offline
+ 1974  codex
+ 1975  py map_viewer.py --map maps/live_slam_latest.pcd --offline
+ 1976  codex
+ 1977  py map_viewer.py --map maps/live_slam_latest.pcd --offline
+ 1978  codex resume 019c5e64-f44f-7581-953c-c5bd99d49f97
+ 1979  python map_viewer.py --map maps/live_slam_latest.pcd --offline
+ 1980  codex resume 019c5e64-f44f-7581-953c-c5bd99d49f97
+ 1981  python map_viewer.py --iface eth0
+ 1982  python map_viewer.py --iface enp1s0
+ 1983  python map_viewer.py --map maps/live_slam_latest.pcd --offline
+ 1984  codex resume 019c5e64-f44f-7581-953c-c5bd99d49f97
+ 1985  ls
+ 1986  py plan_path_view.py --map /tmp/offline_obstacle_map.npz --start-x 1.0 --start-y 2.0 --goal-x 5.0 --goal-y -1.0
+ 1987  codex resume 019c5e64-f44f-7581-953c-c5bd99d49f97
+ 1988  python real_time_path_steps.py --map /tmp/offline_obstacle_map.npz --start-x 1.0 --start-y 2.0 --goal-x 5.0 --goal-y -1.0
+ 1989  python real_time_path_steps.py --map /tmp/offline_obstacle_map.npz --start-x 1.0 --start-y 2.0 --goal-x 5.0 --goal-y -1.0 --iface enp1s0
+ 1990  py plan_path_view.py --map /tmp/offline_obstacle_map.npz --start-x 1.0 --start-y 2.0 --goal-x 5.0 --goal-y -1.0
+ 1991  python real_time_path_steps.py --map /tmp/offline_obstacle_map.npz --start-x 1.0 --start-y 2.0 --goal-x 5.0 --goal-y -1.0 --iface enp1s0
+ 1992  codex resume 019c5e64-f44f-7581-953c-c5bd99d49f97
+ 1993  python real_time_path_steps.py --map /tmp/offline_obstacle_map.npz --start-x 1.0 --start-y 2.0 --goal-x 5.0 --goal-y -1.0 --iface enp1s0 --use-map-start
+ 1994  codex resume 019c5e64-f44f-7581-953c-c5bd99d49f97
+ 1995  python real_time_path_steps.py --map /tmp/offline_obstacle_map.npz --start-x 1.0 --start-y 2.0 --goal-x 5.0 --goal-y -1.0 --iface enp1s0 --use-map-start
+ 1996  gs
+ 1997  git add real_time_path_steps.py 
+ 1998  git commit -a -m "preeliminary navigation"
+ 1999  git push
+ 2000  codex
+ 2001  python real_time_path_steps_dynamic.py --map maps/your_map.npz --iface enp1s0
+ 2002  python real_time_path_steps_dynamic.py --map maps/live_slam_latest.pcd --iface enp1s0
+ 2003* 
+ 2004  python real_time_path_steps_dynamic.py --map maps/live_slam_latest.pcd --iface enp1s0
+ 2005  python real_time_path_steps_dynamic.py --map maps/live_slam_latest.pcd --iface enp1s0 --start-x 1.0 --start-y 2.0 --goal-x 5.0 --goal-y -1.0
+ 2006  ls
+ 2007  py slam_console_o3d.py --iface enp1s0
+ 2008  python real_time_path_steps_dynamic.py --map maps/live_slam_latest.pcd --iface enp1s0 --start-x 1.0 --start-y 2.0 --goal-x 5.0 --goal-y -1.0
+ 2009  ls
+ 2010  py view_map.py --map /tmp/live_obstacle_map.npz 
+ 2011  py view_map.py --help
+ 2012  ls
+ 2013  py plan_path_view.py --help
+ 2014  py plan_path_view.py --map /tmp/live_obstacle_map.npz 
+ 2015  py plan_path_view.py --map /tmp/live_obstacle_map.npz --start-x 1.0 --start-y 2.0 --goal-x 5.0 --goal-y -1.0
+ 2016  ls
+ 2017  python real_time_path_steps_dynamic.py --map maps/live_slam_latest.pcd --iface enp1s0 --start-x 1.0 --start-y 2.0 --goal-x 5.0 --goal-y -1.0
+ 2018  python real_time_path_steps.py --map /tmp/offline_obstacle_map.npz --start-x 1.0 --start-y 2.0 --goal-x 5.0 --goal-y -1.0 --iface enp1s0 --use-map-start
+ 2019  gs
+ 2020  git add real_time_path_steps_dynamic.py 
+ 2021  git commit -a -m "update"
+ 2022  ls
+ 2023  ls -l
+ 2024  ls maps/
+ 2025  history > history.txt
