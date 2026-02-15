@@ -7,6 +7,9 @@ detection overlaid on the live RGB stream.
 from __future__ import annotations
 
 import argparse
+import os
+import shlex
+import subprocess
 import sys
 import time
 from dataclasses import dataclass
@@ -102,6 +105,37 @@ def build_depth_sink(port: int) -> tuple[GstApp.AppSink, Gst.Pipeline]:
     return sink, pipeline
 
 
+def _build_navigation_command(args: argparse.Namespace) -> list[str]:
+    scripts_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    nav_script = os.path.join(
+        scripts_root,
+        "navigation",
+        "obstacle_avoidance",
+        "real_time_path_steps_dynamic.py",
+    )
+    cmd = [
+        sys.executable,
+        nav_script,
+        "--map",
+        args.nav_map,
+        "--iface",
+        args.nav_iface,
+        "--domain-id",
+        str(args.nav_domain_id),
+        "--sport-topic",
+        args.nav_sport_topic,
+        "--slam-map-topic",
+        args.nav_slam_map_topic,
+    ]
+    if args.nav_start_x is not None and args.nav_start_y is not None:
+        cmd.extend(["--start-x", str(args.nav_start_x), "--start-y", str(args.nav_start_y)])
+    if args.nav_goal_x is not None and args.nav_goal_y is not None:
+        cmd.extend(["--goal-x", str(args.nav_goal_x), "--goal-y", str(args.nav_goal_y)])
+    if args.nav_extra_args:
+        cmd.extend(shlex.split(args.nav_extra_args))
+    return cmd
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="GStreamer RealSense receiver with CLIP energy drink can detection",
@@ -127,7 +161,37 @@ def main() -> None:
         default="a photo without an energy drink can",
         help="Negative text prompt",
     )
+    parser.add_argument(
+        "--trigger-nav-on-detect",
+        action="store_true",
+        help="Launch real_time_path_steps_dynamic.py when detection is above threshold",
+    )
+    parser.add_argument("--nav-map", default=None, help="Map path for navigation script")
+    parser.add_argument("--nav-start-x", type=float, default=None, help="Optional nav start x")
+    parser.add_argument("--nav-start-y", type=float, default=None, help="Optional nav start y")
+    parser.add_argument("--nav-goal-x", type=float, default=None, help="Optional nav goal x")
+    parser.add_argument("--nav-goal-y", type=float, default=None, help="Optional nav goal y")
+    parser.add_argument("--nav-iface", default="eth0", help="DDS interface passed to navigation")
+    parser.add_argument("--nav-domain-id", type=int, default=0, help="DDS domain id for navigation")
+    parser.add_argument("--nav-sport-topic", default="rt/odommodestate", help="Sport topic for navigation")
+    parser.add_argument("--nav-slam-map-topic", default="rt/utlidar/map_state", help="SLAM map topic for navigation")
+    parser.add_argument("--nav-cooldown", type=float, default=30.0, help="Seconds between nav launches")
+    parser.add_argument("--nav-repeat", action="store_true", help="Allow multiple navigation launches")
+    parser.add_argument(
+        "--nav-extra-args",
+        default="",
+        help="Extra args appended to real_time_path_steps_dynamic.py",
+    )
     args = parser.parse_args()
+
+    if args.trigger_nav_on_detect and not args.nav_map:
+        raise SystemExit("--nav-map is required when --trigger-nav-on-detect is set")
+
+    nav_cmd: list[str] | None = None
+    if args.trigger_nav_on_detect:
+        nav_cmd = _build_navigation_command(args)
+        print("[nav] trigger enabled")
+        print("[nav] command:", " ".join(shlex.quote(c) for c in nav_cmd))
 
     Gst.init(None)
 
@@ -157,6 +221,9 @@ def main() -> None:
     last_score = -1.0
     last_box = None
     frame_idx = 0
+    nav_proc: subprocess.Popen | None = None
+    nav_last_launch = 0.0
+    nav_started_once = False
 
     try:
         while True:
@@ -226,12 +293,33 @@ def main() -> None:
                         2,
                     )
 
+            if nav_proc is not None and nav_proc.poll() is not None:
+                print(f"[nav] exited with code {nav_proc.returncode}")
+                nav_proc = None
+
+            should_start_nav = (
+                nav_cmd is not None
+                and last_box is not None
+                and last_score >= args.threshold
+                and (args.nav_repeat or not nav_started_once)
+                and nav_proc is None
+                and (time.time() - nav_last_launch) >= max(0.0, args.nav_cooldown)
+            )
+            if should_start_nav:
+                nav_proc = subprocess.Popen(nav_cmd)
+                nav_last_launch = time.time()
+                nav_started_once = True
+                print("[nav] launched dynamic path navigation")
+
             combo = cv2.hconcat([rgb, depth_bgr])
 
             now = time.perf_counter()
             fps = 1.0 / (now - last)
             last = now
             cv2.putText(combo, f"FPS: {fps:.1f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+            if nav_cmd is not None:
+                nav_status = "running" if nav_proc is not None else ("ready" if args.nav_repeat or not nav_started_once else "done")
+                cv2.putText(combo, f"NAV: {nav_status}", (10, 65), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
 
             cv2.imshow("RGB + Depth (CLIP)", combo)
             if cv2.waitKey(1) & 0xFF in (27, ord("q")):
@@ -239,6 +327,8 @@ def main() -> None:
 
             frame_idx += 1
     finally:
+        if nav_proc is not None and nav_proc.poll() is None:
+            nav_proc.terminate()
         for p in (rgb_pipeline, depth_pipeline):
             p.set_state(Gst.State.NULL)
         cv2.destroyAllWindows()

@@ -538,7 +538,7 @@ def main() -> None:
         volume_level = 100 if args.volume is None else args.volume
         _set_volume(volume_level, args.iface)
         duration = _play_wav_robot(wav_path, args.iface, volume_level)
-        arm.hold_pose(poses["extend"], duration)
+        arm.hold_pose(poses["extend"], duration - 10)
 
         print("Step 3: lift hand (rotate shoulder).")
         arm.ramp_to_pose(poses["lift"], args.lift_sec, easing=args.easing)
