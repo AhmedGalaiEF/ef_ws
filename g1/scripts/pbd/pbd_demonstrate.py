@@ -13,7 +13,7 @@ import argparse
 import os
 import threading
 import time
-from typing import Dict, List
+from typing import List, Optional, Tuple
 
 import numpy as np
 
@@ -50,20 +50,24 @@ def _resolve_lowstate_type():
 class Recorder:
     def __init__(self, joints: List[int]) -> None:
         self.joints = joints
-        self.t0 = time.time()
-        self.ts: List[float] = []
-        self.qs: List[List[float]] = []
-        self.last_update = 0.0
+        self._lock = threading.Lock()
+        self._latest_q: Optional[List[float]] = None
+        self._latest_update = 0.0
 
     def cb(self, msg):
         try:
             q = [float(msg.motor_state[j].q) for j in self.joints]
         except Exception:
             return
-        now = time.time()
-        self.ts.append(now - self.t0)
-        self.qs.append(q)
-        self.last_update = now
+        with self._lock:
+            self._latest_q = q
+            self._latest_update = time.time()
+
+    def snapshot(self) -> Optional[Tuple[List[float], float]]:
+        with self._lock:
+            if self._latest_q is None:
+                return None
+            return list(self._latest_q), self._latest_update
 
 
 def main() -> None:
@@ -71,7 +75,13 @@ def main() -> None:
     parser.add_argument("--iface", default="enp1s0", help="network interface for DDS")
     parser.add_argument("--arm", choices=["left", "right", "both"], default="right", help="which arm(s) to record")
     parser.add_argument("--duration", type=float, default=15.0, help="seconds to record (0=until Ctrl+C)")
+    parser.add_argument("--poll-s", type=float, default=0.02, help="sample period in seconds")
     parser.add_argument("--out", default="/tmp/pbd_motion.npz", help="output file (.npz)")
+    parser.add_argument(
+        "--log",
+        default="",
+        help="CSV log path (default: <out>.csv)",
+    )
     args = parser.parse_args()
 
     # Ensure balanced stand (FSM-200), then switch to ZeroTorque for teaching
@@ -110,28 +120,64 @@ def main() -> None:
 
     threading.Thread(target=_wait_for_enter, daemon=True).start()
 
-    print(f"Recording joints {joints} (duration limit: {args.duration}s)")
-    t0 = time.time()
-    try:
-        while True:
-            time.sleep(0.02)
-            if stop_event.is_set():
-                break
-            if args.duration > 0 and (time.time() - t0) >= args.duration:
-                break
-    except KeyboardInterrupt:
-        pass
+    log_path = args.log or f"{os.path.splitext(args.out)[0]}.csv"
+    poll_s = max(1e-3, float(args.poll_s))
 
-    if not recorder.ts:
+    print(f"Recording joints {joints} (duration limit: {args.duration}s, poll_s={poll_s})")
+    t0 = time.time()
+    ts: List[float] = []
+    qs: List[List[float]] = []
+    last_wait_log = 0.0
+
+    with open(log_path, "w", encoding="utf-8") as f_log:
+        f_log.write("t_s," + ",".join([f"j{j}" for j in joints]) + "\n")
+        next_tick = t0
+        try:
+            while True:
+                now = time.time()
+                if now < next_tick:
+                    time.sleep(min(0.02, next_tick - now))
+                    continue
+                next_tick += poll_s
+
+                if stop_event.is_set():
+                    break
+                if args.duration > 0 and (time.time() - t0) >= args.duration:
+                    break
+
+                snap = recorder.snapshot()
+                if snap is None:
+                    if time.time() - last_wait_log >= 1.0:
+                        print("Waiting for rt/lowstate...")
+                        last_wait_log = time.time()
+                    continue
+
+                q, _ = snap
+                t_rel = time.time() - t0
+                ts.append(t_rel)
+                qs.append(q)
+
+                row = f"{t_rel:.6f}," + ",".join([f"{v:.6f}" for v in q])
+                f_log.write(row + "\n")
+                f_log.flush()
+                print(f"[{len(ts):04d}] {row}")
+        except KeyboardInterrupt:
+            pass
+
+    if not ts:
         raise SystemExit("No samples recorded. Is LowState publishing?")
 
     np.savez(
         args.out,
         joints=np.array(joints, dtype=np.int32),
-        ts=np.array(recorder.ts, dtype=np.float32),
-        qs=np.array(recorder.qs, dtype=np.float32),
+        ts=np.array(ts, dtype=np.float32),
+        qs=np.array(qs, dtype=np.float32),
+        fk_qs=np.array(qs, dtype=np.float32),
+        poll_s=np.array([poll_s], dtype=np.float32),
+        representation=np.array(["joint_space"], dtype="<U16"),
     )
-    print(f"Saved {len(recorder.ts)} samples to {args.out}")
+    print(f"Saved {len(ts)} samples to {args.out}")
+    print(f"Logged sampled poses to {log_path}")
 
 
 if __name__ == "__main__":
