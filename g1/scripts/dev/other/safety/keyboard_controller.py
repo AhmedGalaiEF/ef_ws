@@ -255,6 +255,10 @@ def main() -> None:
 
     # Boot sequence – returns initialised LocoClient in FSM-200
     bot = hanger_boot_sequence(iface=args.iface)
+    try:
+        bot.BalanceStand(0)
+    except Exception:
+        pass
 
     if args.input == "curses":
         curses.wrapper(drive_loop_curses, bot)

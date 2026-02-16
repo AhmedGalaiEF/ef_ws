@@ -223,12 +223,21 @@ class ArmSdkController:
         self._pub.Init()
 
         self._cmd = unitree_hg_msg_dds__LowCmd_()
+        for mc in self._cmd.motor_cmd:
+            mc.mode = 1
+            mc.q = 0.0
+            mc.dq = 0.0
+            mc.tau = 0.0
+            mc.kp = 0.0
+            mc.kd = 0.0
         self._cmd.motor_cmd[self._NOT_USED_IDX].q = 1
 
         if arm == "left":
             self._joint_idx = [15, 16, 17, 18, 19, 20, 21]
+            self._passive_joint_idx = [22, 23, 24, 25, 26, 27, 28]
         else:
             self._joint_idx = [22, 23, 24, 25, 26, 27, 28]
+            self._passive_joint_idx = [15, 16, 17, 18, 19, 20, 21]
 
         for idx in self._joint_idx:
             self._cmd_q[idx] = 0.0
@@ -289,6 +298,13 @@ class ArmSdkController:
         return True
 
     def _apply_targets(self, targets: Dict[int, float]) -> None:
+        # Force non-target arm to zero gain each tick to avoid stale torque from
+        # prior rt/arm_sdk publishers.
+        for j_idx in self._passive_joint_idx:
+            mc = self._cmd.motor_cmd[j_idx]
+            mc.kp = 0.0
+            mc.kd = 0.0
+            mc.tau = 0.0
         for j_idx, q_val in targets.items():
             mc = self._cmd.motor_cmd[j_idx]
             mc.q = float(q_val)
@@ -538,7 +554,7 @@ def main() -> None:
         volume_level = 100 if args.volume is None else args.volume
         _set_volume(volume_level, args.iface)
         duration = _play_wav_robot(wav_path, args.iface, volume_level)
-        arm.hold_pose(poses["extend"], duration - 10)
+        arm.hold_pose(poses["extend"], duration - 4)
 
         print("Step 3: lift hand (rotate shoulder).")
         arm.ramp_to_pose(poses["lift"], args.lift_sec, easing=args.easing)

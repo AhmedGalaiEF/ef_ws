@@ -19,6 +19,7 @@ import json
 import math
 import os
 import shlex
+import shutil
 import signal
 import subprocess
 import sys
@@ -80,6 +81,145 @@ class ImuData:
     temp: float | None
 
 
+class _RgbdDepthGuard:
+    """
+    Lightweight RGBD depth guard using the GST receive pipeline.
+
+    The incoming depth stream is expected to be PLASMA color-mapped depth
+    (as produced by jetson_realsense_stream.py).
+    """
+
+    def __init__(
+        self,
+        depth_port: int,
+        width: int,
+        height: int,
+        fps: int,
+        near_distance_m: float = 0.75,
+        min_coverage: float = 0.18,
+        required_hits: int = 2,
+    ) -> None:
+        self.depth_port = int(depth_port)
+        self.width = int(width)
+        self.height = int(height)
+        self.fps = max(1, int(fps))
+        self.near_distance_m = float(near_distance_m)
+        self.min_coverage = float(min_coverage)
+        self.required_hits = max(1, int(required_hits))
+
+        self._available = False
+        self._err: str | None = None
+        self._blocked = False
+        self._hits = 0
+        self._running = False
+        self._thread: threading.Thread | None = None
+        self._lock = threading.Lock()
+
+    @property
+    def available(self) -> bool:
+        return bool(self._available)
+
+    @property
+    def error(self) -> str | None:
+        return self._err
+
+    def is_blocked(self) -> bool:
+        with self._lock:
+            return bool(self._blocked)
+
+    def start(self) -> None:
+        if self._thread is not None and self._thread.is_alive():
+            return
+        self._running = True
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._running = False
+        if self._thread is not None:
+            self._thread.join(timeout=1.0)
+
+    def _run(self) -> None:
+        try:
+            import cv2
+            import gi
+            import numpy as np
+
+            gi.require_version("Gst", "1.0")
+            gi.require_version("GstApp", "1.0")
+            from gi.repository import Gst
+        except Exception as exc:
+            self._err = f"RGBD depth guard unavailable: {exc}"
+            self._available = False
+            return
+
+        try:
+            Gst.init(None)
+            pipeline = Gst.parse_launch(
+                f"udpsrc port={self.depth_port} caps=application/x-rtp,media=video,encoding-name=H264,payload=97 ! "
+                "rtph264depay ! avdec_h264 ! videoconvert ! video/x-raw,format=BGR ! "
+                "appsink name=sink emit-signals=true sync=false drop=true"
+            )
+            sink = pipeline.get_by_name("sink")
+            if sink is None:
+                raise RuntimeError("appsink not found")
+            pipeline.set_state(Gst.State.PLAYING)
+            self._available = True
+
+            # Build PLASMA lookup in BGR, index 0..255 -> distance 0..6m.
+            cmap = cv2.applyColorMap(np.arange(256, dtype=np.uint8).reshape(256, 1), cv2.COLORMAP_PLASMA)
+            cmap = cmap.reshape(256, 3).astype(np.int16)
+            near_idx = int(max(0.0, min(255.0, (self.near_distance_m / 6.0) * 255.0)))
+
+            wait_ns = int(Gst.SECOND // self.fps)
+
+            while self._running:
+                sample = sink.emit("try-pull-sample", wait_ns)
+                if not sample:
+                    time.sleep(0.01)
+                    continue
+                buf = sample.get_buffer()
+                if buf is None:
+                    continue
+                raw = np.frombuffer(buf.extract_dup(0, buf.get_size()), dtype=np.uint8)
+                expected = self.width * self.height * 3
+                if raw.size != expected:
+                    continue
+                depth_bgr = raw.reshape((self.height, self.width, 3))
+
+                # Forward ROI: center horizontally, upper-middle vertically to reduce floor hits.
+                x0 = int(self.width * 0.30)
+                x1 = int(self.width * 0.70)
+                y0 = int(self.height * 0.25)
+                y1 = int(self.height * 0.70)
+                roi = depth_bgr[y0:y1, x0:x1]
+                if roi.size == 0:
+                    continue
+                pix = roi.reshape(-1, 3).astype(np.int16)
+
+                # Approximate inverse-colormap by nearest BGR entry.
+                diff = pix[:, None, :] - cmap[None, :, :]
+                dist2 = (diff * diff).sum(axis=2)
+                idx = np.argmin(dist2, axis=1)
+                near_cov = float(np.mean(idx <= near_idx))
+                blocked_now = near_cov >= self.min_coverage
+
+                with self._lock:
+                    if blocked_now:
+                        self._hits += 1
+                    else:
+                        self._hits = 0
+                    self._blocked = self._hits >= self.required_hits
+        except Exception as exc:
+            self._err = str(exc)
+            self._available = False
+        finally:
+            try:
+                pipeline.set_state(Gst.State.NULL)  # type: ignore[name-defined]
+            except Exception:
+                pass
+
+
 class Robot:
     """End-user wrapper around common G1 workflows."""
 
@@ -100,7 +240,10 @@ class Robot:
         rgb_height: int = 480,
         rgb_fps: int = 30,
         nav_map: str | None = None,
-        nav_extra_args: str = "--smooth --allow-diagonal --use-live-map",
+        nav_extra_args: str = "--smooth --use-live-map --no-viz",
+        nav_use_external_astar: bool = False,
+        rgbd_obs_near_m: float = 0.75,
+        rgbd_obs_min_coverage: float = 0.18,
     ) -> None:
         self.iface = iface
         self.domain_id = int(domain_id)
@@ -118,6 +261,9 @@ class Robot:
 
         self.nav_map = nav_map
         self.nav_extra_args = nav_extra_args
+        self.nav_use_external_astar = bool(nav_use_external_astar)
+        self.rgbd_obs_near_m = float(rgbd_obs_near_m)
+        self.rgbd_obs_min_coverage = float(rgbd_obs_min_coverage)
 
         self._lock = threading.Lock()
         self._sport: SportModeState_ | None = None
@@ -133,10 +279,12 @@ class Robot:
 
         self._rgbd_proc: subprocess.Popen | None = None
         self._slam_proc: subprocess.Popen | None = None
+        self._slam_log_fp: Any | None = None
         self.slam_is_running = False
         self._slam_save_dir: str | None = None
 
         self._path_points: list[tuple[float, float, float]] = []
+        self._slam_service_windows: list[Any] = []
 
         if safety_boot:
             self._client = hanger_boot_sequence(iface=self.iface)
@@ -145,9 +293,17 @@ class Robot:
             self._client = LocoClient()
             self._client.SetTimeout(10.0)
             self._client.Init()
+        self._ensure_balanced_gait_mode()
 
         if auto_start_sensors:
             self.start_sensors()
+
+    def _ensure_balanced_gait_mode(self) -> None:
+        try:
+            if hasattr(self._client, "BalanceStand"):
+                self._client.BalanceStand(0)
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Sensor subscriptions
@@ -349,6 +505,41 @@ class Robot:
         else:
             self._client.Move(0.0, 0.0, 0.0, continous_move=False)
 
+    @staticmethod
+    def _normalize_gait_type(gait_type: int | str) -> int:
+        if isinstance(gait_type, str):
+            key = gait_type.strip().lower().replace("-", "_").replace(" ", "_")
+            alias = {
+                "normal": 0,
+                "balanced": 0,
+                "balance": 0,
+                "static": 0,
+                "stand": 0,
+                "continuous": 1,
+                "walk": 1,
+                "walking": 1,
+                "dynamic": 1,
+            }
+            if key not in alias:
+                raise ValueError(f"Unknown gait_type '{gait_type}'.")
+            return int(alias[key])
+        return int(gait_type)
+
+    def set_gait_type(self, gait_type: int | str = 0) -> int:
+        """
+        Set locomotion gait/balance mode.
+
+        Accepts integer mode or aliases:
+          - 0: normal/balanced/static stand
+          - 1: continuous walking mode
+        """
+        mode = self._normalize_gait_type(gait_type)
+        if hasattr(self._client, "SetGaitType"):
+            return int(self._client.SetGaitType(mode))
+        if hasattr(self._client, "SetBalanceMode"):
+            return int(self._client.SetBalanceMode(mode))
+        raise AttributeError("Current locomotion client does not support gait mode setting API.")
+
     def _rpc_get_int(self, api_id: int) -> Optional[int]:
         try:
             code, data = self._client._Call(api_id, "{}")  # type: ignore[attr-defined]
@@ -384,7 +575,7 @@ class Robot:
         elif hasattr(self._client, "SetFsmId"):
             self._client.SetFsmId(1)
 
-    def fsm_2_airborne(self) -> None:
+    def fsm_2_squat(self) -> None:
         if hasattr(self._client, "SetFsmId"):
             self._client.SetFsmId(2)
 
@@ -552,13 +743,18 @@ class Robot:
         save_every: int = 1,
         save_latest: bool = True,
         save_prefix: str = "live_slam_latest",
+        viz: bool = False,
     ) -> subprocess.Popen:
         if self._slam_proc is not None and self._slam_proc.poll() is None:
             self.slam_is_running = True
             return self._slam_proc
 
-        slam_script = SCRIPTS_ROOT / "navigation" / "obstacle_avoidance" / "live_slam_save.py"
-        slam_cwd = slam_script.parent
+        if viz:
+            slam_script = DEV_OTHER_DIR / "other" / "slam_viz_nav_overlay_runner.py"
+            slam_cwd = SCRIPTS_ROOT / "navigation" / "obstacle_avoidance"
+        else:
+            slam_script = DEV_OTHER_DIR / "other" / "slam_headless_save_runner.py"
+            slam_cwd = slam_script.parent
         save_dir = Path(save_folder)
         if not save_dir.is_absolute():
             save_dir = (slam_cwd / save_dir).resolve()
@@ -576,9 +772,61 @@ class Robot:
         ]
         if save_latest:
             cmd.append("--save-latest")
+        if viz:
+            cmd.extend(["--iface", self.iface, "--domain-id", str(self.domain_id)])
 
-        self._slam_proc = subprocess.Popen(cmd, cwd=str(slam_cwd))
+        log_path = save_dir / "slam_runtime.log"
+        self._slam_log_fp = open(log_path, "a", encoding="utf-8", buffering=1)
+        self._slam_log_fp.write(f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] start viz={bool(viz)} cmd={cmd}\n")
+        self._slam_proc = subprocess.Popen(
+            cmd,
+            cwd=str(slam_cwd),
+            stdin=subprocess.DEVNULL,
+            stdout=self._slam_log_fp,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+        startup_deadline = time.time() + (5.0 if viz else 0.35)
+        while time.time() < startup_deadline and self._slam_proc.poll() is None:
+            time.sleep(0.1)
+
+        if self._slam_proc.poll() is not None:
+            tail = ""
+            try:
+                with open(log_path, "r", encoding="utf-8") as fp:
+                    lines = fp.readlines()
+                tail = "".join(lines[-40:]).strip()
+            except Exception:
+                pass
+            tail_lower = tail.lower()
+            viz_init_failed = (
+                "failed to initialize glew" in tail_lower
+                or "glfw error" in tail_lower
+                or "failed to initialize gtk" in tail_lower
+            )
+            self.slam_is_running = False
+            self._slam_proc = None
+            if self._slam_log_fp is not None:
+                try:
+                    self._slam_log_fp.close()
+                except Exception:
+                    pass
+                self._slam_log_fp = None
+            if viz and viz_init_failed:
+                # Typical on headless/Wayland sessions where Open3D GUI cannot be created.
+                print("[start_slam] Visualization init failed; falling back to headless SLAM runner.")
+                return self.start_slam(
+                    save_folder=str(save_dir),
+                    save_every=save_every,
+                    save_latest=save_latest,
+                    save_prefix=save_prefix,
+                    viz=False,
+                )
+            detail = f"\nSLAM log tail:\n{tail}" if tail else ""
+            raise RuntimeError(f"Failed to start SLAM process (viz={bool(viz)}).{detail}")
         self._slam_save_dir = str(save_dir)
+        if save_latest:
+            self.nav_map = str(save_dir / f"{save_prefix}_latest.pcd")
         self.slam_is_running = True
         return self._slam_proc
 
@@ -592,7 +840,7 @@ class Robot:
         proc = self._slam_proc
         if proc is not None and proc.poll() is None:
             try:
-                proc.send_signal(signal.SIGINT)
+                os.killpg(os.getpgid(proc.pid), signal.SIGINT)
                 proc.wait(timeout=5.0)
             except Exception:
                 try:
@@ -601,6 +849,13 @@ class Robot:
                 except Exception:
                     proc.kill()
         self._slam_proc = None
+        if self._slam_log_fp is not None:
+            try:
+                self._slam_log_fp.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] stop\n")
+                self._slam_log_fp.close()
+            except Exception:
+                pass
+            self._slam_log_fp = None
         self.slam_is_running = False
 
     # ------------------------------------------------------------------
@@ -612,19 +867,80 @@ class Robot:
             raise RuntimeError("set_path_point is only allowed while slam_is_running=True")
         self._path_points.append((float(x), float(y), float(yaw)))
 
-    def _run_dynamic_nav(self, x: float, y: float) -> int:
+    def get_path_points(self) -> list[tuple[float, float, float]]:
+        return list(self._path_points)
+
+    def clear_path_points(self) -> None:
+        self._path_points.clear()
+
+    def _snapshot_live_slam_map_npz(self, timeout_s: float = 2.0) -> str | None:
+        """
+        Snapshot current rt/utlidar map_state into a temporary .npz map file.
+        This keeps planner map frame aligned with robot pose frame.
+        """
+        try:
+            from navigation.obstacle_avoidance.slam_map import SlamMapSubscriber
+        except Exception:
+            return None
+
+        sub = SlamMapSubscriber(self.lidar_map_topic)
+        sub.start()
+        t0 = time.time()
+        while time.time() - t0 < max(0.2, float(timeout_s)):
+            occ, _meta = sub.to_occupancy(height_threshold=0.15, max_height=None, origin_centered=True)
+            if occ is not None:
+                try:
+                    with tempfile.NamedTemporaryFile(prefix="g1_live_nav_", suffix=".npz", delete=False) as tf:
+                        out = tf.name
+                    occ.save(out)
+                    return out
+                except Exception:
+                    return None
+            time.sleep(0.05)
+        return None
+
+    def _run_dynamic_nav(self, x: float, y: float, use_rgbd_depth_guard: bool = False) -> int:
         nav_script = SCRIPTS_ROOT / "navigation" / "obstacle_avoidance" / "real_time_path_steps_dynamic.py"
 
-        if not self.nav_map:
-            # common fallback map path
-            fallback = SCRIPTS_ROOT / "navigation" / "obstacle_avoidance" / "maps" / "live_slam_latest.pcd"
-            self.nav_map = str(fallback)
+        map_for_run: str | None = self._snapshot_live_slam_map_npz(timeout_s=1.5)
+        if map_for_run is None:
+            map_for_run = self.nav_map
+
+        if not map_for_run:
+            candidates: list[Path] = []
+            if self._slam_save_dir:
+                save_dir = Path(self._slam_save_dir)
+                candidates.extend(
+                    sorted(save_dir.glob("*latest*.pcd"), key=lambda p: p.stat().st_mtime if p.exists() else 0.0, reverse=True)
+                )
+                candidates.extend(
+                    sorted(save_dir.glob("*.pcd"), key=lambda p: p.stat().st_mtime if p.exists() else 0.0, reverse=True)
+                )
+            # common legacy fallback map path
+            candidates.append(SCRIPTS_ROOT / "navigation" / "obstacle_avoidance" / "maps" / "live_slam_latest.pcd")
+            for c in candidates:
+                if c.exists():
+                    map_for_run = str(c)
+                    break
+        if not map_for_run:
+            print("[_run_dynamic_nav] no map path resolved for dynamic navigation.")
+            return 97
+
+        nav_map_path = Path(map_for_run)
+        if not nav_map_path.exists():
+            # map file can appear shortly after SLAM starts; wait briefly.
+            t0 = time.time()
+            while time.time() - t0 < 3.0 and not nav_map_path.exists():
+                time.sleep(0.1)
+            if not nav_map_path.exists():
+                print(f"[_run_dynamic_nav] map file does not exist: {nav_map_path}")
+                return 97
 
         cmd = [
             sys.executable,
             str(nav_script),
             "--map",
-            str(self.nav_map),
+            str(map_for_run),
             "--iface",
             self.iface,
             "--domain-id",
@@ -634,13 +950,81 @@ class Robot:
             "--goal-y",
             str(float(y)),
         ]
+        start = self.get_position()
+        if start is not None:
+            cmd.extend(["--start-x", str(float(start[0])), "--start-y", str(float(start[1]))])
         if self.nav_extra_args:
             cmd.extend(shlex.split(self.nav_extra_args))
+        if "--no-viz" not in cmd:
+            cmd.append("--no-viz")
 
-        result = subprocess.run(cmd, cwd=str(nav_script.parent), check=False)
-        return int(result.returncode)
+        guard: _RgbdDepthGuard | None = None
+        if use_rgbd_depth_guard:
+            guard = _RgbdDepthGuard(
+                depth_port=self.depth_port,
+                width=self.rgb_width,
+                height=self.rgb_height,
+                fps=self.rgb_fps,
+                near_distance_m=self.rgbd_obs_near_m,
+                min_coverage=self.rgbd_obs_min_coverage,
+            )
+            guard.start()
+            # Give guard a brief moment to initialise pipeline.
+            time.sleep(0.15)
+            if not guard.available and guard.error:
+                print(f"[_run_dynamic_nav] RGBD depth guard disabled: {guard.error}")
+                guard = None
 
-    def _run_pose_nav(self, x: float, y: float, yaw: float = 0.0) -> int:
+        print(f"[_run_dynamic_nav] start map={map_for_run} goal=({float(x):+.3f},{float(y):+.3f})")
+        proc = subprocess.Popen(cmd, cwd=str(nav_script.parent), start_new_session=True)
+        blocked_abort = False
+        try:
+            while proc.poll() is None:
+                if guard is not None and guard.is_blocked():
+                    blocked_abort = True
+                    try:
+                        os.killpg(os.getpgid(proc.pid), signal.SIGINT)
+                    except Exception:
+                        try:
+                            proc.terminate()
+                        except Exception:
+                            pass
+                    break
+                time.sleep(0.05)
+            rc = int(proc.wait())
+            if blocked_abort:
+                print("[_run_dynamic_nav] aborted due to RGBD depth obstacle in front ROI.")
+                return 98
+            return rc
+        finally:
+            if guard is not None:
+                guard.stop()
+
+    def _wait_pose_nav_arrival(self, timeout_s: float = 90.0) -> bool:
+        from navigation.obstacle_avoidance.slam_map import SlamInfoSubscriber
+
+        sub = SlamInfoSubscriber(self.slam_info_topic, self.slam_key_topic)
+        sub.start()
+        t0 = time.time()
+        while time.time() - t0 < max(0.1, float(timeout_s)):
+            for payload in (sub.get_key(), sub.get_info()):
+                if not payload:
+                    continue
+                try:
+                    msg = json.loads(payload)
+                except Exception:
+                    continue
+                data = msg.get("data") if isinstance(msg, dict) else None
+                if not isinstance(data, dict):
+                    continue
+                if data.get("is_arrived") is True:
+                    return True
+                if data.get("is_abort") is True or data.get("is_failed") is True:
+                    return False
+            time.sleep(0.05)
+        return False
+
+    def _run_pose_nav(self, x: float, y: float, yaw: float = 0.0, wait_timeout_s: float = 90.0) -> int:
         from navigation.obstacle_avoidance.slam_service import SlamOperateClient
 
         client = SlamOperateClient()
@@ -650,19 +1034,39 @@ class Robot:
         qz = math.sin(float(yaw) * 0.5)
         qw = math.cos(float(yaw) * 0.5)
         resp = client.pose_nav(float(x), float(y), 0.0, 0.0, 0.0, qz, qw, mode=1)
-        return int(resp.code)
+        if int(resp.code) != 0:
+            return int(resp.code)
+        return 0 if self._wait_pose_nav_arrival(timeout_s=wait_timeout_s) else -1
 
     def navigate_path(self, obs_avoid: bool = True, clear_on_finish: bool = True) -> bool:
         if not self._path_points:
             raise RuntimeError("No path points queued. Call set_path_point(...) first.")
+        try:
+            self.set_gait_type(0)
+        except Exception as exc:
+            print(f"[navigate_path] warning: failed to set gait_type=0 ({exc})")
 
         ok = True
         try:
             for idx, (x, y, yaw) in enumerate(self._path_points, start=1):
-                if obs_avoid:
-                    rc = self._run_dynamic_nav(x, y)
+                pos = self.get_position()
+                if pos is not None:
+                    dxy = math.hypot(float(x) - float(pos[0]), float(y) - float(pos[1]))
+                    # pose_nav often rejects already-reached goals with rc=4.
+                    if dxy <= 0.20:
+                        continue
+                if obs_avoid and self.nav_use_external_astar:
+                    rc = self._run_dynamic_nav(x, y, use_rgbd_depth_guard=True)
                 else:
+                    # Default: robot-side planning/execution through SLAM pose_nav.
                     rc = self._run_pose_nav(x, y, yaw)
+                    if rc == 4 and pos is not None:
+                        dxy = math.hypot(float(x) - float(pos[0]), float(y) - float(pos[1]))
+                        if dxy <= 0.30:
+                            rc = 0
+                    if rc != 0:
+                        print(f"[navigate_path] pose_nav rejected (rc={rc}); trying local dynamic nav fallback.")
+                        rc = self._run_dynamic_nav(x, y, use_rgbd_depth_guard=True)
                 if rc != 0:
                     print(f"[navigate_path] failed at point {idx}: ({x:.3f},{y:.3f},{yaw:.3f}) rc={rc}")
                     ok = False
@@ -671,6 +1075,242 @@ class Robot:
             if clear_on_finish:
                 self._path_points.clear()
         return ok
+
+    # ------------------------------------------------------------------
+    # Unified SLAM service GUI
+    # ------------------------------------------------------------------
+
+    def _keyboard_controller_path(self) -> Path:
+        candidates = [
+            SCRIPTS_ROOT / "basic" / "safety" / "keyboard_controller.py",
+            DEV_OTHER_SAFETY_DIR / "keyboard_controller.py",
+        ]
+        for p in candidates:
+            if p.exists():
+                return p
+        raise FileNotFoundError("keyboard_controller.py not found in basic/safety or dev/other/safety")
+
+    def _launch_teleop(self, input_mode: str = "curses") -> subprocess.Popen:
+        script = self._keyboard_controller_path()
+        base_cmd = [sys.executable, str(script), "--iface", self.iface, "--input", input_mode]
+
+        if input_mode == "curses":
+            term_launchers = [
+                ["x-terminal-emulator", "-e"] if shutil.which("x-terminal-emulator") else None,
+                ["gnome-terminal", "--"] if shutil.which("gnome-terminal") else None,
+                ["konsole", "-e"] if shutil.which("konsole") else None,
+                ["xterm", "-e"] if shutil.which("xterm") else None,
+            ]
+            for prefix in term_launchers:
+                if not prefix:
+                    continue
+                try:
+                    return subprocess.Popen(prefix + base_cmd, start_new_session=True)
+                except Exception:
+                    continue
+
+        return subprocess.Popen(base_cmd, start_new_session=True)
+
+    def slam_service(
+        self,
+        save_folder: str = "./maps",
+        save_every: int = 1,
+        save_latest: bool = True,
+        save_prefix: str = "live_slam_latest",
+        viz: bool = False,
+    ) -> int:
+        try:
+            from PyQt5 import QtCore, QtWidgets
+        except Exception:
+            try:
+                from PySide6 import QtCore, QtWidgets  # type: ignore
+            except Exception as exc:
+                raise RuntimeError(
+                    "PyQt is required for slam_service(). Install PyQt5 or PySide6."
+                ) from exc
+
+        robot = self
+
+        class _SlamServiceWindow(QtWidgets.QWidget):  # type: ignore[misc]
+            def __init__(self) -> None:
+                super().__init__()
+                self.setWindowTitle("SLAM Service")
+                self.resize(620, 520)
+
+                self._teleop_proc: subprocess.Popen | None = None
+                self._follow_thread: threading.Thread | None = None
+                self._follow_result: tuple[bool, str] | None = None
+
+                self._status = QtWidgets.QLabel("idle")
+                self._path_list = QtWidgets.QListWidget()
+                self._obs_avoid = QtWidgets.QCheckBox("Obstacle Avoid Navigation")
+                self._obs_avoid.setChecked(True)
+                self._clear_on_finish = QtWidgets.QCheckBox("Clear Path On Finish")
+                self._clear_on_finish.setChecked(True)
+
+                self._start_btn = QtWidgets.QPushButton("Start SLAM")
+                self._stop_btn = QtWidgets.QPushButton("Stop SLAM")
+                self._teleop_start_btn = QtWidgets.QPushButton("Start Teleop (curses)")
+                self._teleop_stop_btn = QtWidgets.QPushButton("Stop Teleop")
+                self._add_pose_btn = QtWidgets.QPushButton("Add Current Pose")
+                self._clear_btn = QtWidgets.QPushButton("Clear Path")
+                self._follow_btn = QtWidgets.QPushButton("Follow Path")
+
+                btn_row1 = QtWidgets.QHBoxLayout()
+                btn_row1.addWidget(self._start_btn)
+                btn_row1.addWidget(self._stop_btn)
+                btn_row2 = QtWidgets.QHBoxLayout()
+                btn_row2.addWidget(self._teleop_start_btn)
+                btn_row2.addWidget(self._teleop_stop_btn)
+                btn_row3 = QtWidgets.QHBoxLayout()
+                btn_row3.addWidget(self._add_pose_btn)
+                btn_row3.addWidget(self._clear_btn)
+                btn_row3.addWidget(self._follow_btn)
+
+                layout = QtWidgets.QVBoxLayout()
+                layout.addWidget(self._status)
+                layout.addLayout(btn_row1)
+                layout.addLayout(btn_row2)
+                layout.addWidget(self._obs_avoid)
+                layout.addWidget(self._clear_on_finish)
+                layout.addLayout(btn_row3)
+                layout.addWidget(QtWidgets.QLabel("Queued Path Points (x, y, yaw):"))
+                layout.addWidget(self._path_list)
+                self.setLayout(layout)
+
+                self._start_btn.clicked.connect(self._start_slam)
+                self._stop_btn.clicked.connect(self._stop_slam)
+                self._teleop_start_btn.clicked.connect(self._start_teleop)
+                self._teleop_stop_btn.clicked.connect(self._stop_teleop)
+                self._add_pose_btn.clicked.connect(self._add_pose)
+                self._clear_btn.clicked.connect(self._clear_path)
+                self._follow_btn.clicked.connect(self._follow_path)
+
+                self._timer = QtCore.QTimer(self)
+                self._timer.setInterval(400)
+                self._timer.timeout.connect(self._refresh)
+                self._timer.start()
+                self._refresh()
+
+            def _refresh(self) -> None:
+                follow_alive = self._follow_thread is not None and self._follow_thread.is_alive()
+                self._follow_btn.setEnabled(not follow_alive)
+
+                pos = robot.get_position()
+                yaw = robot.get_yaw()
+                pose_txt = "pose unavailable"
+                if pos is not None:
+                    pose_txt = f"x={pos[0]:.3f} y={pos[1]:.3f} yaw={(yaw if yaw is not None else 0.0):.3f}"
+                self._status.setText(
+                    f"slam_running={robot.slam_is_running} | queued={len(robot.get_path_points())} | {pose_txt}"
+                )
+
+                self._path_list.clear()
+                for x, y, yyaw in robot.get_path_points():
+                    self._path_list.addItem(f"{x:.3f}, {y:.3f}, {yyaw:.3f}")
+
+                if not follow_alive and self._follow_result is not None:
+                    ok, err = self._follow_result
+                    self._follow_result = None
+                    if err:
+                        QtWidgets.QMessageBox.critical(self, "Follow Path Failed", err)
+                    elif not ok:
+                        QtWidgets.QMessageBox.warning(self, "Follow Path", "Path execution did not complete.")
+
+            def _start_slam(self) -> None:
+                try:
+                    robot.start_slam(
+                        save_folder=save_folder,
+                        save_every=save_every,
+                        save_latest=save_latest,
+                        save_prefix=save_prefix,
+                        viz=viz,
+                    )
+                except Exception as exc:
+                    QtWidgets.QMessageBox.critical(self, "Start SLAM Failed", str(exc))
+                self._refresh()
+
+            def _stop_slam(self) -> None:
+                try:
+                    robot.stop_slam(save_folder=save_folder)
+                except Exception as exc:
+                    QtWidgets.QMessageBox.critical(self, "Stop SLAM Failed", str(exc))
+                self._refresh()
+
+            def _start_teleop(self) -> None:
+                if self._teleop_proc is not None and self._teleop_proc.poll() is None:
+                    return
+                try:
+                    self._teleop_proc = robot._launch_teleop(input_mode="curses")
+                except Exception as exc:
+                    QtWidgets.QMessageBox.critical(self, "Teleop Failed", str(exc))
+
+            def _stop_teleop(self) -> None:
+                if self._teleop_proc is None or self._teleop_proc.poll() is not None:
+                    return
+                try:
+                    os.killpg(os.getpgid(self._teleop_proc.pid), signal.SIGINT)
+                except Exception:
+                    try:
+                        self._teleop_proc.terminate()
+                    except Exception:
+                        pass
+
+            def _add_pose(self) -> None:
+                pos = robot.get_position()
+                yaw = robot.get_yaw()
+                if pos is None:
+                    QtWidgets.QMessageBox.warning(self, "Pose Unavailable", "No current pose from sensors.")
+                    return
+                try:
+                    robot.set_path_point(float(pos[0]), float(pos[1]), float(yaw if yaw is not None else 0.0))
+                except Exception as exc:
+                    QtWidgets.QMessageBox.warning(self, "Add Pose Failed", str(exc))
+                self._refresh()
+
+            def _clear_path(self) -> None:
+                robot.clear_path_points()
+                self._refresh()
+
+            def _follow_path(self) -> None:
+                if self._follow_thread is not None and self._follow_thread.is_alive():
+                    return
+
+                def _run() -> None:
+                    ok = False
+                    err = ""
+                    try:
+                        ok = robot.navigate_path(
+                            obs_avoid=bool(self._obs_avoid.isChecked()),
+                            clear_on_finish=bool(self._clear_on_finish.isChecked()),
+                        )
+                    except Exception as exc:
+                        err = str(exc)
+                    self._follow_result = (ok, err)
+
+                self._follow_thread = threading.Thread(target=_run, daemon=True)
+                self._follow_thread.start()
+
+            def closeEvent(self, event: Any) -> None:  # noqa: N802
+                try:
+                    self._timer.stop()
+                except Exception:
+                    pass
+                super().closeEvent(event)
+
+        app = QtWidgets.QApplication.instance()
+        own_app = app is None
+        if app is None:
+            app = QtWidgets.QApplication(sys.argv)
+
+        window = _SlamServiceWindow()
+        self._slam_service_windows.append(window)
+        window.destroyed.connect(lambda *_: self._slam_service_windows.remove(window) if window in self._slam_service_windows else None)
+        window.show()
+
+        if own_app:
+            return int(app.exec())
+        return 0
 
     # ------------------------------------------------------------------
     # SLAM debug API (mirrors api_util.py sequence)
@@ -775,6 +1415,7 @@ class Robot:
     def hanged_boot(self) -> None:
         """Re-run hanger boot sequence and refresh locomotion client."""
         self._client = hanger_boot_sequence(iface=self.iface)
+        self._ensure_balanced_gait_mode()
 
     def say(self, text: str = "what would you like me to say?") -> None:
         audio_dir = SCRIPTS_ROOT / "basic" / "audio"

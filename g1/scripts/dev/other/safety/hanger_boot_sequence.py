@@ -52,6 +52,15 @@ def _fsm_mode(client: LocoClient) -> Optional[int]:
     return _rpc_get_int(client, ROBOT_API_ID_LOCO_GET_FSM_MODE)
 
 
+def _set_balanced_mode(client: LocoClient, logger: logging.Logger) -> None:
+    """Best-effort normalization to balanced stand mode."""
+    try:
+        client.BalanceStand(0)
+        logger.info("%-12s → FSM %s   mode %s", "balance(0)", _fsm_id(client), _fsm_mode(client))
+    except Exception as exc:
+        logger.warning("Failed to set BalanceStand(0): %s", exc)
+
+
 def hanger_boot_sequence(
     iface: str = "enp68s0f1",
     step: float = 0.02,
@@ -99,13 +108,7 @@ def hanger_boot_sequence(
                 "Robot already in balanced stand (FSM 200, mode %s) – skipping boot sequence.",
                 cur_mode,
             )
-
-            # Leave the existing balance mode unchanged – if the operator
-            # previously enabled continuous gait it will remain active; if
-            # the robot was static it will stay still.  This avoids toggling
-            # modes unnecessarily and prevents inadvertent “stepping in
-            # place” when no motion is desired.
-
+            _set_balanced_mode(bot, logger)
             return bot
     except Exception:
         # Fallback to the full sequence if any check fails (e.g. communication
@@ -177,6 +180,7 @@ def hanger_boot_sequence(
     # continuous gait (balance-mode 1) when they actually want to walk.
 
     bot.Start(); show("start")
+    _set_balanced_mode(bot, logger)
 
     # Caller can now send velocity commands.
     return bot
