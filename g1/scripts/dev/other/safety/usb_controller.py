@@ -59,6 +59,10 @@ def main() -> None:
     args = parser.parse_args()
 
     bot = hanger_boot_sequence(iface=args.iface)
+    try:
+        bot.BalanceStand(0)
+    except Exception:
+        pass
 
     pygame.init()
     pygame.joystick.init()
@@ -100,6 +104,7 @@ def main() -> None:
                 bot.Squat2StandUp()
                 time.sleep(1.0)
                 bot.Start()
+                bot.BalanceStand(0)
                 active = True
                 time.sleep(0.5)
                 continue

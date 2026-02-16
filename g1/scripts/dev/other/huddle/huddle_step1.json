@@ -1,12 +1,12 @@
 {
-  "arm": "right",
+  "arm": "left",
   "steps": [
     {
-      "name": "shoulder_90",
+      "name": "shoulder_150",
       "duration": 2.0,
       "hold": 0.5,
       "descriptions": [
-        "right shoulder - 90 degrees"
+        "left shoulder - 150 degrees"
       ]
     }
   ]
