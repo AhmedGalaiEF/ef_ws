@@ -9,12 +9,15 @@ pbd_demonstrate.py.
 from __future__ import annotations
 
 import argparse
+import csv
+import os
+import re
 import threading
 import time
 from typing import Dict, List
 
 import numpy as np
-
+import pickle
 try:
     from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelPublisher, ChannelSubscriber
     from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
@@ -32,6 +35,7 @@ from safety.hanger_boot_sequence import hanger_boot_sequence
 NOT_USED_IDX = 29  # enable arm sdk
 LEFT_ARM_IDX = [15, 16, 17, 18, 19, 20, 21]
 RIGHT_ARM_IDX = [22, 23, 24, 25, 26, 27, 28]
+WAIST_YAW_IDX = 12
 
 
 def _rot_x(a: float) -> np.ndarray:
@@ -210,6 +214,31 @@ def _compute_ik_qs(joints: List[int], qs: np.ndarray, verbose: bool = True) -> n
     return out
 
 
+def _select_replay_qs(joints: List[int], qs: np.ndarray, arm: str) -> tuple[List[int], np.ndarray]:
+    c_map = _col_map(joints)
+    selected: List[int] = []
+    required: List[int] = []
+    if arm in ("left", "both"):
+        required.extend(LEFT_ARM_IDX)
+        selected.extend(LEFT_ARM_IDX)
+    if arm in ("right", "both"):
+        required.extend(RIGHT_ARM_IDX)
+        selected.extend(RIGHT_ARM_IDX)
+
+    missing = [j for j in required if j not in c_map]
+    if missing:
+        raise SystemExit(
+            f"Motion file missing required joints for --arm={arm}: {missing}. "
+            "Record with pbd_demonstrate.py --arm both (default)."
+        )
+
+    if WAIST_YAW_IDX in c_map:
+        selected.append(WAIST_YAW_IDX)
+
+    cols = [c_map[j] for j in selected]
+    return selected, qs[:, cols]
+
+
 def _resolve_lowstate_type():
     for module_path in (
         "unitree_sdk2py.idl.unitree_hg.msg.dds_",
@@ -328,10 +357,89 @@ def _interp_row(ts: np.ndarray, qs: np.ndarray, t: float) -> np.ndarray:
     return qs[lo] * (1.0 - a) + qs[hi] * a
 
 
+def _load_motion_file(path: str) -> Dict[str, np.ndarray]:
+    if not path:
+        raise ValueError("motion file path is empty")
+    if not os.path.exists(path):
+        raise FileNotFoundError(path)
+
+    ext = os.path.splitext(path)[1].lower()
+    if ext == ".npz":
+        with np.load(path, allow_pickle=True) as data:
+            return {k: np.asarray(data[k]) for k in data.files}
+    if ext == ".csv":
+        with open(path, "r", encoding="utf-8", newline="") as f:
+            reader = csv.DictReader(f)
+            if not reader.fieldnames:
+                raise ValueError(f"CSV has no header: {path}")
+
+            ts_key = None
+            for k in ("t_s", "ts", "time_s", "time"):
+                if k in reader.fieldnames:
+                    ts_key = k
+                    break
+            if ts_key is None:
+                raise ValueError(
+                    f"CSV must include one time column (t_s/ts/time_s/time): {path}"
+                )
+
+            joint_cols: List[tuple[int, str]] = []
+            for name in reader.fieldnames:
+                m = re.fullmatch(r"j(\d+)", str(name).strip().lower())
+                if m:
+                    joint_cols.append((int(m.group(1)), name))
+            if not joint_cols:
+                raise ValueError(f"CSV must include joint columns like j22,j23,...: {path}")
+
+            ts_vals: List[float] = []
+            q_rows: List[List[float]] = []
+            for row in reader:
+                if not row:
+                    continue
+                t_raw = row.get(ts_key)
+                if t_raw is None or str(t_raw).strip() == "":
+                    continue
+                ts_vals.append(float(t_raw))
+                q_rows.append([float(row[col_name]) for _, col_name in joint_cols])
+
+            if not ts_vals or not q_rows:
+                raise ValueError(f"CSV has no data rows: {path}")
+
+            return {
+                "joints": np.asarray([j for j, _ in joint_cols], dtype=int),
+                "ts": np.asarray(ts_vals, dtype=float),
+                "qs": np.asarray(q_rows, dtype=float),
+            }
+    if ext in (".pkl", ".pickle"):
+        with open(path, "rb") as f:
+            obj = pickle.load(f)
+        if not isinstance(obj, dict):
+            raise ValueError(f"Pickle motion file must contain a dict, got: {type(obj).__name__}")
+        return {str(k): np.asarray(v) for k, v in obj.items()}
+
+    # Fallback: try NPZ first, then pickle.
+    try:
+        with np.load(path, allow_pickle=True) as data:
+            return {k: np.asarray(data[k]) for k in data.files}
+    except Exception:
+        try:
+            with open(path, "rb") as f:
+                obj = pickle.load(f)
+            if not isinstance(obj, dict):
+                raise ValueError(f"Unsupported motion file format: {path}")
+            return {str(k): np.asarray(v) for k, v in obj.items()}
+        except Exception as exc:
+            raise ValueError(
+                f"Unsupported motion file format for '{path}'. "
+                "Use .npz, .csv (t_s + jXX columns), or .pkl/.pickle dict."
+            ) from exc
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Replay recorded arm motion.")
     parser.add_argument("--iface", default="enp1s0", help="network interface for DDS")
-    parser.add_argument("--file", default="/tmp/pbd_motion.npz", help="input .npz file")
+    parser.add_argument("--file", default="/tmp/pbd_motion.npz", help="input motion file (.npz or .pkl/.pickle)")
+    parser.add_argument("--arm", choices=["left", "right", "both"], default="both", help="which arm(s) to replay")
     parser.add_argument("--mode", choices=["joint", "fk", "ik"], default="fk", help="trajectory replay space")
     parser.add_argument("--speed", type=float, default=1.0, help="time scale (1.0=real-time)")
     parser.add_argument("--cmd-hz", type=float, default=50.0, help="command rate (Hz)")
@@ -342,8 +450,7 @@ def main() -> None:
     args = parser.parse_args()
 
     hanger_boot_sequence(iface=args.iface)
-
-    data = np.load(args.file)
+    data = _load_motion_file(args.file)
     joints = data["joints"].astype(int).tolist()
     ts = data["ts"].astype(float)
     qs = _resolve_replay_qs(data, args.mode)
@@ -354,6 +461,7 @@ def main() -> None:
         raise SystemExit("Invalid motion file: ts and qs length mismatch.")
     if qs.shape[1] != len(joints):
         raise SystemExit("Invalid motion file: joints and qs width mismatch.")
+    joints, qs = _select_replay_qs(joints, qs, arm=args.arm)
 
     ctrl = LowCmdController(iface=args.iface, joints=joints, kp=args.kp, kd=args.kd)
     seeded = ctrl.seed_from_lowstate(timeout_s=args.seed_timeout)
