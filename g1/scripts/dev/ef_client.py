@@ -1466,7 +1466,7 @@ class Robot:
     # Path points + navigation
     # ------------------------------------------------------------------
 
-    def slam_set_path_point(self, x: float, y: float, yaw: float = 0.0) -> None:
+    def set_path_point(self, x: float, y: float, yaw: float = 0.0) -> None:
         if not self.slam_is_running:
             raise RuntimeError("set_path_point is only allowed while slam_is_running=True")
         self._path_points.append((float(x), float(y), float(yaw)))
