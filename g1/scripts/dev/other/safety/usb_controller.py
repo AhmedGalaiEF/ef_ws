@@ -4,39 +4,45 @@ usb_controller.py — USB gamepad teleop for Unitree G1.
 
 Requires: pip install pygame
 
-Controls (Xbox-style layout):
+Controls:
     Left stick Y  : forward / backward (vx)
     Left stick X  : strafe left / right (vy)
     Right stick X : turn left / right (vyaw)
 
-    A  : Damp (soft stop — motors go limp)
-    B  : BalanceStand (stand still, balanced)
-    X  : Start / Dev Mode (re-enter walking-ready FSM-200)
-    Y  : ZeroTorque (emergency — kills all motors, robot WILL fall)
+    Start  : BalancedStand(0) and re-enable controller output
+    Select : StopMove and disable controller output
 
-    Start button : StopMove (zero velocity, keep standing)
+    L2 + DPad Up    : Damp
+    L2 + DPad Right : ZeroTorque
+
+    Hold R2         : run gait (SetGaitType(1))
+    Release R2      : walk gait (SetGaitType(0))
 """
 from __future__ import annotations
 
 import argparse
+import subprocess
+import sys
 import time
+from pathlib import Path
 
 import pygame
 
 from hanger_boot_sequence import hanger_boot_sequence
 
 
-# Xbox button indices (standard Linux xpad mapping)
-BTN_A = 0
-BTN_B = 1
-BTN_X = 2
-BTN_Y = 3
+# Common button indices (can vary by controller)
+BTN_SELECT = 6
 BTN_START = 7
+BTN_L2_FALLBACK = 4
+BTN_R2_FALLBACK = 5
 
 # Axis indices
 AXIS_LX = 0   # left stick X  -> vy (strafe)
 AXIS_LY = 1   # left stick Y  -> vx (forward/back, inverted)
 AXIS_RX = 3   # right stick X -> vyaw (turn)
+AXIS_L2 = 2
+AXIS_R2 = 5
 
 MAX_VX = 0.5    # m/s
 MAX_VY = 0.3    # m/s
@@ -52,6 +58,28 @@ def apply_deadzone(value: float, dz: float) -> float:
     return sign * (abs(value) - dz) / (1.0 - dz)
 
 
+def _axis_pressed(v: float) -> bool:
+    # Supports both [-1..1] and [0..1] trigger ranges.
+    val = float(v)
+    if val < -1.0:
+        val = -1.0
+    if val > 1.0:
+        val = 1.0
+    norm = 0.5 * (val + 1.0)
+    return norm >= 0.60
+
+
+def _set_red_headlight(iface: str) -> None:
+    script = Path(__file__).resolve().parents[2] / "basic" / "headlight_client" / "headlight.py"
+    if not script.exists():
+        return
+    cmd = [sys.executable, str(script), "--iface", iface, "--color", "red", "--intensity", "100"]
+    try:
+        subprocess.run(cmd, check=False)
+    except Exception:
+        pass
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="USB gamepad teleop for G1.")
     parser.add_argument("--iface", default="eth0", help="network interface")
@@ -64,6 +92,8 @@ def main() -> None:
     except Exception:
         pass
 
+    _set_red_headlight(args.iface)
+
     pygame.init()
     pygame.joystick.init()
 
@@ -73,53 +103,79 @@ def main() -> None:
     joy = pygame.joystick.Joystick(args.joy)
     joy.init()
     print(f"Using: {joy.get_name()}  (axes={joy.get_numaxes()}, buttons={joy.get_numbuttons()})")
-    print("A=Damp  B=BalanceStand  X=DevMode  Y=ZeroTorque  Start=StopMove")
+    print("Start=BalancedStand(re-enable)  Select=Stop+Disable  L2+Up=Damp  L2+Right=ZeroTorque")
 
     active = True  # False after Damp/ZeroTorque (don't send Move commands)
     dt = 1.0 / SEND_HZ
+    run_mode = False
+    last_start = False
+    last_select = False
+    last_damp_combo = False
+    last_zt_combo = False
+    last_mode: int | None = None
 
     try:
         while True:
             pygame.event.pump()
 
-            # --- buttons ---
-            if joy.get_button(BTN_Y):
-                print("[Y] ZeroTorque — EMERGENCY")
+            # --- gating buttons ---
+            start_pressed = joy.get_numbuttons() > BTN_START and bool(joy.get_button(BTN_START))
+            select_pressed = joy.get_numbuttons() > BTN_SELECT and bool(joy.get_button(BTN_SELECT))
+
+            if start_pressed and not last_start:
+                print("[Start] BalanceStand + enable controller")
+                bot.StopMove()
+                bot.BalanceStand(0)
+                active = True
+            if select_pressed and not last_select:
+                print("[Select] Stop + disable controller")
+                bot.StopMove()
+                active = False
+
+            last_start = start_pressed
+            last_select = select_pressed
+
+            # --- trigger + dpad combos for FSM ---
+            l2_pressed = False
+            if joy.get_numaxes() > AXIS_L2:
+                l2_pressed = _axis_pressed(joy.get_axis(AXIS_L2))
+            if not l2_pressed and joy.get_numbuttons() > BTN_L2_FALLBACK:
+                l2_pressed = bool(joy.get_button(BTN_L2_FALLBACK))
+            hat_x, hat_y = (0, 0)
+            if joy.get_numhats() > 0:
+                hat_x, hat_y = joy.get_hat(0)
+
+            damp_combo = l2_pressed and hat_y > 0
+            zt_combo = l2_pressed and hat_x > 0
+
+            if damp_combo and not last_damp_combo:
+                print("[L2 + DPad Up] Damp")
+                bot.Damp()
+                active = False
+            if zt_combo and not last_zt_combo:
+                print("[L2 + DPad Right] ZeroTorque — EMERGENCY")
                 bot.ZeroTorque()
                 active = False
-                time.sleep(0.5)
-                continue
 
-            if joy.get_button(BTN_A):
-                print("[A] Damp")
-                bot.Damp()
-                active = False
-                time.sleep(0.5)
-                continue
+            last_damp_combo = damp_combo
+            last_zt_combo = zt_combo
 
-            if joy.get_button(BTN_X):
-                print("[X] Dev Mode — Squat2StandUp + Start")
-                bot.Damp()
-                time.sleep(0.5)
-                bot.Squat2StandUp()
-                time.sleep(1.0)
-                bot.Start()
-                bot.BalanceStand(0)
-                active = True
-                time.sleep(0.5)
-                continue
-
-            if joy.get_button(BTN_B):
-                print("[B] BalanceStand")
-                bot.BalanceStand(0)
-                active = True
-                time.sleep(0.5)
-                continue
-
-            if joy.get_numbuttons() > BTN_START and joy.get_button(BTN_START):
-                bot.StopMove()
-                time.sleep(0.2)
-                continue
+            # --- run/walk gait mode from R2 hold ---
+            r2_pressed = False
+            if joy.get_numaxes() > AXIS_R2:
+                r2_pressed = _axis_pressed(joy.get_axis(AXIS_R2))
+            if not r2_pressed and joy.get_numbuttons() > BTN_R2_FALLBACK:
+                r2_pressed = bool(joy.get_button(BTN_R2_FALLBACK))
+            if r2_pressed != run_mode:
+                run_mode = r2_pressed
+                mode = 1 if run_mode else 0
+                if mode != last_mode:
+                    try:
+                        bot.SetGaitType(mode)
+                        last_mode = mode
+                        print("[R2] run gait" if run_mode else "[R2 released] walk gait")
+                    except Exception:
+                        pass
 
             # --- sticks ---
             if active:

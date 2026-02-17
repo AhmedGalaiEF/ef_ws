@@ -38,7 +38,14 @@ def _load_live_slam_save_module():
 
 
 class _NavOverlay:
-    def __init__(self, iface: str, domain_id: int, info_topic: str, key_topic: str) -> None:
+    def __init__(
+        self,
+        iface: str,
+        domain_id: int,
+        info_topic: str,
+        key_topic: str,
+        plan_file: str | None = None,
+    ) -> None:
         self._ok = False
         self._sub = None
         self._lock = threading.Lock()
@@ -47,6 +54,8 @@ class _NavOverlay:
         self._polyline_xy: list[tuple[float, float]] = []
         self._trail_xy: list[tuple[float, float]] = []
         self._last_info_ts = 0.0
+        self._plan_file = Path(plan_file).expanduser() if plan_file else None
+        self._last_plan_mtime = 0.0
 
         try:
             from unitree_sdk2py.core.channel import ChannelFactoryInitialize
@@ -93,6 +102,40 @@ class _NavOverlay:
         return []
 
     def update(self) -> None:
+        if self._plan_file is not None:
+            try:
+                if self._plan_file.exists():
+                    mtime = float(self._plan_file.stat().st_mtime)
+                    if mtime > self._last_plan_mtime:
+                        self._last_plan_mtime = mtime
+                        payload = json.loads(self._plan_file.read_text(encoding="utf-8"))
+                        if isinstance(payload, dict):
+                            goal = payload.get("goal")
+                            if isinstance(goal, dict):
+                                gx = float(goal.get("x"))
+                                gy = float(goal.get("y"))
+                                if math.isfinite(gx) and math.isfinite(gy):
+                                    with self._lock:
+                                        self._goal_xy = (gx, gy)
+                            path = payload.get("path")
+                            if isinstance(path, list):
+                                pts: list[tuple[float, float]] = []
+                                for p in path:
+                                    if not isinstance(p, dict):
+                                        continue
+                                    try:
+                                        px = float(p.get("x"))
+                                        py = float(p.get("y"))
+                                    except Exception:
+                                        continue
+                                    if math.isfinite(px) and math.isfinite(py):
+                                        pts.append((px, py))
+                                if len(pts) >= 2:
+                                    with self._lock:
+                                        self._polyline_xy = pts
+            except Exception:
+                pass
+
         if not self._ok or self._sub is None:
             return
 
@@ -238,10 +281,17 @@ def main() -> None:
     ap.add_argument("--domain-id", type=int, default=0, help="DDS domain id")
     ap.add_argument("--slam-info-topic", default="rt/slam_info", help="SLAM info topic")
     ap.add_argument("--slam-key-topic", default="rt/slam_key_info", help="SLAM key topic")
+    ap.add_argument("--overlay-plan-file", default="/tmp/g1_nav_overlay_plan.json", help="JSON file for external planned path overlay")
     args = ap.parse_args()
 
     lss = _load_live_slam_save_module()
-    overlay = _NavOverlay(args.iface, int(args.domain_id), args.slam_info_topic, args.slam_key_topic)
+    overlay = _NavOverlay(
+        args.iface,
+        int(args.domain_id),
+        args.slam_info_topic,
+        args.slam_key_topic,
+        plan_file=args.overlay_plan_file,
+    )
     lss._Viewer = _make_overlay_viewer_class(lss, overlay)  # type: ignore[attr-defined]
 
     save_dir = Path(args.save_dir) if args.save_dir else None

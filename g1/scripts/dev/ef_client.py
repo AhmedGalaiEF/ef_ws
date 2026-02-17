@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 import shlex
 import shutil
 import signal
@@ -70,6 +71,47 @@ except Exception:
 DEFAULT_SPORT_TOPIC = "rt/odommodestate"
 DEFAULT_LIDAR_MAP_TOPIC = "rt/utlidar/map_state"
 DEFAULT_LIDAR_CLOUD_TOPIC = "rt/utlidar/cloud_deskewed"
+DEFAULT_NAV_OVERLAY_PLAN_FILE = "/tmp/g1_nav_overlay_plan.json"
+
+ARM_JOINT_ALIASES = {
+    "shoulder": "shoulder_pitch",
+    "shoulder_pitch": "shoulder_pitch",
+    "shoulder_roll": "shoulder_roll",
+    "shoulder_yaw": "shoulder_yaw",
+    "elbow": "elbow",
+    "wrist": "wrist_pitch",
+    "wrist_pitch": "wrist_pitch",
+    "wrist_roll": "wrist_roll",
+    "wrist_yaw": "wrist_yaw",
+    "waist_yaw": "waist_yaw",
+    "waist": "waist_yaw",
+}
+
+LEG_JOINT_ALIASES = {
+    "hip_pitch": "hip_pitch",
+    "hip_roll": "hip_roll",
+    "hip_yaw": "hip_yaw",
+    "knee": "knee",
+    "ankle_pitch": "ankle_pitch",
+    "ankle_roll": "ankle_roll",
+    "ankle_a": "ankle_roll",
+    "ankle_b": "ankle_pitch",
+}
+
+G1_LEG_JOINT_INDEX = {
+    "left_hip_pitch": 0,
+    "left_hip_roll": 1,
+    "left_hip_yaw": 2,
+    "left_knee": 3,
+    "left_ankle_pitch": 4,
+    "left_ankle_roll": 5,
+    "right_hip_pitch": 6,
+    "right_hip_roll": 7,
+    "right_hip_yaw": 8,
+    "right_knee": 9,
+    "right_ankle_pitch": 10,
+    "right_ankle_roll": 11,
+}
 
 
 @dataclass
@@ -240,10 +282,11 @@ class Robot:
         rgb_height: int = 480,
         rgb_fps: int = 30,
         nav_map: str | None = None,
-        nav_extra_args: str = "--smooth --use-live-map --no-viz",
+        nav_extra_args: str = "--smooth --no-viz --no-live-map --inflation 1",
         nav_use_external_astar: bool = False,
         rgbd_obs_near_m: float = 0.75,
         rgbd_obs_min_coverage: float = 0.18,
+        lidar_ignore_near_m: float = 0.0,
     ) -> None:
         self.iface = iface
         self.domain_id = int(domain_id)
@@ -264,6 +307,7 @@ class Robot:
         self.nav_use_external_astar = bool(nav_use_external_astar)
         self.rgbd_obs_near_m = float(rgbd_obs_near_m)
         self.rgbd_obs_min_coverage = float(rgbd_obs_min_coverage)
+        self.lidar_ignore_near_m = max(0.0, float(lidar_ignore_near_m))
 
         self._lock = threading.Lock()
         self._sport: SportModeState_ | None = None
@@ -280,11 +324,14 @@ class Robot:
         self._rgbd_proc: subprocess.Popen | None = None
         self._slam_proc: subprocess.Popen | None = None
         self._slam_log_fp: Any | None = None
+        self._usb_proc: subprocess.Popen | None = None
         self.slam_is_running = False
         self._slam_save_dir: str | None = None
 
         self._path_points: list[tuple[float, float, float]] = []
         self._slam_service_windows: list[Any] = []
+        self._nav_overlay_plan_file = Path(DEFAULT_NAV_OVERLAY_PLAN_FILE)
+        self._slam_info_sub: Any | None = None
 
         if safety_boot:
             self._client = hanger_boot_sequence(iface=self.iface)
@@ -499,11 +546,209 @@ class Robot:
     def loco_move(self, vx: float, vy: float, vyaw: float) -> int:
         return self._client.Move(float(vx), float(vy), float(vyaw), continous_move=True)
 
-    def stop_moving(self) -> None:
+    def walk(self, vx: float = 0.0, vy: float = 0.0, vyaw: float = 0.0) -> int:
+        """Balanced gait (type 0) then apply locomotion command."""
+        self.set_gait_type(0)
+        return int(self.loco_move(float(vx), float(vy), float(vyaw)))
+
+    def run(self, vx: float = 0.0, vy: float = 0.0, vyaw: float = 0.0) -> int:
+        """Continuous gait (type 1) then apply locomotion command."""
+        self.set_gait_type(1)
+        return int(self.loco_move(float(vx), float(vy), float(vyaw)))
+
+    @staticmethod
+    def _wrap_angle(a: float) -> float:
+        while a > math.pi:
+            a -= 2.0 * math.pi
+        while a < -math.pi:
+            a += 2.0 * math.pi
+        return a
+
+    @staticmethod
+    def _clamp(value: float, lo: float, hi: float) -> float:
+        return max(lo, min(hi, value))
+
+    def _move_for_feedback(
+        self,
+        distance: float,
+        gait_type: int,
+        max_vx: float,
+        max_vyaw: float,
+        pos_tolerance: float,
+        yaw_tolerance: float,
+        timeout: float,
+        tick: float,
+        kp_lin: float,
+        kp_yaw: float,
+    ) -> bool:
+        pos0 = self.get_position()
+        yaw0 = self.get_yaw()
+        if pos0 is None or yaw0 is None:
+            raise RuntimeError("walk_for/run_for requires live position and IMU yaw.")
+
+        d = float(distance)
+        if abs(d) <= float(pos_tolerance):
+            self.stop()
+            return True
+
+        sign = 1.0 if d >= 0.0 else -1.0
+        target_x = float(pos0[0]) + d * math.cos(float(yaw0))
+        target_y = float(pos0[1]) + d * math.sin(float(yaw0))
+
+        self.set_gait_type(int(gait_type))
+        t0 = time.time()
+        ok = False
+        try:
+            while (time.time() - t0) <= max(0.1, float(timeout)):
+                pos = self.get_position()
+                yaw = self.get_yaw()
+                if pos is None or yaw is None:
+                    time.sleep(max(0.01, float(tick)))
+                    continue
+
+                dx = target_x - float(pos[0])
+                dy = target_y - float(pos[1])
+                dist = math.hypot(dx, dy)
+                if dist <= float(pos_tolerance):
+                    ok = True
+                    break
+
+                target_heading = math.atan2(dy, dx)
+                heading_err = self._wrap_angle(target_heading - float(yaw))
+
+                if abs(heading_err) > float(yaw_tolerance):
+                    vx_cmd = 0.0
+                else:
+                    vx_cmd = sign * self._clamp(float(kp_lin) * dist, 0.0, max(0.0, float(max_vx)))
+                vyaw_cmd = self._clamp(
+                    float(kp_yaw) * heading_err,
+                    -max(0.0, float(max_vyaw)),
+                    max(0.0, float(max_vyaw)),
+                )
+                self.loco_move(vx_cmd, 0.0, vyaw_cmd)
+                time.sleep(max(0.01, float(tick)))
+        finally:
+            self.stop()
+        return ok
+
+    def walk_for(
+        self,
+        distance: float,
+        max_vx: float = 0.25,
+        max_vyaw: float = 0.5,
+        pos_tolerance: float = 0.05,
+        yaw_tolerance: float = 0.20,
+        timeout: float = 20.0,
+        tick: float = 0.05,
+        kp_lin: float = 0.9,
+        kp_yaw: float = 1.6,
+    ) -> bool:
+        """
+        Balanced gait (type 0), move for a relative distance (meters) with
+        IMU/pose feedback correction toward the target pose.
+        """
+        return self._move_for_feedback(
+            distance=distance,
+            gait_type=0,
+            max_vx=max_vx,
+            max_vyaw=max_vyaw,
+            pos_tolerance=pos_tolerance,
+            yaw_tolerance=yaw_tolerance,
+            timeout=timeout,
+            tick=tick,
+            kp_lin=kp_lin,
+            kp_yaw=kp_yaw,
+        )
+
+    def run_for(
+        self,
+        distance: float,
+        max_vx: float = 0.45,
+        max_vyaw: float = 0.8,
+        pos_tolerance: float = 0.07,
+        yaw_tolerance: float = 0.25,
+        timeout: float = 15.0,
+        tick: float = 0.05,
+        kp_lin: float = 1.0,
+        kp_yaw: float = 1.8,
+    ) -> bool:
+        """
+        Continuous gait (type 1), move for a relative distance (meters) with
+        IMU/pose feedback correction toward the target pose.
+        """
+        return self._move_for_feedback(
+            distance=distance,
+            gait_type=1,
+            max_vx=max_vx,
+            max_vyaw=max_vyaw,
+            pos_tolerance=pos_tolerance,
+            yaw_tolerance=yaw_tolerance,
+            timeout=timeout,
+            tick=tick,
+            kp_lin=kp_lin,
+            kp_yaw=kp_yaw,
+        )
+
+    def turn_for(
+        self,
+        angle_deg: float,
+        max_vyaw: float = 0.8,
+        yaw_tolerance_deg: float = 2.5,
+        timeout: float = 10.0,
+        tick: float = 0.05,
+        kp_yaw: float = 1.8,
+        gait_type: int = 0,
+    ) -> bool:
+        """
+        Turn in place by a relative angle in degrees (can be negative).
+        Uses IMU yaw feedback to converge accurately to the target heading.
+        """
+        yaw0 = self.get_yaw()
+        if yaw0 is None:
+            raise RuntimeError("turn_for requires live IMU yaw.")
+
+        delta = math.radians(float(angle_deg))
+        tol = math.radians(max(0.1, float(yaw_tolerance_deg)))
+        if abs(delta) <= tol:
+            self.stop()
+            return True
+
+        target = self._wrap_angle(float(yaw0) + delta)
+        self.set_gait_type(int(gait_type))
+
+        t0 = time.time()
+        ok = False
+        try:
+            while (time.time() - t0) <= max(0.1, float(timeout)):
+                yaw = self.get_yaw()
+                if yaw is None:
+                    time.sleep(max(0.01, float(tick)))
+                    continue
+                err = self._wrap_angle(target - float(yaw))
+                if abs(err) <= tol:
+                    ok = True
+                    break
+                vyaw_cmd = self._clamp(
+                    float(kp_yaw) * err,
+                    -max(0.0, float(max_vyaw)),
+                    max(0.0, float(max_vyaw)),
+                )
+                self.loco_move(0.0, 0.0, vyaw_cmd)
+                time.sleep(max(0.01, float(tick)))
+        finally:
+            self.stop()
+        return ok
+
+    def stop(self) -> None:
+        """Stop locomotion motion commands."""
         if hasattr(self._client, "StopMove"):
             self._client.StopMove()
         else:
             self._client.Move(0.0, 0.0, 0.0, continous_move=False)
+
+    def stop_moving(self) -> None:
+        """Backward-compatible alias for stop()."""
+        self.stop()
 
     @staticmethod
     def _normalize_gait_type(gait_type: int | str) -> int:
@@ -524,6 +769,14 @@ class Robot:
                 raise ValueError(f"Unknown gait_type '{gait_type}'.")
             return int(alias[key])
         return int(gait_type)
+
+    def set_lidar_ignore_near(self, meters: float = 0.0) -> float:
+        """
+        Ignore lidar/map obstacles within this radius (meters) around robot pose
+        when preparing the navigation occupancy map.
+        """
+        self.lidar_ignore_near_m = max(0.0, float(meters))
+        return self.lidar_ignore_near_m
 
     def set_gait_type(self, gait_type: int | str = 0) -> int:
         """
@@ -773,7 +1026,16 @@ class Robot:
         if save_latest:
             cmd.append("--save-latest")
         if viz:
-            cmd.extend(["--iface", self.iface, "--domain-id", str(self.domain_id)])
+            cmd.extend(
+                [
+                    "--iface",
+                    self.iface,
+                    "--domain-id",
+                    str(self.domain_id),
+                    "--overlay-plan-file",
+                    str(self._nav_overlay_plan_file),
+                ]
+            )
 
         log_path = save_dir / "slam_runtime.log"
         self._slam_log_fp = open(log_path, "a", encoding="utf-8", buffering=1)
@@ -849,6 +1111,7 @@ class Robot:
                 except Exception:
                     proc.kill()
         self._slam_proc = None
+        self._clear_nav_overlay_plan()
         if self._slam_log_fp is not None:
             try:
                 self._slam_log_fp.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] stop\n")
@@ -859,10 +1122,116 @@ class Robot:
         self.slam_is_running = False
 
     # ------------------------------------------------------------------
+    # Single-call convenience API
+    # ------------------------------------------------------------------
+
+    def slam_start(
+        self,
+        viz: bool = False,
+        save_folder: str = "./maps",
+        save_every: int = 1,
+        save_latest: bool = True,
+        save_prefix: str = "live_slam_latest",
+    ) -> bool:
+        self.start_slam(
+            save_folder=save_folder,
+            save_every=save_every,
+            save_latest=save_latest,
+            save_prefix=save_prefix,
+            viz=viz,
+        )
+        return bool(self.slam_is_running)
+
+    def slam_stop(self, save_folder: str = "./maps") -> None:
+        self.stop_slam(save_folder=save_folder)
+
+    def slam_add_pose(
+        self,
+        x: float | None = None,
+        y: float | None = None,
+        yaw: float | None = None,
+        use_slam_pose: bool = True,
+    ) -> tuple[float, float, float]:
+        if x is None or y is None:
+            pose = self.get_slam_pose(timeout_s=0.35) if bool(use_slam_pose) and self.slam_is_running else None
+            if pose is None:
+                pos = self.get_position()
+                if pos is None:
+                    raise RuntimeError("No current pose available from SLAM or sport state.")
+                x = float(pos[0])
+                y = float(pos[1])
+                if yaw is None:
+                    yv = self.get_yaw()
+                    yaw = float(yv) if yv is not None else 0.0
+            else:
+                x = float(pose[0])
+                y = float(pose[1])
+                if yaw is None:
+                    yaw = float(pose[2])
+        if yaw is None:
+            yaw = 0.0
+        self.set_path_point(float(x), float(y), float(yaw))
+        return (float(x), float(y), float(yaw))
+
+    def slam_nav_pose(
+        self,
+        x: float,
+        y: float,
+        yaw: float = 0.0,
+        obs_avoid: bool = False,
+        use_dynamic_fallback: bool = True,
+        use_rgbd_depth_guard: bool = True,
+    ) -> int:
+        """
+        Navigate to a single pose.
+        - obs_avoid=True: use local dynamic planner.
+        - obs_avoid=False: try robot pose_nav API first.
+        """
+        try:
+            self.set_gait_type(0)
+        except Exception:
+            pass
+
+        if bool(obs_avoid):
+            return int(self._run_dynamic_nav(float(x), float(y), use_rgbd_depth_guard=bool(use_rgbd_depth_guard)))
+
+        rc = int(self._run_pose_nav(float(x), float(y), float(yaw)))
+        if rc != 0 and bool(use_dynamic_fallback):
+            print(f"[nav_pose] pose_nav rejected (rc={rc}); trying local dynamic nav fallback.")
+            return int(self._run_dynamic_nav(float(x), float(y), use_rgbd_depth_guard=bool(use_rgbd_depth_guard)))
+        return rc
+
+    def slam_nav_path(
+        self,
+        points: list[tuple[float, float] | tuple[float, float, float]],
+        obs_avoid: bool = True,
+        clear_on_finish: bool = True,
+        append: bool = False,
+    ) -> bool:
+        """
+        Convenience wrapper to navigate a path in one call.
+        points accepts:
+          - (x, y)
+          - (x, y, yaw)
+        """
+        if not bool(append):
+            self.clear_path_points()
+        for p in points:
+            if len(p) == 2:
+                x, y = p
+                yaw = 0.0
+            elif len(p) == 3:
+                x, y, yaw = p
+            else:
+                raise ValueError(f"Invalid path point {p!r}; expected (x,y) or (x,y,yaw).")
+            self.set_path_point(float(x), float(y), float(yaw))
+        return bool(self.navigate_path(obs_avoid=bool(obs_avoid), clear_on_finish=bool(clear_on_finish)))
+
+    # ------------------------------------------------------------------
     # Path points + navigation
     # ------------------------------------------------------------------
 
-    def set_path_point(self, x: float, y: float, yaw: float = 0.0) -> None:
+    def slam_set_path_point(self, x: float, y: float, yaw: float = 0.0) -> None:
         if not self.slam_is_running:
             raise RuntimeError("set_path_point is only allowed while slam_is_running=True")
         self._path_points.append((float(x), float(y), float(yaw)))
@@ -873,11 +1242,273 @@ class Robot:
     def clear_path_points(self) -> None:
         self._path_points.clear()
 
+    def _clear_nav_overlay_plan(self) -> None:
+        try:
+            if self._nav_overlay_plan_file.exists():
+                self._nav_overlay_plan_file.unlink()
+        except Exception:
+            pass
+
+    def _write_nav_overlay_plan(
+        self,
+        start_xy: tuple[float, float] | None,
+        goal_xy: tuple[float, float] | None,
+        path_xy: list[tuple[float, float]] | None = None,
+        source: str = "preview",
+    ) -> None:
+        if goal_xy is None:
+            return
+        payload: dict[str, Any] = {
+            "source": str(source),
+            "timestamp": time.time(),
+            "goal": {"x": float(goal_xy[0]), "y": float(goal_xy[1])},
+            "path": [],
+        }
+        if start_xy is not None:
+            payload["start"] = {"x": float(start_xy[0]), "y": float(start_xy[1])}
+        pts = path_xy or []
+        if not pts and start_xy is not None:
+            pts = [start_xy, goal_xy]
+        payload["path"] = [{"x": float(px), "y": float(py)} for px, py in pts]
+        try:
+            tmp = self._nav_overlay_plan_file.with_suffix(".tmp")
+            tmp.write_text(json.dumps(payload, ensure_ascii=True), encoding="utf-8")
+            tmp.replace(self._nav_overlay_plan_file)
+        except Exception:
+            pass
+
+    def _ensure_slam_info_sub(self) -> Any | None:
+        if self._slam_info_sub is not None:
+            return self._slam_info_sub
+        try:
+            from navigation.obstacle_avoidance.slam_map import SlamInfoSubscriber
+            sub = SlamInfoSubscriber(self.slam_info_topic, self.slam_key_topic)
+            sub.start()
+            self._slam_info_sub = sub
+            return sub
+        except Exception:
+            return None
+
+    @staticmethod
+    def _parse_slam_pose_payload(payload_raw: str | None) -> tuple[float, float, float] | None:
+        if not payload_raw:
+            return None
+        try:
+            payload = json.loads(payload_raw)
+        except Exception:
+            return None
+        if not isinstance(payload, dict):
+            return None
+        data = payload.get("data")
+        if not isinstance(data, dict):
+            return None
+        cur = data.get("currentPose")
+        if not isinstance(cur, dict):
+            return None
+        try:
+            x = float(cur.get("x"))
+            y = float(cur.get("y"))
+        except Exception:
+            return None
+        # Prefer yaw from quaternion when available.
+        yaw = 0.0
+        try:
+            qx = float(cur.get("q_x", 0.0))
+            qy = float(cur.get("q_y", 0.0))
+            qz = float(cur.get("q_z", 0.0))
+            qw = float(cur.get("q_w", 1.0))
+            siny_cosp = 2.0 * (qw * qz + qx * qy)
+            cosy_cosp = 1.0 - 2.0 * (qy * qy + qz * qz)
+            yaw = math.atan2(siny_cosp, cosy_cosp)
+        except Exception:
+            try:
+                yaw = float(cur.get("yaw", 0.0))
+            except Exception:
+                yaw = 0.0
+        if not (math.isfinite(x) and math.isfinite(y) and math.isfinite(yaw)):
+            return None
+        return (x, y, yaw)
+
+    def get_slam_pose(self, timeout_s: float = 0.4) -> tuple[float, float, float] | None:
+        sub = self._ensure_slam_info_sub()
+        if sub is None:
+            return None
+        t0 = time.time()
+        while time.time() - t0 < max(0.05, float(timeout_s)):
+            for payload in (sub.get_info(), sub.get_key()):
+                pose = self._parse_slam_pose_payload(payload)
+                if pose is not None:
+                    return pose
+            time.sleep(0.03)
+        return None
+
+    @staticmethod
+    def _heightmap_to_occupancy(
+        height_map_msg: HeightMap_,
+        height_threshold: float = 0.15,
+        ignore_near_center_xy: tuple[float, float] | None = None,
+        ignore_near_m: float = 0.0,
+    ) -> Any | None:
+        try:
+            import numpy as np
+            from navigation.obstacle_avoidance.create_map import OccupancyGrid
+        except Exception:
+            return None
+        try:
+            width = int(height_map_msg.width)
+            height = int(height_map_msg.height)
+            resolution = float(height_map_msg.resolution)
+            data = np.array(list(height_map_msg.data), dtype=float)
+            if width <= 0 or height <= 0 or resolution <= 0:
+                return None
+            if data.size != width * height:
+                return None
+            heights = data.reshape((height, width))
+            occ = (heights >= float(height_threshold)).astype(np.int8)
+            origin_x = -width * resolution / 2.0
+            origin_y = -height * resolution / 2.0
+            out = OccupancyGrid(
+                width_m=width * resolution,
+                height_m=height * resolution,
+                resolution=resolution,
+                origin_x=origin_x,
+                origin_y=origin_y,
+            )
+            out.grid = occ
+            if ignore_near_center_xy is not None and float(ignore_near_m) > 0.0:
+                cx, cy = float(ignore_near_center_xy[0]), float(ignore_near_center_xy[1])
+                rr = max(1, int(float(ignore_near_m) / float(resolution)))
+                r0, c0 = out.world_to_grid(cx, cy)
+                import numpy as np
+                y, x = np.ogrid[-rr : rr + 1, -rr : rr + 1]
+                mask = (x * x + y * y) <= (rr * rr)
+                r_lo = max(0, r0 - rr)
+                r_hi = min(out.height_cells - 1, r0 + rr)
+                c_lo = max(0, c0 - rr)
+                c_hi = min(out.width_cells - 1, c0 + rr)
+                sub = out.grid[r_lo : r_hi + 1, c_lo : c_hi + 1]
+                mr0 = rr - (r0 - r_lo)
+                mc0 = rr - (c0 - c_lo)
+                sub[mask[mr0 : mr0 + sub.shape[0], mc0 : mc0 + sub.shape[1]]] = 0
+            return out
+        except Exception:
+            return None
+
+    def _filter_nav_map_near_points(
+        self,
+        map_path: str,
+        start_xy: tuple[float, float] | None,
+    ) -> str:
+        radius_m = float(self.lidar_ignore_near_m)
+        if radius_m <= 0.0 or start_xy is None:
+            return str(map_path)
+        try:
+            from navigation.obstacle_avoidance.create_map import OccupancyGrid, load_from_point_cloud
+            import numpy as np
+        except Exception:
+            return str(map_path)
+        try:
+            lower = str(map_path).lower()
+            if lower.endswith((".pcd", ".ply", ".xyz", ".xyzn", ".xyzrgb")):
+                occ = load_from_point_cloud(
+                    str(map_path),
+                    resolution=0.1,
+                    padding_m=0.5,
+                    height_threshold=0.15,
+                    max_height=None,
+                    origin_centered=True,
+                )
+            else:
+                occ = OccupancyGrid.load(str(map_path))
+            rr = max(1, int(radius_m / float(occ.resolution)))
+            r0, c0 = occ.world_to_grid(float(start_xy[0]), float(start_xy[1]))
+            y, x = np.ogrid[-rr : rr + 1, -rr : rr + 1]
+            mask = (x * x + y * y) <= (rr * rr)
+            r_lo = max(0, r0 - rr)
+            r_hi = min(occ.height_cells - 1, r0 + rr)
+            c_lo = max(0, c0 - rr)
+            c_hi = min(occ.width_cells - 1, c0 + rr)
+            sub = occ.grid[r_lo : r_hi + 1, c_lo : c_hi + 1]
+            mr0 = rr - (r0 - r_lo)
+            mc0 = rr - (c0 - c_lo)
+            sub[mask[mr0 : mr0 + sub.shape[0], mc0 : mc0 + sub.shape[1]]] = 0
+            with tempfile.NamedTemporaryFile(prefix="g1_nav_filtered_", suffix=".npz", delete=False) as tf:
+                out = tf.name
+            occ.save(out)
+            return out
+        except Exception:
+            return str(map_path)
+
+    def _preview_path_from_map(
+        self,
+        map_path: str,
+        start_xy: tuple[float, float],
+        goal_xy: tuple[float, float],
+        inflation: int = 1,
+        allow_diagonal: bool = False,
+        smooth: bool = True,
+    ) -> list[tuple[float, float]] | None:
+        try:
+            from navigation.obstacle_avoidance.create_map import OccupancyGrid, load_from_point_cloud
+            from navigation.obstacle_avoidance.path_planner import astar, smooth_path
+        except Exception:
+            return None
+        try:
+            lower = str(map_path).lower()
+            if lower.endswith((".pcd", ".ply", ".xyz", ".xyzn", ".xyzrgb")):
+                occ = load_from_point_cloud(
+                    str(map_path),
+                    resolution=0.1,
+                    padding_m=0.5,
+                    height_threshold=0.15,
+                    max_height=None,
+                    origin_centered=True,
+                )
+            else:
+                occ = OccupancyGrid.load(str(map_path))
+            plan_grid = occ.inflate(max(0, int(inflation))) if inflation > 0 else occ.grid.copy()
+            s_rc = occ.world_to_grid(float(start_xy[0]), float(start_xy[1]))
+            g_rc = occ.world_to_grid(float(goal_xy[0]), float(goal_xy[1]))
+            path = astar(plan_grid, s_rc, g_rc, allow_diagonal=bool(allow_diagonal))
+            if not path:
+                return None
+            if smooth:
+                path = smooth_path(path, plan_grid, max_skip=5)
+            return [occ.grid_to_world(r, c) for r, c in path]
+        except Exception:
+            return None
+
     def _snapshot_live_slam_map_npz(self, timeout_s: float = 2.0) -> str | None:
         """
         Snapshot current rt/utlidar map_state into a temporary .npz map file.
         This keeps planner map frame aligned with robot pose frame.
         """
+        # Fast path: use already cached HeightMap_ from this process.
+        slam_pose = self.get_slam_pose(timeout_s=0.20)
+        pos = self.get_position()
+        near_center = (
+            (float(slam_pose[0]), float(slam_pose[1])) if slam_pose is not None
+            else ((float(pos[0]), float(pos[1])) if pos is not None else None)
+        )
+        with self._lock:
+            hm = self._lidar_map
+            hm_ts = self._last_lidar_map_ts
+        if hm is not None and (time.time() - float(hm_ts)) <= max(0.2, float(timeout_s) + 0.5):
+            occ = self._heightmap_to_occupancy(
+                hm,
+                height_threshold=0.15,
+                ignore_near_center_xy=near_center,
+                ignore_near_m=self.lidar_ignore_near_m,
+            )
+            if occ is not None:
+                try:
+                    with tempfile.NamedTemporaryFile(prefix="g1_live_nav_", suffix=".npz", delete=False) as tf:
+                        out = tf.name
+                    occ.save(out)
+                    return out
+                except Exception:
+                    pass
+
         try:
             from navigation.obstacle_avoidance.slam_map import SlamMapSubscriber
         except Exception:
@@ -890,6 +1521,20 @@ class Robot:
             occ, _meta = sub.to_occupancy(height_threshold=0.15, max_height=None, origin_centered=True)
             if occ is not None:
                 try:
+                    if near_center is not None and self.lidar_ignore_near_m > 0.0:
+                        rr = max(1, int(float(self.lidar_ignore_near_m) / float(occ.resolution)))
+                        r0, c0 = occ.world_to_grid(float(near_center[0]), float(near_center[1]))
+                        import numpy as np
+                        y, x = np.ogrid[-rr : rr + 1, -rr : rr + 1]
+                        mask = (x * x + y * y) <= (rr * rr)
+                        r_lo = max(0, r0 - rr)
+                        r_hi = min(occ.height_cells - 1, r0 + rr)
+                        c_lo = max(0, c0 - rr)
+                        c_hi = min(occ.width_cells - 1, c0 + rr)
+                        subm = occ.grid[r_lo : r_hi + 1, c_lo : c_hi + 1]
+                        mr0 = rr - (r0 - r_lo)
+                        mc0 = rr - (c0 - c_lo)
+                        subm[mask[mr0 : mr0 + subm.shape[0], mc0 : mc0 + subm.shape[1]]] = 0
                     with tempfile.NamedTemporaryFile(prefix="g1_live_nav_", suffix=".npz", delete=False) as tf:
                         out = tf.name
                     occ.save(out)
@@ -902,8 +1547,9 @@ class Robot:
     def _run_dynamic_nav(self, x: float, y: float, use_rgbd_depth_guard: bool = False) -> int:
         nav_script = SCRIPTS_ROOT / "navigation" / "obstacle_avoidance" / "real_time_path_steps_dynamic.py"
 
-        map_for_run: str | None = self._snapshot_live_slam_map_npz(timeout_s=1.5)
+        map_for_run: str | None = self._snapshot_live_slam_map_npz(timeout_s=3.0)
         if map_for_run is None:
+            print("[_run_dynamic_nav] live SLAM snapshot unavailable; using fallback map source.")
             map_for_run = self.nav_map
 
         if not map_for_run:
@@ -936,6 +1582,11 @@ class Robot:
                 print(f"[_run_dynamic_nav] map file does not exist: {nav_map_path}")
                 return 97
 
+        slam_pose = self.get_slam_pose(timeout_s=0.25)
+        start = slam_pose if slam_pose is not None else self.get_position()
+        start_xy = (float(start[0]), float(start[1])) if start is not None else None
+        map_for_run = self._filter_nav_map_near_points(str(map_for_run), start_xy)
+
         cmd = [
             sys.executable,
             str(nav_script),
@@ -950,13 +1601,42 @@ class Robot:
             "--goal-y",
             str(float(y)),
         ]
-        start = self.get_position()
         if start is not None:
             cmd.extend(["--start-x", str(float(start[0])), "--start-y", str(float(start[1]))])
-        if self.nav_extra_args:
-            cmd.extend(shlex.split(self.nav_extra_args))
+        extra_args = shlex.split(self.nav_extra_args) if self.nav_extra_args else []
+        sanitized: list[str] = []
+        i = 0
+        while i < len(extra_args):
+            tok = extra_args[i]
+            if tok in ("--use-live-map", "--allow-diagonal"):
+                i += 1
+                continue
+            if tok == "--inflation" and i + 1 < len(extra_args):
+                sanitized.extend([tok, extra_args[i + 1]])
+                i += 2
+                continue
+            sanitized.append(tok)
+            i += 1
+        cmd.extend(sanitized)
+        if "--no-live-map" not in cmd:
+            cmd.append("--no-live-map")
         if "--no-viz" not in cmd:
             cmd.append("--no-viz")
+        if "--inflation" not in cmd:
+            cmd.extend(["--inflation", "1"])
+        # Preview path into SLAM overlay (same map window).
+        goal_xy = (float(x), float(y))
+        preview = None
+        if start_xy is not None:
+            preview = self._preview_path_from_map(
+                str(map_for_run),
+                start_xy=start_xy,
+                goal_xy=goal_xy,
+                inflation=1,
+                allow_diagonal=False,
+                smooth=True,
+            )
+        self._write_nav_overlay_plan(start_xy=start_xy, goal_xy=goal_xy, path_xy=preview, source="dynamic_nav")
 
         guard: _RgbdDepthGuard | None = None
         if use_rgbd_depth_guard:
@@ -975,10 +1655,9 @@ class Robot:
                 print(f"[_run_dynamic_nav] RGBD depth guard disabled: {guard.error}")
                 guard = None
 
-        print(f"[_run_dynamic_nav] start map={map_for_run} goal=({float(x):+.3f},{float(y):+.3f})")
-        proc = subprocess.Popen(cmd, cwd=str(nav_script.parent), start_new_session=True)
-        blocked_abort = False
-        try:
+        def _exec_nav(run_cmd: list[str]) -> tuple[int, bool]:
+            proc = subprocess.Popen(run_cmd, cwd=str(nav_script.parent), start_new_session=True)
+            blocked_abort = False
             while proc.poll() is None:
                 if guard is not None and guard.is_blocked():
                     blocked_abort = True
@@ -991,10 +1670,25 @@ class Robot:
                             pass
                     break
                 time.sleep(0.05)
-            rc = int(proc.wait())
+            return int(proc.wait()), blocked_abort
+
+        print(f"[_run_dynamic_nav] start map={map_for_run} goal=({float(x):+.3f},{float(y):+.3f})")
+        try:
+            rc, blocked_abort = _exec_nav(cmd)
             if blocked_abort:
                 print("[_run_dynamic_nav] aborted due to RGBD depth obstacle in front ROI.")
                 return 98
+            if rc != 0 and "--inflation" in cmd:
+                retry = list(cmd)
+                idx = retry.index("--inflation")
+                if idx + 1 < len(retry) and retry[idx + 1] != "0":
+                    retry[idx + 1] = "0"
+                    print("[_run_dynamic_nav] retrying with --inflation 0 due to planning failure.")
+                    rc2, blocked_abort2 = _exec_nav(retry)
+                    if blocked_abort2:
+                        print("[_run_dynamic_nav] aborted due to RGBD depth obstacle in front ROI.")
+                        return 98
+                    rc = rc2
             return rc
         finally:
             if guard is not None:
@@ -1033,6 +1727,14 @@ class Robot:
 
         qz = math.sin(float(yaw) * 0.5)
         qw = math.cos(float(yaw) * 0.5)
+        slam_pose = self.get_slam_pose(timeout_s=0.25)
+        if slam_pose is not None:
+            self._write_nav_overlay_plan(
+                start_xy=(float(slam_pose[0]), float(slam_pose[1])),
+                goal_xy=(float(x), float(y)),
+                path_xy=None,
+                source="pose_nav",
+            )
         resp = client.pose_nav(float(x), float(y), 0.0, 0.0, 0.0, qz, qw, mode=1)
         if int(resp.code) != 0:
             return int(resp.code)
@@ -1050,20 +1752,27 @@ class Robot:
         try:
             for idx, (x, y, yaw) in enumerate(self._path_points, start=1):
                 pos = self.get_position()
+                slam_pos = self.get_slam_pose(timeout_s=0.20)
                 if pos is not None:
                     dxy = math.hypot(float(x) - float(pos[0]), float(y) - float(pos[1]))
                     # pose_nav often rejects already-reached goals with rc=4.
                     if dxy <= 0.20:
                         continue
-                if obs_avoid and self.nav_use_external_astar:
+                if obs_avoid:
                     rc = self._run_dynamic_nav(x, y, use_rgbd_depth_guard=True)
                 else:
-                    # Default: robot-side planning/execution through SLAM pose_nav.
+                    # Robot-side planning/execution through SLAM pose_nav.
                     rc = self._run_pose_nav(x, y, yaw)
-                    if rc == 4 and pos is not None:
-                        dxy = math.hypot(float(x) - float(pos[0]), float(y) - float(pos[1]))
+                    ref = slam_pos if slam_pos is not None else pos
+                    if rc == 4 and ref is not None:
+                        dxy = math.hypot(float(x) - float(ref[0]), float(y) - float(ref[1]))
                         if dxy <= 0.30:
                             rc = 0
+                        else:
+                            print(
+                                "[navigate_path] pose_nav rc=4 likely frame/relocalization mismatch; "
+                                f"slam_pose={slam_pos} odom_pose={pos} goal=({x:.3f},{y:.3f})"
+                            )
                     if rc != 0:
                         print(f"[navigate_path] pose_nav rejected (rc={rc}); trying local dynamic nav fallback.")
                         rc = self._run_dynamic_nav(x, y, use_rgbd_depth_guard=True)
@@ -1074,6 +1783,7 @@ class Robot:
         finally:
             if clear_on_finish:
                 self._path_points.clear()
+            self._clear_nav_overlay_plan()
         return ok
 
     # ------------------------------------------------------------------
@@ -1089,6 +1799,16 @@ class Robot:
             if p.exists():
                 return p
         raise FileNotFoundError("keyboard_controller.py not found in basic/safety or dev/other/safety")
+
+    def _usb_controller_path(self) -> Path:
+        candidates = [
+            DEV_OTHER_SAFETY_DIR / "usb_controller.py",
+            SCRIPTS_ROOT / "basic" / "safety" / "usb_controller.py",
+        ]
+        for p in candidates:
+            if p.exists():
+                return p
+        raise FileNotFoundError("usb_controller.py not found in dev/other/safety or basic/safety")
 
     def _launch_teleop(self, input_mode: str = "curses") -> subprocess.Popen:
         script = self._keyboard_controller_path()
@@ -1110,6 +1830,41 @@ class Robot:
                     continue
 
         return subprocess.Popen(base_cmd, start_new_session=True)
+
+    def enable_usb_controller(self, open_terminal: bool = True, joy: int = 0) -> subprocess.Popen:
+        """
+        Launch USB gamepad controller.
+        While enabled, set the robot headlight to red.
+        """
+        if self._usb_proc is not None and self._usb_proc.poll() is None:
+            return self._usb_proc
+
+        try:
+            self.headlight({"color": "red", "intensity": 100})
+        except Exception:
+            pass
+
+        script = self._usb_controller_path()
+        base_cmd = [sys.executable, str(script), "--iface", self.iface, "--joy", str(int(joy))]
+
+        if open_terminal:
+            term_launchers = [
+                ["x-terminal-emulator", "-e"] if shutil.which("x-terminal-emulator") else None,
+                ["gnome-terminal", "--"] if shutil.which("gnome-terminal") else None,
+                ["konsole", "-e"] if shutil.which("konsole") else None,
+                ["xterm", "-e"] if shutil.which("xterm") else None,
+            ]
+            for prefix in term_launchers:
+                if not prefix:
+                    continue
+                try:
+                    self._usb_proc = subprocess.Popen(prefix + base_cmd, start_new_session=True)
+                    return self._usb_proc
+                except Exception:
+                    continue
+
+        self._usb_proc = subprocess.Popen(base_cmd, start_new_session=True)
+        return self._usb_proc
 
     def slam_service(
         self,
@@ -1147,6 +1902,13 @@ class Robot:
                 self._obs_avoid.setChecked(True)
                 self._clear_on_finish = QtWidgets.QCheckBox("Clear Path On Finish")
                 self._clear_on_finish.setChecked(True)
+                self._lidar_ignore_spin = QtWidgets.QDoubleSpinBox()
+                self._lidar_ignore_spin.setRange(0.0, 3.0)
+                self._lidar_ignore_spin.setDecimals(2)
+                self._lidar_ignore_spin.setSingleStep(0.05)
+                self._lidar_ignore_spin.setSuffix(" m")
+                self._lidar_ignore_spin.setValue(float(getattr(robot, "lidar_ignore_near_m", 0.0)))
+                self._lidar_apply_btn = QtWidgets.QPushButton("Apply Lidar Ignore")
 
                 self._start_btn = QtWidgets.QPushButton("Start SLAM")
                 self._stop_btn = QtWidgets.QPushButton("Stop SLAM")
@@ -1162,6 +1924,10 @@ class Robot:
                 btn_row2 = QtWidgets.QHBoxLayout()
                 btn_row2.addWidget(self._teleop_start_btn)
                 btn_row2.addWidget(self._teleop_stop_btn)
+                btn_row_cfg = QtWidgets.QHBoxLayout()
+                btn_row_cfg.addWidget(QtWidgets.QLabel("Lidar Ignore Near"))
+                btn_row_cfg.addWidget(self._lidar_ignore_spin)
+                btn_row_cfg.addWidget(self._lidar_apply_btn)
                 btn_row3 = QtWidgets.QHBoxLayout()
                 btn_row3.addWidget(self._add_pose_btn)
                 btn_row3.addWidget(self._clear_btn)
@@ -1171,6 +1937,7 @@ class Robot:
                 layout.addWidget(self._status)
                 layout.addLayout(btn_row1)
                 layout.addLayout(btn_row2)
+                layout.addLayout(btn_row_cfg)
                 layout.addWidget(self._obs_avoid)
                 layout.addWidget(self._clear_on_finish)
                 layout.addLayout(btn_row3)
@@ -1182,6 +1949,7 @@ class Robot:
                 self._stop_btn.clicked.connect(self._stop_slam)
                 self._teleop_start_btn.clicked.connect(self._start_teleop)
                 self._teleop_stop_btn.clicked.connect(self._stop_teleop)
+                self._lidar_apply_btn.clicked.connect(self._apply_lidar_ignore_near)
                 self._add_pose_btn.clicked.connect(self._add_pose)
                 self._clear_btn.clicked.connect(self._clear_path)
                 self._follow_btn.clicked.connect(self._follow_path)
@@ -1202,7 +1970,9 @@ class Robot:
                 if pos is not None:
                     pose_txt = f"x={pos[0]:.3f} y={pos[1]:.3f} yaw={(yaw if yaw is not None else 0.0):.3f}"
                 self._status.setText(
-                    f"slam_running={robot.slam_is_running} | queued={len(robot.get_path_points())} | {pose_txt}"
+                    "slam_running="
+                    f"{robot.slam_is_running} | queued={len(robot.get_path_points())} | "
+                    f"lidar_ignore_near={float(getattr(robot, 'lidar_ignore_near_m', 0.0)):.2f}m | {pose_txt}"
                 )
 
                 self._path_list.clear()
@@ -1256,9 +2026,22 @@ class Robot:
                     except Exception:
                         pass
 
+            def _apply_lidar_ignore_near(self) -> None:
+                try:
+                    val = float(self._lidar_ignore_spin.value())
+                    robot.set_lidar_ignore_near(val)
+                except Exception as exc:
+                    QtWidgets.QMessageBox.warning(self, "Lidar Config Failed", str(exc))
+                self._refresh()
+
             def _add_pose(self) -> None:
-                pos = robot.get_position()
-                yaw = robot.get_yaw()
+                slam_pose = robot.get_slam_pose(timeout_s=0.35) if robot.slam_is_running else None
+                if slam_pose is not None:
+                    pos = (slam_pose[0], slam_pose[1], 0.0)
+                    yaw = slam_pose[2]
+                else:
+                    pos = robot.get_position()
+                    yaw = robot.get_yaw()
                 if pos is None:
                     QtWidgets.QMessageBox.warning(self, "Pose Unavailable", "No current pose from sensors.")
                     return
@@ -1412,10 +2195,263 @@ class Robot:
     # Safety / audio / lights
     # ------------------------------------------------------------------
 
+    def balanced_stand(self, mode: int = 0) -> None:
+        """Command balanced stand (default mode=0)."""
+        if hasattr(self._client, "BalanceStand"):
+            self._client.BalanceStand(int(mode))
+        else:
+            self._ensure_balanced_gait_mode()
+
+    def hanging_boot(self) -> None:
+        """Backward-compatible alias; use balanced_stand()."""
+        self.balanced_stand(0)
+
     def hanged_boot(self) -> None:
-        """Re-run hanger boot sequence and refresh locomotion client."""
-        self._client = hanger_boot_sequence(iface=self.iface)
-        self._ensure_balanced_gait_mode()
+        """Backward-compatible alias; use balanced_stand()."""
+        self.balanced_stand(0)
+
+    @staticmethod
+    def _normalize_arm_joint_name(name: str) -> str:
+        key = str(name).strip().lower().replace("-", " ").replace("_", " ")
+        key = re.sub(r"\s+", " ", key)
+        key = key.replace(" ", "_")
+        return ARM_JOINT_ALIASES.get(key, key)
+
+    @staticmethod
+    def _normalize_leg_joint_name(name: str) -> str:
+        key = str(name).strip().lower().replace("-", " ").replace("_", " ")
+        key = re.sub(r"\s+", " ", key)
+        key = key.replace(" ", "_")
+        return LEG_JOINT_ALIASES.get(key, key)
+
+    def _rotate_lowcmd_joint(
+        self,
+        joint_idx: int,
+        delta_deg: float,
+        duration: float,
+        hold: float,
+        cmd_hz: float,
+        kp: float,
+        kd: float,
+        easing: str,
+    ) -> int:
+        from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelPublisher, ChannelSubscriber
+        from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
+        from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_, LowState_
+        from unitree_sdk2py.utils.crc import CRC
+        from unitree_sdk2py.comm.motion_switcher.motion_switcher_client import MotionSwitcherClient
+
+        joint_idx = int(joint_idx)
+        if joint_idx < 0 or joint_idx > 28:
+            raise ValueError(f"Invalid joint index: {joint_idx}")
+
+        ChannelFactoryInitialize(self.domain_id, self.iface)
+        msc = MotionSwitcherClient()
+        msc.SetTimeout(5.0)
+        msc.Init()
+        try:
+            _status, result = msc.CheckMode()
+            tries = 0
+            while isinstance(result, dict) and result.get("name") and tries < 3:
+                msc.ReleaseMode()
+                time.sleep(0.5)
+                _status, result = msc.CheckMode()
+                tries += 1
+        except Exception:
+            pass
+
+        state_box: dict[str, Any] = {"msg": None}
+        state_ready = threading.Event()
+
+        def _ls_cb(msg: Any) -> None:
+            state_box["msg"] = msg
+            state_ready.set()
+
+        sub = ChannelSubscriber("rt/lowstate", LowState_)
+        sub.Init(_ls_cb, 10)
+        if not state_ready.wait(timeout=1.0):
+            return 2
+        ls = state_box.get("msg")
+        if ls is None:
+            return 2
+
+        q_cur: list[float] = []
+        for i in range(29):
+            try:
+                q_cur.append(float(ls.motor_state[i].q))
+            except Exception:
+                q_cur.append(0.0)
+
+        q0 = float(q_cur[joint_idx])
+        q1 = float(q0 + math.radians(float(delta_deg)))
+
+        pub = ChannelPublisher("rt/lowcmd", LowCmd_)
+        pub.Init()
+        crc = CRC()
+        cmd = unitree_hg_msg_dds__LowCmd_()
+
+        hz = max(1.0, float(cmd_hz))
+        dt = 1.0 / hz
+        steps = max(1, int(hz * max(0.05, float(duration))))
+
+        for step in range(1, steps + 1):
+            alpha = step / steps
+            if str(easing).lower() == "smooth":
+                alpha = 0.5 - 0.5 * math.cos(math.pi * alpha)
+            q_tar = q0 + (q1 - q0) * alpha
+            for i in range(29):
+                mc = cmd.motor_cmd[i]
+                mc.q = float(q_cur[i])
+                mc.dq = 0.0
+                mc.kp = 0.0
+                mc.kd = 0.0
+                mc.tau = 0.0
+            tgt = cmd.motor_cmd[joint_idx]
+            tgt.q = float(q_tar)
+            tgt.dq = 0.0
+            tgt.kp = float(kp)
+            tgt.kd = float(kd)
+            tgt.tau = 0.0
+            cmd.crc = crc.Crc(cmd)
+            pub.Write(cmd)
+            time.sleep(dt)
+
+        hold_steps = max(0, int(hz * max(0.0, float(hold))))
+        for _ in range(hold_steps):
+            for i in range(29):
+                mc = cmd.motor_cmd[i]
+                mc.q = float(q_cur[i])
+                mc.dq = 0.0
+                mc.kp = 0.0
+                mc.kd = 0.0
+                mc.tau = 0.0
+            tgt = cmd.motor_cmd[joint_idx]
+            tgt.q = float(q1)
+            tgt.dq = 0.0
+            tgt.kp = float(kp)
+            tgt.kd = float(kd)
+            tgt.tau = 0.0
+            cmd.crc = crc.Crc(cmd)
+            pub.Write(cmd)
+            time.sleep(dt)
+        return 0
+
+    def rotate_joint(
+        self,
+        joint_name: str,
+        angle_deg: float,
+        arm: str | None = None,
+        duration: float = 1.0,
+        hold: float = 0.0,
+        cmd_hz: float = 50.0,
+        kp: float = 40.0,
+        kd: float = 1.0,
+        easing: str = "smooth",
+    ) -> int:
+        """
+        Rotate a single arm joint using the same arm_sdk path as arm_motion.py.
+
+        Examples:
+            rotate_joint("elbow", 30)                  # defaults to right arm
+            rotate_joint("left shoulder_pitch", -20)   # arm inferred from name
+            rotate_joint("wrist_roll", 15, arm="left")
+        """
+        raw = str(joint_name).strip()
+        if not raw:
+            raise ValueError("joint_name cannot be empty")
+
+        inferred_arm = None
+        inferred_side = None
+        lower = raw.lower()
+        if lower.startswith("left "):
+            inferred_arm = "left"
+            inferred_side = "left"
+            raw = raw[5:].strip()
+        elif lower.startswith("right "):
+            inferred_arm = "right"
+            inferred_side = "right"
+            raw = raw[6:].strip()
+
+        # Try arm-style joint name first.
+        arm_name = str(arm or inferred_arm or "right").strip().lower()
+        if arm_name not in ("left", "right"):
+            arm_name = "right"
+
+        joint = self._normalize_arm_joint_name(raw)
+        valid = {
+            "shoulder_pitch",
+            "shoulder_roll",
+            "shoulder_yaw",
+            "elbow",
+            "wrist_pitch",
+            "wrist_roll",
+            "wrist_yaw",
+            "waist_yaw",
+        }
+        if joint not in valid:
+            # Fall back to leg-joint route.
+            side = str(arm or inferred_side or "left").strip().lower()
+            if side not in ("left", "right"):
+                raise ValueError("For leg joints, provide side with arm='left'/'right' or prefix joint with left/right.")
+            leg_joint = self._normalize_leg_joint_name(raw)
+            leg_key = f"{side}_{leg_joint}"
+            if leg_key not in G1_LEG_JOINT_INDEX:
+                raise ValueError(f"Unknown joint_name '{joint_name}'")
+            return int(
+                self._rotate_lowcmd_joint(
+                    joint_idx=G1_LEG_JOINT_INDEX[leg_key],
+                    delta_deg=float(angle_deg),
+                    duration=max(0.05, float(duration)),
+                    hold=max(0.0, float(hold)),
+                    cmd_hz=max(1.0, float(cmd_hz)),
+                    kp=float(kp),
+                    kd=float(kd),
+                    easing=str(easing),
+                )
+            )
+
+        steps = {
+            "arm": arm_name,
+            "cmd_hz": float(cmd_hz),
+            "kp": float(kp),
+            "kd": float(kd),
+            "steps": [
+                {
+                    "name": f"rotate_{joint}",
+                    "duration": max(0.05, float(duration)),
+                    "hold": max(0.0, float(hold)),
+                    "angles": {joint: float(angle_deg)},
+                }
+            ],
+        }
+
+        script = SCRIPTS_ROOT / "arm_motion" / "arm_motion.py"
+        if not script.exists():
+            raise FileNotFoundError(f"arm motion script not found: {script}")
+
+        with tempfile.NamedTemporaryFile(prefix="g1_rotate_joint_", suffix=".json", delete=False) as tf:
+            tf.write(json.dumps(steps, ensure_ascii=True).encode("utf-8"))
+            steps_path = tf.name
+        try:
+            cmd = [
+                sys.executable,
+                str(script),
+                "--iface",
+                self.iface,
+                "--steps",
+                str(steps_path),
+                "--arm",
+                arm_name,
+                "--easing",
+                str(easing),
+            ]
+            rc = subprocess.run(cmd, cwd=str(script.parent), check=False).returncode
+            return int(rc)
+        finally:
+            try:
+                os.unlink(steps_path)
+            except Exception:
+                pass
 
     def say(self, text: str = "what would you like me to say?") -> None:
         audio_dir = SCRIPTS_ROOT / "basic" / "audio"
@@ -1430,7 +2466,11 @@ class Robot:
                 check=True,
             )
 
-    def headlight(self, args: dict[str, Any] | list[str] | str | None = None) -> int:
+    def headlight(
+        self,
+        args: dict[str, Any] | list[str] | str | None = None,
+        duration: float | None = None,
+    ) -> int:
         """
         Wrapper over basic/headlight_client/headlight.py.
 
@@ -1438,6 +2478,7 @@ class Robot:
             robot.headlight({"color": "yellow", "intensity": 70})
             robot.headlight("--color red --intensity 40")
             robot.headlight(["--color", "green", "--intensity", "90"])
+            robot.headlight({"color": "white", "intensity": 80}, duration=2.5)
         """
         script = SCRIPTS_ROOT / "basic" / "headlight_client" / "headlight.py"
         cmd = [sys.executable, str(script), "--iface", self.iface]
@@ -1454,6 +2495,9 @@ class Robot:
             cmd.extend(shlex.split(args))
         elif isinstance(args, list):
             cmd.extend([str(x) for x in args])
+
+        if duration is not None:
+            cmd.extend(["--duration", str(float(duration))])
 
         result = subprocess.run(cmd, check=False)
         return int(result.returncode)
