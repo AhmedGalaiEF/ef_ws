@@ -2469,6 +2469,7 @@ class Robot:
         kp: float,
         kd: float,
         easing: str,
+        max_joint_speed: float,
     ) -> int:
         from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelPublisher, ChannelSubscriber
         from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
@@ -2525,15 +2526,39 @@ class Robot:
         crc = CRC()
         cmd = unitree_hg_msg_dds__LowCmd_()
 
+        max_speed = max(0.05, float(max_joint_speed))
+        easing_mode = str(easing).lower()
         hz = max(1.0, float(cmd_hz))
-        dt = 1.0 / hz
-        steps = max(1, int(hz * max(0.05, float(duration))))
+        dt_nominal = 1.0 / hz
 
-        for step in range(1, steps + 1):
-            alpha = step / steps
-            if str(easing).lower() == "smooth":
+        delta = abs(q1 - q0)
+        speed_factor = (math.pi / 2.0) if easing_mode == "smooth" else 1.0
+        min_duration = (delta * speed_factor) / max_speed
+        duration = max(max(0.05, float(duration)), min_duration)
+
+        cmd_q = float(q0)
+        t0 = time.monotonic()
+        t_prev = t0
+
+        while True:
+            now = time.monotonic()
+            elapsed = now - t0
+            alpha = min(1.0, elapsed / duration)
+            if easing_mode == "smooth":
                 alpha = 0.5 - 0.5 * math.cos(math.pi * alpha)
             q_tar = q0 + (q1 - q0) * alpha
+
+            dt_loop = max(0.0, now - t_prev)
+            t_prev = now
+            step_limit = max_speed * max(dt_nominal, dt_loop)
+            q_delta = q_tar - cmd_q
+            if q_delta > step_limit:
+                cmd_q += step_limit
+            elif q_delta < -step_limit:
+                cmd_q -= step_limit
+            else:
+                cmd_q = q_tar
+
             for i in range(29):
                 mc = cmd.motor_cmd[i]
                 mc.q = float(q_cur[i])
@@ -2542,14 +2567,35 @@ class Robot:
                 mc.kd = 0.0
                 mc.tau = 0.0
             tgt = cmd.motor_cmd[joint_idx]
-            tgt.q = float(q_tar)
+            tgt.q = float(cmd_q)
             tgt.dq = 0.0
             tgt.kp = float(kp)
             tgt.kd = float(kd)
             tgt.tau = 0.0
             cmd.crc = crc.Crc(cmd)
             pub.Write(cmd)
-            time.sleep(dt)
+
+            if elapsed >= duration:
+                break
+            sleep_for = max(0.0, dt_nominal - (time.monotonic() - now))
+            if sleep_for > 0:
+                time.sleep(sleep_for)
+
+        for i in range(29):
+            mc = cmd.motor_cmd[i]
+            mc.q = float(q_cur[i])
+            mc.dq = 0.0
+            mc.kp = 0.0
+            mc.kd = 0.0
+            mc.tau = 0.0
+        tgt = cmd.motor_cmd[joint_idx]
+        tgt.q = float(q1)
+        tgt.dq = 0.0
+        tgt.kp = float(kp)
+        tgt.kd = float(kd)
+        tgt.tau = 0.0
+        cmd.crc = crc.Crc(cmd)
+        pub.Write(cmd)
 
         hold_steps = max(0, int(hz * max(0.0, float(hold))))
         for _ in range(hold_steps):
@@ -2568,7 +2614,7 @@ class Robot:
             tgt.tau = 0.0
             cmd.crc = crc.Crc(cmd)
             pub.Write(cmd)
-            time.sleep(dt)
+            time.sleep(dt_nominal)
         return 0
 
     def rotate_joint(
@@ -2582,6 +2628,7 @@ class Robot:
         kp: float = 40.0,
         kd: float = 1.0,
         easing: str = "smooth",
+        max_joint_speed: float = 1.2,
     ) -> int:
         """
         Rotate a single arm joint using the same arm_sdk path as arm_motion.py.
@@ -2642,6 +2689,7 @@ class Robot:
                     kp=float(kp),
                     kd=float(kd),
                     easing=str(easing),
+                    max_joint_speed=max(0.05, float(max_joint_speed)),
                 )
             )
 
@@ -2650,6 +2698,7 @@ class Robot:
             "cmd_hz": float(cmd_hz),
             "kp": float(kp),
             "kd": float(kd),
+            "max_joint_speed": max(0.05, float(max_joint_speed)),
             "steps": [
                 {
                     "name": f"rotate_{joint}",

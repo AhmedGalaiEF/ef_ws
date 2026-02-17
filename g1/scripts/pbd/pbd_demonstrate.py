@@ -73,7 +73,7 @@ class Recorder:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Record arm joint trajectories (PBD).")
     parser.add_argument("--iface", default="enp1s0", help="network interface for DDS")
-    parser.add_argument("--arm", choices=["left", "right", "both"], default="right", help="which arm(s) to record")
+    parser.add_argument("--arm", choices=["left", "right", "both"], default="both", help="which arm(s) to record")
     parser.add_argument("--duration", type=float, default=15.0, help="seconds to record (0=until Ctrl+C)")
     parser.add_argument("--poll-s", type=float, default=0.02, help="sample period in seconds")
     parser.add_argument("--out", default="/tmp/pbd_motion.npz", help="output file (.npz)")

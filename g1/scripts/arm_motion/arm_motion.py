@@ -103,11 +103,20 @@ DESC_RE = re.compile(
 class ArmSdkController:
     """Simple arm SDK pose sequencer using rt/arm_sdk (LowCmd)."""
 
-    def __init__(self, iface: str, arm: str, cmd_hz: float, kp: float, kd: float) -> None:
+    def __init__(
+        self,
+        iface: str,
+        arm: str,
+        cmd_hz: float,
+        kp: float,
+        kd: float,
+        max_joint_speed: float,
+    ) -> None:
         self._arm = arm
         self._cmd_hz = max(1.0, cmd_hz)
         self._kp = kp
         self._kd = kd
+        self._max_joint_speed = max(0.05, float(max_joint_speed))
         self._cmd_q: Dict[int, float] = {}
         self._crc = CRC()
 
@@ -158,7 +167,7 @@ class ArmSdkController:
             except Exception:
                 continue
 
-    def seed_from_lowstate(self, timeout_s: float = 0.6) -> bool:
+    def seed_from_lowstate(self, timeout_s: float = 2.0) -> bool:
         if self._initialised_from_state:
             return True
         self._state_ready.wait(timeout=max(0.0, timeout_s))
@@ -182,19 +191,58 @@ class ArmSdkController:
 
     def ramp_to_pose(self, pose: List[Tuple[int, float]], duration: float, easing: str) -> None:
         target = {j: q for j, q in pose}
-        start = {j: self._cmd_q.get(j, 0.0) for j in target}
+        # Prefer measured lowstate as the interpolation start to avoid jumps when
+        # command history and robot state diverge.
+        start = {j: float(self._joint_cur.get(j, self._cmd_q.get(j, 0.0))) for j in target}
 
-        steps = max(1, int(self._cmd_hz * max(0.0, duration)))
-        dt = 1.0 / self._cmd_hz
+        max_delta = max((abs(target[j] - start[j]) for j in target), default=0.0)
+        # smooth easing (half-cosine) has higher peak velocity than linear.
+        # Scale the minimum duration so peak commanded speed still respects
+        # max_joint_speed even when easing="smooth".
+        speed_factor = (math.pi / 2.0) if easing == "smooth" else 1.0
+        min_duration = (max_delta * speed_factor) / self._max_joint_speed
+        duration = max(max(0.0, duration), min_duration)
 
-        for step in range(1, steps + 1):
-            alpha = step / steps
+        if duration <= 0:
+            self._apply_targets(target)
+            self._cmd_q.update(target)
+            return
+
+        dt_nominal = 1.0 / self._cmd_hz
+        cmd = dict(start)
+        t0 = time.monotonic()
+        t_prev = t0
+
+        while True:
+            now = time.monotonic()
+            elapsed = now - t0
+            alpha = min(1.0, elapsed / duration)
             if easing == "smooth":
                 alpha = 0.5 - 0.5 * math.cos(math.pi * alpha)
-            cur = {j: start[j] + (target[j] - start[j]) * alpha for j in target}
-            self._apply_targets(cur)
-            time.sleep(dt)
+            desired = {j: start[j] + (target[j] - start[j]) * alpha for j in target}
 
+            dt_loop = max(0.0, now - t_prev)
+            t_prev = now
+            loop_step_limit = self._max_joint_speed * max(dt_nominal, dt_loop)
+
+            for j in target:
+                delta = desired[j] - cmd[j]
+                if delta > loop_step_limit:
+                    cmd[j] += loop_step_limit
+                elif delta < -loop_step_limit:
+                    cmd[j] -= loop_step_limit
+                else:
+                    cmd[j] = desired[j]
+
+            self._apply_targets(cmd)
+
+            if elapsed >= duration:
+                break
+            sleep_for = max(0.0, dt_nominal - (time.monotonic() - now))
+            if sleep_for > 0:
+                time.sleep(sleep_for)
+
+        self._apply_targets(target)
         self._cmd_q.update(target)
 
     def hold_pose(self, pose: List[Tuple[int, float]], hold_s: float) -> None:
@@ -272,6 +320,12 @@ def main() -> None:
     parser.add_argument("--cmd-hz", type=float, default=0.0, help="override command rate (Hz)")
     parser.add_argument("--kp", type=float, default=0.0, help="override joint kp")
     parser.add_argument("--kd", type=float, default=0.0, help="override joint kd")
+    parser.add_argument(
+        "--max-joint-speed",
+        type=float,
+        default=0.0,
+        help="override per-joint max speed (rad/s) used for anti-snap duration scaling",
+    )
     parser.add_argument("--easing", choices=["linear", "smooth"], default="smooth", help="easing profile")
     parser.add_argument("--no-seed", action="store_true", help="skip seeding from lowstate")
     parser.add_argument("--dry-run", action="store_true", help="print resolved steps without commanding")
@@ -289,14 +343,17 @@ def main() -> None:
     cmd_hz = float(args.cmd_hz or data.get("cmd_hz") or 50.0)
     kp = float(args.kp or data.get("kp") or 40.0)
     kd = float(args.kd or data.get("kd") or 1.0)
+    max_joint_speed = float(args.max_joint_speed or data.get("max_joint_speed") or 1.2)
 
     steps = data.get("steps") or []
     if not steps:
         raise SystemExit("No steps found in steps.json")
 
-    arm_ctrl = ArmSdkController(args.iface, arm, cmd_hz, kp, kd)
+    arm_ctrl = ArmSdkController(args.iface, arm, cmd_hz, kp, kd, max_joint_speed)
     if not args.no_seed:
-        arm_ctrl.seed_from_lowstate()
+        seeded = arm_ctrl.seed_from_lowstate()
+        if not seeded:
+            print("Warning: lowstate seed unavailable; using command-history start pose.")
 
     current_pose_deg: Dict[str, float] = {}
 

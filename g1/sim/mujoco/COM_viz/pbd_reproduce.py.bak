@@ -35,7 +35,6 @@ from safety.hanger_boot_sequence import hanger_boot_sequence
 NOT_USED_IDX = 29  # enable arm sdk
 LEFT_ARM_IDX = [15, 16, 17, 18, 19, 20, 21]
 RIGHT_ARM_IDX = [22, 23, 24, 25, 26, 27, 28]
-WAIST_YAW_IDX = 12
 
 
 def _rot_x(a: float) -> np.ndarray:
@@ -212,31 +211,6 @@ def _compute_ik_qs(joints: List[int], qs: np.ndarray, verbose: bool = True) -> n
     if verbose:
         print("IK: solve complete.")
     return out
-
-
-def _select_replay_qs(joints: List[int], qs: np.ndarray, arm: str) -> tuple[List[int], np.ndarray]:
-    c_map = _col_map(joints)
-    selected: List[int] = []
-    required: List[int] = []
-    if arm in ("left", "both"):
-        required.extend(LEFT_ARM_IDX)
-        selected.extend(LEFT_ARM_IDX)
-    if arm in ("right", "both"):
-        required.extend(RIGHT_ARM_IDX)
-        selected.extend(RIGHT_ARM_IDX)
-
-    missing = [j for j in required if j not in c_map]
-    if missing:
-        raise SystemExit(
-            f"Motion file missing required joints for --arm={arm}: {missing}. "
-            "Record with pbd_demonstrate.py --arm both (default)."
-        )
-
-    if WAIST_YAW_IDX in c_map:
-        selected.append(WAIST_YAW_IDX)
-
-    cols = [c_map[j] for j in selected]
-    return selected, qs[:, cols]
 
 
 def _resolve_lowstate_type():
@@ -439,7 +413,6 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Replay recorded arm motion.")
     parser.add_argument("--iface", default="enp1s0", help="network interface for DDS")
     parser.add_argument("--file", default="/tmp/pbd_motion.npz", help="input motion file (.npz or .pkl/.pickle)")
-    parser.add_argument("--arm", choices=["left", "right", "both"], default="both", help="which arm(s) to replay")
     parser.add_argument("--mode", choices=["joint", "fk", "ik"], default="fk", help="trajectory replay space")
     parser.add_argument("--speed", type=float, default=1.0, help="time scale (1.0=real-time)")
     parser.add_argument("--cmd-hz", type=float, default=50.0, help="command rate (Hz)")
@@ -461,7 +434,6 @@ def main() -> None:
         raise SystemExit("Invalid motion file: ts and qs length mismatch.")
     if qs.shape[1] != len(joints):
         raise SystemExit("Invalid motion file: joints and qs width mismatch.")
-    joints, qs = _select_replay_qs(joints, qs, arm=args.arm)
 
     ctrl = LowCmdController(iface=args.iface, joints=joints, kp=args.kp, kd=args.kd)
     seeded = ctrl.seed_from_lowstate(timeout_s=args.seed_timeout)
