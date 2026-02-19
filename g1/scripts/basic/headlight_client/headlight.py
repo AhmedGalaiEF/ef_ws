@@ -45,6 +45,16 @@ def _parse_intensity(value: str) -> int:
     return level
 
 
+def _parse_duration(value: str) -> float:
+    try:
+        seconds = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("duration must be a number in seconds") from exc
+    if seconds < 0:
+        raise argparse.ArgumentTypeError("duration must be >= 0 seconds")
+    return seconds
+
+
 _NAMED_COLORS = {
     "white": (255, 255, 255),
     "red": (255, 0, 0),
@@ -85,6 +95,12 @@ def main() -> int:
     parser.add_argument("--iface", default=None, help="network interface for DDS (e.g. eth0)")
     parser.add_argument("--intensity", type=_parse_intensity, default=100, help="brightness level 0-100")
     parser.add_argument("--color", type=_parse_color, default=_NAMED_COLORS["white"], help="headlight color")
+    parser.add_argument(
+        "--duration",
+        type=_parse_duration,
+        default=None,
+        help="optional duration in seconds; if set, turns headlight off after this time",
+    )
     args = parser.parse_args()
 
     _init_channel(args.iface)
@@ -100,9 +116,21 @@ def main() -> int:
         return 1
 
     print(f"Headlight set to RGB({r},{g},{b}) at {args.intensity}% intensity.")
-    # LED control requires >200ms between calls
+    # LED control requires >200ms between calls.
+    if args.duration is None:
+        time.sleep(0.25)
+        return 0
+
+    print(f"Holding for {args.duration:g}s...")
+    time.sleep(args.duration)
     time.sleep(0.25)
 
+    off_code = client.LedControl(0, 0, 0)
+    if off_code != 0:
+        print(f"LedControl(off) failed: code={off_code}")
+        return 1
+
+    print("Headlight turned off.")
     return 0
 
 
