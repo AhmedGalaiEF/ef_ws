@@ -18,7 +18,10 @@ from typing import List, Optional, Tuple
 import numpy as np
 
 try:
-    from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelSubscriber
+    from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelPublisher, ChannelSubscriber
+    from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
+    from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_
+    from unitree_sdk2py.utils.crc import CRC
 except Exception as exc:
     raise SystemExit(
         "unitree_sdk2py is not installed. Install it with:\n"
@@ -31,6 +34,8 @@ from safety.hanger_boot_sequence import hanger_boot_sequence
 RIGHT_ARM_IDX = [22, 23, 24, 25, 26, 27, 28]
 LEFT_ARM_IDX = [15, 16, 17, 18, 19, 20, 21]
 WAIST_YAW_IDX = 12
+NOT_USED_IDX = 29  # enable arm sdk
+ARM_HAND_ZERO_TORQUE_IDX = LEFT_ARM_IDX + RIGHT_ARM_IDX
 
 
 def _resolve_lowstate_type():
@@ -70,11 +75,30 @@ class Recorder:
             return list(self._latest_q), self._latest_update
 
 
+class ArmZeroTorqueController:
+    def __init__(self, joints: List[int]) -> None:
+        self._joints = [int(j) for j in joints]
+        self._crc = CRC()
+        self._pub = ChannelPublisher("rt/arm_sdk", LowCmd_)
+        self._pub.Init()
+        self._cmd = unitree_hg_msg_dds__LowCmd_()
+        self._cmd.motor_cmd[NOT_USED_IDX].q = 1
+
+    def write_zero_torque(self) -> None:
+        for j_idx in self._joints:
+            mc = self._cmd.motor_cmd[j_idx]
+            mc.kp = 0.0
+            mc.kd = 0.0
+            mc.tau = 0.0
+        self._cmd.crc = self._crc.Crc(self._cmd)
+        self._pub.Write(self._cmd)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Record arm joint trajectories (PBD).")
     parser.add_argument("--iface", default="enp1s0", help="network interface for DDS")
     parser.add_argument("--arm", choices=["left", "right", "both"], default="both", help="which arm(s) to record")
-    parser.add_argument("--duration", type=float, default=15.0, help="seconds to record (0=until Ctrl+C)")
+    parser.add_argument("--duration", type=float, default=0.0, help="seconds to record (0=until Ctrl+C)")
     parser.add_argument("--poll-s", type=float, default=0.02, help="sample period in seconds")
     parser.add_argument("--out", default="/tmp/pbd_motion.npz", help="output file (.npz)")
     parser.add_argument(
@@ -84,13 +108,13 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    # Ensure balanced stand (FSM-200), then switch to ZeroTorque for teaching
-    bot = hanger_boot_sequence(iface=args.iface)
-    try:
-        bot.ZeroTorque()
-    except Exception:
-        pass
+    # Ensure balanced stand (FSM-200), then zero arm/hand torque for teaching.
+    _ = hanger_boot_sequence(iface=args.iface)
     ChannelFactoryInitialize(0, args.iface)
+    arm_ctrl = ArmZeroTorqueController(ARM_HAND_ZERO_TORQUE_IDX)
+    for _ in range(5):
+        arm_ctrl.write_zero_torque()
+        time.sleep(0.02)
 
     LowState_ = _resolve_lowstate_type()
     if LowState_ is None:
@@ -107,7 +131,8 @@ def main() -> None:
     sub = ChannelSubscriber("rt/lowstate", LowState_)
     sub.Init(recorder.cb, 200)
 
-    print("Robot set to ZeroTorque. Move joints freely to demonstrate.")
+    print("Balanced stand active. Arm/hand joints set to zero torque.")
+    print("Move joints freely to demonstrate.")
     print("Press <Enter> when finished (Ctrl+C also stops).")
     stop_event = threading.Event()
 
@@ -145,6 +170,7 @@ def main() -> None:
                 if args.duration > 0 and (time.time() - t0) >= args.duration:
                     break
 
+                arm_ctrl.write_zero_torque()
                 snap = recorder.snapshot()
                 if snap is None:
                     if time.time() - last_wait_log >= 1.0:
