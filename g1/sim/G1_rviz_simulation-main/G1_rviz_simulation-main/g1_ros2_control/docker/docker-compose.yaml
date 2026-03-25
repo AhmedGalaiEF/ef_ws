@@ -1,0 +1,16 @@
+services:
+  g1_ros2_control:
+    image: theconstructai/g1_ros2_control:latest
+    #pull_policy: always
+    privileged: true
+    network_mode: host
+    container_name: g1_ros2_control
+    environment:
+      - ROS_DOMAIN_ID=0
+    #   - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+    #   - CYCLONEDDS_URI=/var/lib/theconstruct.rrl/cyclonedds.xml
+    volumes:
+      - ./volumes/g1_state_estimator.launch.py:/colcon_ws/install/g1_ros2_control/share/g1_ros2_control/launch/g1_basic_control.launch.py
+      - ./volumes/state_estimator.yaml:/colcon_ws/install/g1_ros2_control/share/g1_ros2_control/config/controllers.yaml
+    entrypoint: /ros_entrypoint.sh
+    command: ["/bin/bash", "-lc", "ros2 launch g1_ros2_control g1_basic_control.launch.py network_interface:=eth0"]
