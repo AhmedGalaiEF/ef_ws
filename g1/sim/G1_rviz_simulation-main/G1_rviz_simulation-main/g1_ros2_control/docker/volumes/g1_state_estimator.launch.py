@@ -1,15 +1,19 @@
 import os
 import yaml
-from ament_index_python.packages import get_package_share_directory
+from ament_index_python.packages import get_package_share_directory, PackageNotFoundError
 from launch import LaunchDescription
 from launch.actions import OpaqueFunction, SetLaunchConfiguration, DeclareLaunchArgument
-from launch.substitutions import Command, FindExecutable, PathJoinSubstitution, LaunchConfiguration
+from launch.substitutions import Command, PathJoinSubstitution, LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 
 def generate_temp_config(config_path, package_name, kv_pairs):
-    pkg_dir = get_package_share_directory(package_name)
+    try:
+        pkg_dir = get_package_share_directory(package_name)
+    except PackageNotFoundError:
+        # Allow launching directly from source tree without installing package.
+        pkg_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
     src_path = os.path.join(pkg_dir, config_path)
     dst_path = os.path.join('/tmp', package_name, 'temp_controllers.yaml')
     os.makedirs(os.path.dirname(dst_path), exist_ok=True)
@@ -48,11 +52,31 @@ def control_spawner(names):
 
 def setup_controllers(context):
     robot_type_value = LaunchConfiguration('robot_type').perform(context)
-    controllers_config_path = f'config/{robot_type_value}/controllers.yaml'
+    package_name = 'g1_ros2_control'
+    try:
+        pkg_dir = get_package_share_directory(package_name)
+    except PackageNotFoundError:
+        pkg_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+
+    # Prefer robot-specific config if present, otherwise use the repo default.
+    candidate_rel_paths = [
+        f'config/{robot_type_value}/controllers.yaml',
+        'config/controllers.yaml',
+    ]
+    controllers_config_path = None
+    for rel_path in candidate_rel_paths:
+        if os.path.exists(os.path.join(pkg_dir, rel_path)):
+            controllers_config_path = rel_path
+            break
+    if controllers_config_path is None:
+        raise FileNotFoundError(
+            f"No controllers config found in package '{package_name}'. "
+            f"Tried: {candidate_rel_paths}"
+        )
 
     temp_path = generate_temp_config(
         controllers_config_path,
-        'motion_tracking_controller',
+        package_name,
         []  # no kv overrides
     )
 
@@ -68,7 +92,7 @@ def generate_launch_description():
     urdf_name = 'g1'  # or dynamically from robot_type if needed
 
     robot_description_command = Command([
-        PathJoinSubstitution([FindExecutable(name='xacro')]),
+        "xacro",
         " ",
         PathJoinSubstitution([
             FindPackageShare("unitree_description"),
