@@ -32,16 +32,38 @@ Run the Ollama stack with live perception/planning but no robot actuation:
 python run_vla_stack.py --iface enp0s31f6 --dry-run --print-json
 ```
 
+If the configured Ollama model is unavailable or too slow during `--dry-run`, the stack degrades to deterministic local fallback responses and logs the original backend error to stderr. Increase the client timeout with `--request-timeout-sec` when you want to wait longer for a local model load or first token.
+
+For faster local inference, the Ollama stack now lets planner/actor use a small text model while perception can use a separate vision model:
+
+```bash
+python run_vla_stack.py --iface enp0s31f6 --dry-run --model qwen3.5:0.8b --vision-model qwen2.5vl:3b
+```
+
 Run the Hugging Face stack with live perception/planning but no robot actuation:
 
 ```bash
 HF_TOKEN=hf_xxx python run_hf_vla_stack.py --iface enp0s31f6 --dry-run --print-json
 ```
 
+If the configured Hugging Face model or token is unavailable during `--dry-run`, the stack now degrades to deterministic local fallback responses and logs the original backend error to stderr. When the router rejects `--model` with `model_not_supported`, the client probes `/v1/models`, retries with a provider-suffixed variant of the same base model when available, and otherwise falls back to another router-exposed text or vision chat model.
+
 Run the Hugging Face stack fully offline with deterministic local fallback responses:
 
 ```bash
 python run_hf_vla_stack.py --iface enp0s31f6 --dry-run --mock-hf --print-json
+```
+
+Disable laptop-speaker intent announcements if you want silent execution:
+
+```bash
+python run_hf_vla_stack.py --iface enp0s31f6 --no-speak-intent
+```
+
+Show a resizable RGB window while the stack runs:
+
+```bash
+python run_hf_vla_stack.py --iface enp0s31f6 --visualize-rgb
 ```
 
 Run fully offline with deterministic local fallback responses:
@@ -98,14 +120,15 @@ python text_to_voice_go2.py "Speaker test successful" --iface enp0s31f6 --mode g
 
 - `unitree_sdk2py` is installed in the Python environment used to launch the script.
 - Ollama is running locally at `http://127.0.0.1:11434` for the Ollama stack's non-dry-run execution.
-- Model `qwen3.5:2b` is already pulled in Ollama for the Ollama stack's non-dry-run execution.
+- Model `qwen3.5:0.8b` is already pulled in Ollama for planner/actor execution, unless `--model` overrides it.
+- A local vision-capable Ollama model such as `qwen2.5vl:3b` is pulled if you want image perception parity with the Hugging Face stack via `--vision-model`.
 - `HF_TOKEN` is set or `--hf-token` is passed for the Hugging Face stack's non-dry-run execution.
-- The selected Hugging Face model supports text-only chat completions for planner/actor calls and image inputs for perception calls.
+- The selected Hugging Face model supports text-only chat completions for planner/actor calls and image inputs for perception calls, or the router exposes a compatible provider-suffixed variant that the client can auto-select.
 - The installed `unitree_sdk2py` package exposes Go2 `vui` controls, but not a Go2 audio/TTS streaming client.
 
 ## Safety
 
 The executable action vocabulary is intentionally narrow and clamps `move` commands to small velocities and short durations.
-With `--dry-run`, the stack still queries the video source and the configured model backend, but no `SportClient` motion command is sent to the robot.
+With `--dry-run`, each stack still queries the video source and tries the configured model backend first, but no `SportClient` motion command is sent to the robot. If the backend is unavailable, execution degrades to deterministic local fallback responses.
 With `--mock-ollama`, the stack uses deterministic local fallback outputs for perception, planning, and action selection.
 With `--mock-hf`, the Hugging Face stack uses deterministic local fallback outputs for perception, planning, and action selection.

@@ -6,7 +6,7 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 
 JSON_BLOCK_RE = re.compile(r"\{.*\}|\[.*\]", re.DOTALL)
@@ -24,16 +24,27 @@ class ChatMessage:
 
 
 class OllamaChatClient:
-    def __init__(self, base_url: str, model: str, timeout_sec: float = 90.0):
+    def __init__(
+        self,
+        base_url: str,
+        model: str,
+        timeout_sec: float = 90.0,
+        default_options: Optional[Dict[str, Any]] = None,
+        keep_alive: str = "10m",
+    ):
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.timeout_sec = timeout_sec
+        self.default_options = dict(default_options or {})
+        self.keep_alive = keep_alive
 
     def chat(
         self,
         messages: List[ChatMessage],
         stream: bool = False,
         options: Optional[Dict[str, Any]] = None,
+        response_format: Optional[str] = None,
+        think: Optional[bool] = None,
     ) -> Dict[str, Any]:
         payload = {
             "model": self.model,
@@ -47,8 +58,17 @@ class OllamaChatClient:
                 for m in messages
             ],
         }
+        merged_options = dict(self.default_options)
         if options:
-            payload["options"] = options
+            merged_options.update(options)
+        if merged_options:
+            payload["options"] = merged_options
+        if self.keep_alive:
+            payload["keep_alive"] = self.keep_alive
+        if response_format:
+            payload["format"] = response_format
+        if think is not None:
+            payload["think"] = think
 
         req = urllib.request.Request(
             f"{self.base_url}/api/chat",
@@ -61,7 +81,15 @@ class OllamaChatClient:
             with urllib.request.urlopen(req, timeout=self.timeout_sec) as resp:
                 raw = resp.read().decode("utf-8")
         except TimeoutError as exc:
-            raise OllamaError(f"ollama request timed out after {self.timeout_sec:.1f}s") from exc
+            raise OllamaError(
+                f"ollama request timed out after {self.timeout_sec:.1f}s; "
+                "the model may still be loading or generating"
+            ) from exc
+        except urllib.error.HTTPError as exc:
+            details = exc.read().decode("utf-8", errors="replace")
+            raise OllamaError(
+                f"ollama request failed: HTTP {exc.code}: {details[:300]}"
+            ) from exc
         except urllib.error.URLError as exc:
             raise OllamaError(f"ollama request failed: {exc}") from exc
 
@@ -80,22 +108,30 @@ class OllamaChatClient:
             ChatMessage(role="system", content=system_prompt),
             ChatMessage(role="user", content=user_prompt, images=images),
         ]
-        response = self.chat(messages=messages)
+        response = self.chat(messages=messages, response_format="json", think=False)
         content = response.get("message", {}).get("content", "").strip()
         return extract_json_object(content)
 
 
 class DryRunOllamaChatClient(OllamaChatClient):
     def __init__(self, model: str = "dry-run", timeout_sec: float = 0.0):
-        super().__init__(base_url="dry-run://local", model=model, timeout_sec=timeout_sec)
+        super().__init__(
+            base_url="dry-run://local",
+            model=model,
+            timeout_sec=timeout_sec,
+            default_options={},
+            keep_alive="",
+        )
 
     def chat(
         self,
         messages: List[ChatMessage],
         stream: bool = False,
         options: Optional[Dict[str, Any]] = None,
+        response_format: Optional[str] = None,
+        think: Optional[bool] = None,
     ) -> Dict[str, Any]:
-        _ = (stream, options)
+        _ = (stream, options, response_format, think)
         content = self._generate_content(messages)
         return {
             "model": self.model,
@@ -151,6 +187,63 @@ class DryRunOllamaChatClient(OllamaChatClient):
                 "user_prompt": user_prompt,
             }
         )
+
+
+class FallbackOllamaChatClient(OllamaChatClient):
+    def __init__(
+        self,
+        primary: OllamaChatClient,
+        fallback: OllamaChatClient,
+        on_error: Optional[Callable[[OllamaError], None]] = None,
+    ):
+        super().__init__(
+            base_url=primary.base_url,
+            model=primary.model,
+            timeout_sec=primary.timeout_sec,
+            default_options=primary.default_options,
+            keep_alive=primary.keep_alive,
+        )
+        self._primary = primary
+        self._fallback = fallback
+        self._on_error = on_error
+        self._using_fallback = False
+
+    def chat(
+        self,
+        messages: List[ChatMessage],
+        stream: bool = False,
+        options: Optional[Dict[str, Any]] = None,
+        response_format: Optional[str] = None,
+        think: Optional[bool] = None,
+    ) -> Dict[str, Any]:
+        if self._using_fallback:
+            return self._fallback.chat(
+                messages=messages,
+                stream=stream,
+                options=options,
+                response_format=response_format,
+                think=think,
+            )
+
+        try:
+            return self._primary.chat(
+                messages=messages,
+                stream=stream,
+                options=options,
+                response_format=response_format,
+                think=think,
+            )
+        except OllamaError as exc:
+            self._using_fallback = True
+            if self._on_error is not None:
+                self._on_error(exc)
+            return self._fallback.chat(
+                messages=messages,
+                stream=stream,
+                options=options,
+                response_format=response_format,
+                think=think,
+            )
 
 
 def extract_json_object(text: str) -> Dict[str, Any]:

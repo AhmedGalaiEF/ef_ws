@@ -8,7 +8,13 @@ import threading
 import time
 
 from hf_vla.config import RuntimeConfig
-from hf_vla.hf_client import DryRunHuggingFaceChatClient, HuggingFaceChatClient
+from hf_vla.hf_client import (
+    DryRunHuggingFaceChatClient,
+    FallbackHuggingFaceChatClient,
+    HuggingFaceChatClient,
+)
+from intent_summary import build_intent_statement
+from local_speech import LocalSpeechAnnouncer
 from ollama_vla.agents import (
     ActorAgent,
     PerceptionAgent,
@@ -40,6 +46,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--print-json", action="store_true", default=False)
     parser.add_argument("--visualize-rgb", action="store_true", default=False)
+    parser.add_argument("--speak-intent", dest="speak_intent", action="store_true", default=True)
+    parser.add_argument("--no-speak-intent", dest="speak_intent", action="store_false")
     return parser.parse_args()
 
 
@@ -61,13 +69,35 @@ def main() -> int:
     if runtime.mock_hf:
         model_client = DryRunHuggingFaceChatClient(model=f"{runtime.hf.model}-dry-run")
     else:
-        model_client = HuggingFaceChatClient(
+        primary_client = HuggingFaceChatClient(
             api_url=runtime.hf.api_url,
             model=runtime.hf.model,
             api_token=runtime.hf.api_token,
             timeout_sec=runtime.hf.request_timeout_sec,
             temperature=runtime.hf.temperature,
         )
+        if runtime.dry_run:
+            fallback_client = DryRunHuggingFaceChatClient(model=f"{runtime.hf.model}-dry-run")
+            warned = False
+
+            def _warn_fallback(exc: Exception) -> None:
+                nonlocal warned
+                if warned:
+                    return
+                warned = True
+                print(
+                    "Hugging Face backend unavailable in --dry-run; "
+                    f"falling back to deterministic local responses: {exc}",
+                    file=sys.stderr,
+                )
+
+            model_client = FallbackHuggingFaceChatClient(
+                primary=primary_client,
+                fallback=fallback_client,
+                on_error=_warn_fallback,
+            )
+        else:
+            model_client = primary_client
     video = Go2VideoSource(timeout_sec=runtime.video_timeout_sec, fps=runtime.video_fps)
     video.start()
     visualizer = RgbVisualizer(video) if args.visualize_rgb else None
@@ -92,11 +122,16 @@ def main() -> int:
         perception_worker=perception_worker,
     )
     perception_worker.start()
+    announcer = LocalSpeechAnnouncer(enabled=args.speak_intent)
 
     stop = threading.Event()
+    shutting_down = threading.Event()
+    exit_code = 0
 
     def _stop_handler(_signum, _frame) -> None:
         stop.set()
+        if shutting_down.is_set():
+            return
         raise KeyboardInterrupt
 
     def _term_handler(_signum, _frame) -> None:
@@ -109,10 +144,24 @@ def main() -> int:
         f"Starting Hugging Face VLA stack: iface={runtime.iface}, model={runtime.hf.model}, "
         f"dry_run={runtime.dry_run}, mock_hf={runtime.mock_hf}"
     )
+    if args.speak_intent and not announcer.available():
+        print(
+            "Local speech is enabled but no supported TTS command was found "
+            "(tried: spd-say, espeak-ng, espeak, say).",
+            file=sys.stderr,
+        )
 
     try:
         while not stop.is_set():
+            if visualizer is not None:
+                visualizer.render_latest()
             step = controller.step()
+            announcer.announce(
+                build_intent_statement(
+                    planner_output=step.planner_output,
+                    actor_output=step.actor_output,
+                )
+            )
             executed = executor.execute_many(step.actor_output.get("commands", []))
 
             if args.print_json:
@@ -139,19 +188,42 @@ def main() -> int:
                     f"commands={step.actor_output.get('commands', [])}"
                 )
 
-            stop.wait(runtime.planner_period_sec)
+            _wait_with_visualizer(stop, runtime.planner_period_sec, visualizer)
     except KeyboardInterrupt:
         stop.set()
+        exit_code = 130
         print("\nStopping Hugging Face VLA stack.")
     finally:
+        shutting_down.set()
+        signal.signal(signal.SIGINT, _term_handler)
+        stop.set()
         perception_worker.stop()
         if visualizer is not None:
             visualizer.stop()
         video.stop()
+        announcer.close()
         if not runtime.dry_run:
-            executor.execute({"name": "stop_move", "args": {}, "duration_sec": 0.0})
+            try:
+                executor.execute({"name": "stop_move", "args": {}, "duration_sec": 0.0})
+            except KeyboardInterrupt:
+                exit_code = 130
 
-    return 0
+    return exit_code
+
+
+def _wait_with_visualizer(
+    stop: threading.Event,
+    duration_sec: float,
+    visualizer: RgbVisualizer | None,
+) -> None:
+    deadline = time.time() + max(0.0, duration_sec)
+    while not stop.is_set():
+        remaining = deadline - time.time()
+        if remaining <= 0.0:
+            return
+        if visualizer is not None:
+            visualizer.render_latest()
+        stop.wait(min(0.03, remaining))
 
 
 if __name__ == "__main__":
