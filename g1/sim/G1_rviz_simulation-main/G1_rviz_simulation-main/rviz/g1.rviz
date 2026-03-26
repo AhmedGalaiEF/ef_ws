@@ -31,9 +31,6 @@ Visualization Manager:
     Enabled: true
     Name: RobotModel
     Robot Description: robot_description
-  - Class: rviz_default_plugins/JointState
-    Enabled: true
-    Name: JointState
   Global Options:
     Background Color: 48; 48; 48
     Fixed Frame: base_link
