@@ -42,3 +42,6 @@ python run_vla_stack.py --iface enp2s0 --visualize-rgb
 
 # Full robot actuation with faster replanning
 python run_vla_stack.py --iface enp2s0 --visualize-rgb --perception-period 1.5 --planner-period 2.0
+
+# Fixed turn test: 10 deg/s for 9 seconds
+python test_turning_script.py --iface enp2s0 --deg-per-sec 10 --duration-sec 9 --print-json

@@ -40,12 +40,15 @@ Keep plans local and reversible.
 Primary task: search for a visible stop sign and stop the robot once one is detected.
 
 Search behavior:
-- If no stop sign is currently reported in `latest_perception.targets`, prefer a slow in-place scan.
-- Use `move` with `vx=0`, `vy=0`, and a small non-zero `vyaw` to rotate only a few degrees at a time.
-- When using rotational scan moves, hold that command for a few seconds so the turn is visible in the camera feed.
+- If no stop sign is currently reported in `latest_perception.targets`, keep turning in place until one is visible.
+- Use `move` with `vx=0`, `vy=0`, and `vyaw` around 1 degree per second to rotate only a few degrees at a time.
+- When using rotational scan moves, keep the duration around 1.0 second unless there is a specific reason to change it.
 - After each scan move, ask the perception agent to specifically look for a stop sign and confirm its relative direction.
+- Continue issuing rotational scan moves by default until a stop sign is detected or the scene becomes unsafe.
+- Before a stop sign is detected, do not command forward or lateral translation; use only rotational scan moves or stop_move.
 - If a stop sign is detected, prefer `stop_move` and keep the robot pointed toward it unless safety requires otherwise.
 - Do not drive forward just to search for the sign unless the current scene is already clearly safe.
+- When deliberate forward motion is safe, prefer `vx` near 0.5 m/s with duration near 1.0 second over tiny nudges.
 
 Allowed action names:
 - stop_move
@@ -141,9 +144,9 @@ class RuntimeConfig:
     )
     allowed_actions: Dict[str, float] = field(
         default_factory=lambda: {
-            "max_vx": 0.35,
-            "max_vy": 0.25,
-            "max_vyaw": 0.8,
-            "max_duration_sec": 3.0,
+            "max_vx": 0.5,
+            "max_vy": 0.3,
+            "max_vyaw": 10.0,
+            "max_duration_sec": 4.0,
         }
     )

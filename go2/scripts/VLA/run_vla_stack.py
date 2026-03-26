@@ -24,6 +24,7 @@ from ollama_vla.ollama_client import (
 )
 from ollama_vla.sport_actor import SportCommandExecutor
 from ollama_vla.video_source import Go2VideoSource, RgbVisualizer
+from planner_prompt_editor import PlannerPromptEditor
 from sdk_safety import init_channel_autodetect
 
 
@@ -38,8 +39,8 @@ def parse_args() -> argparse.Namespace:
         help="Optional vision-capable Ollama model for perception. Defaults to --model.",
     )
     parser.add_argument("--request-timeout-sec", type=float, default=90.0)
-    parser.add_argument("--text-num-predict", type=int, default=160)
-    parser.add_argument("--vision-num-predict", type=int, default=220)
+    parser.add_argument("--text-num-predict", type=int, default=96)
+    parser.add_argument("--vision-num-predict", type=int, default=160)
     parser.add_argument("--keep-alive", default="10m")
     parser.add_argument("--perception-period", type=float, default=3.0)
     parser.add_argument("--planner-period", type=float, default=4.0)
@@ -52,6 +53,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--print-json", action="store_true", default=False)
     parser.add_argument("--visualize-rgb", action="store_true", default=False)
+    parser.add_argument(
+        "--interactive-planner-prompt",
+        action="store_true",
+        default=False,
+        help="Ask before each planner inference whether to edit the planner system prompt.",
+    )
     parser.add_argument("--speak-intent", dest="speak_intent", action="store_true", default=True)
     parser.add_argument("--no-speak-intent", dest="speak_intent", action="store_false")
     return parser.parse_args()
@@ -158,6 +165,8 @@ def main() -> int:
     )
     perception_worker.start()
     announcer = LocalSpeechAnnouncer(enabled=args.speak_intent)
+    prompt_editor = PlannerPromptEditor(enabled=args.interactive_planner_prompt)
+    current_planner_prompt = runtime.planner_system_prompt
 
     stop = threading.Event()
     shutting_down = threading.Event()
@@ -194,8 +203,8 @@ def main() -> int:
 
     try:
         while not stop.is_set():
-            if visualizer is not None:
-                visualizer.render_latest()
+            current_planner_prompt = prompt_editor.maybe_update(current_planner_prompt)
+            planner_agent.set_system_prompt(current_planner_prompt)
             step = controller.step()
             announcer.announce(
                 build_intent_statement(

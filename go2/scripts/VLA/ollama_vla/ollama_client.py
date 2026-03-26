@@ -110,7 +110,30 @@ class OllamaChatClient:
         ]
         response = self.chat(messages=messages, response_format="json", think=False)
         content = response.get("message", {}).get("content", "").strip()
-        return extract_json_object(content)
+        if not content:
+            fallback_response = self.chat(messages=messages, think=False)
+            fallback_content = fallback_response.get("message", {}).get("content", "").strip()
+            if fallback_content:
+                return extract_json_object(fallback_content)
+        try:
+            return extract_json_object(content)
+        except OllamaError as exc:
+            if response.get("done_reason") != "length":
+                raise
+
+            base_predict = int(self.default_options.get("num_predict", 128) or 128)
+            retry_options = {"num_predict": max(base_predict * 2, 192)}
+            retry_response = self.chat(
+                messages=messages,
+                options=retry_options,
+                response_format="json",
+                think=False,
+            )
+            retry_content = retry_response.get("message", {}).get("content", "").strip()
+            try:
+                return extract_json_object(retry_content)
+            except OllamaError:
+                raise exc
 
 
 class DryRunOllamaChatClient(OllamaChatClient):
@@ -256,11 +279,49 @@ def extract_json_object(text: str) -> Dict[str, Any]:
     except json.JSONDecodeError:
         pass
 
+    for candidate in _json_candidates(text):
+        try:
+            parsed = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            return parsed
+
     match = JSON_BLOCK_RE.search(text)
     if not match:
         raise OllamaError(f"no JSON object found in model response: {text[:200]}")
 
-    parsed = json.loads(match.group(0))
-    if not isinstance(parsed, dict):
-        raise OllamaError("model returned JSON but not an object")
-    return parsed
+    raise OllamaError(f"model returned malformed JSON: {match.group(0)[:200]}")
+
+
+def _json_candidates(text: str) -> List[str]:
+    candidates: List[str] = []
+    start = -1
+    depth = 0
+    in_string = False
+    escape = False
+
+    for index, char in enumerate(text):
+        if in_string:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            continue
+
+        if char == '"':
+            in_string = True
+            continue
+
+        if char == "{":
+            if depth == 0:
+                start = index
+            depth += 1
+        elif char == "}" and depth > 0:
+            depth -= 1
+            if depth == 0 and start >= 0:
+                candidates.append(text[start : index + 1])
+                start = -1
+    return candidates

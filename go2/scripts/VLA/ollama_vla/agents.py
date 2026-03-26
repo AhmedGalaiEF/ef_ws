@@ -102,6 +102,9 @@ class PlannerAgent:
         self._client = client
         self._system_prompt = system_prompt
 
+    def set_system_prompt(self, system_prompt: str) -> None:
+        self._system_prompt = system_prompt
+
     def plan(
         self,
         latest_perception: Optional[PerceptionResult],
@@ -118,10 +121,42 @@ class PlannerAgent:
                 "Update the next perception prompt and suggest the next short-horizon action."
             ),
         }
-        return self._client.chat_json(
+        raw = self._client.chat_json(
             system_prompt=self._system_prompt,
             user_prompt=json.dumps(prompt, indent=2),
         )
+        return self._sanitize(raw, latest_perception)
+
+    def _sanitize(
+        self,
+        raw: Dict[str, Any],
+        latest_perception: Optional[PerceptionResult],
+    ) -> Dict[str, Any]:
+        perception_data = latest_perception.data if latest_perception else {}
+        targets = perception_data.get("targets", [])
+        if isinstance(targets, list):
+            joined_targets = " ".join(str(target) for target in targets).lower()
+        else:
+            joined_targets = str(targets).lower()
+
+        if "stop sign" in joined_targets:
+            return raw
+
+        raw["perception_prompt"] = (
+            "Is there a visible stop sign in the current view? "
+            "If not, which direction should the robot keep turning?"
+        )
+        raw["reasoning_brief"] = (
+            "No stop sign is currently visible, so continue rotating in place to search for one."
+        )
+        raw["suggested_actions"] = [
+            {
+                "name": "move",
+                "args": {"vx": 0.0, "vy": 0.0, "vyaw": 1.0},
+                "duration_sec": 1.0,
+            }
+        ]
+        return raw
 
 
 class ActorAgent:
@@ -131,18 +166,12 @@ class ActorAgent:
         self._runtime = runtime
 
     def map_actions(self, planner_output: Dict[str, Any]) -> Dict[str, Any]:
-        payload = {
-            "planner_output": planner_output,
-            "limits": self._runtime.allowed_actions,
-            "instruction": "Produce executable commands only.",
+        raw = {
+            "commands": planner_output.get("suggested_actions", []),
         }
-        raw = self._client.chat_json(
-            system_prompt=self._system_prompt,
-            user_prompt=json.dumps(payload, indent=2),
-        )
-        return self._sanitize(raw)
+        return self._sanitize(raw, planner_output)
 
-    def _sanitize(self, raw: Dict[str, Any]) -> Dict[str, Any]:
+    def _sanitize(self, raw: Dict[str, Any], planner_output: Dict[str, Any]) -> Dict[str, Any]:
         commands = raw.get("commands", [])
         if not isinstance(commands, list) or not commands:
             return {"commands": [{"name": "stop_move", "args": {}, "duration_sec": 0.0}]}
@@ -152,6 +181,7 @@ class ActorAgent:
         max_vy = float(self._runtime.allowed_actions["max_vy"])
         max_vyaw = float(self._runtime.allowed_actions["max_vyaw"])
         max_duration = float(self._runtime.allowed_actions["max_duration_sec"])
+        planner_actions = planner_output.get("suggested_actions", [])
         allowed = {
             "stop_move",
             "stand_up",
@@ -170,16 +200,40 @@ class ActorAgent:
             name = str(command.get("name", "stop_move"))
             if name not in allowed:
                 continue
+            planner_command: Dict[str, Any] = {}
+            if isinstance(planner_actions, list) and len(planner_actions) > len(cleaned):
+                maybe_command = planner_actions[len(cleaned)]
+                if isinstance(maybe_command, dict):
+                    planner_command = maybe_command
             args = dict(command.get("args", {}) or {})
             duration_sec = max(0.0, min(float(command.get("duration_sec", 0.0) or 0.0), max_duration))
             if name == "move":
+                planner_args = dict(planner_command.get("args", {}) or {})
+                if str(planner_command.get("name", "")) == "move":
+                    if planner_args:
+                        args = planner_args
+                    planner_duration = float(planner_command.get("duration_sec", 0.0) or 0.0)
+                    if planner_duration > 0.0:
+                        duration_sec = min(planner_duration, max_duration)
                 args = {
                     "vx": _clamp(args.get("vx", 0.0), -max_vx, max_vx),
                     "vy": _clamp(args.get("vy", 0.0), -max_vy, max_vy),
                     "vyaw": _clamp(args.get("vyaw", 0.0), -max_vyaw, max_vyaw),
                 }
+                if abs(args["vx"]) < 0.05 and abs(args["vy"]) < 0.05 and abs(args["vyaw"]) > 0.0:
+                    args["vx"] = 0.0
+                    args["vy"] = 0.0
+                    args["vyaw"] = 1.0 if args["vyaw"] > 0.0 else -1.0
+                    if duration_sec < 1.0:
+                        duration_sec = 1.0
+                elif abs(args["vx"]) < 0.05 and abs(args["vy"]) < 0.05 and abs(args["vyaw"]) < 0.05:
+                    args["vx"] = 0.5
+                    args["vy"] = 0.0
+                    args["vyaw"] = 0.0
+                    if duration_sec < 1.0:
+                        duration_sec = 1.0
                 if duration_sec <= 0.0:
-                    duration_sec = 0.75
+                    duration_sec = 1.0
             else:
                 args = {}
                 duration_sec = 0.0
