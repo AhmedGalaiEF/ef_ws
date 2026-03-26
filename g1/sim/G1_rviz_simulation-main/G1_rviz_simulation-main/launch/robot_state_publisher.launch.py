@@ -18,7 +18,7 @@ def generate_launch_description():
     robot_description_command = Command([
         FindExecutable(name='xacro'),
         " ",
-        "/home/melodse/ef_ws/src/unitree_description/urdf/g1/g1.xacro",
+        "/home/melodse/ef_ws/src/unitree_ros/robots/g1_description/g1_29dof.urdf",
         " ", "robot_type:=", robot_type,
         " ", "simulation:=", simulation,
         " ", "network_interface:=", network_interface
