@@ -118,6 +118,7 @@ class RuntimeConfig:
     planner_period_sec: float = 4.0
     actor_cooldown_sec: float = 1.0
     dry_run: bool = True
+    mock_ollama: bool = False
     video_timeout_sec: float = 3.0
     video_fps: float = 30.0
     sport_timeout_sec: float = 5.0

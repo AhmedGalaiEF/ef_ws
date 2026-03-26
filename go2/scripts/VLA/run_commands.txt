@@ -1,26 +1,38 @@
 # Safe baseline: full stack, no robot actuation, JSON logs
 python run_vla_stack.py --iface enp2s0 --dry-run --print-json
+python run_vla_stack.py --iface enp2s0 --dry-run --mock-ollama --print-json
+HF_TOKEN=hf_xxx python run_hf_vla_stack.py --iface enp2s0 --dry-run --print-json
+python run_hf_vla_stack.py --iface enp2s0 --dry-run --mock-hf --print-json
 
 # Safe baseline with live RGB visualization
 python run_vla_stack.py --iface enp2s0 --dry-run --visualize-rgb
+python run_vla_stack.py --iface enp2s0 --dry-run --mock-ollama --visualize-rgb
+HF_TOKEN=hf_xxx python run_hf_vla_stack.py --iface enp2s0 --dry-run --visualize-rgb
+python run_hf_vla_stack.py --iface enp2s0 --dry-run --mock-hf --visualize-rgb
 
 # Dry-run with visualization and JSON output
 python run_vla_stack.py --iface enp2s0 --dry-run --visualize-rgb --print-json
+python run_vla_stack.py --iface enp2s0 --dry-run --mock-ollama --visualize-rgb --print-json
 
 # Faster perception/planning loop for more reactive testing
 python run_vla_stack.py --iface enp2s0 --dry-run --visualize-rgb --perception-period 1.0 --planner-period 1.5
+python run_vla_stack.py --iface enp2s0 --dry-run --mock-ollama --visualize-rgb --perception-period 1.0 --planner-period 1.5
 
 # Slower loop for lower model load
 python run_vla_stack.py --iface enp2s0 --dry-run --perception-period 5.0 --planner-period 6.0
+python run_vla_stack.py --iface enp2s0 --dry-run --mock-ollama --perception-period 5.0 --planner-period 6.0
 
 # Use a non-default Ollama endpoint
 python run_vla_stack.py --iface enp2s0 --dry-run --ollama-url http://192.168.1.50:11434
+python run_vla_stack.py --iface enp2s0 --dry-run --mock-ollama --ollama-url http://192.168.1.50:11434
 
 # Override the Ollama model name
 python run_vla_stack.py --iface enp2s0 --dry-run --model qwen3.5:2b
+python run_vla_stack.py --iface enp2s0 --dry-run --mock-ollama --model qwen3.5:2b
 
 # Different robot network interface
 python run_vla_stack.py --iface enp1s0 --dry-run --visualize-rgb
+python run_vla_stack.py --iface enp1s0 --dry-run --mock-ollama --visualize-rgb
 
 # Full robot actuation, console summaries only
 python run_vla_stack.py --iface enp2s0
