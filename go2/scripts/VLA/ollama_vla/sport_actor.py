@@ -46,6 +46,8 @@ class SportCommandExecutor:
         return ExecutedCommand(name=name, args=args, duration_sec=duration_sec, code=code)
 
     def _dispatch(self, name: str, args: Dict[str, Any], duration_sec: float) -> int:
+        if name == "damp":
+            return self._client.Damp()
         if name == "stop_move":
             return self._client.StopMove()
         if name == "stand_up":
@@ -60,8 +62,35 @@ class SportCommandExecutor:
             return self._client.Hello()
         if name == "stretch":
             return self._client.Stretch()
+        if name == "content":
+            return self._client.Content()
         if name == "free_walk":
             return self._client.FreeWalk()
+        if name == "pose_on":
+            return self._client.Pose(True)
+        if name == "pose_off":
+            return self._client.Pose(False)
+        if name == "dance1":
+            return self._client.Dance1()
+        if name == "dance2":
+            return self._client.Dance2()
+        if name == "static_walk":
+            return self._client.StaticWalk()
+        if name == "trot_run":
+            return self._client.TrotRun()
+        if name == "walk_upright_on":
+            return self._client.WalkUpright(True)
+        if name == "walk_upright_off":
+            return self._client.WalkUpright(False)
+        if name == "classic_walk_on":
+            return self._client.ClassicWalk(True)
+        if name == "classic_walk_off":
+            return self._client.ClassicWalk(False)
+        if name == "switch_avoid_mode":
+            return self._client.SwitchAvoidMode()
+        if name == "speed_level":
+            level = int(args.get("level", 1) or 1)
+            return self._client.SpeedLevel(level)
         if name == "sit":
             return self._client.Sit()
         if name == "rise_sit":

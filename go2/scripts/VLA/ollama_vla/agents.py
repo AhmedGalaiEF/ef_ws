@@ -183,6 +183,7 @@ class ActorAgent:
         max_duration = float(self._runtime.allowed_actions["max_duration_sec"])
         planner_actions = planner_output.get("suggested_actions", [])
         allowed = {
+            "damp",
             "stop_move",
             "stand_up",
             "stand_down",
@@ -194,6 +195,19 @@ class ActorAgent:
             "free_walk",
             "sit",
             "rise_sit",
+            "content",
+            "pose_on",
+            "pose_off",
+            "dance1",
+            "dance2",
+            "static_walk",
+            "trot_run",
+            "walk_upright_on",
+            "walk_upright_off",
+            "classic_walk_on",
+            "classic_walk_off",
+            "switch_avoid_mode",
+            "speed_level",
         }
 
         for command in commands[:2]:
@@ -235,7 +249,11 @@ class ActorAgent:
                 if duration_sec <= 0.0:
                     duration_sec = 1.0
             else:
-                args = {}
+                if name == "speed_level":
+                    level = int(command.get("args", {}).get("level", 1) or 1)
+                    args = {"level": max(0, min(level, 2))}
+                else:
+                    args = {}
                 duration_sec = 0.0
             cleaned.append({"name": name, "args": args, "duration_sec": duration_sec})
 

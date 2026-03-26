@@ -44,6 +44,34 @@ def summarize_commands(commands: List[Dict[str, Any]]) -> str:
             phrases.append("wave hello")
         elif name == "stretch":
             phrases.append("stretch")
+        elif name == "content":
+            phrases.append("show a content pose")
+        elif name == "pose_on":
+            phrases.append("enable pose mode")
+        elif name == "pose_off":
+            phrases.append("disable pose mode")
+        elif name == "dance1":
+            phrases.append("perform dance one")
+        elif name == "dance2":
+            phrases.append("perform dance two")
+        elif name == "static_walk":
+            phrases.append("switch to static walk")
+        elif name == "trot_run":
+            phrases.append("switch to trot run")
+        elif name == "walk_upright_on":
+            phrases.append("enable upright walking")
+        elif name == "walk_upright_off":
+            phrases.append("disable upright walking")
+        elif name == "classic_walk_on":
+            phrases.append("enable classic walk")
+        elif name == "classic_walk_off":
+            phrases.append("disable classic walk")
+        elif name == "switch_avoid_mode":
+            phrases.append("switch avoid mode")
+        elif name == "speed_level":
+            phrases.append(f"set speed level to {int(args.get('level', 1) or 1)}")
+        elif name == "damp":
+            phrases.append("enter damp mode")
         elif name == "free_walk":
             phrases.append("walk freely")
         elif name == "sit":

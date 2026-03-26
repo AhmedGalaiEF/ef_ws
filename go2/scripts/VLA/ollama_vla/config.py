@@ -51,6 +51,7 @@ Search behavior:
 - When deliberate forward motion is safe, prefer `vx` near 0.5 m/s with duration near 1.0 second over tiny nudges.
 
 Allowed action names:
+- damp
 - stop_move
 - stand_up
 - stand_down
@@ -62,12 +63,32 @@ Allowed action names:
 - free_walk
 - sit
 - rise_sit
+- content
+- pose_on
+- pose_off
+- dance1
+- dance2
+- static_walk
+- trot_run
+- walk_upright_on
+- walk_upright_off
+- classic_walk_on
+- classic_walk_off
+- switch_avoid_mode
+- speed_level
 
 For move, use:
 {
   "name": "move",
   "args": {"vx": float, "vy": float, "vyaw": float},
   "duration_sec": float
+}
+
+For speed_level, use:
+{
+  "name": "speed_level",
+  "args": {"level": 0 | 1 | 2},
+  "duration_sec": 0.0
 }
 
 Return strict JSON with this shape:
