@@ -1,0 +1,1 @@
+python run_vla_stack.py --iface enp0s31f6 --print-json --vision-model qwen3-vl:2b
