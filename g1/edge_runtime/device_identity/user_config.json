@@ -1,0 +1,15 @@
+{
+  "device_name": "G1_Robot_001",
+  "location": "Warehouse_A",
+  "operator": "John_Doe",
+  "preferred_skills": ["navigation", "object_detection"],
+  "safety_constraints": {
+    "max_speed": 1.5,
+    "max_payload": 5.0,
+    "operational_hours": "08:00-18:00"
+  },
+  "network_settings": {
+    "cloud_endpoint": "https://marketplace.example.com",
+    "update_server": "https://updates.example.com"
+  }
+}
