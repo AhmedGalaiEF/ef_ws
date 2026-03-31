@@ -21,12 +21,12 @@ Visualization Manager:
     Normal Cell Count: 10
     Plane: XY
   - Class: rviz_default_plugins/TF
-    Enabled: true
+    Enabled: false
     Frame Timeout: 10
     Name: TF
     Show Arrows: true
     Show Axes: true
-    Show Names: true
+    Show Names: false
   - Class: rviz_default_plugins/RobotModel
     Enabled: true
     Name: RobotModel
