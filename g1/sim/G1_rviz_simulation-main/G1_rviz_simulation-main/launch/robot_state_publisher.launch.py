@@ -1,6 +1,6 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions import Command, FindExecutable, LaunchConfiguration
+from launch.substitutions import Command, FindExecutable, LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 from launch_ros.parameter_descriptions import ParameterValue
@@ -18,7 +18,11 @@ def generate_launch_description():
     robot_description_command = Command([
         FindExecutable(name='xacro'),
         " ",
-        "/home/melodse/ef_ws/src/unitree_ros/robots/g1_description/g1_29dof.urdf",
+        PathJoinSubstitution([
+            FindPackageShare("g1_description"),
+            "urdf",
+            "g1_29dof_with_hand_rev_1_0_pkg.urdf"
+        ]),
         " ", "robot_type:=", robot_type,
         " ", "simulation:=", simulation,
         " ", "network_interface:=", network_interface
