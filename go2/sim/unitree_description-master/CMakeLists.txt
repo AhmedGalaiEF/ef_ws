@@ -47,6 +47,7 @@ target_compile_definitions( ${PROJECT_NAME} INTERFACE
 
 install(TARGETS ${PROJECT_NAME} EXPORT ${TARGETS_EXPORT_NAME})
 install(DIRECTORY model DESTINATION share/${PROJECT_NAME})
+install(DIRECTORY launch rviz DESTINATION share/${PROJECT_NAME})
 
 # Python
 findpython(REQUIRED)
