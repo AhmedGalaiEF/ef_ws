@@ -31,6 +31,8 @@ setup(
     entry_points={
         'console_scripts': [
             'lowstate_jointstate_bridge = g1_description.lowstate_jointstate_bridge:main',
+            'demo_joint_motion = g1_description.demo_joint_motion:main',
+            'rviz_joint_motion = g1_description.rviz_joint_motion:main',
         ],
     },
 )

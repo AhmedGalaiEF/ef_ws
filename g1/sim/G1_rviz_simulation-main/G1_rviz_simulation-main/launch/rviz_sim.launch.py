@@ -1,5 +1,5 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, GroupAction
 from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import Command, FindExecutable, PathJoinSubstitution, LaunchConfiguration
 from launch_ros.actions import Node
@@ -14,6 +14,8 @@ def generate_launch_description():
     publish_frequency = LaunchConfiguration('publish_frequency')
     use_gui = LaunchConfiguration('use_gui')
     rviz_config = LaunchConfiguration('rviz_config')
+    use_demo_motion = LaunchConfiguration('use_demo_motion')
+    demo_mode = LaunchConfiguration('demo_mode')
 
     urdf_name = 'g1'
 
@@ -47,20 +49,32 @@ def generate_launch_description():
         }],
     )
 
-    joint_state_publisher = Node(
-        package='joint_state_publisher',
-        executable='joint_state_publisher',
-        output='screen',
-        parameters=[robot_description, {'use_sim_time': use_sim_time}],
-        condition=UnlessCondition(use_gui),
+    joint_state_publishers = GroupAction(
+        condition=UnlessCondition(use_demo_motion),
+        actions=[
+            Node(
+                package='joint_state_publisher',
+                executable='joint_state_publisher',
+                output='screen',
+                parameters=[robot_description, {'use_sim_time': use_sim_time}],
+                condition=UnlessCondition(use_gui),
+            ),
+            Node(
+                package='joint_state_publisher_gui',
+                executable='joint_state_publisher_gui',
+                output='screen',
+                parameters=[robot_description, {'use_sim_time': use_sim_time}],
+                condition=IfCondition(use_gui),
+            ),
+        ],
     )
 
-    joint_state_publisher_gui = Node(
-        package='joint_state_publisher_gui',
-        executable='joint_state_publisher_gui',
+    demo_joint_motion = Node(
+        package='g1_description',
+        executable='demo_joint_motion',
         output='screen',
-        parameters=[robot_description, {'use_sim_time': use_sim_time}],
-        condition=IfCondition(use_gui),
+        parameters=[{'use_sim_time': use_sim_time, 'mode': demo_mode}],
+        condition=IfCondition(use_demo_motion),
     )
 
     rviz = Node(
@@ -77,6 +91,8 @@ def generate_launch_description():
         DeclareLaunchArgument('use_sim_time', default_value='false'),
         DeclareLaunchArgument('publish_frequency', default_value='100.0'),
         DeclareLaunchArgument('use_gui', default_value='false'),
+        DeclareLaunchArgument('use_demo_motion', default_value='false'),
+        DeclareLaunchArgument('demo_mode', default_value='pose'),
         DeclareLaunchArgument(
             'rviz_config',
             default_value=PathJoinSubstitution([
@@ -86,7 +102,7 @@ def generate_launch_description():
             ])
         ),
         node_robot_state_publisher,
-        joint_state_publisher,
-        joint_state_publisher_gui,
+        joint_state_publishers,
+        demo_joint_motion,
         rviz,
     ])
