@@ -6,6 +6,12 @@
     <color rgba="0.7 0.7 0.7 1"/>
   </material>
 
+  <link name="base_link"/>
+  <joint name="base_link_to_pelvis" type="fixed">
+    <parent link="base_link"/>
+    <child link="pelvis"/>
+  </joint>
+
   <mujoco>
     <compiler meshdir="meshes" discardvisual="false"/>
   </mujoco>
