@@ -1,0 +1,218 @@
+[2.623s] Invoking command in '/home/melodse/ef_ws/src/g1_rviz_simulation': PYTHONPATH=/home/melodse/ef_ws/build/g1_description/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../../../build/g1_description build --build-base /home/melodse/ef_ws/build/g1_description/build install --record /home/melodse/ef_ws/build/g1_description/install.log --single-version-externally-managed install_data
+[3.105s] running egg_info
+[3.105s] creating ../../../../build/g1_description/g1_description.egg-info
+[3.140s] writing ../../../../build/g1_description/g1_description.egg-info/PKG-INFO
+[3.141s] writing dependency_links to ../../../../build/g1_description/g1_description.egg-info/dependency_links.txt
+[3.141s] writing entry points to ../../../../build/g1_description/g1_description.egg-info/entry_points.txt
+[3.141s] writing requirements to ../../../../build/g1_description/g1_description.egg-info/requires.txt
+[3.143s] writing top-level names to ../../../../build/g1_description/g1_description.egg-info/top_level.txt
+[3.143s] writing manifest file '../../../../build/g1_description/g1_description.egg-info/SOURCES.txt'
+[3.220s] reading manifest file '../../../../build/g1_description/g1_description.egg-info/SOURCES.txt'
+[3.222s] writing manifest file '../../../../build/g1_description/g1_description.egg-info/SOURCES.txt'
+[3.223s] running build
+[3.223s] running build_py
+[3.223s] creating /home/melodse/ef_ws/build/g1_description/build
+[3.223s] creating /home/melodse/ef_ws/build/g1_description/build/lib
+[3.224s] creating /home/melodse/ef_ws/build/g1_description/build/lib/g1_description
+[3.226s] copying g1_description/demo_joint_motion.py -> /home/melodse/ef_ws/build/g1_description/build/lib/g1_description
+[3.226s] copying g1_description/rviz_joint_motion.py -> /home/melodse/ef_ws/build/g1_description/build/lib/g1_description
+[3.226s] copying g1_description/__init__.py -> /home/melodse/ef_ws/build/g1_description/build/lib/g1_description
+[3.226s] copying g1_description/lowstate_jointstate_bridge.py -> /home/melodse/ef_ws/build/g1_description/build/lib/g1_description
+[3.226s] running install
+[3.236s] running install_lib
+[3.272s] creating /home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages/g1_description
+[3.273s] copying /home/melodse/ef_ws/build/g1_description/build/lib/g1_description/demo_joint_motion.py -> /home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages/g1_description
+[3.273s] copying /home/melodse/ef_ws/build/g1_description/build/lib/g1_description/rviz_joint_motion.py -> /home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages/g1_description
+[3.274s] copying /home/melodse/ef_ws/build/g1_description/build/lib/g1_description/__init__.py -> /home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages/g1_description
+[3.274s] copying /home/melodse/ef_ws/build/g1_description/build/lib/g1_description/lowstate_jointstate_bridge.py -> /home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages/g1_description
+[3.275s] byte-compiling /home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages/g1_description/demo_joint_motion.py to demo_joint_motion.cpython-312.pyc
+[3.278s] byte-compiling /home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages/g1_description/rviz_joint_motion.py to rviz_joint_motion.cpython-312.pyc
+[3.280s] byte-compiling /home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages/g1_description/__init__.py to __init__.cpython-312.pyc
+[3.280s] byte-compiling /home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages/g1_description/lowstate_jointstate_bridge.py to lowstate_jointstate_bridge.cpython-312.pyc
+[3.282s] running install_data
+[3.282s] creating /home/melodse/ef_ws/install/g1_description/share/ament_index
+[3.283s] creating /home/melodse/ef_ws/install/g1_description/share/ament_index/resource_index
+[3.283s] creating /home/melodse/ef_ws/install/g1_description/share/ament_index/resource_index/packages
+[3.284s] copying resource/g1_description -> /home/melodse/ef_ws/install/g1_description/share/ament_index/resource_index/packages
+[3.284s] copying package.xml -> /home/melodse/ef_ws/install/g1_description/share/g1_description
+[3.284s] creating /home/melodse/ef_ws/install/g1_description/share/g1_description/launch
+[3.285s] copying launch/rviz_sim.launch.py -> /home/melodse/ef_ws/install/g1_description/share/g1_description/launch
+[3.285s] copying launch/robot_state_publisher.launch.py -> /home/melodse/ef_ws/install/g1_description/share/g1_description/launch
+[3.286s] creating /home/melodse/ef_ws/install/g1_description/share/g1_description/rviz
+[3.286s] copying rviz/g1.rviz -> /home/melodse/ef_ws/install/g1_description/share/g1_description/rviz
+[3.286s] creating /home/melodse/ef_ws/install/g1_description/share/g1_description/urdf
+[3.287s] copying urdf/g1_29dof_with_hand_rev_1_0_pkg.urdf -> /home/melodse/ef_ws/install/g1_description/share/g1_description/urdf
+[3.287s] creating /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.288s] copying meshes/right_elbow_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.288s] copying meshes/logo_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.289s] copying meshes/left_palm_force_sensor.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.294s] copying meshes/dex1_col_1.stl -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.294s] copying meshes/left_middle_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.294s] copying meshes/right_ring_force_sensor_3.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.295s] copying meshes/right_wrist_yaw_link_5010.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.295s] copying meshes/left_rubber_hand.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.298s] copying meshes/left_shoulder_roll_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.299s] copying meshes/right_hand_index_1_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.301s] copying meshes/left_wrist_yaw_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.302s] copying meshes/left_index_force_sensor_3.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.302s] copying meshes/left_little_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.303s] copying meshes/right_hip_yaw_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.304s] copying meshes/right_ankle_pitch_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.304s] copying meshes/left_middle_force_sensor_3.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.305s] copying meshes/dex1_col_2.stl -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.305s] copying meshes/waist_support_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.306s] copying meshes/torso_constraint_R_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.307s] copying meshes/Link16_L.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.309s] copying meshes/waist_constraint_R.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.311s] copying meshes/left_thumb_force_sensor_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.311s] copying meshes/d455_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.313s] copying meshes/left_little_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.314s] copying meshes/right_middle_force_sensor_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.315s] copying meshes/left_little_force_sensor_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.316s] copying meshes/Dex1_finger_link_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.317s] copying meshes/waist_yaw_link_rev_1_0.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.318s] copying meshes/left_hand_thumb_1_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.319s] copying meshes/right_shoulder_pitch_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.319s] copying meshes/left_shoulder_yaw_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.320s] copying meshes/left_little_force_sensor_3.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.321s] copying meshes/right_base_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.327s] copying meshes/left_index_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.329s] copying meshes/left_wrist_roll_rubber_hand.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.335s] copying meshes/right_thumb_force_sensor_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.335s] copying meshes/right_thumb_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.336s] copying meshes/left_middle_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.337s] copying meshes/Link22_R.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.338s] copying meshes/right_hand_palm_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.342s] copying meshes/right_index_force_sensor_3.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.343s] copying meshes/right_knee_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.344s] copying meshes/right_rubber_hand.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.348s] copying meshes/Link11_L.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.348s] copying meshes/torso_link_rev_1_0.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.352s] copying meshes/waist_constraint_L.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.352s] copying meshes/left_middle_force_sensor_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.354s] copying meshes/right_little_force_sensor_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.354s] copying meshes/right_hand_thumb_1_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.355s] copying meshes/left_shoulder_pitch_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.356s] copying meshes/right_middle_force_sensor_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.357s] copying meshes/right_thumb_3.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.358s] copying meshes/torso_constraint_R_rod_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.359s] copying meshes/right_wrist_roll_link_5010.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.360s] copying meshes/right_index_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.363s] copying meshes/Link13_R.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.365s] copying meshes/Link17_R.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.366s] copying meshes/right_wrist_roll_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.367s] copying meshes/left_middle_force_sensor_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.367s] copying meshes/right_little_force_sensor_3.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.368s] copying meshes/Link12_L.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.370s] copying meshes/right_index_force_sensor_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.371s] copying meshes/Dex1_base_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.375s] copying meshes/waist_roll_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.376s] copying meshes/right_ring_force_sensor_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.377s] copying meshes/torso_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.381s] copying meshes/right_index_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.382s] copying meshes/left_ring_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.383s] copying meshes/left_thumb_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.383s] copying meshes/right_wrist_pitch_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.385s] copying meshes/Link13_L.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.385s] copying meshes/left_hand_palm_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.388s] copying meshes/right_shoulder_yaw_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.389s] copying meshes/left_hip_yaw_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.390s] copying meshes/right_little_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.391s] copying meshes/left_base_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.397s] copying meshes/left_hand_index_1_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.400s] copying meshes/left_index_force_sensor_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.401s] copying meshes/right_thumb_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.403s] copying meshes/Link20_L.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.403s] copying meshes/left_hand_thumb_2_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.406s] copying meshes/left_wrist_yaw_link_5010.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.407s] copying meshes/left_hand_middle_0_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.410s] copying meshes/Link14_L.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.410s] copying meshes/R_hand_base_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.413s] copying meshes/left_thumb_3.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.414s] copying meshes/Link16_R.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.414s] copying meshes/right_middle_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.415s] copying meshes/Dex1_finger_link_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.416s] copying meshes/Link14_R.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.417s] copying meshes/left_wrist_roll_link_5010.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.419s] copying meshes/head_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.420s] copying meshes/head_servo_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.421s] copying meshes/right_middle_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.423s] copying meshes/Link22_L.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.424s] copying meshes/right_hand_middle_1_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.426s] copying meshes/right_hand_thumb_2_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.430s] copying meshes/torso_constraint_L_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.431s] copying meshes/right_little_force_sensor_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.433s] copying meshes/left_elbow_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.433s] copying meshes/left_ring_force_sensor_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.434s] copying meshes/left_thumb_force_sensor_3.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.435s] copying meshes/torso_constraint_L_rod_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.436s] copying meshes/right_thumb_4.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.437s] copying meshes/L_hand_base_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.439s] copying meshes/Link17_L.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.440s] copying meshes/right_ring_force_sensor_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.441s] copying meshes/right_wrist_pitch_link_5010.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.442s] copying meshes/left_ring_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.443s] copying meshes/Link18_R.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.444s] copying meshes/right_ankle_roll_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.445s] copying meshes/left_hand_thumb_0_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.446s] copying meshes/pelvis.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.447s] copying meshes/Link19_R.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.448s] copying meshes/left_wrist_pitch_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.450s] copying meshes/right_wrist_yaw_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.451s] copying meshes/right_little_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.453s] copying meshes/right_hip_pitch_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.453s] copying meshes/left_index_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.455s] copying meshes/right_shoulder_roll_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.456s] copying meshes/left_index_force_sensor_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.457s] copying meshes/left_little_force_sensor_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.457s] copying meshes/Link18_L.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.458s] copying meshes/left_knee_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.462s] copying meshes/right_ring_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.463s] copying meshes/left_ring_force_sensor_3.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.466s] copying meshes/right_hand_middle_0_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.466s] copying meshes/Link15_R.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.467s] copying meshes/left_hand_middle_1_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.469s] copying meshes/torso_link_23dof_rev_1_0.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.483s] copying meshes/right_hand_index_0_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.484s] copying meshes/right_hip_roll_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.484s] copying meshes/left_ankle_pitch_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.485s] copying meshes/right_hand_thumb_0_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.485s] copying meshes/right_thumb_force_sensor_4.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.486s] copying meshes/left_hip_pitch_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.486s] copying meshes/left_thumb_force_sensor_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.487s] copying meshes/Link15_L.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.488s] copying meshes/right_thumb_force_sensor_3.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.489s] copying meshes/right_palm_force_sensor.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.491s] copying meshes/left_thumb_force_sensor_4.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.492s] copying meshes/Link11_R.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.492s] copying meshes/waist_roll_link_rev_1_0.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.493s] copying meshes/left_ankle_roll_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.494s] copying meshes/Link19_L.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.497s] copying meshes/right_ring_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.499s] copying meshes/right_thumb_force_sensor_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.500s] copying meshes/right_middle_force_sensor_3.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.500s] copying meshes/pelvis_contour_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.503s] copying meshes/Link12_R.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.505s] copying meshes/left_ring_force_sensor_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.506s] copying meshes/left_thumb_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.507s] copying meshes/left_hip_roll_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.507s] copying meshes/left_wrist_pitch_link_5010.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.508s] copying meshes/waist_yaw_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.509s] copying meshes/left_thumb_swing.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.510s] copying meshes/right_wrist_roll_rubber_hand.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.516s] copying meshes/Link21_L.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.517s] copying meshes/left_hand_index_0_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.518s] copying meshes/right_index_force_sensor_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.519s] copying meshes/left_thumb_4.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.520s] copying meshes/xl330_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.521s] copying meshes/Link20_R.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.522s] copying meshes/left_wrist_roll_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.522s] copying meshes/Link21_R.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes
+[3.523s] running install_egg_info
+[3.563s] Copying ../../../../build/g1_description/g1_description.egg-info to /home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages/g1_description-0.0.0-py3.12.egg-info
+[3.566s] running install_scripts
+[3.785s] Installing demo_joint_motion script to /home/melodse/ef_ws/install/g1_description/lib/g1_description
+[3.785s] Installing lowstate_jointstate_bridge script to /home/melodse/ef_ws/install/g1_description/lib/g1_description
+[3.786s] Installing rviz_joint_motion script to /home/melodse/ef_ws/install/g1_description/lib/g1_description
+[3.786s] writing list of installed files to '/home/melodse/ef_ws/build/g1_description/install.log'
+[3.835s] Invoked command in '/home/melodse/ef_ws/src/g1_rviz_simulation' returned '0': PYTHONPATH=/home/melodse/ef_ws/build/g1_description/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../../../build/g1_description build --build-base /home/melodse/ef_ws/build/g1_description/build install --record /home/melodse/ef_ws/build/g1_description/install.log --single-version-externally-managed install_data

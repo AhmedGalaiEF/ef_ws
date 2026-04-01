@@ -1,0 +1,4 @@
+[0.022s] Invoking command in '/home/melodse/ef_ws/build/slam_example': /usr/bin/cmake --build /home/melodse/ef_ws/build/slam_example -- -j12 -l12
+[0.138s] [ 50%] Building CXX object CMakeFiles/keyDemo.dir/src/keyDemo.cpp.o
+[7.928s] [100%] Linking CXX executable keyDemo
+[8.730s] [100%] Built target keyDemo

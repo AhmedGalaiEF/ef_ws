@@ -1,0 +1,262 @@
+[0.000000] (-) TimerEvent: {}
+[0.000114] (g1_description) JobQueued: {'identifier': 'g1_description', 'dependencies': OrderedDict()}
+[0.001258] (g1_description) JobStarted: {'identifier': 'g1_description'}
+[0.099622] (-) TimerEvent: {}
+[0.199903] (-) TimerEvent: {}
+[0.300186] (-) TimerEvent: {}
+[0.400535] (-) TimerEvent: {}
+[0.500970] (-) TimerEvent: {}
+[0.601276] (-) TimerEvent: {}
+[0.701567] (-) TimerEvent: {}
+[0.801846] (-) TimerEvent: {}
+[0.902207] (-) TimerEvent: {}
+[1.002530] (-) TimerEvent: {}
+[1.102777] (-) TimerEvent: {}
+[1.203063] (-) TimerEvent: {}
+[1.303395] (-) TimerEvent: {}
+[1.403727] (-) TimerEvent: {}
+[1.504101] (-) TimerEvent: {}
+[1.604440] (-) TimerEvent: {}
+[1.704869] (-) TimerEvent: {}
+[1.805306] (-) TimerEvent: {}
+[1.905716] (-) TimerEvent: {}
+[2.006067] (-) TimerEvent: {}
+[2.106353] (-) TimerEvent: {}
+[2.206625] (-) TimerEvent: {}
+[2.306901] (-) TimerEvent: {}
+[2.407181] (-) TimerEvent: {}
+[2.507454] (-) TimerEvent: {}
+[2.607766] (-) TimerEvent: {}
+[2.622105] (g1_description) Command: {'cmd': ['/usr/bin/python3', '-W', 'ignore:setup.py install is deprecated', '-W', 'ignore:easy_install command is deprecated', 'setup.py', 'egg_info', '--egg-base', '../../../../build/g1_description', 'build', '--build-base', '/home/melodse/ef_ws/build/g1_description/build', 'install', '--record', '/home/melodse/ef_ws/build/g1_description/install.log', '--single-version-externally-managed', 'install_data'], 'cwd': '/home/melodse/ef_ws/src/g1_rviz_simulation', 'env': {'LESSOPEN': '| /usr/bin/lesspipe %s', 'USER': 'melodse', 'GZ_CONFIG_PATH': '/opt/ros/jazzy/opt/gz_sim_vendor/share/gz:/opt/ros/jazzy/opt/sdformat_vendor/share/gz:/opt/ros/jazzy/opt/gz_gui_vendor/share/gz:/opt/ros/jazzy/opt/gz_transport_vendor/share/gz:/opt/ros/jazzy/opt/gz_rendering_vendor/share/gz:/opt/ros/jazzy/opt/gz_plugin_vendor/share/gz:/opt/ros/jazzy/opt/gz_fuel_tools_vendor/share/gz:/opt/ros/jazzy/opt/gz_msgs_vendor/share/gz:/opt/ros/jazzy/opt/gz_common_vendor/share/gz', 'ROS_PACKAGE_PATH': '/home/melodse/ef_ws/install/unitree_description/share', 'SHLVL': '1', 'LD_LIBRARY_PATH': '/home/melodse/ef_ws/install/unitree_hg/lib:/opt/ros/jazzy/opt/gz_sim_vendor/lib:/opt/ros/jazzy/opt/gz_sensors_vendor/lib:/opt/ros/jazzy/opt/gz_physics_vendor/lib:/opt/ros/jazzy/opt/sdformat_vendor/lib:/opt/ros/jazzy/opt/rviz_ogre_vendor/lib:/opt/ros/jazzy/lib/x86_64-linux-gnu:/opt/ros/jazzy/opt/gz_gui_vendor/lib:/opt/ros/jazzy/opt/gz_transport_vendor/lib:/opt/ros/jazzy/opt/gz_rendering_vendor/lib:/opt/ros/jazzy/opt/gz_plugin_vendor/lib:/opt/ros/jazzy/opt/gz_fuel_tools_vendor/lib:/opt/ros/jazzy/opt/gz_msgs_vendor/lib:/opt/ros/jazzy/opt/gz_common_vendor/lib:/opt/ros/jazzy/opt/gz_math_vendor/lib:/opt/ros/jazzy/opt/gz_utils_vendor/lib:/opt/ros/jazzy/opt/gz_tools_vendor/lib:/opt/ros/jazzy/opt/gz_ogre_next_vendor/lib:/opt/ros/jazzy/opt/gz_dartsim_vendor/lib:/opt/ros/jazzy/opt/gz_cmake_vendor/lib:/opt/ros/jazzy/lib', 'WT_PROFILE_ID': '{61c54bbd-c2c6-5271-96e7-009a87ff44bf}', 'HOME': '/home/melodse', 'CONDA_SHLVL': '0', 'OLDPWD': '/mnt/c/Users/meldo', 'ROS_PYTHON_VERSION': '3', 'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/run/user/1000/bus', '_CE_M': '', 'WSL_DISTRO_NAME': 'Ubuntu', '_CONDA_ROOT': '/home/melodse/miniconda3', 'WAYLAND_DISPLAY': 'wayland-0', 'COLCON_PREFIX_PATH': '/home/melodse/ros2_ws/install:/home/melodse/ef_ws/install', 'ROS_DISTRO': 'jazzy', 'LOGNAME': 'melodse', 'NAME': 'meldose', 'WSL_INTEROP': '/run/WSL/16218_interop', 'PULSE_SERVER': 'unix:/mnt/wslg/PulseServer', '_': '/usr/bin/colcon', 'ROS_VERSION': '2', 'PKG_CONFIG_PATH': '/home/melodse/ros2_ws/install/unitree_description/lib/x86_64-linux-gnu/pkgconfig:/home/melodse/ros2_ws/install/unitree_description/lib/pkgconfig:/home/melodse/ef_ws/install/unitree_description/lib/x86_64-linux-gnu/pkgconfig:/home/melodse/ef_ws/install/unitree_description/lib/pkgconfig', 'TERM': 'xterm-256color', '_CE_CONDA': '', 'PATH': '/home/melodse/.codex/tmp/path/codex-arg0ntaggF:/usr/local/lib/node_modules/@openai/codex/vendor/x86_64-unknown-linux-musl/path:/home/melodse/miniconda3/condabin:/home/melodse/.local/bin:/opt/ros/jazzy/opt/gz_msgs_vendor/bin:/opt/ros/jazzy/opt/gz_tools_vendor/bin:/opt/ros/jazzy/opt/gz_ogre_next_vendor/bin:/opt/ros/jazzy/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/lib/wsl/lib:/mnt/c/WINDOWS/system32:/mnt/c/WINDOWS:/mnt/c/WINDOWS/System32/Wbem:/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/:/mnt/c/WINDOWS/System32/OpenSSH/:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/usbipd-win/:/mnt/c/Users/meldo/.local/bin:/mnt/c/Users/meldo/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/meldo/AppData/Local/Programs/Microsoft VS Code/bin:/mnt/c/Users/meldo/AppData/Local/GitHubDesktop/bin:/mnt/c/Users/meldo/AppData/Local/Microsoft/WinGet/Links:/snap/bin', 'WT_SESSION': 'a5e3245a-3945-411f-8535-4fd197f2eea6', 'XDG_RUNTIME_DIR': '/run/user/1000/', 'DISPLAY': ':0', 'CODEX_SANDBOX_NETWORK_DISABLED': '1', 'LANG': 'en_US.UTF-8', 'RMW_IMPLEMENTATION': 'rmw_cyclonedds_cpp', 'CYCLONEDDS_HOME': '/home/melodse/cyclonedds/install', 'LS_COLORS': 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=00:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.avif=01;35:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:*~=00;90:*#=00;90:*.bak=00;90:*.crdownload=00;90:*.dpkg-dist=00;90:*.dpkg-new=00;90:*.dpkg-old=00;90:*.dpkg-tmp=00;90:*.old=00;90:*.orig=00;90:*.part=00;90:*.rej=00;90:*.rpmnew=00;90:*.rpmorig=00;90:*.rpmsave=00;90:*.swp=00;90:*.tmp=00;90:*.ucf-dist=00;90:*.ucf-new=00;90:*.ucf-old=00;90:', 'AMENT_PREFIX_PATH': '/home/melodse/ros2_ws/install/unitree_description:/home/melodse/ef_ws/install/unitree_hg:/home/melodse/ef_ws/install/g1_description:/opt/ros/jazzy', 'CONDA_PYTHON_EXE': '/home/melodse/miniconda3/bin/python', 'SHELL': '/bin/bash', 'LESSCLOSE': '/usr/bin/lesspipe %s %s', '_CONDA_EXE': '/home/melodse/miniconda3/bin/conda', 'ROS_AUTOMATIC_DISCOVERY_RANGE': 'SUBNET', 'PWD': '/home/melodse/ef_ws/build/g1_description', 'CONDA_EXE': '/home/melodse/miniconda3/bin/conda', 'XDG_DATA_DIRS': '/usr/local/share:/usr/share:/var/lib/snapd/desktop', 'PYTHONPATH': '/home/melodse/ef_ws/build/g1_description/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages:/home/melodse/ros2_ws/install/unitree_description/lib/python3.12/site-packages:/home/melodse/ef_ws/install/unitree_hg/lib/python3.12/site-packages:/home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages:/opt/ros/jazzy/lib/python3.12/site-packages', 'COLCON': '1', 'WSL2_GUI_APPS_ENABLED': '1', 'CODEX_MANAGED_BY_NPM': '1', 'HOSTTYPE': 'x86_64', 'CMAKE_PREFIX_PATH': '/home/melodse/cyclonedds/install', 'WSLENV': 'WT_SESSION:WT_PROFILE_ID:'}, 'shell': False}
+[2.707951] (-) TimerEvent: {}
+[2.808238] (-) TimerEvent: {}
+[2.908536] (-) TimerEvent: {}
+[3.008973] (-) TimerEvent: {}
+[3.105620] (g1_description) StdoutLine: {'line': b'running egg_info\n'}
+[3.106433] (g1_description) StdoutLine: {'line': b'creating ../../../../build/g1_description/g1_description.egg-info\n'}
+[3.109075] (-) TimerEvent: {}
+[3.141346] (g1_description) StdoutLine: {'line': b'writing ../../../../build/g1_description/g1_description.egg-info/PKG-INFO\n'}
+[3.141883] (g1_description) StdoutLine: {'line': b'writing dependency_links to ../../../../build/g1_description/g1_description.egg-info/dependency_links.txt\n'}
+[3.142286] (g1_description) StdoutLine: {'line': b'writing entry points to ../../../../build/g1_description/g1_description.egg-info/entry_points.txt\n'}
+[3.142605] (g1_description) StdoutLine: {'line': b'writing requirements to ../../../../build/g1_description/g1_description.egg-info/requires.txt\n'}
+[3.143831] (g1_description) StdoutLine: {'line': b'writing top-level names to ../../../../build/g1_description/g1_description.egg-info/top_level.txt\n'}
+[3.144295] (g1_description) StdoutLine: {'line': b"writing manifest file '../../../../build/g1_description/g1_description.egg-info/SOURCES.txt'\n"}
+[3.209240] (-) TimerEvent: {}
+[3.221331] (g1_description) StdoutLine: {'line': b"reading manifest file '../../../../build/g1_description/g1_description.egg-info/SOURCES.txt'\n"}
+[3.223211] (g1_description) StdoutLine: {'line': b"writing manifest file '../../../../build/g1_description/g1_description.egg-info/SOURCES.txt'\n"}
+[3.223765] (g1_description) StdoutLine: {'line': b'running build\n'}
+[3.223912] (g1_description) StdoutLine: {'line': b'running build_py\n'}
+[3.224199] (g1_description) StdoutLine: {'line': b'creating /home/melodse/ef_ws/build/g1_description/build\n'}
+[3.224506] (g1_description) StdoutLine: {'line': b'creating /home/melodse/ef_ws/build/g1_description/build/lib\n'}
+[3.224922] (g1_description) StdoutLine: {'line': b'creating /home/melodse/ef_ws/build/g1_description/build/lib/g1_description\n'}
+[3.227220] (g1_description) StdoutLine: {'line': b'copying g1_description/demo_joint_motion.py -> /home/melodse/ef_ws/build/g1_description/build/lib/g1_description\n'}
+[3.227453] (g1_description) StdoutLine: {'line': b'copying g1_description/rviz_joint_motion.py -> /home/melodse/ef_ws/build/g1_description/build/lib/g1_description\n'}
+[3.227565] (g1_description) StdoutLine: {'line': b'copying g1_description/__init__.py -> /home/melodse/ef_ws/build/g1_description/build/lib/g1_description\n'}
+[3.227684] (g1_description) StdoutLine: {'line': b'copying g1_description/lowstate_jointstate_bridge.py -> /home/melodse/ef_ws/build/g1_description/build/lib/g1_description\n'}
+[3.227776] (g1_description) StdoutLine: {'line': b'running install\n'}
+[3.237144] (g1_description) StdoutLine: {'line': b'running install_lib\n'}
+[3.273517] (g1_description) StdoutLine: {'line': b'creating /home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages/g1_description\n'}
+[3.274120] (g1_description) StdoutLine: {'line': b'copying /home/melodse/ef_ws/build/g1_description/build/lib/g1_description/demo_joint_motion.py -> /home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages/g1_description\n'}
+[3.274545] (g1_description) StdoutLine: {'line': b'copying /home/melodse/ef_ws/build/g1_description/build/lib/g1_description/rviz_joint_motion.py -> /home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages/g1_description\n'}
+[3.274852] (g1_description) StdoutLine: {'line': b'copying /home/melodse/ef_ws/build/g1_description/build/lib/g1_description/__init__.py -> /home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages/g1_description\n'}
+[3.275169] (g1_description) StdoutLine: {'line': b'copying /home/melodse/ef_ws/build/g1_description/build/lib/g1_description/lowstate_jointstate_bridge.py -> /home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages/g1_description\n'}
+[3.275934] (g1_description) StdoutLine: {'line': b'byte-compiling /home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages/g1_description/demo_joint_motion.py to demo_joint_motion.cpython-312.pyc\n'}
+[3.279225] (g1_description) StdoutLine: {'line': b'byte-compiling /home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages/g1_description/rviz_joint_motion.py to rviz_joint_motion.cpython-312.pyc\n'}
+[3.280915] (g1_description) StdoutLine: {'line': b'byte-compiling /home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages/g1_description/__init__.py to __init__.cpython-312.pyc\n'}
+[3.281419] (g1_description) StdoutLine: {'line': b'byte-compiling /home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages/g1_description/lowstate_jointstate_bridge.py to lowstate_jointstate_bridge.cpython-312.pyc\n'}
+[3.283103] (g1_description) StdoutLine: {'line': b'running install_data\n'}
+[3.283416] (g1_description) StdoutLine: {'line': b'creating /home/melodse/ef_ws/install/g1_description/share/ament_index\n'}
+[3.283925] (g1_description) StdoutLine: {'line': b'creating /home/melodse/ef_ws/install/g1_description/share/ament_index/resource_index\n'}
+[3.284324] (g1_description) StdoutLine: {'line': b'creating /home/melodse/ef_ws/install/g1_description/share/ament_index/resource_index/packages\n'}
+[3.284765] (g1_description) StdoutLine: {'line': b'copying resource/g1_description -> /home/melodse/ef_ws/install/g1_description/share/ament_index/resource_index/packages\n'}
+[3.285372] (g1_description) StdoutLine: {'line': b'copying package.xml -> /home/melodse/ef_ws/install/g1_description/share/g1_description\n'}
+[3.285696] (g1_description) StdoutLine: {'line': b'creating /home/melodse/ef_ws/install/g1_description/share/g1_description/launch\n'}
+[3.286157] (g1_description) StdoutLine: {'line': b'copying launch/rviz_sim.launch.py -> /home/melodse/ef_ws/install/g1_description/share/g1_description/launch\n'}
+[3.286434] (g1_description) StdoutLine: {'line': b'copying launch/robot_state_publisher.launch.py -> /home/melodse/ef_ws/install/g1_description/share/g1_description/launch\n'}
+[3.286772] (g1_description) StdoutLine: {'line': b'creating /home/melodse/ef_ws/install/g1_description/share/g1_description/rviz\n'}
+[3.287215] (g1_description) StdoutLine: {'line': b'copying rviz/g1.rviz -> /home/melodse/ef_ws/install/g1_description/share/g1_description/rviz\n'}
+[3.287512] (g1_description) StdoutLine: {'line': b'creating /home/melodse/ef_ws/install/g1_description/share/g1_description/urdf\n'}
+[3.287969] (g1_description) StdoutLine: {'line': b'copying urdf/g1_29dof_with_hand_rev_1_0_pkg.urdf -> /home/melodse/ef_ws/install/g1_description/share/g1_description/urdf\n'}
+[3.288381] (g1_description) StdoutLine: {'line': b'creating /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.288786] (g1_description) StdoutLine: {'line': b'copying meshes/right_elbow_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.289307] (g1_description) StdoutLine: {'line': b'copying meshes/logo_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.289843] (g1_description) StdoutLine: {'line': b'copying meshes/left_palm_force_sensor.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.294871] (g1_description) StdoutLine: {'line': b'copying meshes/dex1_col_1.stl -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.295139] (g1_description) StdoutLine: {'line': b'copying meshes/left_middle_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.295646] (g1_description) StdoutLine: {'line': b'copying meshes/right_ring_force_sensor_3.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.295821] (g1_description) StdoutLine: {'line': b'copying meshes/right_wrist_yaw_link_5010.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.296328] (g1_description) StdoutLine: {'line': b'copying meshes/left_rubber_hand.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.299109] (g1_description) StdoutLine: {'line': b'copying meshes/left_shoulder_roll_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.299953] (g1_description) StdoutLine: {'line': b'copying meshes/right_hand_index_1_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.301954] (g1_description) StdoutLine: {'line': b'copying meshes/left_wrist_yaw_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.302648] (g1_description) StdoutLine: {'line': b'copying meshes/left_index_force_sensor_3.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.303362] (g1_description) StdoutLine: {'line': b'copying meshes/left_little_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.304436] (g1_description) StdoutLine: {'line': b'copying meshes/right_hip_yaw_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.305207] (g1_description) StdoutLine: {'line': b'copying meshes/right_ankle_pitch_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.305617] (g1_description) StdoutLine: {'line': b'copying meshes/left_middle_force_sensor_3.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.306010] (g1_description) StdoutLine: {'line': b'copying meshes/dex1_col_2.stl -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.306476] (g1_description) StdoutLine: {'line': b'copying meshes/waist_support_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.307365] (g1_description) StdoutLine: {'line': b'copying meshes/torso_constraint_R_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.307919] (g1_description) StdoutLine: {'line': b'copying meshes/Link16_L.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.309462] (-) TimerEvent: {}
+[3.310039] (g1_description) StdoutLine: {'line': b'copying meshes/waist_constraint_R.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.311916] (g1_description) StdoutLine: {'line': b'copying meshes/left_thumb_force_sensor_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.312124] (g1_description) StdoutLine: {'line': b'copying meshes/d455_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.314173] (g1_description) StdoutLine: {'line': b'copying meshes/left_little_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.315102] (g1_description) StdoutLine: {'line': b'copying meshes/right_middle_force_sensor_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.315919] (g1_description) StdoutLine: {'line': b'copying meshes/left_little_force_sensor_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.316815] (g1_description) StdoutLine: {'line': b'copying meshes/Dex1_finger_link_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.317733] (g1_description) StdoutLine: {'line': b'copying meshes/waist_yaw_link_rev_1_0.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.318974] (g1_description) StdoutLine: {'line': b'copying meshes/left_hand_thumb_1_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.319967] (g1_description) StdoutLine: {'line': b'copying meshes/right_shoulder_pitch_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.320579] (g1_description) StdoutLine: {'line': b'copying meshes/left_shoulder_yaw_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.321352] (g1_description) StdoutLine: {'line': b'copying meshes/left_little_force_sensor_3.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.321770] (g1_description) StdoutLine: {'line': b'copying meshes/right_base_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.328668] (g1_description) StdoutLine: {'line': b'copying meshes/left_index_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.330150] (g1_description) StdoutLine: {'line': b'copying meshes/left_wrist_roll_rubber_hand.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.336063] (g1_description) StdoutLine: {'line': b'copying meshes/right_thumb_force_sensor_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.336569] (g1_description) StdoutLine: {'line': b'copying meshes/right_thumb_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.337008] (g1_description) StdoutLine: {'line': b'copying meshes/left_middle_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.338584] (g1_description) StdoutLine: {'line': b'copying meshes/Link22_R.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.339513] (g1_description) StdoutLine: {'line': b'copying meshes/right_hand_palm_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.343513] (g1_description) StdoutLine: {'line': b'copying meshes/right_index_force_sensor_3.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.344011] (g1_description) StdoutLine: {'line': b'copying meshes/right_knee_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.345582] (g1_description) StdoutLine: {'line': b'copying meshes/right_rubber_hand.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.348936] (g1_description) StdoutLine: {'line': b'copying meshes/Link11_L.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.349409] (g1_description) StdoutLine: {'line': b'copying meshes/torso_link_rev_1_0.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.353144] (g1_description) StdoutLine: {'line': b'copying meshes/waist_constraint_L.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.353684] (g1_description) StdoutLine: {'line': b'copying meshes/left_middle_force_sensor_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.354714] (g1_description) StdoutLine: {'line': b'copying meshes/right_little_force_sensor_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.355643] (g1_description) StdoutLine: {'line': b'copying meshes/right_hand_thumb_1_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.356637] (g1_description) StdoutLine: {'line': b'copying meshes/left_shoulder_pitch_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.357276] (g1_description) StdoutLine: {'line': b'copying meshes/right_middle_force_sensor_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.358170] (g1_description) StdoutLine: {'line': b'copying meshes/right_thumb_3.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.359063] (g1_description) StdoutLine: {'line': b'copying meshes/torso_constraint_R_rod_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.359872] (g1_description) StdoutLine: {'line': b'copying meshes/right_wrist_roll_link_5010.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.361397] (g1_description) StdoutLine: {'line': b'copying meshes/right_index_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.363743] (g1_description) StdoutLine: {'line': b'copying meshes/Link13_R.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.365746] (g1_description) StdoutLine: {'line': b'copying meshes/Link17_R.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.366910] (g1_description) StdoutLine: {'line': b'copying meshes/right_wrist_roll_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.367753] (g1_description) StdoutLine: {'line': b'copying meshes/left_middle_force_sensor_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.368550] (g1_description) StdoutLine: {'line': b'copying meshes/right_little_force_sensor_3.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.369091] (g1_description) StdoutLine: {'line': b'copying meshes/Link12_L.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.371037] (g1_description) StdoutLine: {'line': b'copying meshes/right_index_force_sensor_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.371866] (g1_description) StdoutLine: {'line': b'copying meshes/Dex1_base_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.376230] (g1_description) StdoutLine: {'line': b'copying meshes/waist_roll_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.377504] (g1_description) StdoutLine: {'line': b'copying meshes/right_ring_force_sensor_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.378329] (g1_description) StdoutLine: {'line': b'copying meshes/torso_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.381894] (g1_description) StdoutLine: {'line': b'copying meshes/right_index_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.382824] (g1_description) StdoutLine: {'line': b'copying meshes/left_ring_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.384185] (g1_description) StdoutLine: {'line': b'copying meshes/left_thumb_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.384627] (g1_description) StdoutLine: {'line': b'copying meshes/right_wrist_pitch_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.385549] (g1_description) StdoutLine: {'line': b'copying meshes/Link13_L.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.386595] (g1_description) StdoutLine: {'line': b'copying meshes/left_hand_palm_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.389658] (g1_description) StdoutLine: {'line': b'copying meshes/right_shoulder_yaw_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.390346] (g1_description) StdoutLine: {'line': b'copying meshes/left_hip_yaw_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.391117] (g1_description) StdoutLine: {'line': b'copying meshes/right_little_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.391973] (g1_description) StdoutLine: {'line': b'copying meshes/left_base_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.398513] (g1_description) StdoutLine: {'line': b'copying meshes/left_hand_index_1_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.401061] (g1_description) StdoutLine: {'line': b'copying meshes/left_index_force_sensor_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.402663] (g1_description) StdoutLine: {'line': b'copying meshes/right_thumb_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.403763] (g1_description) StdoutLine: {'line': b'copying meshes/Link20_L.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.404648] (g1_description) StdoutLine: {'line': b'copying meshes/left_hand_thumb_2_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.407348] (g1_description) StdoutLine: {'line': b'copying meshes/left_wrist_yaw_link_5010.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.408594] (g1_description) StdoutLine: {'line': b'copying meshes/left_hand_middle_0_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.409716] (-) TimerEvent: {}
+[3.410704] (g1_description) StdoutLine: {'line': b'copying meshes/Link14_L.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.411197] (g1_description) StdoutLine: {'line': b'copying meshes/R_hand_base_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.413867] (g1_description) StdoutLine: {'line': b'copying meshes/left_thumb_3.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.414777] (g1_description) StdoutLine: {'line': b'copying meshes/Link16_R.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.415524] (g1_description) StdoutLine: {'line': b'copying meshes/right_middle_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.416303] (g1_description) StdoutLine: {'line': b'copying meshes/Dex1_finger_link_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.417187] (g1_description) StdoutLine: {'line': b'copying meshes/Link14_R.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.418229] (g1_description) StdoutLine: {'line': b'copying meshes/left_wrist_roll_link_5010.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.419752] (g1_description) StdoutLine: {'line': b'copying meshes/head_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.421374] (g1_description) StdoutLine: {'line': b'copying meshes/head_servo_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.422561] (g1_description) StdoutLine: {'line': b'copying meshes/right_middle_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.423907] (g1_description) StdoutLine: {'line': b'copying meshes/Link22_L.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.424871] (g1_description) StdoutLine: {'line': b'copying meshes/right_hand_middle_1_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.427647] (g1_description) StdoutLine: {'line': b'copying meshes/right_hand_thumb_2_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.431309] (g1_description) StdoutLine: {'line': b'copying meshes/torso_constraint_L_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.432142] (g1_description) StdoutLine: {'line': b'copying meshes/right_little_force_sensor_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.434001] (g1_description) StdoutLine: {'line': b'copying meshes/left_elbow_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.434576] (g1_description) StdoutLine: {'line': b'copying meshes/left_ring_force_sensor_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.435584] (g1_description) StdoutLine: {'line': b'copying meshes/left_thumb_force_sensor_3.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.436487] (g1_description) StdoutLine: {'line': b'copying meshes/torso_constraint_L_rod_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.437012] (g1_description) StdoutLine: {'line': b'copying meshes/right_thumb_4.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.438124] (g1_description) StdoutLine: {'line': b'copying meshes/L_hand_base_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.440318] (g1_description) StdoutLine: {'line': b'copying meshes/Link17_L.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.441335] (g1_description) StdoutLine: {'line': b'copying meshes/right_ring_force_sensor_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.442186] (g1_description) StdoutLine: {'line': b'copying meshes/right_wrist_pitch_link_5010.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.442869] (g1_description) StdoutLine: {'line': b'copying meshes/left_ring_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.444325] (g1_description) StdoutLine: {'line': b'copying meshes/Link18_R.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.445125] (g1_description) StdoutLine: {'line': b'copying meshes/right_ankle_roll_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.446390] (g1_description) StdoutLine: {'line': b'copying meshes/left_hand_thumb_0_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.446753] (g1_description) StdoutLine: {'line': b'copying meshes/pelvis.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.448375] (g1_description) StdoutLine: {'line': b'copying meshes/Link19_R.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.449410] (g1_description) StdoutLine: {'line': b'copying meshes/left_wrist_pitch_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.451311] (g1_description) StdoutLine: {'line': b'copying meshes/right_wrist_yaw_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.452173] (g1_description) StdoutLine: {'line': b'copying meshes/right_little_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.453924] (g1_description) StdoutLine: {'line': b'copying meshes/right_hip_pitch_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.454455] (g1_description) StdoutLine: {'line': b'copying meshes/left_index_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.455866] (g1_description) StdoutLine: {'line': b'copying meshes/right_shoulder_roll_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.456796] (g1_description) StdoutLine: {'line': b'copying meshes/left_index_force_sensor_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.457796] (g1_description) StdoutLine: {'line': b'copying meshes/left_little_force_sensor_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.458648] (g1_description) StdoutLine: {'line': b'copying meshes/Link18_L.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.459489] (g1_description) StdoutLine: {'line': b'copying meshes/left_knee_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.462863] (g1_description) StdoutLine: {'line': b'copying meshes/right_ring_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.464131] (g1_description) StdoutLine: {'line': b'copying meshes/left_ring_force_sensor_3.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.466815] (g1_description) StdoutLine: {'line': b'copying meshes/right_hand_middle_0_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.467418] (g1_description) StdoutLine: {'line': b'copying meshes/Link15_R.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.468010] (g1_description) StdoutLine: {'line': b'copying meshes/left_hand_middle_1_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.470499] (g1_description) StdoutLine: {'line': b'copying meshes/torso_link_23dof_rev_1_0.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.483671] (g1_description) StdoutLine: {'line': b'copying meshes/right_hand_index_0_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.484990] (g1_description) StdoutLine: {'line': b'copying meshes/right_hip_roll_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.485674] (g1_description) StdoutLine: {'line': b'copying meshes/left_ankle_pitch_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.486141] (g1_description) StdoutLine: {'line': b'copying meshes/right_hand_thumb_0_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.486515] (g1_description) StdoutLine: {'line': b'copying meshes/right_thumb_force_sensor_4.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.487054] (g1_description) StdoutLine: {'line': b'copying meshes/left_hip_pitch_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.487566] (g1_description) StdoutLine: {'line': b'copying meshes/left_thumb_force_sensor_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.488458] (g1_description) StdoutLine: {'line': b'copying meshes/Link15_L.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.489371] (g1_description) StdoutLine: {'line': b'copying meshes/right_thumb_force_sensor_3.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.490158] (g1_description) StdoutLine: {'line': b'copying meshes/right_palm_force_sensor.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.492508] (g1_description) StdoutLine: {'line': b'copying meshes/left_thumb_force_sensor_4.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.493079] (g1_description) StdoutLine: {'line': b'copying meshes/Link11_R.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.493669] (g1_description) StdoutLine: {'line': b'copying meshes/waist_roll_link_rev_1_0.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.494080] (g1_description) StdoutLine: {'line': b'copying meshes/left_ankle_roll_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.495533] (g1_description) StdoutLine: {'line': b'copying meshes/Link19_L.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.498583] (g1_description) StdoutLine: {'line': b'copying meshes/right_ring_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.499931] (g1_description) StdoutLine: {'line': b'copying meshes/right_thumb_force_sensor_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.500787] (g1_description) StdoutLine: {'line': b'copying meshes/right_middle_force_sensor_3.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.501336] (g1_description) StdoutLine: {'line': b'copying meshes/pelvis_contour_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.504134] (g1_description) StdoutLine: {'line': b'copying meshes/Link12_R.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.505743] (g1_description) StdoutLine: {'line': b'copying meshes/left_ring_force_sensor_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.506743] (g1_description) StdoutLine: {'line': b'copying meshes/left_thumb_2.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.507883] (g1_description) StdoutLine: {'line': b'copying meshes/left_hip_roll_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.508466] (g1_description) StdoutLine: {'line': b'copying meshes/left_wrist_pitch_link_5010.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.508881] (g1_description) StdoutLine: {'line': b'copying meshes/waist_yaw_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.509853] (-) TimerEvent: {}
+[3.510580] (g1_description) StdoutLine: {'line': b'copying meshes/left_thumb_swing.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.511016] (g1_description) StdoutLine: {'line': b'copying meshes/right_wrist_roll_rubber_hand.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.517071] (g1_description) StdoutLine: {'line': b'copying meshes/Link21_L.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.518035] (g1_description) StdoutLine: {'line': b'copying meshes/left_hand_index_0_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.519059] (g1_description) StdoutLine: {'line': b'copying meshes/right_index_force_sensor_1.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.519894] (g1_description) StdoutLine: {'line': b'copying meshes/left_thumb_4.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.521030] (g1_description) StdoutLine: {'line': b'copying meshes/xl330_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.521967] (g1_description) StdoutLine: {'line': b'copying meshes/Link20_R.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.522787] (g1_description) StdoutLine: {'line': b'copying meshes/left_wrist_roll_link.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.523599] (g1_description) StdoutLine: {'line': b'copying meshes/Link21_R.STL -> /home/melodse/ef_ws/install/g1_description/share/g1_description/meshes\n'}
+[3.524467] (g1_description) StdoutLine: {'line': b'running install_egg_info\n'}
+[3.563948] (g1_description) StdoutLine: {'line': b'Copying ../../../../build/g1_description/g1_description.egg-info to /home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages/g1_description-0.0.0-py3.12.egg-info\n'}
+[3.566889] (g1_description) StdoutLine: {'line': b'running install_scripts\n'}
+[3.610046] (-) TimerEvent: {}
+[3.710333] (-) TimerEvent: {}
+[3.785719] (g1_description) StdoutLine: {'line': b'Installing demo_joint_motion script to /home/melodse/ef_ws/install/g1_description/lib/g1_description\n'}
+[3.786393] (g1_description) StdoutLine: {'line': b'Installing lowstate_jointstate_bridge script to /home/melodse/ef_ws/install/g1_description/lib/g1_description\n'}
+[3.786747] (g1_description) StdoutLine: {'line': b'Installing rviz_joint_motion script to /home/melodse/ef_ws/install/g1_description/lib/g1_description\n'}
+[3.787384] (g1_description) StdoutLine: {'line': b"writing list of installed files to '/home/melodse/ef_ws/build/g1_description/install.log'\n"}
+[3.810552] (-) TimerEvent: {}
+[3.836275] (g1_description) CommandEnded: {'returncode': 0}
+[3.911008] (-) TimerEvent: {}
+[3.912429] (g1_description) JobEnded: {'identifier': 'g1_description', 'rc': 0}
+[3.914412] (-) EventReactorShutdown: {}

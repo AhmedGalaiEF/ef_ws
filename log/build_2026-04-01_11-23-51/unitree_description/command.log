@@ -1,0 +1,1 @@
+Invoking command in '/home/melodse/ef_ws/build/unitree_description': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/melodse/ros2_ws/install/unitree_description:/home/melodse/ef_ws/install/unitree_hg:/home/melodse/ef_ws/install/g1_description:/opt/ros/jazzy /usr/bin/cmake --build /home/melodse/ef_ws/build/unitree_description -- -j12 -l12

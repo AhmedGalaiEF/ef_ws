@@ -1,0 +1,1 @@
+Invoking command in '/home/melodse/ef_ws/build/unitree_description': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/jazzy /usr/bin/cmake /home/melodse/ef_ws/go2/sim/unitree_description-master -DCMAKE_INSTALL_PREFIX=/home/melodse/ef_ws/install/unitree_description

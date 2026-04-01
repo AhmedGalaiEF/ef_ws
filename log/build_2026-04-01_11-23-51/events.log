@@ -1,0 +1,154 @@
+[0.000000] (-) TimerEvent: {}
+[0.000203] (slam_example) JobQueued: {'identifier': 'slam_example', 'dependencies': OrderedDict()}
+[0.000272] (tx_lidar) JobQueued: {'identifier': 'tx_lidar', 'dependencies': OrderedDict()}
+[0.000322] (unitree_description) JobQueued: {'identifier': 'unitree_description', 'dependencies': OrderedDict()}
+[0.000368] (g1_description) JobQueued: {'identifier': 'g1_description', 'dependencies': OrderedDict({'unitree_description': '/home/melodse/ef_ws/install/unitree_description'})}
+[0.001238] (unitree_description) JobStarted: {'identifier': 'unitree_description'}
+[0.013145] (slam_example) JobStarted: {'identifier': 'slam_example'}
+[0.017889] (tx_lidar) JobStarted: {'identifier': 'tx_lidar'}
+[0.027971] (unitree_description) JobProgress: {'identifier': 'unitree_description', 'progress': 'cmake'}
+[0.028758] (unitree_description) JobProgress: {'identifier': 'unitree_description', 'progress': 'build'}
+[0.029836] (unitree_description) Command: {'cmd': ['/usr/bin/cmake', '--build', '/home/melodse/ef_ws/build/unitree_description', '--', '-j12', '-l12'], 'cwd': '/home/melodse/ef_ws/build/unitree_description', 'env': OrderedDict({'LESSOPEN': '| /usr/bin/lesspipe %s', 'USER': 'melodse', 'GZ_CONFIG_PATH': '/opt/ros/jazzy/opt/gz_sim_vendor/share/gz:/opt/ros/jazzy/opt/sdformat_vendor/share/gz:/opt/ros/jazzy/opt/gz_gui_vendor/share/gz:/opt/ros/jazzy/opt/gz_transport_vendor/share/gz:/opt/ros/jazzy/opt/gz_rendering_vendor/share/gz:/opt/ros/jazzy/opt/gz_plugin_vendor/share/gz:/opt/ros/jazzy/opt/gz_fuel_tools_vendor/share/gz:/opt/ros/jazzy/opt/gz_msgs_vendor/share/gz:/opt/ros/jazzy/opt/gz_common_vendor/share/gz', 'ROS_PACKAGE_PATH': '/home/melodse/ef_ws/install/unitree_description/share', 'SHLVL': '1', 'LD_LIBRARY_PATH': '/home/melodse/ef_ws/install/unitree_hg/lib:/opt/ros/jazzy/opt/gz_sim_vendor/lib:/opt/ros/jazzy/opt/gz_sensors_vendor/lib:/opt/ros/jazzy/opt/gz_physics_vendor/lib:/opt/ros/jazzy/opt/sdformat_vendor/lib:/opt/ros/jazzy/opt/rviz_ogre_vendor/lib:/opt/ros/jazzy/lib/x86_64-linux-gnu:/opt/ros/jazzy/opt/gz_gui_vendor/lib:/opt/ros/jazzy/opt/gz_transport_vendor/lib:/opt/ros/jazzy/opt/gz_rendering_vendor/lib:/opt/ros/jazzy/opt/gz_plugin_vendor/lib:/opt/ros/jazzy/opt/gz_fuel_tools_vendor/lib:/opt/ros/jazzy/opt/gz_msgs_vendor/lib:/opt/ros/jazzy/opt/gz_common_vendor/lib:/opt/ros/jazzy/opt/gz_math_vendor/lib:/opt/ros/jazzy/opt/gz_utils_vendor/lib:/opt/ros/jazzy/opt/gz_tools_vendor/lib:/opt/ros/jazzy/opt/gz_ogre_next_vendor/lib:/opt/ros/jazzy/opt/gz_dartsim_vendor/lib:/opt/ros/jazzy/opt/gz_cmake_vendor/lib:/opt/ros/jazzy/lib', 'WT_PROFILE_ID': '{61c54bbd-c2c6-5271-96e7-009a87ff44bf}', 'HOME': '/home/melodse', 'CONDA_SHLVL': '0', 'OLDPWD': '/mnt/c/Users/meldo', 'ROS_PYTHON_VERSION': '3', 'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/run/user/1000/bus', '_CE_M': '', 'WSL_DISTRO_NAME': 'Ubuntu', '_CONDA_ROOT': '/home/melodse/miniconda3', 'WAYLAND_DISPLAY': 'wayland-0', 'COLCON_PREFIX_PATH': '/home/melodse/ros2_ws/install:/home/melodse/ef_ws/install', 'ROS_DISTRO': 'jazzy', 'LOGNAME': 'melodse', 'NAME': 'meldose', 'WSL_INTEROP': '/run/WSL/16218_interop', 'PULSE_SERVER': 'unix:/mnt/wslg/PulseServer', '_': '/usr/bin/colcon', 'ROS_VERSION': '2', 'PKG_CONFIG_PATH': '/home/melodse/ros2_ws/install/unitree_description/lib/x86_64-linux-gnu/pkgconfig:/home/melodse/ros2_ws/install/unitree_description/lib/pkgconfig:/home/melodse/ef_ws/install/unitree_description/lib/x86_64-linux-gnu/pkgconfig:/home/melodse/ef_ws/install/unitree_description/lib/pkgconfig', 'TERM': 'xterm-256color', '_CE_CONDA': '', 'PATH': '/home/melodse/.codex/tmp/path/codex-arg0ntaggF:/usr/local/lib/node_modules/@openai/codex/vendor/x86_64-unknown-linux-musl/path:/home/melodse/miniconda3/condabin:/home/melodse/.local/bin:/opt/ros/jazzy/opt/gz_msgs_vendor/bin:/opt/ros/jazzy/opt/gz_tools_vendor/bin:/opt/ros/jazzy/opt/gz_ogre_next_vendor/bin:/opt/ros/jazzy/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/lib/wsl/lib:/mnt/c/WINDOWS/system32:/mnt/c/WINDOWS:/mnt/c/WINDOWS/System32/Wbem:/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/:/mnt/c/WINDOWS/System32/OpenSSH/:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/usbipd-win/:/mnt/c/Users/meldo/.local/bin:/mnt/c/Users/meldo/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/meldo/AppData/Local/Programs/Microsoft VS Code/bin:/mnt/c/Users/meldo/AppData/Local/GitHubDesktop/bin:/mnt/c/Users/meldo/AppData/Local/Microsoft/WinGet/Links:/snap/bin', 'WT_SESSION': 'a5e3245a-3945-411f-8535-4fd197f2eea6', 'XDG_RUNTIME_DIR': '/run/user/1000/', 'DISPLAY': ':0', 'CODEX_SANDBOX_NETWORK_DISABLED': '1', 'LANG': 'en_US.UTF-8', 'RMW_IMPLEMENTATION': 'rmw_cyclonedds_cpp', 'CYCLONEDDS_HOME': '/home/melodse/cyclonedds/install', 'LS_COLORS': 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=00:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.avif=01;35:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:*~=00;90:*#=00;90:*.bak=00;90:*.crdownload=00;90:*.dpkg-dist=00;90:*.dpkg-new=00;90:*.dpkg-old=00;90:*.dpkg-tmp=00;90:*.old=00;90:*.orig=00;90:*.part=00;90:*.rej=00;90:*.rpmnew=00;90:*.rpmorig=00;90:*.rpmsave=00;90:*.swp=00;90:*.tmp=00;90:*.ucf-dist=00;90:*.ucf-new=00;90:*.ucf-old=00;90:', 'AMENT_PREFIX_PATH': '/home/melodse/ros2_ws/install/unitree_description:/home/melodse/ef_ws/install/unitree_hg:/home/melodse/ef_ws/install/g1_description:/opt/ros/jazzy', 'CONDA_PYTHON_EXE': '/home/melodse/miniconda3/bin/python', 'SHELL': '/bin/bash', 'LESSCLOSE': '/usr/bin/lesspipe %s %s', '_CONDA_EXE': '/home/melodse/miniconda3/bin/conda', 'ROS_AUTOMATIC_DISCOVERY_RANGE': 'SUBNET', 'PWD': '/home/melodse/ef_ws/build/unitree_description', 'CONDA_EXE': '/home/melodse/miniconda3/bin/conda', 'XDG_DATA_DIRS': '/usr/local/share:/usr/share:/var/lib/snapd/desktop', 'PYTHONPATH': '/home/melodse/ros2_ws/install/unitree_description/lib/python3.12/site-packages:/home/melodse/ef_ws/install/unitree_hg/lib/python3.12/site-packages:/home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages:/opt/ros/jazzy/lib/python3.12/site-packages', 'COLCON': '1', 'WSL2_GUI_APPS_ENABLED': '1', 'CODEX_MANAGED_BY_NPM': '1', 'HOSTTYPE': 'x86_64', 'CMAKE_PREFIX_PATH': '/home/melodse/cyclonedds/install:/home/melodse/ros2_ws/install/unitree_description:/home/melodse/ef_ws/install/unitree_hg:/home/melodse/ef_ws/install/g1_description:/opt/ros/jazzy', 'WSLENV': 'WT_SESSION:WT_PROFILE_ID:'}), 'shell': False}
+[0.033711] (slam_example) JobProgress: {'identifier': 'slam_example', 'progress': 'cmake'}
+[0.033767] (slam_example) JobProgress: {'identifier': 'slam_example', 'progress': 'build'}
+[0.033792] (slam_example) Command: {'cmd': ['/usr/bin/cmake', '--build', '/home/melodse/ef_ws/build/slam_example', '--', '-j12', '-l12'], 'cwd': '/home/melodse/ef_ws/build/slam_example', 'env': OrderedDict({'LESSOPEN': '| /usr/bin/lesspipe %s', 'USER': 'melodse', 'GZ_CONFIG_PATH': '/opt/ros/jazzy/opt/gz_sim_vendor/share/gz:/opt/ros/jazzy/opt/sdformat_vendor/share/gz:/opt/ros/jazzy/opt/gz_gui_vendor/share/gz:/opt/ros/jazzy/opt/gz_transport_vendor/share/gz:/opt/ros/jazzy/opt/gz_rendering_vendor/share/gz:/opt/ros/jazzy/opt/gz_plugin_vendor/share/gz:/opt/ros/jazzy/opt/gz_fuel_tools_vendor/share/gz:/opt/ros/jazzy/opt/gz_msgs_vendor/share/gz:/opt/ros/jazzy/opt/gz_common_vendor/share/gz', 'ROS_PACKAGE_PATH': '/home/melodse/ef_ws/install/unitree_description/share', 'SHLVL': '1', 'LD_LIBRARY_PATH': '/home/melodse/ef_ws/install/unitree_hg/lib:/opt/ros/jazzy/opt/gz_sim_vendor/lib:/opt/ros/jazzy/opt/gz_sensors_vendor/lib:/opt/ros/jazzy/opt/gz_physics_vendor/lib:/opt/ros/jazzy/opt/sdformat_vendor/lib:/opt/ros/jazzy/opt/rviz_ogre_vendor/lib:/opt/ros/jazzy/lib/x86_64-linux-gnu:/opt/ros/jazzy/opt/gz_gui_vendor/lib:/opt/ros/jazzy/opt/gz_transport_vendor/lib:/opt/ros/jazzy/opt/gz_rendering_vendor/lib:/opt/ros/jazzy/opt/gz_plugin_vendor/lib:/opt/ros/jazzy/opt/gz_fuel_tools_vendor/lib:/opt/ros/jazzy/opt/gz_msgs_vendor/lib:/opt/ros/jazzy/opt/gz_common_vendor/lib:/opt/ros/jazzy/opt/gz_math_vendor/lib:/opt/ros/jazzy/opt/gz_utils_vendor/lib:/opt/ros/jazzy/opt/gz_tools_vendor/lib:/opt/ros/jazzy/opt/gz_ogre_next_vendor/lib:/opt/ros/jazzy/opt/gz_dartsim_vendor/lib:/opt/ros/jazzy/opt/gz_cmake_vendor/lib:/opt/ros/jazzy/lib', 'WT_PROFILE_ID': '{61c54bbd-c2c6-5271-96e7-009a87ff44bf}', 'HOME': '/home/melodse', 'CONDA_SHLVL': '0', 'OLDPWD': '/mnt/c/Users/meldo', 'ROS_PYTHON_VERSION': '3', 'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/run/user/1000/bus', '_CE_M': '', 'WSL_DISTRO_NAME': 'Ubuntu', '_CONDA_ROOT': '/home/melodse/miniconda3', 'WAYLAND_DISPLAY': 'wayland-0', 'COLCON_PREFIX_PATH': '/home/melodse/ros2_ws/install:/home/melodse/ef_ws/install', 'ROS_DISTRO': 'jazzy', 'LOGNAME': 'melodse', 'NAME': 'meldose', 'WSL_INTEROP': '/run/WSL/16218_interop', 'PULSE_SERVER': 'unix:/mnt/wslg/PulseServer', '_': '/usr/bin/colcon', 'ROS_VERSION': '2', 'PKG_CONFIG_PATH': '/home/melodse/ros2_ws/install/unitree_description/lib/x86_64-linux-gnu/pkgconfig:/home/melodse/ros2_ws/install/unitree_description/lib/pkgconfig:/home/melodse/ef_ws/install/unitree_description/lib/x86_64-linux-gnu/pkgconfig:/home/melodse/ef_ws/install/unitree_description/lib/pkgconfig', 'TERM': 'xterm-256color', '_CE_CONDA': '', 'PATH': '/home/melodse/.codex/tmp/path/codex-arg0ntaggF:/usr/local/lib/node_modules/@openai/codex/vendor/x86_64-unknown-linux-musl/path:/home/melodse/miniconda3/condabin:/home/melodse/.local/bin:/opt/ros/jazzy/opt/gz_msgs_vendor/bin:/opt/ros/jazzy/opt/gz_tools_vendor/bin:/opt/ros/jazzy/opt/gz_ogre_next_vendor/bin:/opt/ros/jazzy/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/lib/wsl/lib:/mnt/c/WINDOWS/system32:/mnt/c/WINDOWS:/mnt/c/WINDOWS/System32/Wbem:/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/:/mnt/c/WINDOWS/System32/OpenSSH/:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/usbipd-win/:/mnt/c/Users/meldo/.local/bin:/mnt/c/Users/meldo/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/meldo/AppData/Local/Programs/Microsoft VS Code/bin:/mnt/c/Users/meldo/AppData/Local/GitHubDesktop/bin:/mnt/c/Users/meldo/AppData/Local/Microsoft/WinGet/Links:/snap/bin', 'WT_SESSION': 'a5e3245a-3945-411f-8535-4fd197f2eea6', 'XDG_RUNTIME_DIR': '/run/user/1000/', 'DISPLAY': ':0', 'CODEX_SANDBOX_NETWORK_DISABLED': '1', 'LANG': 'en_US.UTF-8', 'RMW_IMPLEMENTATION': 'rmw_cyclonedds_cpp', 'CYCLONEDDS_HOME': '/home/melodse/cyclonedds/install', 'LS_COLORS': 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=00:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.avif=01;35:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:*~=00;90:*#=00;90:*.bak=00;90:*.crdownload=00;90:*.dpkg-dist=00;90:*.dpkg-new=00;90:*.dpkg-old=00;90:*.dpkg-tmp=00;90:*.old=00;90:*.orig=00;90:*.part=00;90:*.rej=00;90:*.rpmnew=00;90:*.rpmorig=00;90:*.rpmsave=00;90:*.swp=00;90:*.tmp=00;90:*.ucf-dist=00;90:*.ucf-new=00;90:*.ucf-old=00;90:', 'AMENT_PREFIX_PATH': '/home/melodse/ros2_ws/install/unitree_description:/home/melodse/ef_ws/install/unitree_hg:/home/melodse/ef_ws/install/g1_description:/opt/ros/jazzy', 'CONDA_PYTHON_EXE': '/home/melodse/miniconda3/bin/python', 'SHELL': '/bin/bash', 'LESSCLOSE': '/usr/bin/lesspipe %s %s', '_CONDA_EXE': '/home/melodse/miniconda3/bin/conda', 'ROS_AUTOMATIC_DISCOVERY_RANGE': 'SUBNET', 'PWD': '/home/melodse/ef_ws/build/slam_example', 'CONDA_EXE': '/home/melodse/miniconda3/bin/conda', 'XDG_DATA_DIRS': '/usr/local/share:/usr/share:/var/lib/snapd/desktop', 'PYTHONPATH': '/home/melodse/ros2_ws/install/unitree_description/lib/python3.12/site-packages:/home/melodse/ef_ws/install/unitree_hg/lib/python3.12/site-packages:/home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages:/opt/ros/jazzy/lib/python3.12/site-packages', 'COLCON': '1', 'WSL2_GUI_APPS_ENABLED': '1', 'CODEX_MANAGED_BY_NPM': '1', 'HOSTTYPE': 'x86_64', 'CMAKE_PREFIX_PATH': '/home/melodse/cyclonedds/install', 'WSLENV': 'WT_SESSION:WT_PROFILE_ID:'}), 'shell': False}
+[0.043070] (tx_lidar) JobProgress: {'identifier': 'tx_lidar', 'progress': 'cmake'}
+[0.043140] (tx_lidar) Command: {'cmd': ['/usr/bin/cmake', '/home/melodse/ef_ws/g1/scripts/sensors/manual_streaming', '-DCMAKE_INSTALL_PREFIX=/home/melodse/ef_ws/install/tx_lidar'], 'cwd': '/home/melodse/ef_ws/build/tx_lidar', 'env': OrderedDict({'LESSOPEN': '| /usr/bin/lesspipe %s', 'USER': 'melodse', 'GZ_CONFIG_PATH': '/opt/ros/jazzy/opt/gz_sim_vendor/share/gz:/opt/ros/jazzy/opt/sdformat_vendor/share/gz:/opt/ros/jazzy/opt/gz_gui_vendor/share/gz:/opt/ros/jazzy/opt/gz_transport_vendor/share/gz:/opt/ros/jazzy/opt/gz_rendering_vendor/share/gz:/opt/ros/jazzy/opt/gz_plugin_vendor/share/gz:/opt/ros/jazzy/opt/gz_fuel_tools_vendor/share/gz:/opt/ros/jazzy/opt/gz_msgs_vendor/share/gz:/opt/ros/jazzy/opt/gz_common_vendor/share/gz', 'ROS_PACKAGE_PATH': '/home/melodse/ef_ws/install/unitree_description/share', 'SHLVL': '1', 'LD_LIBRARY_PATH': '/home/melodse/ef_ws/install/unitree_hg/lib:/opt/ros/jazzy/opt/gz_sim_vendor/lib:/opt/ros/jazzy/opt/gz_sensors_vendor/lib:/opt/ros/jazzy/opt/gz_physics_vendor/lib:/opt/ros/jazzy/opt/sdformat_vendor/lib:/opt/ros/jazzy/opt/rviz_ogre_vendor/lib:/opt/ros/jazzy/lib/x86_64-linux-gnu:/opt/ros/jazzy/opt/gz_gui_vendor/lib:/opt/ros/jazzy/opt/gz_transport_vendor/lib:/opt/ros/jazzy/opt/gz_rendering_vendor/lib:/opt/ros/jazzy/opt/gz_plugin_vendor/lib:/opt/ros/jazzy/opt/gz_fuel_tools_vendor/lib:/opt/ros/jazzy/opt/gz_msgs_vendor/lib:/opt/ros/jazzy/opt/gz_common_vendor/lib:/opt/ros/jazzy/opt/gz_math_vendor/lib:/opt/ros/jazzy/opt/gz_utils_vendor/lib:/opt/ros/jazzy/opt/gz_tools_vendor/lib:/opt/ros/jazzy/opt/gz_ogre_next_vendor/lib:/opt/ros/jazzy/opt/gz_dartsim_vendor/lib:/opt/ros/jazzy/opt/gz_cmake_vendor/lib:/opt/ros/jazzy/lib', 'WT_PROFILE_ID': '{61c54bbd-c2c6-5271-96e7-009a87ff44bf}', 'HOME': '/home/melodse', 'CONDA_SHLVL': '0', 'OLDPWD': '/mnt/c/Users/meldo', 'ROS_PYTHON_VERSION': '3', 'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/run/user/1000/bus', '_CE_M': '', 'WSL_DISTRO_NAME': 'Ubuntu', '_CONDA_ROOT': '/home/melodse/miniconda3', 'WAYLAND_DISPLAY': 'wayland-0', 'COLCON_PREFIX_PATH': '/home/melodse/ros2_ws/install:/home/melodse/ef_ws/install', 'ROS_DISTRO': 'jazzy', 'LOGNAME': 'melodse', 'NAME': 'meldose', 'WSL_INTEROP': '/run/WSL/16218_interop', 'PULSE_SERVER': 'unix:/mnt/wslg/PulseServer', '_': '/usr/bin/colcon', 'ROS_VERSION': '2', 'PKG_CONFIG_PATH': '/home/melodse/ros2_ws/install/unitree_description/lib/x86_64-linux-gnu/pkgconfig:/home/melodse/ros2_ws/install/unitree_description/lib/pkgconfig:/home/melodse/ef_ws/install/unitree_description/lib/x86_64-linux-gnu/pkgconfig:/home/melodse/ef_ws/install/unitree_description/lib/pkgconfig', 'TERM': 'xterm-256color', '_CE_CONDA': '', 'PATH': '/home/melodse/.codex/tmp/path/codex-arg0ntaggF:/usr/local/lib/node_modules/@openai/codex/vendor/x86_64-unknown-linux-musl/path:/home/melodse/miniconda3/condabin:/home/melodse/.local/bin:/opt/ros/jazzy/opt/gz_msgs_vendor/bin:/opt/ros/jazzy/opt/gz_tools_vendor/bin:/opt/ros/jazzy/opt/gz_ogre_next_vendor/bin:/opt/ros/jazzy/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/lib/wsl/lib:/mnt/c/WINDOWS/system32:/mnt/c/WINDOWS:/mnt/c/WINDOWS/System32/Wbem:/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/:/mnt/c/WINDOWS/System32/OpenSSH/:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/usbipd-win/:/mnt/c/Users/meldo/.local/bin:/mnt/c/Users/meldo/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/meldo/AppData/Local/Programs/Microsoft VS Code/bin:/mnt/c/Users/meldo/AppData/Local/GitHubDesktop/bin:/mnt/c/Users/meldo/AppData/Local/Microsoft/WinGet/Links:/snap/bin', 'WT_SESSION': 'a5e3245a-3945-411f-8535-4fd197f2eea6', 'XDG_RUNTIME_DIR': '/run/user/1000/', 'DISPLAY': ':0', 'CODEX_SANDBOX_NETWORK_DISABLED': '1', 'LANG': 'en_US.UTF-8', 'RMW_IMPLEMENTATION': 'rmw_cyclonedds_cpp', 'CYCLONEDDS_HOME': '/home/melodse/cyclonedds/install', 'LS_COLORS': 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=00:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.avif=01;35:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:*~=00;90:*#=00;90:*.bak=00;90:*.crdownload=00;90:*.dpkg-dist=00;90:*.dpkg-new=00;90:*.dpkg-old=00;90:*.dpkg-tmp=00;90:*.old=00;90:*.orig=00;90:*.part=00;90:*.rej=00;90:*.rpmnew=00;90:*.rpmorig=00;90:*.rpmsave=00;90:*.swp=00;90:*.tmp=00;90:*.ucf-dist=00;90:*.ucf-new=00;90:*.ucf-old=00;90:', 'AMENT_PREFIX_PATH': '/home/melodse/ros2_ws/install/unitree_description:/home/melodse/ef_ws/install/unitree_hg:/home/melodse/ef_ws/install/g1_description:/opt/ros/jazzy', 'CONDA_PYTHON_EXE': '/home/melodse/miniconda3/bin/python', 'SHELL': '/bin/bash', 'LESSCLOSE': '/usr/bin/lesspipe %s %s', '_CONDA_EXE': '/home/melodse/miniconda3/bin/conda', 'ROS_AUTOMATIC_DISCOVERY_RANGE': 'SUBNET', 'PWD': '/home/melodse/ef_ws/build/tx_lidar', 'CONDA_EXE': '/home/melodse/miniconda3/bin/conda', 'XDG_DATA_DIRS': '/usr/local/share:/usr/share:/var/lib/snapd/desktop', 'PYTHONPATH': '/home/melodse/ros2_ws/install/unitree_description/lib/python3.12/site-packages:/home/melodse/ef_ws/install/unitree_hg/lib/python3.12/site-packages:/home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages:/opt/ros/jazzy/lib/python3.12/site-packages', 'COLCON': '1', 'WSL2_GUI_APPS_ENABLED': '1', 'CODEX_MANAGED_BY_NPM': '1', 'HOSTTYPE': 'x86_64', 'CMAKE_PREFIX_PATH': '/home/melodse/cyclonedds/install', 'WSLENV': 'WT_SESSION:WT_PROFILE_ID:'}), 'shell': False}
+[0.062642] (unitree_description) StdoutLine: {'line': b'/usr/bin/cmake -S/home/melodse/ef_ws/go2/sim/unitree_description-master -B/home/melodse/ef_ws/build/unitree_description --check-build-system CMakeFiles/Makefile.cmake 0\n'}
+[0.069465] (tx_lidar) StderrLine: {'line': b'CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):\n'}
+[0.070016] (tx_lidar) StderrLine: {'line': b'  Compatibility with CMake < 3.5 will be removed from a future version of\n'}
+[0.070168] (tx_lidar) StderrLine: {'line': b'  CMake.\n'}
+[0.070328] (tx_lidar) StderrLine: {'line': b'\n'}
+[0.070751] (tx_lidar) StderrLine: {'line': b'  Update the VERSION argument <min> value or use a ...<max> suffix to tell\n'}
+[0.070852] (tx_lidar) StderrLine: {'line': b'  CMake that the project does not need compatibility with older versions.\n'}
+[0.070948] (tx_lidar) StderrLine: {'line': b'\n'}
+[0.071036] (tx_lidar) StderrLine: {'line': b'\n'}
+[0.089721] (tx_lidar) StdoutLine: {'line': b'-- Configuring done (0.0s)\n'}
+[0.090890] (tx_lidar) StderrLine: {'line': b'CMake Error at CMakeLists.txt:5 (add_executable):\n'}
+[0.091122] (tx_lidar) StderrLine: {'line': b'  Cannot find source file:\n'}
+[0.091233] (tx_lidar) StderrLine: {'line': b'\n'}
+[0.091323] (tx_lidar) StderrLine: {'line': b'    main.cpp\n'}
+[0.091411] (tx_lidar) StderrLine: {'line': b'\n'}
+[0.091495] (tx_lidar) StderrLine: {'line': b'  Tried extensions .c .C .c++ .cc .cpp .cxx .cu .mpp .m .M .mm .ixx .cppm\n'}
+[0.091584] (tx_lidar) StderrLine: {'line': b'  .ccm .cxxm .c++m .h .hh .h++ .hm .hpp .hxx .in .txx .f .F .for .f77 .f90\n'}
+[0.091668] (tx_lidar) StderrLine: {'line': b'  .f95 .f03 .hip .ispc\n'}
+[0.091748] (tx_lidar) StderrLine: {'line': b'\n'}
+[0.091827] (tx_lidar) StderrLine: {'line': b'\n'}
+[0.091901] (tx_lidar) StderrLine: {'line': b'CMake Error at CMakeLists.txt:5 (add_executable):\n'}
+[0.092048] (tx_lidar) StderrLine: {'line': b'  No SOURCES given to target: tx_lidar\n'}
+[0.092139] (tx_lidar) StderrLine: {'line': b'\n'}
+[0.092225] (tx_lidar) StderrLine: {'line': b'\n'}
+[0.092305] (tx_lidar) StderrLine: {'line': b'CMake Generate step failed.  Build files cannot be regenerated correctly.\n'}
+[0.094573] (tx_lidar) CommandEnded: {'returncode': 1}
+[0.095051] (tx_lidar) JobEnded: {'identifier': 'tx_lidar', 'rc': 1}
+[0.095717] (unitree_description) StdoutLine: {'line': b'/usr/bin/cmake -E cmake_progress_start /home/melodse/ef_ws/build/unitree_description/CMakeFiles /home/melodse/ef_ws/build/unitree_description//CMakeFiles/progress.marks\n'}
+[0.099638] (-) TimerEvent: {}
+[0.110636] (unitree_description) StdoutLine: {'line': b'/usr/bin/gmake  -f CMakeFiles/Makefile2 all\n'}
+[0.115259] (unitree_description) StdoutLine: {'line': b"gmake[1]: Entering directory '/home/melodse/ef_ws/build/unitree_description'\n"}
+[0.115546] (unitree_description) StdoutLine: {'line': b'/usr/bin/gmake  -f python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_go2_sim_unitree_description-master_python.dir/build.make python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_go2_sim_unitree_description-master_python.dir/depend\n'}
+[0.117296] (unitree_description) StdoutLine: {'line': b"gmake[2]: Entering directory '/home/melodse/ef_ws/build/unitree_description'\n"}
+[0.117607] (unitree_description) StdoutLine: {'line': b'cd /home/melodse/ef_ws/build/unitree_description && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/melodse/ef_ws/go2/sim/unitree_description-master /home/melodse/ef_ws/go2/sim/unitree_description-master/python /home/melodse/ef_ws/build/unitree_description /home/melodse/ef_ws/build/unitree_description/python /home/melodse/ef_ws/build/unitree_description/python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_go2_sim_unitree_description-master_python.dir/DependInfo.cmake "--color="\n'}
+[0.131852] (unitree_description) StdoutLine: {'line': b"gmake[2]: Leaving directory '/home/melodse/ef_ws/build/unitree_description'\n"}
+[0.132148] (unitree_description) StdoutLine: {'line': b'/usr/bin/gmake  -f python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_go2_sim_unitree_description-master_python.dir/build.make python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_go2_sim_unitree_description-master_python.dir/build\n'}
+[0.134229] (unitree_description) StdoutLine: {'line': b"gmake[2]: Entering directory '/home/melodse/ef_ws/build/unitree_description'\n"}
+[0.134467] (unitree_description) StdoutLine: {'line': b'cd /home/melodse/ef_ws/build/unitree_description/python && /usr/bin/cmake -E make_directory /home/melodse/ef_ws/build/unitree_description/python/unitree_description\n'}
+[0.151200] (slam_example) StdoutLine: {'line': b'[ 50%] Building CXX object CMakeFiles/keyDemo.dir/src/keyDemo.cpp.o\n'}
+[0.152648] (unitree_description) StdoutLine: {'line': b'cd /home/melodse/ef_ws/build/unitree_description/python && /usr/bin/python -c "import py_compile; py_compile.compile(\\"/home/melodse/ef_ws/go2/sim/unitree_description-master/python/unitree_description/__init__.py\\",\\"/home/melodse/ef_ws/build/unitree_description/python/unitree_description/__init__.pyc\\")"\n'}
+[0.199916] (-) TimerEvent: {}
+[0.205805] (unitree_description) StdoutLine: {'line': b'cd /home/melodse/ef_ws/build/unitree_description/python && /usr/bin/cmake -E make_directory /home/melodse/ef_ws/build/unitree_description/python/unitree_description\n'}
+[0.221804] (unitree_description) StdoutLine: {'line': b'cd /home/melodse/ef_ws/build/unitree_description/python && /usr/bin/python -c "import py_compile; py_compile.compile(\\"/home/melodse/ef_ws/go2/sim/unitree_description-master/python/unitree_description/loader.py\\",\\"/home/melodse/ef_ws/build/unitree_description/python/unitree_description/loader.pyc\\")"\n'}
+[0.273734] (unitree_description) StdoutLine: {'line': b"gmake[2]: Leaving directory '/home/melodse/ef_ws/build/unitree_description'\n"}
+[0.287903] (unitree_description) StdoutLine: {'line': b'Built target unitree_description_compile_pyc__home_melodse_ef_ws_go2_sim_unitree_description-master_python\n'}
+[0.289302] (unitree_description) StdoutLine: {'line': b"gmake[1]: Leaving directory '/home/melodse/ef_ws/build/unitree_description'\n"}
+[0.289695] (unitree_description) StdoutLine: {'line': b'/usr/bin/cmake -E cmake_progress_start /home/melodse/ef_ws/build/unitree_description/CMakeFiles 0\n'}
+[0.300118] (-) TimerEvent: {}
+[0.306570] (unitree_description) JobEnded: {'identifier': 'unitree_description', 'rc': 'SIGINT'}
+[0.400830] (-) TimerEvent: {}
+[0.502322] (-) TimerEvent: {}
+[0.603810] (-) TimerEvent: {}
+[0.705407] (-) TimerEvent: {}
+[0.806944] (-) TimerEvent: {}
+[0.907948] (-) TimerEvent: {}
+[1.008706] (-) TimerEvent: {}
+[1.110114] (-) TimerEvent: {}
+[1.210887] (-) TimerEvent: {}
+[1.311836] (-) TimerEvent: {}
+[1.412675] (-) TimerEvent: {}
+[1.513546] (-) TimerEvent: {}
+[1.614096] (-) TimerEvent: {}
+[1.714472] (-) TimerEvent: {}
+[1.815115] (-) TimerEvent: {}
+[1.915609] (-) TimerEvent: {}
+[2.016160] (-) TimerEvent: {}
+[2.116757] (-) TimerEvent: {}
+[2.217397] (-) TimerEvent: {}
+[2.317822] (-) TimerEvent: {}
+[2.418251] (-) TimerEvent: {}
+[2.518724] (-) TimerEvent: {}
+[2.619146] (-) TimerEvent: {}
+[2.719850] (-) TimerEvent: {}
+[2.820279] (-) TimerEvent: {}
+[2.920729] (-) TimerEvent: {}
+[3.021106] (-) TimerEvent: {}
+[3.121469] (-) TimerEvent: {}
+[3.221891] (-) TimerEvent: {}
+[3.322212] (-) TimerEvent: {}
+[3.422557] (-) TimerEvent: {}
+[3.522879] (-) TimerEvent: {}
+[3.623162] (-) TimerEvent: {}
+[3.723514] (-) TimerEvent: {}
+[3.824524] (-) TimerEvent: {}
+[3.924986] (-) TimerEvent: {}
+[4.025507] (-) TimerEvent: {}
+[4.125783] (-) TimerEvent: {}
+[4.226203] (-) TimerEvent: {}
+[4.326676] (-) TimerEvent: {}
+[4.427045] (-) TimerEvent: {}
+[4.527560] (-) TimerEvent: {}
+[4.627904] (-) TimerEvent: {}
+[4.728428] (-) TimerEvent: {}
+[4.828954] (-) TimerEvent: {}
+[4.929402] (-) TimerEvent: {}
+[5.029856] (-) TimerEvent: {}
+[5.130178] (-) TimerEvent: {}
+[5.230536] (-) TimerEvent: {}
+[5.330882] (-) TimerEvent: {}
+[5.431261] (-) TimerEvent: {}
+[5.531575] (-) TimerEvent: {}
+[5.631847] (-) TimerEvent: {}
+[5.732237] (-) TimerEvent: {}
+[5.832880] (-) TimerEvent: {}
+[5.933453] (-) TimerEvent: {}
+[6.033755] (-) TimerEvent: {}
+[6.134014] (-) TimerEvent: {}
+[6.234303] (-) TimerEvent: {}
+[6.334611] (-) TimerEvent: {}
+[6.434890] (-) TimerEvent: {}
+[6.535538] (-) TimerEvent: {}
+[6.650372] (-) TimerEvent: {}
+[6.750682] (-) TimerEvent: {}
+[6.851059] (-) TimerEvent: {}
+[6.951486] (-) TimerEvent: {}
+[7.051841] (-) TimerEvent: {}
+[7.152251] (-) TimerEvent: {}
+[7.253025] (-) TimerEvent: {}
+[7.353407] (-) TimerEvent: {}
+[7.453736] (-) TimerEvent: {}
+[7.554097] (-) TimerEvent: {}
+[7.654506] (-) TimerEvent: {}
+[7.755010] (-) TimerEvent: {}
+[7.855412] (-) TimerEvent: {}
+[7.940507] (slam_example) StdoutLine: {'line': b'[100%] Linking CXX executable keyDemo\n'}
+[7.955764] (-) TimerEvent: {}
+[8.056153] (-) TimerEvent: {}
+[8.156625] (-) TimerEvent: {}
+[8.257420] (-) TimerEvent: {}
+[8.357953] (-) TimerEvent: {}
+[8.458418] (-) TimerEvent: {}
+[8.558913] (-) TimerEvent: {}
+[8.659497] (-) TimerEvent: {}
+[8.742597] (slam_example) StdoutLine: {'line': b'[100%] Built target keyDemo\n'}
+[8.758079] (slam_example) JobEnded: {'identifier': 'slam_example', 'rc': 'SIGINT'}
+[8.759626] (-) TimerEvent: {}
+[8.768790] (g1_description) JobSkipped: {'identifier': 'g1_description'}
+[8.768854] (-) EventReactorShutdown: {}

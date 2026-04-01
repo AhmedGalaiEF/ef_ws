@@ -1,0 +1,26 @@
+[0.026s] Invoking command in '/home/melodse/ef_ws/build/tx_lidar': /usr/bin/cmake /home/melodse/ef_ws/g1/scripts/sensors/manual_streaming -DCMAKE_INSTALL_PREFIX=/home/melodse/ef_ws/install/tx_lidar
+[0.052s] CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+[0.052s]   Compatibility with CMake < 3.5 will be removed from a future version of
+[0.052s]   CMake.
+[0.053s] 
+[0.053s]   Update the VERSION argument <min> value or use a ...<max> suffix to tell
+[0.053s]   CMake that the project does not need compatibility with older versions.
+[0.053s] 
+[0.053s] 
+[0.072s] -- Configuring done (0.0s)
+[0.073s] CMake Error at CMakeLists.txt:5 (add_executable):
+[0.073s]   Cannot find source file:
+[0.073s] 
+[0.073s]     main.cpp
+[0.074s] 
+[0.074s]   Tried extensions .c .C .c++ .cc .cpp .cxx .cu .mpp .m .M .mm .ixx .cppm
+[0.074s]   .ccm .cxxm .c++m .h .hh .h++ .hm .hpp .hxx .in .txx .f .F .for .f77 .f90
+[0.074s]   .f95 .f03 .hip .ispc
+[0.074s] 
+[0.074s] 
+[0.074s] CMake Error at CMakeLists.txt:5 (add_executable):
+[0.074s]   No SOURCES given to target: tx_lidar
+[0.074s] 
+[0.074s] 
+[0.074s] CMake Generate step failed.  Build files cannot be regenerated correctly.
+[0.077s] Invoked command in '/home/melodse/ef_ws/build/tx_lidar' returned '1': /usr/bin/cmake /home/melodse/ef_ws/g1/scripts/sensors/manual_streaming -DCMAKE_INSTALL_PREFIX=/home/melodse/ef_ws/install/tx_lidar

@@ -1,0 +1,19 @@
+[0.030s] Invoking command in '/home/melodse/ef_ws/build/unitree_description': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/melodse/ros2_ws/install/unitree_description:/home/melodse/ef_ws/install/unitree_hg:/home/melodse/ef_ws/install/g1_description:/opt/ros/jazzy /usr/bin/cmake --build /home/melodse/ef_ws/build/unitree_description -- -j12 -l12
+[0.062s] /usr/bin/cmake -S/home/melodse/ef_ws/go2/sim/unitree_description-master -B/home/melodse/ef_ws/build/unitree_description --check-build-system CMakeFiles/Makefile.cmake 0
+[0.095s] /usr/bin/cmake -E cmake_progress_start /home/melodse/ef_ws/build/unitree_description/CMakeFiles /home/melodse/ef_ws/build/unitree_description//CMakeFiles/progress.marks
+[0.110s] /usr/bin/gmake  -f CMakeFiles/Makefile2 all
+[0.114s] gmake[1]: Entering directory '/home/melodse/ef_ws/build/unitree_description'
+[0.114s] /usr/bin/gmake  -f python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_go2_sim_unitree_description-master_python.dir/build.make python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_go2_sim_unitree_description-master_python.dir/depend
+[0.116s] gmake[2]: Entering directory '/home/melodse/ef_ws/build/unitree_description'
+[0.116s] cd /home/melodse/ef_ws/build/unitree_description && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/melodse/ef_ws/go2/sim/unitree_description-master /home/melodse/ef_ws/go2/sim/unitree_description-master/python /home/melodse/ef_ws/build/unitree_description /home/melodse/ef_ws/build/unitree_description/python /home/melodse/ef_ws/build/unitree_description/python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_go2_sim_unitree_description-master_python.dir/DependInfo.cmake "--color="
+[0.131s] gmake[2]: Leaving directory '/home/melodse/ef_ws/build/unitree_description'
+[0.131s] /usr/bin/gmake  -f python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_go2_sim_unitree_description-master_python.dir/build.make python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_go2_sim_unitree_description-master_python.dir/build
+[0.133s] gmake[2]: Entering directory '/home/melodse/ef_ws/build/unitree_description'
+[0.133s] cd /home/melodse/ef_ws/build/unitree_description/python && /usr/bin/cmake -E make_directory /home/melodse/ef_ws/build/unitree_description/python/unitree_description
+[0.152s] cd /home/melodse/ef_ws/build/unitree_description/python && /usr/bin/python -c "import py_compile; py_compile.compile(\"/home/melodse/ef_ws/go2/sim/unitree_description-master/python/unitree_description/__init__.py\",\"/home/melodse/ef_ws/build/unitree_description/python/unitree_description/__init__.pyc\")"
+[0.205s] cd /home/melodse/ef_ws/build/unitree_description/python && /usr/bin/cmake -E make_directory /home/melodse/ef_ws/build/unitree_description/python/unitree_description
+[0.221s] cd /home/melodse/ef_ws/build/unitree_description/python && /usr/bin/python -c "import py_compile; py_compile.compile(\"/home/melodse/ef_ws/go2/sim/unitree_description-master/python/unitree_description/loader.py\",\"/home/melodse/ef_ws/build/unitree_description/python/unitree_description/loader.pyc\")"
+[0.273s] gmake[2]: Leaving directory '/home/melodse/ef_ws/build/unitree_description'
+[0.287s] Built target unitree_description_compile_pyc__home_melodse_ef_ws_go2_sim_unitree_description-master_python
+[0.288s] gmake[1]: Leaving directory '/home/melodse/ef_ws/build/unitree_description'
+[0.289s] /usr/bin/cmake -E cmake_progress_start /home/melodse/ef_ws/build/unitree_description/CMakeFiles 0

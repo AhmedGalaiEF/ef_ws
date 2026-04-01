@@ -1,0 +1,49 @@
+[0.055s] Invoking command in '/home/melodse/ef_ws/build/unitree_description': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/jazzy /usr/bin/cmake /home/melodse/ef_ws/go2/sim/unitree_description-master -DCMAKE_INSTALL_PREFIX=/home/melodse/ef_ws/install/unitree_description
+[1.097s] -- JRL cmakemodules not found. Let's fetch it.
+[4.913s] -- The CXX compiler identification is GNU 13.3.0
+[5.411s] -- Detecting CXX compiler ABI info
+[5.843s] -- Detecting CXX compiler ABI info - done
+[5.862s] -- Check for working CXX compiler: /usr/bin/c++ - skipped
+[5.862s] -- Detecting CXX compile features
+[5.863s] -- Detecting CXX compile features - done
+[5.921s] -- Configuring "unitree_description" (https://github.com/inria-paris-robotics-lab/unitree_description)
+[5.921s] -- Package version (ROS package.xml): 0.0.0
+[6.164s] -- The C compiler identification is GNU 13.3.0
+[6.714s] -- Detecting C compiler ABI info
+[7.141s] -- Detecting C compiler ABI info - done
+[7.155s] -- Check for working C compiler: /usr/bin/cc - skipped
+[7.156s] -- Detecting C compile features
+[7.157s] -- Detecting C compile features - done
+[7.208s] -- Found PkgConfig: /usr/bin/pkg-config (found version "1.8.1") 
+[8.186s] -- Performing Test res_-pedantic
+[8.542s] -- Performing Test res_-pedantic - Success
+[8.543s] -- Performing Test res_-Wno-long-long
+[8.752s] -- Performing Test res_-Wno-long-long - Success
+[8.753s] -- Performing Test res_-Wall
+[8.961s] -- Performing Test res_-Wall - Success
+[8.962s] -- Performing Test res_-Wextra
+[9.173s] -- Performing Test res_-Wextra - Success
+[9.175s] -- Performing Test res_-Wcast-align
+[9.368s] -- Performing Test res_-Wcast-align - Success
+[9.369s] -- Performing Test res_-Wcast-qual
+[9.565s] -- Performing Test res_-Wcast-qual - Success
+[9.566s] -- Performing Test res_-Wformat
+[9.756s] -- Performing Test res_-Wformat - Success
+[9.757s] -- Performing Test res_-Wwrite-strings
+[9.955s] -- Performing Test res_-Wwrite-strings - Success
+[9.957s] -- Performing Test res_-Wconversion
+[10.179s] -- Performing Test res_-Wconversion - Success
+[10.180s] -- Performing Test res_-Werror
+[10.251s] -- Performing Test res_-Werror - Failed
+[10.425s] -- Could NOT find Doxygen (missing: DOXYGEN_EXECUTABLE) 
+[10.426s] -- Failed to find Doxygen, documentation will not be generated.
+[10.835s] -- Found Python3: /usr/bin/python (found version "3.12.3") found components: Interpreter Development Development.Module Development.Embed 
+[10.837s] -- PythonLibraryDirs: /usr/lib/x86_64-linux-gnu
+[10.837s] -- PythonLibVersionString: 3.12.3
+[10.864s] -- Python site lib: lib/python3.12/site-packages
+[10.865s] -- Python include dirs: /usr/include/python3.12
+[10.931s] -- Create files for AMENT (ROS 2)
+[10.939s] -- Create files for AMENT (ROS 2)
+[10.942s] -- Configuring done (10.8s)
+[10.994s] -- Generating done (0.0s)
+[11.011s] -- Build files have been written to: /home/melodse/ef_ws/build/unitree_description

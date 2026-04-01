@@ -1,0 +1,1 @@
+Invoking command in '/home/melodse/ef_ws/build/slam_example': /usr/bin/cmake /home/melodse/ef_ws/g1/scripts/navigation/obstacle_avoidance/slam_sdk_example/example -DCMAKE_INSTALL_PREFIX=/home/melodse/ef_ws/install/slam_example
