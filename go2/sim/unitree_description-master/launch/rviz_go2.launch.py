@@ -1,5 +1,5 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, ExecuteProcess
 from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import Command, FindExecutable, LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
@@ -61,6 +61,17 @@ def generate_launch_description():
         parameters=[{'use_sim_time': use_sim_time}],
     )
 
+    cmd_vel_pub = ExecuteProcess(
+        cmd=[
+            'ros2', 'topic', 'pub', '-r', '1',
+            '/cmd_vel', 'geometry_msgs/msg/Twist',
+            '{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}',
+        ],
+        name='cmd_vel_pub',
+        output='screen',
+        additional_env={'RMW_IMPLEMENTATION': 'rmw_fastrtps_cpp'},
+    )
+
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='false'),
         DeclareLaunchArgument('use_gui', default_value='false'),
@@ -76,4 +87,5 @@ def generate_launch_description():
         joint_state_publisher,
         joint_state_publisher_gui,
         rviz,
+        cmd_vel_pub,
     ])
