@@ -1,9 +1,10 @@
+from pathlib import Path
+
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions import Command, FindExecutable, LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
-from launch_ros.substitutions import FindPackageShare
-from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description():
@@ -13,26 +14,14 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time')
     publish_frequency = LaunchConfiguration('publish_frequency')
 
-    urdf_name = 'g1'
-
-    robot_description_command = Command([
-        FindExecutable(name='xacro'),
-        " ",
-        PathJoinSubstitution([
-            FindPackageShare("g1_description"),
-            "urdf",
-            "g1_29dof_with_hand_rev_1_0_pkg.urdf"
-        ]),
-        " ", "robot_type:=", robot_type,
-        " ", "simulation:=", simulation,
-        " ", "network_interface:=", network_interface
-    ])
+    urdf_path = (
+        Path(get_package_share_directory("g1_description"))
+        / "urdf"
+        / "g1_29dof_with_hand_rev_1_0_pkg.urdf"
+    )
 
     robot_description = {
-        "robot_description": ParameterValue(
-            robot_description_command,
-            value_type=str
-        )
+        "robot_description": urdf_path.read_text()
     }
 
     node_robot_state_publisher = Node(

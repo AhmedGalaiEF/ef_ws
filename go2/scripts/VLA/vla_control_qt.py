@@ -10,9 +10,13 @@ import time
 from dataclasses import dataclass
 from typing import Any, Dict, List
 
+import cv2
+import numpy as np
+
 from hf_vla.hf_client import HuggingFaceChatClient
 from intent_summary import build_intent_statement
 from local_speech import LocalSpeechAnnouncer
+from openai_vla.openai_client import OpenAIChatClient
 from ollama_vla.agents import ActorAgent, PerceptionAgent, PerceptionWorker, PlannerAgent, VLAController
 from ollama_vla.config import DEFAULT_PLANNER_SYSTEM_PROMPT, RuntimeConfig
 from ollama_vla.ollama_client import OllamaChatClient
@@ -39,6 +43,14 @@ HF_MODELS = [
     "zai-org/GLM-4.5V",
 ]
 
+CODEX_MODELS = [
+    "gpt-5.2-codex",
+    "gpt-4.1",
+    "gpt-4.1-mini",
+    "gpt-4.1-nano",
+    "gpt-4o-mini",
+]
+
 
 @dataclass
 class ModelChoice:
@@ -63,6 +75,8 @@ class ControlConfig:
     ollama_url: str
     hf_api_url: str
     hf_token: str
+    openai_api_url: str
+    openai_api_key: str
 
 
 def list_ollama_models() -> List[str]:
@@ -94,6 +108,8 @@ def make_client(
     ollama_url: str,
     hf_api_url: str,
     hf_token: str,
+    openai_api_url: str,
+    openai_api_key: str,
 ):
     if choice.backend == "ollama":
         options = {
@@ -109,10 +125,19 @@ def make_client(
             keep_alive="10m",
         )
 
-    return HuggingFaceChatClient(
-        api_url=hf_api_url,
+    if choice.backend == "huggingface":
+        return HuggingFaceChatClient(
+            api_url=hf_api_url,
+            model=choice.model,
+            api_token=hf_token,
+            timeout_sec=90.0,
+            temperature=0.1,
+        )
+
+    return OpenAIChatClient(
+        api_url=openai_api_url,
         model=choice.model,
-        api_token=hf_token,
+        api_key=openai_api_key,
         timeout_sec=90.0,
         temperature=0.1,
     )
@@ -174,6 +199,8 @@ class ControlWorker(QtCore.QObject):
             self._config.ollama_url,
             self._config.hf_api_url,
             self._config.hf_token,
+            self._config.openai_api_url,
+            self._config.openai_api_key,
         )
         perception_client = make_client(
             self._config.perception_choice,
@@ -181,6 +208,8 @@ class ControlWorker(QtCore.QObject):
             self._config.ollama_url,
             self._config.hf_api_url,
             self._config.hf_token,
+            self._config.openai_api_url,
+            self._config.openai_api_key,
         )
 
         perception_agent = PerceptionAgent(perception_client, runtime.perception_system_prompt)
@@ -269,6 +298,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._video_source: Go2VideoSource | None = None
         self._worker_thread: QtCore.QThread | None = None
         self._worker: ControlWorker | None = None
+        self._last_preview_error = ""
 
         self._ollama_models = list_ollama_models()
         self._build_ui()
@@ -308,6 +338,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.hf_url_edit = QtWidgets.QLineEdit("https://router.huggingface.co/v1/chat/completions", self)
         self.hf_token_edit = QtWidgets.QLineEdit(os.environ.get("HF_TOKEN", ""), self)
         self.hf_token_edit.setEchoMode(QtWidgets.QLineEdit.Password)
+        self.openai_url_edit = QtWidgets.QLineEdit("https://api.openai.com/v1/chat/completions", self)
+        self.openai_key_edit = QtWidgets.QLineEdit(os.environ.get("OPENAI_API_KEY", ""), self)
+        self.openai_key_edit.setEchoMode(QtWidgets.QLineEdit.Password)
         self.perception_period_spin = QtWidgets.QDoubleSpinBox(self)
         self.perception_period_spin.setRange(0.2, 30.0)
         self.perception_period_spin.setValue(3.0)
@@ -330,16 +363,20 @@ class MainWindow(QtWidgets.QMainWindow):
         controls.addWidget(self.hf_url_edit)
         controls.addWidget(QtWidgets.QLabel("HF Token"))
         controls.addWidget(self.hf_token_edit)
+        controls.addWidget(QtWidgets.QLabel("OpenAI/Codex API URL"))
+        controls.addWidget(self.openai_url_edit)
+        controls.addWidget(QtWidgets.QLabel("OpenAI/Codex API Key"))
+        controls.addWidget(self.openai_key_edit)
 
         self.refresh_models_button = QtWidgets.QPushButton("Refresh Ollama Models", self)
         self.refresh_models_button.clicked.connect(self._refresh_models)
         controls.addWidget(self.refresh_models_button)
 
         self.planner_backend_combo = QtWidgets.QComboBox(self)
-        self.planner_backend_combo.addItems(["ollama", "huggingface"])
+        self.planner_backend_combo.addItems(["ollama", "huggingface", "codex"])
         self.planner_model_combo = QtWidgets.QComboBox(self)
         self.perception_backend_combo = QtWidgets.QComboBox(self)
-        self.perception_backend_combo.addItems(["ollama", "huggingface"])
+        self.perception_backend_combo.addItems(["ollama", "huggingface", "codex"])
         self.perception_model_combo = QtWidgets.QComboBox(self)
 
         self.planner_backend_combo.currentTextChanged.connect(self._reload_model_combos)
@@ -413,7 +450,12 @@ class MainWindow(QtWidgets.QMainWindow):
         current = combo.currentText()
         combo.blockSignals(True)
         combo.clear()
-        models = self._ollama_models if backend == "ollama" else HF_MODELS
+        if backend == "ollama":
+            models = self._ollama_models
+        elif backend == "huggingface":
+            models = HF_MODELS
+        else:
+            models = CODEX_MODELS
         combo.addItems(models)
         target = current or preferred
         index = combo.findText(target)
@@ -452,16 +494,29 @@ class MainWindow(QtWidgets.QMainWindow):
             self.preview_label.setText(error or "Waiting for camera feed...")
             return
         try:
-            image = QtGui.QImage.fromData(frame.jpeg_bytes, "JPG")
+            array = np.frombuffer(frame.jpeg_bytes, dtype=np.uint8)
+            decoded = cv2.imdecode(array, cv2.IMREAD_COLOR)
         except Exception as exc:  # noqa: BLE001
             self.preview_label.setText("Failed to decode camera frame")
-            self._append_log(f"Preview decode error: {exc}")
+            message = f"Preview decode error: {exc}"
+            if message != self._last_preview_error:
+                self._append_log(message)
+                self._last_preview_error = message
             return
-        if image.isNull():
+        if decoded is None:
             self.preview_label.setText("Failed to decode camera frame")
             return
+        rgb = cv2.cvtColor(decoded, cv2.COLOR_BGR2RGB)
+        image = QtGui.QImage(
+            rgb.data,
+            rgb.shape[1],
+            rgb.shape[0],
+            rgb.strides[0],
+            QtGui.QImage.Format_RGB888,
+        ).copy()
         pixmap = QtGui.QPixmap.fromImage(image)
         self.preview_label.setText("")
+        self._last_preview_error = ""
         self.preview_label.setPixmap(
             pixmap.scaled(
                 self.preview_label.size(),
@@ -491,6 +546,8 @@ class MainWindow(QtWidgets.QMainWindow):
             ollama_url=self.ollama_url_edit.text().strip(),
             hf_api_url=self.hf_url_edit.text().strip(),
             hf_token=self.hf_token_edit.text().strip(),
+            openai_api_url=self.openai_url_edit.text().strip(),
+            openai_api_key=self.openai_key_edit.text().strip(),
         )
 
         self._worker_thread = QtCore.QThread(self)

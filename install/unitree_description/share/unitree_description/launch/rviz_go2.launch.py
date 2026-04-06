@@ -1,7 +1,7 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, ExecuteProcess
 from launch.conditions import IfCondition, UnlessCondition
-from launch.substitutions import Command, FindExecutable, LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import Command, FindExecutable, LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
@@ -10,6 +10,8 @@ from launch_ros.substitutions import FindPackageShare
 def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time')
     use_gui = LaunchConfiguration('use_gui')
+    publish_joint_states = LaunchConfiguration('publish_joint_states')
+    use_zero_joint_state_publisher = LaunchConfiguration('use_zero_joint_state_publisher')
     rviz_config = LaunchConfiguration('rviz_config')
 
     robot_description_command = Command([
@@ -42,7 +44,7 @@ def generate_launch_description():
         executable='joint_state_publisher',
         output='screen',
         parameters=[robot_description, {'use_sim_time': use_sim_time}],
-        condition=UnlessCondition(use_gui),
+        condition=IfCondition(publish_joint_states),
     )
 
     joint_state_publisher_gui = Node(
@@ -50,7 +52,20 @@ def generate_launch_description():
         executable='joint_state_publisher_gui',
         output='screen',
         parameters=[robot_description, {'use_sim_time': use_sim_time}],
-        condition=IfCondition(use_gui),
+        condition=IfCondition(PythonExpression(["'", publish_joint_states, "' == 'true' and '", use_gui, "' == 'true'"])),
+    )
+
+    zero_joint_state_publisher = ExecuteProcess(
+        cmd=[
+            FindExecutable(name='python3'),
+            PathJoinSubstitution([
+                FindPackageShare('unitree_description'),
+                'scripts',
+                'zero_joint_state_publisher.py',
+            ]),
+        ],
+        output='screen',
+        condition=IfCondition(use_zero_joint_state_publisher),
     )
 
     rviz = Node(
@@ -64,6 +79,8 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='false'),
         DeclareLaunchArgument('use_gui', default_value='false'),
+        DeclareLaunchArgument('publish_joint_states', default_value='false'),
+        DeclareLaunchArgument('use_zero_joint_state_publisher', default_value='true'),
         DeclareLaunchArgument(
             'rviz_config',
             default_value=PathJoinSubstitution([
@@ -75,5 +92,6 @@ def generate_launch_description():
         node_robot_state_publisher,
         joint_state_publisher,
         joint_state_publisher_gui,
+        zero_joint_state_publisher,
         rviz,
     ])
