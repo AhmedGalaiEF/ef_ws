@@ -1,0 +1,138 @@
+/usr/bin/cmake -S/home/melodse/ef_ws/src/unitree_description -B/home/melodse/ef_ws/src/build/unitree_description --check-build-system CMakeFiles/Makefile.cmake 0
+/usr/bin/cmake -E cmake_progress_start /home/melodse/ef_ws/src/build/unitree_description/CMakeFiles /home/melodse/ef_ws/src/build/unitree_description//CMakeFiles/progress.marks
+/usr/bin/gmake  -f CMakeFiles/Makefile2 all
+gmake[1]: Entering directory '/home/melodse/ef_ws/src/build/unitree_description'
+/usr/bin/gmake  -f python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_src_unitree_description_python.dir/build.make python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_src_unitree_description_python.dir/depend
+gmake[2]: Entering directory '/home/melodse/ef_ws/src/build/unitree_description'
+cd /home/melodse/ef_ws/src/build/unitree_description && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/melodse/ef_ws/src/unitree_description /home/melodse/ef_ws/src/unitree_description/python /home/melodse/ef_ws/src/build/unitree_description /home/melodse/ef_ws/src/build/unitree_description/python /home/melodse/ef_ws/src/build/unitree_description/python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_src_unitree_description_python.dir/DependInfo.cmake "--color="
+gmake[2]: Leaving directory '/home/melodse/ef_ws/src/build/unitree_description'
+/usr/bin/gmake  -f python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_src_unitree_description_python.dir/build.make python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_src_unitree_description_python.dir/build
+gmake[2]: Entering directory '/home/melodse/ef_ws/src/build/unitree_description'
+cd /home/melodse/ef_ws/src/build/unitree_description/python && /usr/bin/cmake -E make_directory /home/melodse/ef_ws/src/build/unitree_description/python/unitree_description
+cd /home/melodse/ef_ws/src/build/unitree_description/python && /usr/bin/python -c "import py_compile; py_compile.compile(\"/home/melodse/ef_ws/src/unitree_description/python/unitree_description/__init__.py\",\"/home/melodse/ef_ws/src/build/unitree_description/python/unitree_description/__init__.pyc\")"
+cd /home/melodse/ef_ws/src/build/unitree_description/python && /usr/bin/cmake -E make_directory /home/melodse/ef_ws/src/build/unitree_description/python/unitree_description
+cd /home/melodse/ef_ws/src/build/unitree_description/python && /usr/bin/python -c "import py_compile; py_compile.compile(\"/home/melodse/ef_ws/src/unitree_description/python/unitree_description/loader.py\",\"/home/melodse/ef_ws/src/build/unitree_description/python/unitree_description/loader.pyc\")"
+gmake[2]: Leaving directory '/home/melodse/ef_ws/src/build/unitree_description'
+Built target unitree_description_compile_pyc__home_melodse_ef_ws_src_unitree_description_python
+gmake[1]: Leaving directory '/home/melodse/ef_ws/src/build/unitree_description'
+/usr/bin/cmake -E cmake_progress_start /home/melodse/ef_ws/src/build/unitree_description/CMakeFiles 0
+-- Install configuration: ""
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/include/unitree/description/config.hh
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/include/unitree/description/deprecated.hh
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/include/unitree/description/warning.hh
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/visuals
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/visuals/hip.dae
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/visuals/base.dae
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/visuals/foot.dae
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/visuals/calf_mirror.dae
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/visuals/thigh.dae
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/visuals/calf.dae
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/visuals/thigh_mirror.dae
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/collisions
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/collisions/calf_lower_mirror_convex.stl
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/collisions/foot_convex.stl
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/collisions/thigh_convex.stl
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/collisions/thigh_mirror_convex.stl
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/collisions/base_convex.stl
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/collisions/calf_upper_convex.stl
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/collisions/hip_convex.stl
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/collisions/calf_upper_mirror_convex.stl
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/collisions/calf_lower_convex.stl
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/go2.urdf
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/go2.srdf
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_elbow_link.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/logo_link.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_rubber_hand.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_shoulder_roll_link.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_wrist_yaw_link.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_hip_yaw_link.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_ankle_pitch_link.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/waist_yaw_link_rev_1_0.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_shoulder_pitch_link.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_shoulder_yaw_link.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_knee_link.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_rubber_hand.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/torso_link_rev_1_0.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_shoulder_pitch_link.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_wrist_roll_link.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_wrist_pitch_link.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_shoulder_yaw_link.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_hip_yaw_link.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/head_link.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_elbow_link.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_ankle_roll_link.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/pelvis.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_wrist_pitch_link.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_wrist_yaw_link.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_hip_pitch_link.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_shoulder_roll_link.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_knee_link.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_hip_roll_link.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_ankle_pitch_link.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_hip_pitch_link.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/waist_roll_link_rev_1_0.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_ankle_roll_link.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/pelvis_contour_link.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_hip_roll_link.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_wrist_roll_link.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/left_shoulder_roll_link_collision.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/right_shoulder_pitch_link_collision.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/left_knee_link_collision.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/right_shoulder_roll_link_collision.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/logo_link_collision.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/left_wrist_roll_link_collision.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/right_elbow_link_collision.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/left_hip_pitch_link_collision.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/right_wrist_hand_collision.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/head_link_collision.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/right_ankle_roll_link_collision.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/left_shoulder_pitch_link_collision.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/torso_waist_roll_pitch_collision.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/pelvis_collision.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/left_wrist_hand_collision.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/left_shoulder_yaw_link_collision.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/left_ankle_roll_link_collision.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/left_hip_yaw_link_collision.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/left_elbow_link_collision.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/left_wrist_pitch_link_collision.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/right_wrist_roll_link_collision.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/right_shoulder_yaw_link_collision.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/right_wrist_pitch_link_collision.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/right_hip_yaw_link_collision.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/right_hip_pitch_link_collision.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/right_hip_roll_link_collision.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/right_knee_link_collision.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/left_hip_roll_link_collision.STL
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/g1.srdf
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/g1.urdf
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/launch
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/launch/go2_rviz.launch.py
+-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/launch/rviz_go2.launch.py
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/rviz
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/rviz/go2.rviz
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/lib/python3.12/site-packages/unitree_description/__init__.py
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/lib/python3.12/site-packages/unitree_description/loader.py
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/lib/python3.12/site-packages/unitree_description/path.py
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/lib/pkgconfig/unitree_description.pc
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/ament_index/resource_index/packages/unitree_description
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/hook/ament_prefix_path.dsv
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/hook/python_path.dsv
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/package.xml
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/lib/cmake/unitree_description/unitree_descriptionConfig.cmake
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/lib/cmake/unitree_description/unitree_descriptionConfigVersion.cmake
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/lib/cmake/unitree_description/unitree_descriptionTargets.cmake
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/lib/pkgconfig/unitree_description.pc
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/ament_index/resource_index/packages/unitree_description
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/hook/ament_prefix_path.dsv
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/hook/python_path.dsv
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/package.xml
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/lib/cmake/unitree_description/unitree_descriptionConfig.cmake
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/lib/cmake/unitree_description/unitree_descriptionConfigVersion.cmake
+-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/lib/cmake/unitree_description/unitree_descriptionTargets.cmake

@@ -1,0 +1,229 @@
+[0.292s] DEBUG:colcon:Command line arguments: ['/usr/bin/colcon', 'build']
+[0.292s] DEBUG:colcon:Parsed command line arguments: Namespace(log_base=None, log_level=None, verb_name='build', build_base='build', install_base='install', merge_install=False, symlink_install=False, test_result_base=None, continue_on_error=False, executor='parallel', parallel_workers=12, event_handlers=None, ignore_user_meta=False, metas=['./colcon.meta'], base_paths=['.'], packages_ignore=None, packages_ignore_regex=None, paths=None, packages_up_to=None, packages_up_to_regex=None, packages_above=None, packages_above_and_dependencies=None, packages_above_depth=None, packages_select_by_dep=None, packages_skip_by_dep=None, packages_skip_up_to=None, packages_select_build_failed=False, packages_skip_build_finished=False, packages_select_test_failures=False, packages_skip_test_passed=False, packages_select=None, packages_skip=None, packages_select_regex=None, packages_skip_regex=None, packages_start=None, packages_end=None, allow_overriding=[], cmake_args=None, cmake_target=None, cmake_target_skip_unavailable=False, cmake_clean_cache=False, cmake_clean_first=False, cmake_force_configure=False, ament_cmake_args=None, catkin_cmake_args=None, catkin_skip_building_tests=False, mixin_files=None, mixin=None, verb_parser=<colcon_mixin.mixin.mixin_argument.MixinArgumentDecorator object at 0x71a7b19c8b30>, verb_extension=<colcon_core.verb.build.BuildVerb object at 0x71a7b1aec8f0>, main=<bound method BuildVerb.main of <colcon_core.verb.build.BuildVerb object at 0x71a7b1aec8f0>>, mixin_verb=('build',))
+[0.350s] Level 1:colcon.colcon_core.package_discovery:discover_packages(colcon_meta) check parameters
+[0.351s] Level 1:colcon.colcon_core.package_discovery:discover_packages(recursive) check parameters
+[0.351s] Level 1:colcon.colcon_core.package_discovery:discover_packages(ignore) check parameters
+[0.351s] Level 1:colcon.colcon_core.package_discovery:discover_packages(path) check parameters
+[0.351s] Level 1:colcon.colcon_core.package_discovery:discover_packages(colcon_meta) discover
+[0.351s] Level 1:colcon.colcon_core.package_discovery:discover_packages(recursive) discover
+[0.351s] INFO:colcon.colcon_core.package_discovery:Crawling recursively for packages in '/home/melodse/ef_ws/src'
+[0.351s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extensions ['ignore', 'ignore_ament_install']
+[0.351s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'ignore'
+[0.351s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'ignore_ament_install'
+[0.351s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extensions ['colcon_pkg']
+[0.351s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'colcon_pkg'
+[0.351s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extensions ['colcon_meta']
+[0.352s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'colcon_meta'
+[0.352s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extensions ['ros']
+[0.352s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'ros'
+[0.385s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extensions ['cmake', 'python']
+[0.385s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'cmake'
+[0.385s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'python'
+[0.385s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extensions ['python_setup_py']
+[0.385s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'python_setup_py'
+[0.385s] Level 1:colcon.colcon_core.package_identification:_identify(build) by extensions ['ignore', 'ignore_ament_install']
+[0.385s] Level 1:colcon.colcon_core.package_identification:_identify(build) by extension 'ignore'
+[0.385s] Level 1:colcon.colcon_core.package_identification:_identify(build) ignored
+[0.385s] Level 1:colcon.colcon_core.package_identification:_identify(g1_rviz_simulation) by extensions ['ignore', 'ignore_ament_install']
+[0.385s] Level 1:colcon.colcon_core.package_identification:_identify(g1_rviz_simulation) by extension 'ignore'
+[0.386s] Level 1:colcon.colcon_core.package_identification:_identify(g1_rviz_simulation) by extension 'ignore_ament_install'
+[0.386s] Level 1:colcon.colcon_core.package_identification:_identify(g1_rviz_simulation) by extensions ['colcon_pkg']
+[0.386s] Level 1:colcon.colcon_core.package_identification:_identify(g1_rviz_simulation) by extension 'colcon_pkg'
+[0.386s] Level 1:colcon.colcon_core.package_identification:_identify(g1_rviz_simulation) by extensions ['colcon_meta']
+[0.386s] Level 1:colcon.colcon_core.package_identification:_identify(g1_rviz_simulation) by extension 'colcon_meta'
+[0.386s] Level 1:colcon.colcon_core.package_identification:_identify(g1_rviz_simulation) by extensions ['ros']
+[0.386s] Level 1:colcon.colcon_core.package_identification:_identify(g1_rviz_simulation) by extension 'ros'
+[0.388s] DEBUG:colcon.colcon_core.package_identification:Package 'g1_rviz_simulation' with type 'ros.ament_python' and name 'g1_description'
+[0.388s] Level 1:colcon.colcon_core.package_identification:_identify(go2_ros2_bridge) by extensions ['ignore', 'ignore_ament_install']
+[0.388s] Level 1:colcon.colcon_core.package_identification:_identify(go2_ros2_bridge) by extension 'ignore'
+[0.389s] Level 1:colcon.colcon_core.package_identification:_identify(go2_ros2_bridge) by extension 'ignore_ament_install'
+[0.389s] Level 1:colcon.colcon_core.package_identification:_identify(go2_ros2_bridge) by extensions ['colcon_pkg']
+[0.389s] Level 1:colcon.colcon_core.package_identification:_identify(go2_ros2_bridge) by extension 'colcon_pkg'
+[0.389s] Level 1:colcon.colcon_core.package_identification:_identify(go2_ros2_bridge) by extensions ['colcon_meta']
+[0.389s] Level 1:colcon.colcon_core.package_identification:_identify(go2_ros2_bridge) by extension 'colcon_meta'
+[0.389s] Level 1:colcon.colcon_core.package_identification:_identify(go2_ros2_bridge) by extensions ['ros']
+[0.389s] Level 1:colcon.colcon_core.package_identification:_identify(go2_ros2_bridge) by extension 'ros'
+[0.389s] DEBUG:colcon.colcon_core.package_identification:Failed to parse potential ROS package manifest in'go2_ros2_bridge': Error(s) in package 'go2_ros2_bridge/package.xml':
+Invalid email "melodse@local" for person "melodse"
+[0.389s] Level 1:colcon.colcon_core.package_identification:_identify(go2_ros2_bridge) by extensions ['cmake', 'python']
+[0.389s] Level 1:colcon.colcon_core.package_identification:_identify(go2_ros2_bridge) by extension 'cmake'
+[0.389s] Level 1:colcon.colcon_core.package_identification:_identify(go2_ros2_bridge) by extension 'python'
+[0.390s] DEBUG:colcon.colcon_core.package_identification:Python package in 'go2_ros2_bridge' passes arguments to the setup() function which requires a different identification extension than 'python'
+[0.390s] Level 1:colcon.colcon_core.package_identification:_identify(go2_ros2_bridge) by extensions ['python_setup_py']
+[0.390s] Level 1:colcon.colcon_core.package_identification:_identify(go2_ros2_bridge) by extension 'python_setup_py'
+[0.636s] DEBUG:colcon.colcon_core.package_identification:Package 'go2_ros2_bridge' with type 'python' and name 'go2_ros2_bridge'
+[0.636s] Level 1:colcon.colcon_core.package_identification:_identify(install) by extensions ['ignore', 'ignore_ament_install']
+[0.636s] Level 1:colcon.colcon_core.package_identification:_identify(install) by extension 'ignore'
+[0.636s] Level 1:colcon.colcon_core.package_identification:_identify(install) ignored
+[0.637s] Level 1:colcon.colcon_core.package_identification:_identify(log) by extensions ['ignore', 'ignore_ament_install']
+[0.637s] Level 1:colcon.colcon_core.package_identification:_identify(log) by extension 'ignore'
+[0.637s] Level 1:colcon.colcon_core.package_identification:_identify(log) ignored
+[0.637s] Level 1:colcon.colcon_core.package_identification:_identify(unitree_description) by extensions ['ignore', 'ignore_ament_install']
+[0.637s] Level 1:colcon.colcon_core.package_identification:_identify(unitree_description) by extension 'ignore'
+[0.637s] Level 1:colcon.colcon_core.package_identification:_identify(unitree_description) by extension 'ignore_ament_install'
+[0.637s] Level 1:colcon.colcon_core.package_identification:_identify(unitree_description) by extensions ['colcon_pkg']
+[0.637s] Level 1:colcon.colcon_core.package_identification:_identify(unitree_description) by extension 'colcon_pkg'
+[0.638s] Level 1:colcon.colcon_core.package_identification:_identify(unitree_description) by extensions ['colcon_meta']
+[0.638s] Level 1:colcon.colcon_core.package_identification:_identify(unitree_description) by extension 'colcon_meta'
+[0.638s] Level 1:colcon.colcon_core.package_identification:_identify(unitree_description) by extensions ['ros']
+[0.638s] Level 1:colcon.colcon_core.package_identification:_identify(unitree_description) by extension 'ros'
+[0.643s] DEBUG:colcon.colcon_core.package_identification:Package 'unitree_description' with type 'ros.cmake' and name 'unitree_description'
+[0.643s] Level 1:colcon.colcon_core.package_discovery:discover_packages(recursive) using defaults
+[0.643s] Level 1:colcon.colcon_core.package_discovery:discover_packages(ignore) discover
+[0.644s] Level 1:colcon.colcon_core.package_discovery:discover_packages(ignore) using defaults
+[0.644s] Level 1:colcon.colcon_core.package_discovery:discover_packages(path) discover
+[0.644s] Level 1:colcon.colcon_core.package_discovery:discover_packages(path) using defaults
+[0.664s] INFO:colcon.colcon_metadata.metadata.colcon_pkg:Updating descriptor of package 'unitree_description' from colcon.pkg: {'hooks': ['share/unitree_description/hook/ament_prefix_path.dsv', 'share/unitree_description/hook/python_path.dsv']}
+[0.665s] Level 1:colcon.colcon_core.package_discovery:discover_packages(prefix_path) check parameters
+[0.665s] Level 1:colcon.colcon_core.package_discovery:discover_packages(prefix_path) discover
+[0.668s] DEBUG:colcon.colcon_installed_package_information.package_discovery:Found 3 installed packages in /home/melodse/ef_ws/install
+[0.668s] DEBUG:colcon.colcon_installed_package_information.package_discovery:Found 1 installed packages in /home/melodse/ros2_ws/install
+[0.670s] DEBUG:colcon.colcon_installed_package_information.package_discovery:Found 423 installed packages in /opt/ros/jazzy
+[0.671s] Level 1:colcon.colcon_core.package_discovery:discover_packages(prefix_path) using defaults
+[0.718s] Level 5:colcon.colcon_core.verb:set package 'go2_ros2_bridge' build argument 'cmake_args' from command line to 'None'
+[0.718s] Level 5:colcon.colcon_core.verb:set package 'go2_ros2_bridge' build argument 'cmake_target' from command line to 'None'
+[0.718s] Level 5:colcon.colcon_core.verb:set package 'go2_ros2_bridge' build argument 'cmake_target_skip_unavailable' from command line to 'False'
+[0.718s] Level 5:colcon.colcon_core.verb:set package 'go2_ros2_bridge' build argument 'cmake_clean_cache' from command line to 'False'
+[0.719s] Level 5:colcon.colcon_core.verb:set package 'go2_ros2_bridge' build argument 'cmake_clean_first' from command line to 'False'
+[0.719s] Level 5:colcon.colcon_core.verb:set package 'go2_ros2_bridge' build argument 'cmake_force_configure' from command line to 'False'
+[0.719s] Level 5:colcon.colcon_core.verb:set package 'go2_ros2_bridge' build argument 'ament_cmake_args' from command line to 'None'
+[0.719s] Level 5:colcon.colcon_core.verb:set package 'go2_ros2_bridge' build argument 'catkin_cmake_args' from command line to 'None'
+[0.719s] Level 5:colcon.colcon_core.verb:set package 'go2_ros2_bridge' build argument 'catkin_skip_building_tests' from command line to 'False'
+[0.719s] DEBUG:colcon.colcon_core.verb:Building package 'go2_ros2_bridge' with the following arguments: {'ament_cmake_args': None, 'build_base': '/home/melodse/ef_ws/src/build/go2_ros2_bridge', 'catkin_cmake_args': None, 'catkin_skip_building_tests': False, 'cmake_args': None, 'cmake_clean_cache': False, 'cmake_clean_first': False, 'cmake_force_configure': False, 'cmake_target': None, 'cmake_target_skip_unavailable': False, 'install_base': '/home/melodse/ef_ws/src/install/go2_ros2_bridge', 'merge_install': False, 'path': '/home/melodse/ef_ws/src/go2_ros2_bridge', 'symlink_install': False, 'test_result_base': None}
+[0.719s] Level 5:colcon.colcon_core.verb:set package 'unitree_description' build argument 'cmake_args' from command line to 'None'
+[0.719s] Level 5:colcon.colcon_core.verb:set package 'unitree_description' build argument 'cmake_target' from command line to 'None'
+[0.719s] Level 5:colcon.colcon_core.verb:set package 'unitree_description' build argument 'cmake_target_skip_unavailable' from command line to 'False'
+[0.719s] Level 5:colcon.colcon_core.verb:set package 'unitree_description' build argument 'cmake_clean_cache' from command line to 'False'
+[0.719s] Level 5:colcon.colcon_core.verb:set package 'unitree_description' build argument 'cmake_clean_first' from command line to 'False'
+[0.719s] Level 5:colcon.colcon_core.verb:set package 'unitree_description' build argument 'cmake_force_configure' from command line to 'False'
+[0.719s] Level 5:colcon.colcon_core.verb:set package 'unitree_description' build argument 'ament_cmake_args' from command line to 'None'
+[0.719s] Level 5:colcon.colcon_core.verb:set package 'unitree_description' build argument 'catkin_cmake_args' from command line to 'None'
+[0.719s] Level 5:colcon.colcon_core.verb:set package 'unitree_description' build argument 'catkin_skip_building_tests' from command line to 'False'
+[0.719s] DEBUG:colcon.colcon_core.verb:Building package 'unitree_description' with the following arguments: {'ament_cmake_args': None, 'build_base': '/home/melodse/ef_ws/src/build/unitree_description', 'catkin_cmake_args': None, 'catkin_skip_building_tests': False, 'cmake_args': None, 'cmake_clean_cache': False, 'cmake_clean_first': False, 'cmake_force_configure': False, 'cmake_target': None, 'cmake_target_skip_unavailable': False, 'install_base': '/home/melodse/ef_ws/src/install/unitree_description', 'merge_install': False, 'path': '/home/melodse/ef_ws/src/unitree_description', 'symlink_install': False, 'test_result_base': None}
+[0.719s] Level 5:colcon.colcon_core.verb:set package 'g1_description' build argument 'cmake_args' from command line to 'None'
+[0.719s] Level 5:colcon.colcon_core.verb:set package 'g1_description' build argument 'cmake_target' from command line to 'None'
+[0.719s] Level 5:colcon.colcon_core.verb:set package 'g1_description' build argument 'cmake_target_skip_unavailable' from command line to 'False'
+[0.719s] Level 5:colcon.colcon_core.verb:set package 'g1_description' build argument 'cmake_clean_cache' from command line to 'False'
+[0.719s] Level 5:colcon.colcon_core.verb:set package 'g1_description' build argument 'cmake_clean_first' from command line to 'False'
+[0.719s] Level 5:colcon.colcon_core.verb:set package 'g1_description' build argument 'cmake_force_configure' from command line to 'False'
+[0.719s] Level 5:colcon.colcon_core.verb:set package 'g1_description' build argument 'ament_cmake_args' from command line to 'None'
+[0.719s] Level 5:colcon.colcon_core.verb:set package 'g1_description' build argument 'catkin_cmake_args' from command line to 'None'
+[0.719s] Level 5:colcon.colcon_core.verb:set package 'g1_description' build argument 'catkin_skip_building_tests' from command line to 'False'
+[0.719s] DEBUG:colcon.colcon_core.verb:Building package 'g1_description' with the following arguments: {'ament_cmake_args': None, 'build_base': '/home/melodse/ef_ws/src/build/g1_description', 'catkin_cmake_args': None, 'catkin_skip_building_tests': False, 'cmake_args': None, 'cmake_clean_cache': False, 'cmake_clean_first': False, 'cmake_force_configure': False, 'cmake_target': None, 'cmake_target_skip_unavailable': False, 'install_base': '/home/melodse/ef_ws/src/install/g1_description', 'merge_install': False, 'path': '/home/melodse/ef_ws/src/g1_rviz_simulation', 'symlink_install': False, 'test_result_base': None}
+[0.719s] INFO:colcon.colcon_core.executor:Executing jobs using 'parallel' executor
+[0.720s] DEBUG:colcon.colcon_parallel_executor.executor.parallel:run_until_complete
+[0.721s] INFO:colcon.colcon_ros.task.cmake.build:Building ROS package in '/home/melodse/ef_ws/src/unitree_description' with build type 'cmake'
+[0.721s] INFO:colcon.colcon_cmake.task.cmake.build:Building CMake package in '/home/melodse/ef_ws/src/unitree_description'
+[0.724s] INFO:colcon.colcon_core.plugin_system:Skipping extension 'colcon_core.shell.bat': Not used on non-Windows systems
+[0.724s] INFO:colcon.colcon_core.shell:Skip shell extension 'powershell' for command environment: Not usable outside of PowerShell
+[0.724s] DEBUG:colcon.colcon_core.shell:Skip shell extension 'dsv' for command environment
+[0.729s] INFO:colcon.colcon_core.task.python.build:Building Python package in '/home/melodse/ef_ws/src/go2_ros2_bridge'
+[0.729s] INFO:colcon.colcon_core.shell:Skip shell extension 'powershell' for command environment: Not usable outside of PowerShell
+[0.729s] DEBUG:colcon.colcon_core.shell:Skip shell extension 'dsv' for command environment
+[0.754s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoking command in '/home/melodse/ef_ws/src/build/unitree_description': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/melodse/ef_ws/install:/home/melodse/ef_ws/install/g1_description:/opt/ros/jazzy /usr/bin/cmake --build /home/melodse/ef_ws/src/build/unitree_description -- -j12 -l12
+[1.027s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoked command in '/home/melodse/ef_ws/src/build/unitree_description' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/melodse/ef_ws/install:/home/melodse/ef_ws/install/g1_description:/opt/ros/jazzy /usr/bin/cmake --build /home/melodse/ef_ws/src/build/unitree_description -- -j12 -l12
+[1.045s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoking command in '/home/melodse/ef_ws/src/build/unitree_description': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/melodse/ef_ws/install:/home/melodse/ef_ws/install/g1_description:/opt/ros/jazzy /usr/bin/cmake --install /home/melodse/ef_ws/src/build/unitree_description
+[1.083s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoked command in '/home/melodse/ef_ws/src/build/unitree_description' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/melodse/ef_ws/install:/home/melodse/ef_ws/install/g1_description:/opt/ros/jazzy /usr/bin/cmake --install /home/melodse/ef_ws/src/build/unitree_description
+[1.084s] Level 1:colcon.colcon_core.shell:create_environment_hook('unitree_description', 'pkg_config_path')
+[1.084s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/hook/pkg_config_path.ps1'
+[1.086s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/hook/pkg_config_path.dsv'
+[1.088s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/hook/pkg_config_path.sh'
+[1.093s] Level 1:colcon.colcon_core.shell:create_environment_hook('unitree_description', 'pkg_config_path_multiarch')
+[1.094s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/hook/pkg_config_path_multiarch.ps1'
+[1.095s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/hook/pkg_config_path_multiarch.dsv'
+[1.095s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/hook/pkg_config_path_multiarch.sh'
+[1.096s] Level 1:colcon.colcon_core.environment:create_environment_scripts_only(unitree_description)
+[1.099s] Level 1:colcon.colcon_core.environment:checking '/home/melodse/ef_ws/src/install/unitree_description' for CMake module files
+[1.100s] Level 1:colcon.colcon_core.environment:checking '/home/melodse/ef_ws/src/install/unitree_description' for CMake config files
+[1.110s] Level 1:colcon.colcon_core.shell:create_environment_hook('unitree_description', 'cmake_prefix_path')
+[1.111s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/hook/cmake_prefix_path.ps1'
+[1.111s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/hook/cmake_prefix_path.dsv'
+[1.112s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/hook/cmake_prefix_path.sh'
+[1.113s] Level 1:colcon.colcon_core.environment:checking '/home/melodse/ef_ws/src/install/unitree_description/lib'
+[1.113s] Level 1:colcon.colcon_core.environment:checking '/home/melodse/ef_ws/src/install/unitree_description/bin'
+[1.113s] Level 1:colcon.colcon_core.environment:checking '/home/melodse/ef_ws/src/install/unitree_description/lib/pkgconfig/unitree_description.pc'
+[1.113s] Level 1:colcon.colcon_core.shell:create_environment_hook('unitree_description', 'pkg_config')
+[1.113s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/hook/pkg_config.ps1'
+[1.114s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/hook/pkg_config.dsv'
+[1.114s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/hook/pkg_config.sh'
+[1.115s] Level 1:colcon.colcon_core.environment:checking '/home/melodse/ef_ws/src/install/unitree_description/lib/python3.12/site-packages'
+[1.115s] Level 1:colcon.colcon_core.shell:create_environment_hook('unitree_description', 'pythonpath')
+[1.115s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/hook/pythonpath.ps1'
+[1.115s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/hook/pythonpath.dsv'
+[1.116s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/hook/pythonpath.sh'
+[1.116s] Level 1:colcon.colcon_core.environment:checking '/home/melodse/ef_ws/src/install/unitree_description/bin'
+[1.117s] INFO:colcon.colcon_core.shell:Creating package script '/home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/package.ps1'
+[1.119s] INFO:colcon.colcon_core.shell:Creating package descriptor '/home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/package.dsv'
+[1.120s] INFO:colcon.colcon_core.shell:Creating package script '/home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/package.sh'
+[1.121s] INFO:colcon.colcon_core.shell:Creating package script '/home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/package.bash'
+[1.122s] INFO:colcon.colcon_core.shell:Creating package script '/home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/package.zsh'
+[1.123s] Level 1:colcon.colcon_core.environment:create_file_with_runtime_dependencies(/home/melodse/ef_ws/src/install/unitree_description/share/colcon-core/packages/unitree_description)
+[1.124s] INFO:colcon.colcon_ros.task.ament_python.build:Building ROS package in '/home/melodse/ef_ws/src/g1_rviz_simulation' with build type 'ament_python'
+[1.124s] Level 1:colcon.colcon_core.shell:create_environment_hook('g1_description', 'ament_prefix_path')
+[1.124s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/melodse/ef_ws/src/install/g1_description/share/g1_description/hook/ament_prefix_path.ps1'
+[1.125s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/home/melodse/ef_ws/src/install/g1_description/share/g1_description/hook/ament_prefix_path.dsv'
+[1.125s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/melodse/ef_ws/src/install/g1_description/share/g1_description/hook/ament_prefix_path.sh'
+[1.126s] INFO:colcon.colcon_core.shell:Skip shell extension 'powershell' for command environment: Not usable outside of PowerShell
+[1.126s] DEBUG:colcon.colcon_core.shell:Skip shell extension 'dsv' for command environment
+[1.682s] INFO:colcon.colcon_core.task.python.build:Building Python package in '/home/melodse/ef_ws/src/g1_rviz_simulation'
+[1.683s] INFO:colcon.colcon_core.shell:Skip shell extension 'powershell' for command environment: Not usable outside of PowerShell
+[1.683s] DEBUG:colcon.colcon_core.shell:Skip shell extension 'dsv' for command environment
+[1.859s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoking command in '/home/melodse/ef_ws/src/go2_ros2_bridge': PYTHONPATH=/home/melodse/ef_ws/src/build/go2_ros2_bridge/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/melodse/ef_ws/src/install/go2_ros2_bridge/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../build/go2_ros2_bridge build --build-base /home/melodse/ef_ws/src/build/go2_ros2_bridge/build install --record /home/melodse/ef_ws/src/build/go2_ros2_bridge/install.log --single-version-externally-managed install_data
+[2.566s] Level 1:colcon.colcon_core.environment:checking '/home/melodse/ef_ws/src/install/go2_ros2_bridge' for CMake module files
+[2.566s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoked command in '/home/melodse/ef_ws/src/go2_ros2_bridge' returned '0': PYTHONPATH=/home/melodse/ef_ws/src/build/go2_ros2_bridge/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/melodse/ef_ws/src/install/go2_ros2_bridge/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../build/go2_ros2_bridge build --build-base /home/melodse/ef_ws/src/build/go2_ros2_bridge/build install --record /home/melodse/ef_ws/src/build/go2_ros2_bridge/install.log --single-version-externally-managed install_data
+[2.569s] Level 1:colcon.colcon_core.environment:checking '/home/melodse/ef_ws/src/install/go2_ros2_bridge' for CMake config files
+[2.572s] Level 1:colcon.colcon_core.environment:checking '/home/melodse/ef_ws/src/install/go2_ros2_bridge/lib'
+[2.572s] Level 1:colcon.colcon_core.environment:checking '/home/melodse/ef_ws/src/install/go2_ros2_bridge/bin'
+[2.572s] Level 1:colcon.colcon_core.environment:checking '/home/melodse/ef_ws/src/install/go2_ros2_bridge/lib/pkgconfig/go2_ros2_bridge.pc'
+[2.573s] Level 1:colcon.colcon_core.environment:checking '/home/melodse/ef_ws/src/install/go2_ros2_bridge/lib/python3.12/site-packages'
+[2.573s] Level 1:colcon.colcon_core.shell:create_environment_hook('go2_ros2_bridge', 'pythonpath')
+[2.573s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/melodse/ef_ws/src/install/go2_ros2_bridge/share/go2_ros2_bridge/hook/pythonpath.ps1'
+[2.573s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/home/melodse/ef_ws/src/install/go2_ros2_bridge/share/go2_ros2_bridge/hook/pythonpath.dsv'
+[2.574s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/melodse/ef_ws/src/install/go2_ros2_bridge/share/go2_ros2_bridge/hook/pythonpath.sh'
+[2.575s] Level 1:colcon.colcon_core.environment:checking '/home/melodse/ef_ws/src/install/go2_ros2_bridge/bin'
+[2.575s] Level 1:colcon.colcon_core.environment:create_environment_scripts_only(go2_ros2_bridge)
+[2.576s] INFO:colcon.colcon_core.shell:Creating package script '/home/melodse/ef_ws/src/install/go2_ros2_bridge/share/go2_ros2_bridge/package.ps1'
+[2.576s] INFO:colcon.colcon_core.shell:Creating package descriptor '/home/melodse/ef_ws/src/install/go2_ros2_bridge/share/go2_ros2_bridge/package.dsv'
+[2.577s] INFO:colcon.colcon_core.shell:Creating package script '/home/melodse/ef_ws/src/install/go2_ros2_bridge/share/go2_ros2_bridge/package.sh'
+[2.578s] INFO:colcon.colcon_core.shell:Creating package script '/home/melodse/ef_ws/src/install/go2_ros2_bridge/share/go2_ros2_bridge/package.bash'
+[2.578s] INFO:colcon.colcon_core.shell:Creating package script '/home/melodse/ef_ws/src/install/go2_ros2_bridge/share/go2_ros2_bridge/package.zsh'
+[2.579s] Level 1:colcon.colcon_core.environment:create_file_with_runtime_dependencies(/home/melodse/ef_ws/src/install/go2_ros2_bridge/share/colcon-core/packages/go2_ros2_bridge)
+[2.747s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoking command in '/home/melodse/ef_ws/src/g1_rviz_simulation': CMAKE_PREFIX_PATH=/home/melodse/ef_ws/src/install/unitree_description:${CMAKE_PREFIX_PATH} PKG_CONFIG_PATH=/home/melodse/ef_ws/src/install/unitree_description/lib/x86_64-linux-gnu/pkgconfig:/home/melodse/ef_ws/src/install/unitree_description/lib/pkgconfig:${PKG_CONFIG_PATH} PYTHONPATH=/home/melodse/ef_ws/src/build/g1_description/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/melodse/ef_ws/src/install/g1_description/lib/python3.12/site-packages:/home/melodse/ef_ws/src/install/unitree_description/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../../../src/build/g1_description build --build-base /home/melodse/ef_ws/src/build/g1_description/build install --record /home/melodse/ef_ws/src/build/g1_description/install.log --single-version-externally-managed install_data
+[3.545s] Level 1:colcon.colcon_core.environment:checking '/home/melodse/ef_ws/src/install/g1_description' for CMake module files
+[3.546s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoked command in '/home/melodse/ef_ws/src/g1_rviz_simulation' returned '0': CMAKE_PREFIX_PATH=/home/melodse/ef_ws/src/install/unitree_description:${CMAKE_PREFIX_PATH} PKG_CONFIG_PATH=/home/melodse/ef_ws/src/install/unitree_description/lib/x86_64-linux-gnu/pkgconfig:/home/melodse/ef_ws/src/install/unitree_description/lib/pkgconfig:${PKG_CONFIG_PATH} PYTHONPATH=/home/melodse/ef_ws/src/build/g1_description/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/melodse/ef_ws/src/install/g1_description/lib/python3.12/site-packages:/home/melodse/ef_ws/src/install/unitree_description/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../../../src/build/g1_description build --build-base /home/melodse/ef_ws/src/build/g1_description/build install --record /home/melodse/ef_ws/src/build/g1_description/install.log --single-version-externally-managed install_data
+[3.549s] Level 1:colcon.colcon_core.environment:checking '/home/melodse/ef_ws/src/install/g1_description' for CMake config files
+[3.556s] Level 1:colcon.colcon_core.environment:checking '/home/melodse/ef_ws/src/install/g1_description/lib'
+[3.557s] Level 1:colcon.colcon_core.environment:checking '/home/melodse/ef_ws/src/install/g1_description/bin'
+[3.557s] Level 1:colcon.colcon_core.environment:checking '/home/melodse/ef_ws/src/install/g1_description/lib/pkgconfig/g1_description.pc'
+[3.557s] Level 1:colcon.colcon_core.environment:checking '/home/melodse/ef_ws/src/install/g1_description/lib/python3.12/site-packages'
+[3.557s] Level 1:colcon.colcon_core.shell:create_environment_hook('g1_description', 'pythonpath')
+[3.557s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/melodse/ef_ws/src/install/g1_description/share/g1_description/hook/pythonpath.ps1'
+[3.558s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/home/melodse/ef_ws/src/install/g1_description/share/g1_description/hook/pythonpath.dsv'
+[3.558s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/melodse/ef_ws/src/install/g1_description/share/g1_description/hook/pythonpath.sh'
+[3.559s] Level 1:colcon.colcon_core.environment:checking '/home/melodse/ef_ws/src/install/g1_description/bin'
+[3.559s] Level 1:colcon.colcon_core.environment:create_environment_scripts_only(g1_description)
+[3.560s] INFO:colcon.colcon_core.shell:Creating package script '/home/melodse/ef_ws/src/install/g1_description/share/g1_description/package.ps1'
+[3.560s] INFO:colcon.colcon_core.shell:Creating package descriptor '/home/melodse/ef_ws/src/install/g1_description/share/g1_description/package.dsv'
+[3.561s] INFO:colcon.colcon_core.shell:Creating package script '/home/melodse/ef_ws/src/install/g1_description/share/g1_description/package.sh'
+[3.561s] INFO:colcon.colcon_core.shell:Creating package script '/home/melodse/ef_ws/src/install/g1_description/share/g1_description/package.bash'
+[3.562s] INFO:colcon.colcon_core.shell:Creating package script '/home/melodse/ef_ws/src/install/g1_description/share/g1_description/package.zsh'
+[3.563s] Level 1:colcon.colcon_core.environment:create_file_with_runtime_dependencies(/home/melodse/ef_ws/src/install/g1_description/share/colcon-core/packages/g1_description)
+[3.563s] DEBUG:colcon.colcon_parallel_executor.executor.parallel:closing loop
+[3.564s] DEBUG:colcon.colcon_parallel_executor.executor.parallel:loop closed
+[3.564s] DEBUG:colcon.colcon_parallel_executor.executor.parallel:run_until_complete finished with '0'
+[3.564s] DEBUG:colcon.colcon_core.event_reactor:joining thread
+[3.584s] INFO:colcon.colcon_core.plugin_system:Skipping extension 'colcon_notification.desktop_notification.terminal_notifier': Not used on non-Darwin systems
+[3.584s] INFO:colcon.colcon_core.plugin_system:Skipping extension 'colcon_notification.desktop_notification.win32': Not used on non-Windows systems
+[3.585s] INFO:colcon.colcon_notification.desktop_notification:Sending desktop notification using 'notify2'
+[3.588s] DEBUG:colcon.colcon_notification.desktop_notification.notify2:Failed to initialize notify2: org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.Notifications was not provided by any .service files
+[3.588s] DEBUG:colcon.colcon_core.event_reactor:joined thread
+[3.589s] INFO:colcon.colcon_core.shell:Creating prefix script '/home/melodse/ef_ws/src/install/local_setup.ps1'
+[3.590s] INFO:colcon.colcon_core.shell:Creating prefix util module '/home/melodse/ef_ws/src/install/_local_setup_util_ps1.py'
+[3.593s] INFO:colcon.colcon_core.shell:Creating prefix chain script '/home/melodse/ef_ws/src/install/setup.ps1'
+[3.595s] INFO:colcon.colcon_core.shell:Creating prefix script '/home/melodse/ef_ws/src/install/local_setup.sh'
+[3.596s] INFO:colcon.colcon_core.shell:Creating prefix util module '/home/melodse/ef_ws/src/install/_local_setup_util_sh.py'
+[3.596s] INFO:colcon.colcon_core.shell:Creating prefix chain script '/home/melodse/ef_ws/src/install/setup.sh'
+[3.598s] INFO:colcon.colcon_core.shell:Creating prefix script '/home/melodse/ef_ws/src/install/local_setup.bash'
+[3.599s] INFO:colcon.colcon_core.shell:Creating prefix chain script '/home/melodse/ef_ws/src/install/setup.bash'
+[3.600s] INFO:colcon.colcon_core.shell:Creating prefix script '/home/melodse/ef_ws/src/install/local_setup.zsh'
+[3.602s] INFO:colcon.colcon_core.shell:Creating prefix chain script '/home/melodse/ef_ws/src/install/setup.zsh'

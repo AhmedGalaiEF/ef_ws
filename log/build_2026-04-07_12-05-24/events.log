@@ -1,0 +1,7 @@
+[0.000000] (-) TimerEvent: {}
+[0.000733] (-) JobUnselected: {'identifier': 'g1_description'}
+[0.001492] (-) JobUnselected: {'identifier': 'go2_ros2_bridge'}
+[0.001569] (-) JobUnselected: {'identifier': 'slam_example'}
+[0.001611] (-) JobUnselected: {'identifier': 'tx_lidar'}
+[0.001652] (-) JobUnselected: {'identifier': 'unitree_description'}
+[0.002118] (-) EventReactorShutdown: {}

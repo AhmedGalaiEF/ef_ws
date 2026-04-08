@@ -1,0 +1,41 @@
+[1.212s] Invoking command in '/home/melodse/ef_ws/src/go2_ros2_bridge': PYTHONPATH=/home/melodse/ef_ws/src/build/go2_ros2_bridge/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/melodse/ef_ws/src/install/go2_ros2_bridge/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../build/go2_ros2_bridge build --build-base /home/melodse/ef_ws/src/build/go2_ros2_bridge/build install --record /home/melodse/ef_ws/src/build/go2_ros2_bridge/install.log --single-version-externally-managed install_data
+[1.485s] running egg_info
+[1.485s] creating ../build/go2_ros2_bridge/go2_ros2_bridge.egg-info
+[1.508s] writing ../build/go2_ros2_bridge/go2_ros2_bridge.egg-info/PKG-INFO
+[1.509s] writing dependency_links to ../build/go2_ros2_bridge/go2_ros2_bridge.egg-info/dependency_links.txt
+[1.509s] writing entry points to ../build/go2_ros2_bridge/go2_ros2_bridge.egg-info/entry_points.txt
+[1.509s] writing requirements to ../build/go2_ros2_bridge/go2_ros2_bridge.egg-info/requires.txt
+[1.509s] writing top-level names to ../build/go2_ros2_bridge/go2_ros2_bridge.egg-info/top_level.txt
+[1.510s] writing manifest file '../build/go2_ros2_bridge/go2_ros2_bridge.egg-info/SOURCES.txt'
+[1.553s] reading manifest file '../build/go2_ros2_bridge/go2_ros2_bridge.egg-info/SOURCES.txt'
+[1.554s] writing manifest file '../build/go2_ros2_bridge/go2_ros2_bridge.egg-info/SOURCES.txt'
+[1.554s] running build
+[1.554s] running build_py
+[1.554s] creating /home/melodse/ef_ws/src/build/go2_ros2_bridge/build
+[1.554s] creating /home/melodse/ef_ws/src/build/go2_ros2_bridge/build/lib
+[1.554s] creating /home/melodse/ef_ws/src/build/go2_ros2_bridge/build/lib/go2_ros2_bridge
+[1.555s] copying go2_ros2_bridge/go2_state_bridge.py -> /home/melodse/ef_ws/src/build/go2_ros2_bridge/build/lib/go2_ros2_bridge
+[1.558s] copying go2_ros2_bridge/__init__.py -> /home/melodse/ef_ws/src/build/go2_ros2_bridge/build/lib/go2_ros2_bridge
+[1.558s] running install
+[1.564s] running install_lib
+[1.585s] creating /home/melodse/ef_ws/src/install/go2_ros2_bridge/lib/python3.12/site-packages/go2_ros2_bridge
+[1.585s] copying /home/melodse/ef_ws/src/build/go2_ros2_bridge/build/lib/go2_ros2_bridge/go2_state_bridge.py -> /home/melodse/ef_ws/src/install/go2_ros2_bridge/lib/python3.12/site-packages/go2_ros2_bridge
+[1.585s] copying /home/melodse/ef_ws/src/build/go2_ros2_bridge/build/lib/go2_ros2_bridge/__init__.py -> /home/melodse/ef_ws/src/install/go2_ros2_bridge/lib/python3.12/site-packages/go2_ros2_bridge
+[1.585s] byte-compiling /home/melodse/ef_ws/src/install/go2_ros2_bridge/lib/python3.12/site-packages/go2_ros2_bridge/go2_state_bridge.py to go2_state_bridge.cpython-312.pyc
+[1.587s] byte-compiling /home/melodse/ef_ws/src/install/go2_ros2_bridge/lib/python3.12/site-packages/go2_ros2_bridge/__init__.py to __init__.cpython-312.pyc
+[1.587s] running install_data
+[1.587s] creating /home/melodse/ef_ws/src/install/go2_ros2_bridge/share
+[1.588s] creating /home/melodse/ef_ws/src/install/go2_ros2_bridge/share/ament_index
+[1.588s] creating /home/melodse/ef_ws/src/install/go2_ros2_bridge/share/ament_index/resource_index
+[1.588s] creating /home/melodse/ef_ws/src/install/go2_ros2_bridge/share/ament_index/resource_index/packages
+[1.588s] copying resource/go2_ros2_bridge -> /home/melodse/ef_ws/src/install/go2_ros2_bridge/share/ament_index/resource_index/packages
+[1.588s] creating /home/melodse/ef_ws/src/install/go2_ros2_bridge/share/go2_ros2_bridge
+[1.589s] copying package.xml -> /home/melodse/ef_ws/src/install/go2_ros2_bridge/share/go2_ros2_bridge
+[1.589s] creating /home/melodse/ef_ws/src/install/go2_ros2_bridge/share/go2_ros2_bridge/launch
+[1.589s] copying launch/go2_state_bridge.launch.py -> /home/melodse/ef_ws/src/install/go2_ros2_bridge/share/go2_ros2_bridge/launch
+[1.590s] running install_egg_info
+[1.613s] Copying ../build/go2_ros2_bridge/go2_ros2_bridge.egg-info to /home/melodse/ef_ws/src/install/go2_ros2_bridge/lib/python3.12/site-packages/go2_ros2_bridge-0.1.0-py3.12.egg-info
+[1.614s] running install_scripts
+[1.748s] Installing go2_state_bridge script to /home/melodse/ef_ws/src/install/go2_ros2_bridge/lib/go2_ros2_bridge
+[1.748s] writing list of installed files to '/home/melodse/ef_ws/src/build/go2_ros2_bridge/install.log'
+[1.775s] Invoked command in '/home/melodse/ef_ws/src/go2_ros2_bridge' returned '0': PYTHONPATH=/home/melodse/ef_ws/src/build/go2_ros2_bridge/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/melodse/ef_ws/src/install/go2_ros2_bridge/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../build/go2_ros2_bridge build --build-base /home/melodse/ef_ws/src/build/go2_ros2_bridge/build install --record /home/melodse/ef_ws/src/build/go2_ros2_bridge/install.log --single-version-externally-managed install_data

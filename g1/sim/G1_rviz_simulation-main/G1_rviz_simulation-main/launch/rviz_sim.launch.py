@@ -102,6 +102,8 @@ def generate_launch_description():
         DeclareLaunchArgument('use_sim_time', default_value='false'),
         DeclareLaunchArgument('publish_frequency', default_value='100.0'),
         DeclareLaunchArgument('use_gui', default_value='false'),
+        DeclareLaunchArgument('publish_joint_states', default_value='true'),
+        DeclareLaunchArgument('use_zero_joint_state_publisher', default_value='false'),
         DeclareLaunchArgument('use_demo_motion', default_value='false'),
         DeclareLaunchArgument('demo_mode', default_value='pose'),
         DeclareLaunchArgument(

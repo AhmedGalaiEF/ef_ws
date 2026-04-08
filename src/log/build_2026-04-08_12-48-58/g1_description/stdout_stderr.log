@@ -1,0 +1,22 @@
+running egg_info
+writing ../../../../src/build/g1_description/g1_description.egg-info/PKG-INFO
+writing dependency_links to ../../../../src/build/g1_description/g1_description.egg-info/dependency_links.txt
+writing entry points to ../../../../src/build/g1_description/g1_description.egg-info/entry_points.txt
+writing requirements to ../../../../src/build/g1_description/g1_description.egg-info/requires.txt
+writing top-level names to ../../../../src/build/g1_description/g1_description.egg-info/top_level.txt
+reading manifest file '../../../../src/build/g1_description/g1_description.egg-info/SOURCES.txt'
+writing manifest file '../../../../src/build/g1_description/g1_description.egg-info/SOURCES.txt'
+running build
+running build_py
+running install
+running install_lib
+running install_data
+copying rviz/g1.rviz -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/rviz
+running install_egg_info
+removing '/home/melodse/ef_ws/src/install/g1_description/lib/python3.12/site-packages/g1_description-0.0.0-py3.12.egg-info' (and everything under it)
+Copying ../../../../src/build/g1_description/g1_description.egg-info to /home/melodse/ef_ws/src/install/g1_description/lib/python3.12/site-packages/g1_description-0.0.0-py3.12.egg-info
+running install_scripts
+Installing demo_joint_motion script to /home/melodse/ef_ws/src/install/g1_description/lib/g1_description
+Installing lowstate_jointstate_bridge script to /home/melodse/ef_ws/src/install/g1_description/lib/g1_description
+Installing rviz_joint_motion script to /home/melodse/ef_ws/src/install/g1_description/lib/g1_description
+writing list of installed files to '/home/melodse/ef_ws/src/build/g1_description/install.log'

@@ -1,0 +1,25 @@
+[1.480s] Invoking command in '/home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main': PYTHONPATH=/home/melodse/ef_ws/build/g1_description/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages:/home/melodse/ef_ws/install/unitree_description/lib/python3.12/site-packages:/home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages:/home/melodse/ef_ws/install/go2_ros2_bridge/lib/python3.12/site-packages:/home/melodse/ros2_ws/install/unitree_description/lib/python3.12/site-packages:/opt/ros/jazzy/lib/python3.12/site-packages /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../../../build/g1_description build --build-base /home/melodse/ef_ws/build/g1_description/build install --record /home/melodse/ef_ws/build/g1_description/install.log --single-version-externally-managed install_data
+[1.797s] running egg_info
+[1.819s] writing ../../../../build/g1_description/g1_description.egg-info/PKG-INFO
+[1.822s] writing dependency_links to ../../../../build/g1_description/g1_description.egg-info/dependency_links.txt
+[1.823s] writing entry points to ../../../../build/g1_description/g1_description.egg-info/entry_points.txt
+[1.824s] writing requirements to ../../../../build/g1_description/g1_description.egg-info/requires.txt
+[1.824s] writing top-level names to ../../../../build/g1_description/g1_description.egg-info/top_level.txt
+[1.876s] reading manifest file '../../../../build/g1_description/g1_description.egg-info/SOURCES.txt'
+[1.880s] writing manifest file '../../../../build/g1_description/g1_description.egg-info/SOURCES.txt'
+[1.881s] running build
+[1.881s] running build_py
+[1.882s] running install
+[1.892s] running install_lib
+[1.924s] running install_data
+[1.924s] copying launch/rviz_sim.launch.py -> /home/melodse/ef_ws/install/g1_description/share/g1_description/launch
+[1.924s] copying rviz/g1.rviz -> /home/melodse/ef_ws/install/g1_description/share/g1_description/rviz
+[1.929s] running install_egg_info
+[1.956s] removing '/home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages/g1_description-0.0.0-py3.12.egg-info' (and everything under it)
+[1.959s] Copying ../../../../build/g1_description/g1_description.egg-info to /home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages/g1_description-0.0.0-py3.12.egg-info
+[1.960s] running install_scripts
+[2.128s] Installing demo_joint_motion script to /home/melodse/ef_ws/install/g1_description/lib/g1_description
+[2.130s] Installing lowstate_jointstate_bridge script to /home/melodse/ef_ws/install/g1_description/lib/g1_description
+[2.130s] Installing rviz_joint_motion script to /home/melodse/ef_ws/install/g1_description/lib/g1_description
+[2.131s] writing list of installed files to '/home/melodse/ef_ws/build/g1_description/install.log'
+[2.165s] Invoked command in '/home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main' returned '0': PYTHONPATH=/home/melodse/ef_ws/build/g1_description/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages:/home/melodse/ef_ws/install/unitree_description/lib/python3.12/site-packages:/home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages:/home/melodse/ef_ws/install/go2_ros2_bridge/lib/python3.12/site-packages:/home/melodse/ros2_ws/install/unitree_description/lib/python3.12/site-packages:/opt/ros/jazzy/lib/python3.12/site-packages /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../../../build/g1_description build --build-base /home/melodse/ef_ws/build/g1_description/build install --record /home/melodse/ef_ws/build/g1_description/install.log --single-version-externally-managed install_data

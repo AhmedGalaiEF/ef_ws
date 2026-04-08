@@ -1,0 +1,1 @@
+/home/melodse/ef_ws/build/go2_ros2_bridge/launch/go2_state_bridge.launch.py

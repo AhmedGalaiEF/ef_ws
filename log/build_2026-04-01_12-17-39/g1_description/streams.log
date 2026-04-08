@@ -1,0 +1,24 @@
+[1.851s] Invoking command in '/home/melodse/ef_ws/src/g1_rviz_simulation': CMAKE_PREFIX_PATH=/home/melodse/ef_ws/install/unitree_description:${CMAKE_PREFIX_PATH} PKG_CONFIG_PATH=/home/melodse/ef_ws/install/unitree_description/lib/x86_64-linux-gnu/pkgconfig:/home/melodse/ef_ws/install/unitree_description/lib/pkgconfig:/home/melodse/ros2_ws/install/unitree_description/lib/x86_64-linux-gnu/pkgconfig:/home/melodse/ros2_ws/install/unitree_description/lib/pkgconfig PYTHONPATH=/home/melodse/ef_ws/build/g1_description/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages:/home/melodse/ef_ws/install/unitree_description/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../../../build/g1_description build --build-base /home/melodse/ef_ws/build/g1_description/build install --record /home/melodse/ef_ws/build/g1_description/install.log --single-version-externally-managed install_data
+[2.313s] running egg_info
+[2.349s] writing ../../../../build/g1_description/g1_description.egg-info/PKG-INFO
+[2.351s] writing dependency_links to ../../../../build/g1_description/g1_description.egg-info/dependency_links.txt
+[2.351s] writing entry points to ../../../../build/g1_description/g1_description.egg-info/entry_points.txt
+[2.352s] writing requirements to ../../../../build/g1_description/g1_description.egg-info/requires.txt
+[2.352s] writing top-level names to ../../../../build/g1_description/g1_description.egg-info/top_level.txt
+[2.468s] reading manifest file '../../../../build/g1_description/g1_description.egg-info/SOURCES.txt'
+[2.473s] writing manifest file '../../../../build/g1_description/g1_description.egg-info/SOURCES.txt'
+[2.473s] running build
+[2.474s] running build_py
+[2.474s] running install
+[2.482s] running install_lib
+[2.513s] running install_data
+[2.513s] copying launch/rviz_sim.launch.py -> /home/melodse/ef_ws/install/g1_description/share/g1_description/launch
+[2.517s] running install_egg_info
+[2.551s] removing '/home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages/g1_description-0.0.0-py3.12.egg-info' (and everything under it)
+[2.552s] Copying ../../../../build/g1_description/g1_description.egg-info to /home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages/g1_description-0.0.0-py3.12.egg-info
+[2.554s] running install_scripts
+[2.811s] Installing demo_joint_motion script to /home/melodse/ef_ws/install/g1_description/lib/g1_description
+[2.812s] Installing lowstate_jointstate_bridge script to /home/melodse/ef_ws/install/g1_description/lib/g1_description
+[2.812s] Installing rviz_joint_motion script to /home/melodse/ef_ws/install/g1_description/lib/g1_description
+[2.813s] writing list of installed files to '/home/melodse/ef_ws/build/g1_description/install.log'
+[2.864s] Invoked command in '/home/melodse/ef_ws/src/g1_rviz_simulation' returned '0': CMAKE_PREFIX_PATH=/home/melodse/ef_ws/install/unitree_description:${CMAKE_PREFIX_PATH} PKG_CONFIG_PATH=/home/melodse/ef_ws/install/unitree_description/lib/x86_64-linux-gnu/pkgconfig:/home/melodse/ef_ws/install/unitree_description/lib/pkgconfig:/home/melodse/ros2_ws/install/unitree_description/lib/x86_64-linux-gnu/pkgconfig:/home/melodse/ros2_ws/install/unitree_description/lib/pkgconfig PYTHONPATH=/home/melodse/ef_ws/build/g1_description/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages:/home/melodse/ef_ws/install/unitree_description/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../../../build/g1_description build --build-base /home/melodse/ef_ws/build/g1_description/build install --record /home/melodse/ef_ws/build/g1_description/install.log --single-version-externally-managed install_data

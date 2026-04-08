@@ -1,13 +1,16 @@
 from launch import LaunchDescription
 from launch_ros.actions import Node
-import os
-
-from ament_index_python.packages import get_package_share_directory
+from pathlib import Path
 
 def generate_launch_description():
 
-    pkg_path = get_package_share_directory('go2_description')
-    urdf_file = os.path.join(pkg_path, 'urdf', 'go2.urdf.xacro')
+    repo_root = Path(__file__).resolve().parent.parent
+    urdf_file = repo_root / 'model' / 'go2' / 'go2.urdf'
+    urdf_text = urdf_file.read_text()
+    urdf_text = urdf_text.replace(
+        'package://unitree_description/',
+        f'file://{repo_root.as_posix()}/',
+    )
 
     return LaunchDescription([
 
@@ -16,7 +19,7 @@ def generate_launch_description():
             package='robot_state_publisher',
             executable='robot_state_publisher',
             parameters=[{
-                'robot_description': open(urdf_file).read()
+                'robot_description': urdf_text,
             }]
         ),
 
@@ -30,6 +33,7 @@ def generate_launch_description():
         Node(
             package='rviz2',
             executable='rviz2',
-            output='screen'
+            output='screen',
+            arguments=['-d', str(repo_root / 'rviz' / 'go2.rviz')],
         ),
     ])

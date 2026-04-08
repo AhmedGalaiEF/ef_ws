@@ -1,0 +1,192 @@
+[0.016s] Invoking command in '/home/melodse/ef_ws/src/build/unitree_description': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/melodse/ef_ws/install/g1_description:/opt/ros/jazzy /usr/bin/cmake /home/melodse/ef_ws/src/unitree_description -DCMAKE_INSTALL_PREFIX=/home/melodse/ef_ws/src/install/unitree_description
+[1.508s] -- JRL cmakemodules not found. Let's fetch it.
+[5.076s] -- The CXX compiler identification is GNU 13.3.0
+[5.602s] -- Detecting CXX compiler ABI info
+[5.920s] -- Detecting CXX compiler ABI info - done
+[5.937s] -- Check for working CXX compiler: /usr/bin/c++ - skipped
+[5.937s] -- Detecting CXX compile features
+[5.938s] -- Detecting CXX compile features - done
+[5.947s] -- Configuring "unitree_description" (https://github.com/inria-paris-robotics-lab/unitree_description)
+[5.947s] -- Package version (ROS package.xml): 0.0.0
+[6.132s] -- The C compiler identification is GNU 13.3.0
+[6.511s] -- Detecting C compiler ABI info
+[6.787s] -- Detecting C compiler ABI info - done
+[6.799s] -- Check for working C compiler: /usr/bin/cc - skipped
+[6.800s] -- Detecting C compile features
+[6.801s] -- Detecting C compile features - done
+[6.819s] -- Found PkgConfig: /usr/bin/pkg-config (found version "1.8.1") 
+[7.492s] -- Performing Test res_-pedantic
+[7.735s] -- Performing Test res_-pedantic - Success
+[7.735s] -- Performing Test res_-Wno-long-long
+[7.966s] -- Performing Test res_-Wno-long-long - Success
+[7.966s] -- Performing Test res_-Wall
+[8.171s] -- Performing Test res_-Wall - Success
+[8.172s] -- Performing Test res_-Wextra
+[8.404s] -- Performing Test res_-Wextra - Success
+[8.405s] -- Performing Test res_-Wcast-align
+[8.607s] -- Performing Test res_-Wcast-align - Success
+[8.609s] -- Performing Test res_-Wcast-qual
+[8.812s] -- Performing Test res_-Wcast-qual - Success
+[8.812s] -- Performing Test res_-Wformat
+[9.216s] -- Performing Test res_-Wformat - Success
+[9.217s] -- Performing Test res_-Wwrite-strings
+[9.547s] -- Performing Test res_-Wwrite-strings - Success
+[9.548s] -- Performing Test res_-Wconversion
+[9.785s] -- Performing Test res_-Wconversion - Success
+[9.785s] -- Performing Test res_-Werror
+[9.855s] -- Performing Test res_-Werror - Failed
+[10.034s] -- Could NOT find Doxygen (missing: DOXYGEN_EXECUTABLE) 
+[10.034s] -- Failed to find Doxygen, documentation will not be generated.
+[10.437s] -- Found Python3: /usr/bin/python (found version "3.12.3") found components: Interpreter Development Development.Module Development.Embed 
+[10.439s] -- PythonLibraryDirs: /usr/lib/x86_64-linux-gnu
+[10.439s] -- PythonLibVersionString: 3.12.3
+[10.470s] -- Python site lib: lib/python3.12/site-packages
+[10.470s] -- Python include dirs: /usr/include/python3.12
+[10.541s] -- Create files for AMENT (ROS 2)
+[10.546s] -- Create files for AMENT (ROS 2)
+[10.555s] -- Configuring done (10.5s)
+[10.633s] -- Generating done (0.1s)
+[10.654s] -- Build files have been written to: /home/melodse/ef_ws/src/build/unitree_description
+[10.665s] Invoked command in '/home/melodse/ef_ws/src/build/unitree_description' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/melodse/ef_ws/install/g1_description:/opt/ros/jazzy /usr/bin/cmake /home/melodse/ef_ws/src/unitree_description -DCMAKE_INSTALL_PREFIX=/home/melodse/ef_ws/src/install/unitree_description
+[10.665s] Invoking command in '/home/melodse/ef_ws/src/build/unitree_description': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/melodse/ef_ws/install/g1_description:/opt/ros/jazzy /usr/bin/cmake --build /home/melodse/ef_ws/src/build/unitree_description -- -j12 -l12
+[10.682s] /usr/bin/cmake -S/home/melodse/ef_ws/src/unitree_description -B/home/melodse/ef_ws/src/build/unitree_description --check-build-system CMakeFiles/Makefile.cmake 0
+[10.695s] /usr/bin/cmake -E cmake_progress_start /home/melodse/ef_ws/src/build/unitree_description/CMakeFiles /home/melodse/ef_ws/src/build/unitree_description//CMakeFiles/progress.marks
+[10.714s] /usr/bin/gmake  -f CMakeFiles/Makefile2 all
+[10.720s] gmake[1]: Entering directory '/home/melodse/ef_ws/src/build/unitree_description'
+[10.720s] /usr/bin/gmake  -f python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_src_unitree_description_python.dir/build.make python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_src_unitree_description_python.dir/depend
+[10.722s] gmake[2]: Entering directory '/home/melodse/ef_ws/src/build/unitree_description'
+[10.722s] cd /home/melodse/ef_ws/src/build/unitree_description && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/melodse/ef_ws/src/unitree_description /home/melodse/ef_ws/src/unitree_description/python /home/melodse/ef_ws/src/build/unitree_description /home/melodse/ef_ws/src/build/unitree_description/python /home/melodse/ef_ws/src/build/unitree_description/python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_src_unitree_description_python.dir/DependInfo.cmake "--color="
+[10.737s] gmake[2]: Leaving directory '/home/melodse/ef_ws/src/build/unitree_description'
+[10.737s] /usr/bin/gmake  -f python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_src_unitree_description_python.dir/build.make python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_src_unitree_description_python.dir/build
+[10.739s] gmake[2]: Entering directory '/home/melodse/ef_ws/src/build/unitree_description'
+[10.739s] cd /home/melodse/ef_ws/src/build/unitree_description/python && /usr/bin/cmake -E make_directory /home/melodse/ef_ws/src/build/unitree_description/python/unitree_description
+[10.756s] cd /home/melodse/ef_ws/src/build/unitree_description/python && /usr/bin/python -c "import py_compile; py_compile.compile(\"/home/melodse/ef_ws/src/unitree_description/python/unitree_description/__init__.py\",\"/home/melodse/ef_ws/src/build/unitree_description/python/unitree_description/__init__.pyc\")"
+[10.811s] cd /home/melodse/ef_ws/src/build/unitree_description/python && /usr/bin/cmake -E make_directory /home/melodse/ef_ws/src/build/unitree_description/python/unitree_description
+[10.823s] cd /home/melodse/ef_ws/src/build/unitree_description/python && /usr/bin/python -c "import py_compile; py_compile.compile(\"/home/melodse/ef_ws/src/unitree_description/python/unitree_description/loader.py\",\"/home/melodse/ef_ws/src/build/unitree_description/python/unitree_description/loader.pyc\")"
+[10.867s] gmake[2]: Leaving directory '/home/melodse/ef_ws/src/build/unitree_description'
+[10.879s] Built target unitree_description_compile_pyc__home_melodse_ef_ws_src_unitree_description_python
+[10.881s] gmake[1]: Leaving directory '/home/melodse/ef_ws/src/build/unitree_description'
+[10.881s] /usr/bin/cmake -E cmake_progress_start /home/melodse/ef_ws/src/build/unitree_description/CMakeFiles 0
+[10.898s] Invoked command in '/home/melodse/ef_ws/src/build/unitree_description' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/melodse/ef_ws/install/g1_description:/opt/ros/jazzy /usr/bin/cmake --build /home/melodse/ef_ws/src/build/unitree_description -- -j12 -l12
+[10.915s] Invoking command in '/home/melodse/ef_ws/src/build/unitree_description': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/melodse/ef_ws/install/g1_description:/opt/ros/jazzy /usr/bin/cmake --install /home/melodse/ef_ws/src/build/unitree_description
+[10.933s] -- Install configuration: ""
+[10.934s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/include/unitree/description/config.hh
+[10.935s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/include/unitree/description/deprecated.hh
+[10.935s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/include/unitree/description/warning.hh
+[10.935s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model
+[10.936s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2
+[10.937s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets
+[10.940s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/visuals
+[10.941s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/visuals/hip.dae
+[10.947s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/visuals/base.dae
+[10.961s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/visuals/foot.dae
+[10.962s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/visuals/calf_mirror.dae
+[10.964s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/visuals/thigh.dae
+[10.970s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/visuals/calf.dae
+[10.972s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/visuals/thigh_mirror.dae
+[10.978s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/collisions
+[10.978s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/collisions/calf_lower_mirror_convex.stl
+[10.978s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/collisions/foot_convex.stl
+[10.979s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/collisions/thigh_convex.stl
+[10.979s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/collisions/thigh_mirror_convex.stl
+[10.980s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/collisions/base_convex.stl
+[10.980s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/collisions/calf_upper_convex.stl
+[10.981s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/collisions/hip_convex.stl
+[10.981s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/collisions/calf_upper_mirror_convex.stl
+[10.982s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/collisions/calf_lower_convex.stl
+[10.982s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/go2.urdf
+[10.982s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/go2.srdf
+[10.983s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1
+[10.983s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets
+[10.984s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals
+[10.984s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_elbow_link.STL
+[10.990s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/logo_link.STL
+[10.992s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_rubber_hand.STL
+[11.005s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_shoulder_roll_link.STL
+[11.009s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_wrist_yaw_link.STL
+[11.011s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_hip_yaw_link.STL
+[11.013s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_ankle_pitch_link.STL
+[11.014s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/waist_yaw_link_rev_1_0.STL
+[11.017s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_shoulder_pitch_link.STL
+[11.018s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_shoulder_yaw_link.STL
+[11.020s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_knee_link.STL
+[11.024s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_rubber_hand.STL
+[11.035s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/torso_link_rev_1_0.STL
+[11.049s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_shoulder_pitch_link.STL
+[11.050s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_wrist_roll_link.STL
+[11.052s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_wrist_pitch_link.STL
+[11.052s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_shoulder_yaw_link.STL
+[11.053s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_hip_yaw_link.STL
+[11.055s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/head_link.STL
+[11.061s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_elbow_link.STL
+[11.061s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_ankle_roll_link.STL
+[11.067s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/pelvis.STL
+[11.073s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_wrist_pitch_link.STL
+[11.073s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_wrist_yaw_link.STL
+[11.076s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_hip_pitch_link.STL
+[11.078s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_shoulder_roll_link.STL
+[11.080s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_knee_link.STL
+[11.085s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_hip_roll_link.STL
+[11.086s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_ankle_pitch_link.STL
+[11.086s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_hip_pitch_link.STL
+[11.087s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/waist_roll_link_rev_1_0.STL
+[11.088s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_ankle_roll_link.STL
+[11.092s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/pelvis_contour_link.STL
+[11.103s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_hip_roll_link.STL
+[11.104s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_wrist_roll_link.STL
+[11.106s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions
+[11.106s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/left_shoulder_roll_link_collision.STL
+[11.107s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/right_shoulder_pitch_link_collision.STL
+[11.108s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/left_knee_link_collision.STL
+[11.109s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/right_shoulder_roll_link_collision.STL
+[11.110s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/logo_link_collision.STL
+[11.110s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/left_wrist_roll_link_collision.STL
+[11.112s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/right_elbow_link_collision.STL
+[11.112s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/left_hip_pitch_link_collision.STL
+[11.113s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/right_wrist_hand_collision.STL
+[11.114s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/head_link_collision.STL
+[11.115s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/right_ankle_roll_link_collision.STL
+[11.116s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/left_shoulder_pitch_link_collision.STL
+[11.117s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/torso_waist_roll_pitch_collision.STL
+[11.118s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/pelvis_collision.STL
+[11.120s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/left_wrist_hand_collision.STL
+[11.121s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/left_shoulder_yaw_link_collision.STL
+[11.122s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/left_ankle_roll_link_collision.STL
+[11.122s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/left_hip_yaw_link_collision.STL
+[11.123s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/left_elbow_link_collision.STL
+[11.124s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/left_wrist_pitch_link_collision.STL
+[11.124s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/right_wrist_roll_link_collision.STL
+[11.125s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/right_shoulder_yaw_link_collision.STL
+[11.126s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/right_wrist_pitch_link_collision.STL
+[11.127s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/right_hip_yaw_link_collision.STL
+[11.127s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/right_hip_pitch_link_collision.STL
+[11.128s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/right_hip_roll_link_collision.STL
+[11.129s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/right_knee_link_collision.STL
+[11.130s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/left_hip_roll_link_collision.STL
+[11.131s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/g1.srdf
+[11.131s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/g1.urdf
+[11.132s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/launch
+[11.132s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/launch/go2_rviz.launch.py
+[11.132s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/launch/rviz_go2.launch.py
+[11.133s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/rviz
+[11.133s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/rviz/go2.rviz
+[11.134s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/lib/python3.12/site-packages/unitree_description/__init__.py
+[11.134s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/lib/python3.12/site-packages/unitree_description/loader.py
+[11.135s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/lib/python3.12/site-packages/unitree_description/path.py
+[11.135s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/lib/pkgconfig/unitree_description.pc
+[11.136s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/ament_index/resource_index/packages/unitree_description
+[11.136s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/hook/ament_prefix_path.dsv
+[11.137s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/hook/python_path.dsv
+[11.137s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/package.xml
+[11.138s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/lib/cmake/unitree_description/unitree_descriptionConfig.cmake
+[11.138s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/lib/cmake/unitree_description/unitree_descriptionConfigVersion.cmake
+[11.138s] -- Installing: /home/melodse/ef_ws/src/install/unitree_description/lib/cmake/unitree_description/unitree_descriptionTargets.cmake
+[11.139s] -- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/lib/pkgconfig/unitree_description.pc
+[11.139s] -- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/ament_index/resource_index/packages/unitree_description
+[11.139s] -- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/hook/ament_prefix_path.dsv
+[11.146s] -- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/hook/python_path.dsv
+[11.146s] -- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/package.xml
+[11.146s] -- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/lib/cmake/unitree_description/unitree_descriptionConfig.cmake
+[11.146s] -- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/lib/cmake/unitree_description/unitree_descriptionConfigVersion.cmake
+[11.147s] -- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/lib/cmake/unitree_description/unitree_descriptionTargets.cmake
+[11.148s] Invoked command in '/home/melodse/ef_ws/src/build/unitree_description' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/melodse/ef_ws/install/g1_description:/opt/ros/jazzy /usr/bin/cmake --install /home/melodse/ef_ws/src/build/unitree_description

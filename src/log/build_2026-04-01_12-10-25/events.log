@@ -1,0 +1,569 @@
+[0.000000] (-) TimerEvent: {}
+[0.000220] (unitree_description) JobQueued: {'identifier': 'unitree_description', 'dependencies': OrderedDict()}
+[0.000292] (g1_description) JobQueued: {'identifier': 'g1_description', 'dependencies': OrderedDict({'unitree_description': '/home/melodse/ef_ws/src/install/unitree_description'})}
+[0.000352] (unitree_description) JobStarted: {'identifier': 'unitree_description'}
+[0.011127] (unitree_description) JobProgress: {'identifier': 'unitree_description', 'progress': 'cmake'}
+[0.013336] (unitree_description) Command: {'cmd': ['/usr/bin/cmake', '/home/melodse/ef_ws/src/unitree_description', '-DCMAKE_INSTALL_PREFIX=/home/melodse/ef_ws/src/install/unitree_description'], 'cwd': '/home/melodse/ef_ws/src/build/unitree_description', 'env': OrderedDict({'LESSOPEN': '| /usr/bin/lesspipe %s', 'USER': 'melodse', 'GZ_CONFIG_PATH': '/opt/ros/jazzy/opt/gz_sim_vendor/share/gz:/opt/ros/jazzy/opt/sdformat_vendor/share/gz:/opt/ros/jazzy/opt/gz_gui_vendor/share/gz:/opt/ros/jazzy/opt/gz_transport_vendor/share/gz:/opt/ros/jazzy/opt/gz_rendering_vendor/share/gz:/opt/ros/jazzy/opt/gz_plugin_vendor/share/gz:/opt/ros/jazzy/opt/gz_fuel_tools_vendor/share/gz:/opt/ros/jazzy/opt/gz_msgs_vendor/share/gz:/opt/ros/jazzy/opt/gz_common_vendor/share/gz', 'ROS_PACKAGE_PATH': '/home/melodse/ef_ws/install/unitree_description/share', 'SHLVL': '1', 'LD_LIBRARY_PATH': '/home/melodse/ef_ws/install/unitree_hg/lib:/opt/ros/jazzy/opt/gz_sim_vendor/lib:/opt/ros/jazzy/opt/gz_sensors_vendor/lib:/opt/ros/jazzy/opt/gz_physics_vendor/lib:/opt/ros/jazzy/opt/sdformat_vendor/lib:/opt/ros/jazzy/opt/rviz_ogre_vendor/lib:/opt/ros/jazzy/lib/x86_64-linux-gnu:/opt/ros/jazzy/opt/gz_gui_vendor/lib:/opt/ros/jazzy/opt/gz_transport_vendor/lib:/opt/ros/jazzy/opt/gz_rendering_vendor/lib:/opt/ros/jazzy/opt/gz_plugin_vendor/lib:/opt/ros/jazzy/opt/gz_fuel_tools_vendor/lib:/opt/ros/jazzy/opt/gz_msgs_vendor/lib:/opt/ros/jazzy/opt/gz_common_vendor/lib:/opt/ros/jazzy/opt/gz_math_vendor/lib:/opt/ros/jazzy/opt/gz_utils_vendor/lib:/opt/ros/jazzy/opt/gz_tools_vendor/lib:/opt/ros/jazzy/opt/gz_ogre_next_vendor/lib:/opt/ros/jazzy/opt/gz_dartsim_vendor/lib:/opt/ros/jazzy/opt/gz_cmake_vendor/lib:/opt/ros/jazzy/lib', 'WT_PROFILE_ID': '{61c54bbd-c2c6-5271-96e7-009a87ff44bf}', 'HOME': '/home/melodse', 'CONDA_SHLVL': '0', 'OLDPWD': '/home/melodse/ef_ws', 'ROS_PYTHON_VERSION': '3', 'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/run/user/1000/bus', '_CE_M': '', 'WSL_DISTRO_NAME': 'Ubuntu', '_CONDA_ROOT': '/home/melodse/miniconda3', 'WAYLAND_DISPLAY': 'wayland-0', 'COLCON_PREFIX_PATH': '/home/melodse/ef_ws/install:/home/melodse/ros2_ws/install', 'ROS_DISTRO': 'jazzy', 'LOGNAME': 'melodse', 'NAME': 'meldose', 'WSL_INTEROP': '/run/WSL/941_interop', 'PULSE_SERVER': 'unix:/mnt/wslg/PulseServer', '_': '/usr/bin/colcon', 'ROS_VERSION': '2', 'PKG_CONFIG_PATH': '/home/melodse/ros2_ws/install/unitree_description/lib/x86_64-linux-gnu/pkgconfig:/home/melodse/ros2_ws/install/unitree_description/lib/pkgconfig:/home/melodse/ef_ws/install/unitree_description/lib/x86_64-linux-gnu/pkgconfig:/home/melodse/ef_ws/install/unitree_description/lib/pkgconfig', 'TERM': 'xterm-256color', '_CE_CONDA': '', 'PATH': '/home/melodse/miniconda3/condabin:/home/melodse/.local/bin:/opt/ros/jazzy/opt/gz_msgs_vendor/bin:/opt/ros/jazzy/opt/gz_tools_vendor/bin:/opt/ros/jazzy/opt/gz_ogre_next_vendor/bin:/opt/ros/jazzy/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/lib/wsl/lib:/mnt/c/WINDOWS/system32:/mnt/c/WINDOWS:/mnt/c/WINDOWS/System32/Wbem:/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/:/mnt/c/WINDOWS/System32/OpenSSH/:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/usbipd-win/:/mnt/c/Users/meldo/.local/bin:/mnt/c/Users/meldo/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/meldo/AppData/Local/Programs/Microsoft VS Code/bin:/mnt/c/Users/meldo/AppData/Local/GitHubDesktop/bin:/mnt/c/Users/meldo/AppData/Local/Microsoft/WinGet/Links:/snap/bin', 'WT_SESSION': 'a9e1e428-6c3c-497b-a75c-948383879a0e', 'XDG_RUNTIME_DIR': '/run/user/1000/', 'DISPLAY': ':0', 'LANG': 'en_US.UTF-8', 'RMW_IMPLEMENTATION': 'rmw_cyclonedds_cpp', 'CYCLONEDDS_HOME': '/home/melodse/cyclonedds/install', 'LS_COLORS': 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=00:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.avif=01;35:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:*~=00;90:*#=00;90:*.bak=00;90:*.crdownload=00;90:*.dpkg-dist=00;90:*.dpkg-new=00;90:*.dpkg-old=00;90:*.dpkg-tmp=00;90:*.old=00;90:*.orig=00;90:*.part=00;90:*.rej=00;90:*.rpmnew=00;90:*.rpmorig=00;90:*.rpmsave=00;90:*.swp=00;90:*.tmp=00;90:*.ucf-dist=00;90:*.ucf-new=00;90:*.ucf-old=00;90:', 'AMENT_PREFIX_PATH': '/home/melodse/ros2_ws/install/unitree_description:/home/melodse/ef_ws/install/unitree_hg:/home/melodse/ef_ws/install/g1_description:/opt/ros/jazzy', 'CONDA_PYTHON_EXE': '/home/melodse/miniconda3/bin/python', 'SHELL': '/bin/bash', 'LESSCLOSE': '/usr/bin/lesspipe %s %s', '_CONDA_EXE': '/home/melodse/miniconda3/bin/conda', 'ROS_AUTOMATIC_DISCOVERY_RANGE': 'SUBNET', 'PWD': '/home/melodse/ef_ws/src/build/unitree_description', 'CONDA_EXE': '/home/melodse/miniconda3/bin/conda', 'XDG_DATA_DIRS': '/usr/local/share:/usr/share:/var/lib/snapd/desktop', 'PYTHONPATH': '/home/melodse/ros2_ws/install/unitree_description/lib/python3.12/site-packages:/home/melodse/ef_ws/install/unitree_hg/lib/python3.12/site-packages:/home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages:/opt/ros/jazzy/lib/python3.12/site-packages', 'COLCON': '1', 'WSL2_GUI_APPS_ENABLED': '1', 'HOSTTYPE': 'x86_64', 'CMAKE_PREFIX_PATH': '/home/melodse/ef_ws/install/unitree_hg:/home/melodse/ef_ws/install/unitree_description:/home/melodse/ros2_ws/install/unitree_description:/opt/ros/jazzy/opt/gz_sim_vendor:/opt/ros/jazzy/opt/gz_sensors_vendor:/opt/ros/jazzy/opt/gz_physics_vendor:/opt/ros/jazzy/opt/sdformat_vendor:/opt/ros/jazzy/opt/gz_gui_vendor:/opt/ros/jazzy/opt/gz_transport_vendor:/opt/ros/jazzy/opt/gz_rendering_vendor:/opt/ros/jazzy/opt/gz_plugin_vendor:/opt/ros/jazzy/opt/gz_fuel_tools_vendor:/opt/ros/jazzy/opt/gz_msgs_vendor:/opt/ros/jazzy/opt/gz_common_vendor:/opt/ros/jazzy/opt/gz_math_vendor:/opt/ros/jazzy/opt/gz_utils_vendor:/opt/ros/jazzy/opt/gz_tools_vendor:/opt/ros/jazzy/opt/gz_ogre_next_vendor:/opt/ros/jazzy/opt/gz_dartsim_vendor:/opt/ros/jazzy/opt/gz_cmake_vendor:/home/melodse/cyclonedds/install:/home/melodse/ef_ws/install/g1_description:/opt/ros/jazzy', 'WSLENV': 'WT_SESSION:WT_PROFILE_ID:'}), 'shell': False}
+[0.098365] (-) TimerEvent: {}
+[0.198798] (-) TimerEvent: {}
+[0.299187] (-) TimerEvent: {}
+[0.399579] (-) TimerEvent: {}
+[0.499974] (-) TimerEvent: {}
+[0.600379] (-) TimerEvent: {}
+[0.701474] (-) TimerEvent: {}
+[0.801913] (-) TimerEvent: {}
+[0.902388] (-) TimerEvent: {}
+[1.002821] (-) TimerEvent: {}
+[1.103211] (-) TimerEvent: {}
+[1.203632] (-) TimerEvent: {}
+[1.303973] (-) TimerEvent: {}
+[1.404377] (-) TimerEvent: {}
+[1.505515] (-) TimerEvent: {}
+[1.507594] (unitree_description) StdoutLine: {'line': b"-- JRL cmakemodules not found. Let's fetch it.\n"}
+[1.605611] (-) TimerEvent: {}
+[1.706027] (-) TimerEvent: {}
+[1.806388] (-) TimerEvent: {}
+[1.906743] (-) TimerEvent: {}
+[2.007162] (-) TimerEvent: {}
+[2.107520] (-) TimerEvent: {}
+[2.207850] (-) TimerEvent: {}
+[2.308245] (-) TimerEvent: {}
+[2.408691] (-) TimerEvent: {}
+[2.509094] (-) TimerEvent: {}
+[2.609562] (-) TimerEvent: {}
+[2.710027] (-) TimerEvent: {}
+[2.810427] (-) TimerEvent: {}
+[2.910868] (-) TimerEvent: {}
+[3.011259] (-) TimerEvent: {}
+[3.111606] (-) TimerEvent: {}
+[3.211997] (-) TimerEvent: {}
+[3.312341] (-) TimerEvent: {}
+[3.412739] (-) TimerEvent: {}
+[3.513161] (-) TimerEvent: {}
+[3.613611] (-) TimerEvent: {}
+[3.713924] (-) TimerEvent: {}
+[3.814343] (-) TimerEvent: {}
+[3.914648] (-) TimerEvent: {}
+[4.015139] (-) TimerEvent: {}
+[4.115532] (-) TimerEvent: {}
+[4.215926] (-) TimerEvent: {}
+[4.316301] (-) TimerEvent: {}
+[4.416674] (-) TimerEvent: {}
+[4.517456] (-) TimerEvent: {}
+[4.618114] (-) TimerEvent: {}
+[4.718498] (-) TimerEvent: {}
+[4.818866] (-) TimerEvent: {}
+[4.919218] (-) TimerEvent: {}
+[5.019633] (-) TimerEvent: {}
+[5.075817] (unitree_description) StdoutLine: {'line': b'-- The CXX compiler identification is GNU 13.3.0\n'}
+[5.122028] (-) TimerEvent: {}
+[5.222374] (-) TimerEvent: {}
+[5.324307] (-) TimerEvent: {}
+[5.424923] (-) TimerEvent: {}
+[5.525586] (-) TimerEvent: {}
+[5.601749] (unitree_description) StdoutLine: {'line': b'-- Detecting CXX compiler ABI info\n'}
+[5.625844] (-) TimerEvent: {}
+[5.726243] (-) TimerEvent: {}
+[5.826666] (-) TimerEvent: {}
+[5.920485] (unitree_description) StdoutLine: {'line': b'-- Detecting CXX compiler ABI info - done\n'}
+[5.926839] (-) TimerEvent: {}
+[5.936851] (unitree_description) StdoutLine: {'line': b'-- Check for working CXX compiler: /usr/bin/c++ - skipped\n'}
+[5.937374] (unitree_description) StdoutLine: {'line': b'-- Detecting CXX compile features\n'}
+[5.938359] (unitree_description) StdoutLine: {'line': b'-- Detecting CXX compile features - done\n'}
+[5.946636] (unitree_description) StdoutLine: {'line': b'-- Configuring "unitree_description" (https://github.com/inria-paris-robotics-lab/unitree_description)\n'}
+[5.947094] (unitree_description) StdoutLine: {'line': b'-- Package version (ROS package.xml): 0.0.0\n'}
+[6.027244] (-) TimerEvent: {}
+[6.127759] (-) TimerEvent: {}
+[6.132181] (unitree_description) StdoutLine: {'line': b'-- The C compiler identification is GNU 13.3.0\n'}
+[6.228174] (-) TimerEvent: {}
+[6.329848] (-) TimerEvent: {}
+[6.433534] (-) TimerEvent: {}
+[6.511216] (unitree_description) StdoutLine: {'line': b'-- Detecting C compiler ABI info\n'}
+[6.533682] (-) TimerEvent: {}
+[6.634078] (-) TimerEvent: {}
+[6.735270] (-) TimerEvent: {}
+[6.787392] (unitree_description) StdoutLine: {'line': b'-- Detecting C compiler ABI info - done\n'}
+[6.799323] (unitree_description) StdoutLine: {'line': b'-- Check for working C compiler: /usr/bin/cc - skipped\n'}
+[6.799825] (unitree_description) StdoutLine: {'line': b'-- Detecting C compile features\n'}
+[6.800837] (unitree_description) StdoutLine: {'line': b'-- Detecting C compile features - done\n'}
+[6.818957] (unitree_description) StdoutLine: {'line': b'-- Found PkgConfig: /usr/bin/pkg-config (found version "1.8.1") \n'}
+[6.835481] (-) TimerEvent: {}
+[6.939239] (-) TimerEvent: {}
+[7.039657] (-) TimerEvent: {}
+[7.140889] (-) TimerEvent: {}
+[7.242417] (-) TimerEvent: {}
+[7.343144] (-) TimerEvent: {}
+[7.443648] (-) TimerEvent: {}
+[7.491856] (unitree_description) StdoutLine: {'line': b'-- Performing Test res_-pedantic\n'}
+[7.544142] (-) TimerEvent: {}
+[7.644935] (-) TimerEvent: {}
+[7.734655] (unitree_description) StdoutLine: {'line': b'-- Performing Test res_-pedantic - Success\n'}
+[7.735669] (unitree_description) StdoutLine: {'line': b'-- Performing Test res_-Wno-long-long\n'}
+[7.748382] (-) TimerEvent: {}
+[7.849761] (-) TimerEvent: {}
+[7.951538] (-) TimerEvent: {}
+[7.965675] (unitree_description) StdoutLine: {'line': b'-- Performing Test res_-Wno-long-long - Success\n'}
+[7.966701] (unitree_description) StdoutLine: {'line': b'-- Performing Test res_-Wall\n'}
+[8.051854] (-) TimerEvent: {}
+[8.153443] (-) TimerEvent: {}
+[8.171130] (unitree_description) StdoutLine: {'line': b'-- Performing Test res_-Wall - Success\n'}
+[8.172008] (unitree_description) StdoutLine: {'line': b'-- Performing Test res_-Wextra\n'}
+[8.253849] (-) TimerEvent: {}
+[8.354888] (-) TimerEvent: {}
+[8.404469] (unitree_description) StdoutLine: {'line': b'-- Performing Test res_-Wextra - Success\n'}
+[8.405481] (unitree_description) StdoutLine: {'line': b'-- Performing Test res_-Wcast-align\n'}
+[8.455077] (-) TimerEvent: {}
+[8.555596] (-) TimerEvent: {}
+[8.607529] (unitree_description) StdoutLine: {'line': b'-- Performing Test res_-Wcast-align - Success\n'}
+[8.608728] (unitree_description) StdoutLine: {'line': b'-- Performing Test res_-Wcast-qual\n'}
+[8.655924] (-) TimerEvent: {}
+[8.756445] (-) TimerEvent: {}
+[8.811884] (unitree_description) StdoutLine: {'line': b'-- Performing Test res_-Wcast-qual - Success\n'}
+[8.812327] (unitree_description) StdoutLine: {'line': b'-- Performing Test res_-Wformat\n'}
+[8.856704] (-) TimerEvent: {}
+[8.957861] (-) TimerEvent: {}
+[9.058372] (-) TimerEvent: {}
+[9.158822] (-) TimerEvent: {}
+[9.216283] (unitree_description) StdoutLine: {'line': b'-- Performing Test res_-Wformat - Success\n'}
+[9.217462] (unitree_description) StdoutLine: {'line': b'-- Performing Test res_-Wwrite-strings\n'}
+[9.259014] (-) TimerEvent: {}
+[9.359438] (-) TimerEvent: {}
+[9.459844] (-) TimerEvent: {}
+[9.547608] (unitree_description) StdoutLine: {'line': b'-- Performing Test res_-Wwrite-strings - Success\n'}
+[9.548497] (unitree_description) StdoutLine: {'line': b'-- Performing Test res_-Wconversion\n'}
+[9.560051] (-) TimerEvent: {}
+[9.660439] (-) TimerEvent: {}
+[9.761172] (-) TimerEvent: {}
+[9.784842] (unitree_description) StdoutLine: {'line': b'-- Performing Test res_-Wconversion - Success\n'}
+[9.785678] (unitree_description) StdoutLine: {'line': b'-- Performing Test res_-Werror\n'}
+[9.854823] (unitree_description) StdoutLine: {'line': b'-- Performing Test res_-Werror - Failed\n'}
+[9.861458] (-) TimerEvent: {}
+[9.961874] (-) TimerEvent: {}
+[10.033670] (unitree_description) StdoutLine: {'line': b'-- Could NOT find Doxygen (missing: DOXYGEN_EXECUTABLE) \n'}
+[10.034160] (unitree_description) StdoutLine: {'line': b'-- Failed to find Doxygen, documentation will not be generated.\n'}
+[10.062001] (-) TimerEvent: {}
+[10.162384] (-) TimerEvent: {}
+[10.262875] (-) TimerEvent: {}
+[10.363276] (-) TimerEvent: {}
+[10.437377] (unitree_description) StdoutLine: {'line': b'-- Found Python3: /usr/bin/python (found version "3.12.3") found components: Interpreter Development Development.Module Development.Embed \n'}
+[10.438921] (unitree_description) StdoutLine: {'line': b'-- PythonLibraryDirs: /usr/lib/x86_64-linux-gnu\n'}
+[10.439066] (unitree_description) StdoutLine: {'line': b'-- PythonLibVersionString: 3.12.3\n'}
+[10.463737] (-) TimerEvent: {}
+[10.469908] (unitree_description) StdoutLine: {'line': b'-- Python site lib: lib/python3.12/site-packages\n'}
+[10.470170] (unitree_description) StdoutLine: {'line': b'-- Python include dirs: /usr/include/python3.12\n'}
+[10.541033] (unitree_description) StdoutLine: {'line': b'-- Create files for AMENT (ROS 2)\n'}
+[10.545666] (unitree_description) StdoutLine: {'line': b'-- Create files for AMENT (ROS 2)\n'}
+[10.554819] (unitree_description) StdoutLine: {'line': b'-- Configuring done (10.5s)\n'}
+[10.563988] (-) TimerEvent: {}
+[10.632808] (unitree_description) StdoutLine: {'line': b'-- Generating done (0.1s)\n'}
+[10.653738] (unitree_description) StdoutLine: {'line': b'-- Build files have been written to: /home/melodse/ef_ws/src/build/unitree_description\n'}
+[10.663468] (unitree_description) CommandEnded: {'returncode': 0}
+[10.665359] (-) TimerEvent: {}
+[10.665562] (unitree_description) JobProgress: {'identifier': 'unitree_description', 'progress': 'build'}
+[10.665590] (unitree_description) Command: {'cmd': ['/usr/bin/cmake', '--build', '/home/melodse/ef_ws/src/build/unitree_description', '--', '-j12', '-l12'], 'cwd': '/home/melodse/ef_ws/src/build/unitree_description', 'env': OrderedDict({'LESSOPEN': '| /usr/bin/lesspipe %s', 'USER': 'melodse', 'GZ_CONFIG_PATH': '/opt/ros/jazzy/opt/gz_sim_vendor/share/gz:/opt/ros/jazzy/opt/sdformat_vendor/share/gz:/opt/ros/jazzy/opt/gz_gui_vendor/share/gz:/opt/ros/jazzy/opt/gz_transport_vendor/share/gz:/opt/ros/jazzy/opt/gz_rendering_vendor/share/gz:/opt/ros/jazzy/opt/gz_plugin_vendor/share/gz:/opt/ros/jazzy/opt/gz_fuel_tools_vendor/share/gz:/opt/ros/jazzy/opt/gz_msgs_vendor/share/gz:/opt/ros/jazzy/opt/gz_common_vendor/share/gz', 'ROS_PACKAGE_PATH': '/home/melodse/ef_ws/install/unitree_description/share', 'SHLVL': '1', 'LD_LIBRARY_PATH': '/home/melodse/ef_ws/install/unitree_hg/lib:/opt/ros/jazzy/opt/gz_sim_vendor/lib:/opt/ros/jazzy/opt/gz_sensors_vendor/lib:/opt/ros/jazzy/opt/gz_physics_vendor/lib:/opt/ros/jazzy/opt/sdformat_vendor/lib:/opt/ros/jazzy/opt/rviz_ogre_vendor/lib:/opt/ros/jazzy/lib/x86_64-linux-gnu:/opt/ros/jazzy/opt/gz_gui_vendor/lib:/opt/ros/jazzy/opt/gz_transport_vendor/lib:/opt/ros/jazzy/opt/gz_rendering_vendor/lib:/opt/ros/jazzy/opt/gz_plugin_vendor/lib:/opt/ros/jazzy/opt/gz_fuel_tools_vendor/lib:/opt/ros/jazzy/opt/gz_msgs_vendor/lib:/opt/ros/jazzy/opt/gz_common_vendor/lib:/opt/ros/jazzy/opt/gz_math_vendor/lib:/opt/ros/jazzy/opt/gz_utils_vendor/lib:/opt/ros/jazzy/opt/gz_tools_vendor/lib:/opt/ros/jazzy/opt/gz_ogre_next_vendor/lib:/opt/ros/jazzy/opt/gz_dartsim_vendor/lib:/opt/ros/jazzy/opt/gz_cmake_vendor/lib:/opt/ros/jazzy/lib', 'WT_PROFILE_ID': '{61c54bbd-c2c6-5271-96e7-009a87ff44bf}', 'HOME': '/home/melodse', 'CONDA_SHLVL': '0', 'OLDPWD': '/home/melodse/ef_ws', 'ROS_PYTHON_VERSION': '3', 'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/run/user/1000/bus', '_CE_M': '', 'WSL_DISTRO_NAME': 'Ubuntu', '_CONDA_ROOT': '/home/melodse/miniconda3', 'WAYLAND_DISPLAY': 'wayland-0', 'COLCON_PREFIX_PATH': '/home/melodse/ef_ws/install:/home/melodse/ros2_ws/install', 'ROS_DISTRO': 'jazzy', 'LOGNAME': 'melodse', 'NAME': 'meldose', 'WSL_INTEROP': '/run/WSL/941_interop', 'PULSE_SERVER': 'unix:/mnt/wslg/PulseServer', '_': '/usr/bin/colcon', 'ROS_VERSION': '2', 'PKG_CONFIG_PATH': '/home/melodse/ros2_ws/install/unitree_description/lib/x86_64-linux-gnu/pkgconfig:/home/melodse/ros2_ws/install/unitree_description/lib/pkgconfig:/home/melodse/ef_ws/install/unitree_description/lib/x86_64-linux-gnu/pkgconfig:/home/melodse/ef_ws/install/unitree_description/lib/pkgconfig', 'TERM': 'xterm-256color', '_CE_CONDA': '', 'PATH': '/home/melodse/miniconda3/condabin:/home/melodse/.local/bin:/opt/ros/jazzy/opt/gz_msgs_vendor/bin:/opt/ros/jazzy/opt/gz_tools_vendor/bin:/opt/ros/jazzy/opt/gz_ogre_next_vendor/bin:/opt/ros/jazzy/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/lib/wsl/lib:/mnt/c/WINDOWS/system32:/mnt/c/WINDOWS:/mnt/c/WINDOWS/System32/Wbem:/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/:/mnt/c/WINDOWS/System32/OpenSSH/:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/usbipd-win/:/mnt/c/Users/meldo/.local/bin:/mnt/c/Users/meldo/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/meldo/AppData/Local/Programs/Microsoft VS Code/bin:/mnt/c/Users/meldo/AppData/Local/GitHubDesktop/bin:/mnt/c/Users/meldo/AppData/Local/Microsoft/WinGet/Links:/snap/bin', 'WT_SESSION': 'a9e1e428-6c3c-497b-a75c-948383879a0e', 'XDG_RUNTIME_DIR': '/run/user/1000/', 'DISPLAY': ':0', 'LANG': 'en_US.UTF-8', 'RMW_IMPLEMENTATION': 'rmw_cyclonedds_cpp', 'CYCLONEDDS_HOME': '/home/melodse/cyclonedds/install', 'LS_COLORS': 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=00:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.avif=01;35:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:*~=00;90:*#=00;90:*.bak=00;90:*.crdownload=00;90:*.dpkg-dist=00;90:*.dpkg-new=00;90:*.dpkg-old=00;90:*.dpkg-tmp=00;90:*.old=00;90:*.orig=00;90:*.part=00;90:*.rej=00;90:*.rpmnew=00;90:*.rpmorig=00;90:*.rpmsave=00;90:*.swp=00;90:*.tmp=00;90:*.ucf-dist=00;90:*.ucf-new=00;90:*.ucf-old=00;90:', 'AMENT_PREFIX_PATH': '/home/melodse/ros2_ws/install/unitree_description:/home/melodse/ef_ws/install/unitree_hg:/home/melodse/ef_ws/install/g1_description:/opt/ros/jazzy', 'CONDA_PYTHON_EXE': '/home/melodse/miniconda3/bin/python', 'SHELL': '/bin/bash', 'LESSCLOSE': '/usr/bin/lesspipe %s %s', '_CONDA_EXE': '/home/melodse/miniconda3/bin/conda', 'ROS_AUTOMATIC_DISCOVERY_RANGE': 'SUBNET', 'PWD': '/home/melodse/ef_ws/src/build/unitree_description', 'CONDA_EXE': '/home/melodse/miniconda3/bin/conda', 'XDG_DATA_DIRS': '/usr/local/share:/usr/share:/var/lib/snapd/desktop', 'PYTHONPATH': '/home/melodse/ros2_ws/install/unitree_description/lib/python3.12/site-packages:/home/melodse/ef_ws/install/unitree_hg/lib/python3.12/site-packages:/home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages:/opt/ros/jazzy/lib/python3.12/site-packages', 'COLCON': '1', 'WSL2_GUI_APPS_ENABLED': '1', 'HOSTTYPE': 'x86_64', 'CMAKE_PREFIX_PATH': '/home/melodse/ef_ws/install/unitree_hg:/home/melodse/ef_ws/install/unitree_description:/home/melodse/ros2_ws/install/unitree_description:/opt/ros/jazzy/opt/gz_sim_vendor:/opt/ros/jazzy/opt/gz_sensors_vendor:/opt/ros/jazzy/opt/gz_physics_vendor:/opt/ros/jazzy/opt/sdformat_vendor:/opt/ros/jazzy/opt/gz_gui_vendor:/opt/ros/jazzy/opt/gz_transport_vendor:/opt/ros/jazzy/opt/gz_rendering_vendor:/opt/ros/jazzy/opt/gz_plugin_vendor:/opt/ros/jazzy/opt/gz_fuel_tools_vendor:/opt/ros/jazzy/opt/gz_msgs_vendor:/opt/ros/jazzy/opt/gz_common_vendor:/opt/ros/jazzy/opt/gz_math_vendor:/opt/ros/jazzy/opt/gz_utils_vendor:/opt/ros/jazzy/opt/gz_tools_vendor:/opt/ros/jazzy/opt/gz_ogre_next_vendor:/opt/ros/jazzy/opt/gz_dartsim_vendor:/opt/ros/jazzy/opt/gz_cmake_vendor:/home/melodse/cyclonedds/install:/home/melodse/ef_ws/install/g1_description:/opt/ros/jazzy', 'WSLENV': 'WT_SESSION:WT_PROFILE_ID:'}), 'shell': False}
+[10.682412] (unitree_description) StdoutLine: {'line': b'/usr/bin/cmake -S/home/melodse/ef_ws/src/unitree_description -B/home/melodse/ef_ws/src/build/unitree_description --check-build-system CMakeFiles/Makefile.cmake 0\n'}
+[10.695426] (unitree_description) StdoutLine: {'line': b'/usr/bin/cmake -E cmake_progress_start /home/melodse/ef_ws/src/build/unitree_description/CMakeFiles /home/melodse/ef_ws/src/build/unitree_description//CMakeFiles/progress.marks\n'}
+[10.713976] (unitree_description) StdoutLine: {'line': b'/usr/bin/gmake  -f CMakeFiles/Makefile2 all\n'}
+[10.720161] (unitree_description) StdoutLine: {'line': b"gmake[1]: Entering directory '/home/melodse/ef_ws/src/build/unitree_description'\n"}
+[10.720431] (unitree_description) StdoutLine: {'line': b'/usr/bin/gmake  -f python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_src_unitree_description_python.dir/build.make python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_src_unitree_description_python.dir/depend\n'}
+[10.722363] (unitree_description) StdoutLine: {'line': b"gmake[2]: Entering directory '/home/melodse/ef_ws/src/build/unitree_description'\n"}
+[10.722589] (unitree_description) StdoutLine: {'line': b'cd /home/melodse/ef_ws/src/build/unitree_description && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/melodse/ef_ws/src/unitree_description /home/melodse/ef_ws/src/unitree_description/python /home/melodse/ef_ws/src/build/unitree_description /home/melodse/ef_ws/src/build/unitree_description/python /home/melodse/ef_ws/src/build/unitree_description/python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_src_unitree_description_python.dir/DependInfo.cmake "--color="\n'}
+[10.736782] (unitree_description) StdoutLine: {'line': b"gmake[2]: Leaving directory '/home/melodse/ef_ws/src/build/unitree_description'\n"}
+[10.736990] (unitree_description) StdoutLine: {'line': b'/usr/bin/gmake  -f python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_src_unitree_description_python.dir/build.make python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_src_unitree_description_python.dir/build\n'}
+[10.739434] (unitree_description) StdoutLine: {'line': b"gmake[2]: Entering directory '/home/melodse/ef_ws/src/build/unitree_description'\n"}
+[10.739666] (unitree_description) StdoutLine: {'line': b'cd /home/melodse/ef_ws/src/build/unitree_description/python && /usr/bin/cmake -E make_directory /home/melodse/ef_ws/src/build/unitree_description/python/unitree_description\n'}
+[10.756436] (unitree_description) StdoutLine: {'line': b'cd /home/melodse/ef_ws/src/build/unitree_description/python && /usr/bin/python -c "import py_compile; py_compile.compile(\\"/home/melodse/ef_ws/src/unitree_description/python/unitree_description/__init__.py\\",\\"/home/melodse/ef_ws/src/build/unitree_description/python/unitree_description/__init__.pyc\\")"\n'}
+[10.765575] (-) TimerEvent: {}
+[10.811591] (unitree_description) StdoutLine: {'line': b'cd /home/melodse/ef_ws/src/build/unitree_description/python && /usr/bin/cmake -E make_directory /home/melodse/ef_ws/src/build/unitree_description/python/unitree_description\n'}
+[10.823646] (unitree_description) StdoutLine: {'line': b'cd /home/melodse/ef_ws/src/build/unitree_description/python && /usr/bin/python -c "import py_compile; py_compile.compile(\\"/home/melodse/ef_ws/src/unitree_description/python/unitree_description/loader.py\\",\\"/home/melodse/ef_ws/src/build/unitree_description/python/unitree_description/loader.pyc\\")"\n'}
+[10.865741] (-) TimerEvent: {}
+[10.866866] (unitree_description) StdoutLine: {'line': b"gmake[2]: Leaving directory '/home/melodse/ef_ws/src/build/unitree_description'\n"}
+[10.879519] (unitree_description) StdoutLine: {'line': b'Built target unitree_description_compile_pyc__home_melodse_ef_ws_src_unitree_description_python\n'}
+[10.880821] (unitree_description) StdoutLine: {'line': b"gmake[1]: Leaving directory '/home/melodse/ef_ws/src/build/unitree_description'\n"}
+[10.881382] (unitree_description) StdoutLine: {'line': b'/usr/bin/cmake -E cmake_progress_start /home/melodse/ef_ws/src/build/unitree_description/CMakeFiles 0\n'}
+[10.898060] (unitree_description) CommandEnded: {'returncode': 0}
+[10.899388] (unitree_description) JobProgress: {'identifier': 'unitree_description', 'progress': 'install'}
+[10.915455] (unitree_description) Command: {'cmd': ['/usr/bin/cmake', '--install', '/home/melodse/ef_ws/src/build/unitree_description'], 'cwd': '/home/melodse/ef_ws/src/build/unitree_description', 'env': OrderedDict({'LESSOPEN': '| /usr/bin/lesspipe %s', 'USER': 'melodse', 'GZ_CONFIG_PATH': '/opt/ros/jazzy/opt/gz_sim_vendor/share/gz:/opt/ros/jazzy/opt/sdformat_vendor/share/gz:/opt/ros/jazzy/opt/gz_gui_vendor/share/gz:/opt/ros/jazzy/opt/gz_transport_vendor/share/gz:/opt/ros/jazzy/opt/gz_rendering_vendor/share/gz:/opt/ros/jazzy/opt/gz_plugin_vendor/share/gz:/opt/ros/jazzy/opt/gz_fuel_tools_vendor/share/gz:/opt/ros/jazzy/opt/gz_msgs_vendor/share/gz:/opt/ros/jazzy/opt/gz_common_vendor/share/gz', 'ROS_PACKAGE_PATH': '/home/melodse/ef_ws/install/unitree_description/share', 'SHLVL': '1', 'LD_LIBRARY_PATH': '/home/melodse/ef_ws/install/unitree_hg/lib:/opt/ros/jazzy/opt/gz_sim_vendor/lib:/opt/ros/jazzy/opt/gz_sensors_vendor/lib:/opt/ros/jazzy/opt/gz_physics_vendor/lib:/opt/ros/jazzy/opt/sdformat_vendor/lib:/opt/ros/jazzy/opt/rviz_ogre_vendor/lib:/opt/ros/jazzy/lib/x86_64-linux-gnu:/opt/ros/jazzy/opt/gz_gui_vendor/lib:/opt/ros/jazzy/opt/gz_transport_vendor/lib:/opt/ros/jazzy/opt/gz_rendering_vendor/lib:/opt/ros/jazzy/opt/gz_plugin_vendor/lib:/opt/ros/jazzy/opt/gz_fuel_tools_vendor/lib:/opt/ros/jazzy/opt/gz_msgs_vendor/lib:/opt/ros/jazzy/opt/gz_common_vendor/lib:/opt/ros/jazzy/opt/gz_math_vendor/lib:/opt/ros/jazzy/opt/gz_utils_vendor/lib:/opt/ros/jazzy/opt/gz_tools_vendor/lib:/opt/ros/jazzy/opt/gz_ogre_next_vendor/lib:/opt/ros/jazzy/opt/gz_dartsim_vendor/lib:/opt/ros/jazzy/opt/gz_cmake_vendor/lib:/opt/ros/jazzy/lib', 'WT_PROFILE_ID': '{61c54bbd-c2c6-5271-96e7-009a87ff44bf}', 'HOME': '/home/melodse', 'CONDA_SHLVL': '0', 'OLDPWD': '/home/melodse/ef_ws', 'ROS_PYTHON_VERSION': '3', 'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/run/user/1000/bus', '_CE_M': '', 'WSL_DISTRO_NAME': 'Ubuntu', '_CONDA_ROOT': '/home/melodse/miniconda3', 'WAYLAND_DISPLAY': 'wayland-0', 'COLCON_PREFIX_PATH': '/home/melodse/ef_ws/install:/home/melodse/ros2_ws/install', 'ROS_DISTRO': 'jazzy', 'LOGNAME': 'melodse', 'NAME': 'meldose', 'WSL_INTEROP': '/run/WSL/941_interop', 'PULSE_SERVER': 'unix:/mnt/wslg/PulseServer', '_': '/usr/bin/colcon', 'ROS_VERSION': '2', 'PKG_CONFIG_PATH': '/home/melodse/ros2_ws/install/unitree_description/lib/x86_64-linux-gnu/pkgconfig:/home/melodse/ros2_ws/install/unitree_description/lib/pkgconfig:/home/melodse/ef_ws/install/unitree_description/lib/x86_64-linux-gnu/pkgconfig:/home/melodse/ef_ws/install/unitree_description/lib/pkgconfig', 'TERM': 'xterm-256color', '_CE_CONDA': '', 'PATH': '/home/melodse/miniconda3/condabin:/home/melodse/.local/bin:/opt/ros/jazzy/opt/gz_msgs_vendor/bin:/opt/ros/jazzy/opt/gz_tools_vendor/bin:/opt/ros/jazzy/opt/gz_ogre_next_vendor/bin:/opt/ros/jazzy/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/lib/wsl/lib:/mnt/c/WINDOWS/system32:/mnt/c/WINDOWS:/mnt/c/WINDOWS/System32/Wbem:/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/:/mnt/c/WINDOWS/System32/OpenSSH/:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/usbipd-win/:/mnt/c/Users/meldo/.local/bin:/mnt/c/Users/meldo/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/meldo/AppData/Local/Programs/Microsoft VS Code/bin:/mnt/c/Users/meldo/AppData/Local/GitHubDesktop/bin:/mnt/c/Users/meldo/AppData/Local/Microsoft/WinGet/Links:/snap/bin', 'WT_SESSION': 'a9e1e428-6c3c-497b-a75c-948383879a0e', 'XDG_RUNTIME_DIR': '/run/user/1000/', 'DISPLAY': ':0', 'LANG': 'en_US.UTF-8', 'RMW_IMPLEMENTATION': 'rmw_cyclonedds_cpp', 'CYCLONEDDS_HOME': '/home/melodse/cyclonedds/install', 'LS_COLORS': 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=00:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.avif=01;35:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:*~=00;90:*#=00;90:*.bak=00;90:*.crdownload=00;90:*.dpkg-dist=00;90:*.dpkg-new=00;90:*.dpkg-old=00;90:*.dpkg-tmp=00;90:*.old=00;90:*.orig=00;90:*.part=00;90:*.rej=00;90:*.rpmnew=00;90:*.rpmorig=00;90:*.rpmsave=00;90:*.swp=00;90:*.tmp=00;90:*.ucf-dist=00;90:*.ucf-new=00;90:*.ucf-old=00;90:', 'AMENT_PREFIX_PATH': '/home/melodse/ros2_ws/install/unitree_description:/home/melodse/ef_ws/install/unitree_hg:/home/melodse/ef_ws/install/g1_description:/opt/ros/jazzy', 'CONDA_PYTHON_EXE': '/home/melodse/miniconda3/bin/python', 'SHELL': '/bin/bash', 'LESSCLOSE': '/usr/bin/lesspipe %s %s', '_CONDA_EXE': '/home/melodse/miniconda3/bin/conda', 'ROS_AUTOMATIC_DISCOVERY_RANGE': 'SUBNET', 'PWD': '/home/melodse/ef_ws/src/build/unitree_description', 'CONDA_EXE': '/home/melodse/miniconda3/bin/conda', 'XDG_DATA_DIRS': '/usr/local/share:/usr/share:/var/lib/snapd/desktop', 'PYTHONPATH': '/home/melodse/ros2_ws/install/unitree_description/lib/python3.12/site-packages:/home/melodse/ef_ws/install/unitree_hg/lib/python3.12/site-packages:/home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages:/opt/ros/jazzy/lib/python3.12/site-packages', 'COLCON': '1', 'WSL2_GUI_APPS_ENABLED': '1', 'HOSTTYPE': 'x86_64', 'CMAKE_PREFIX_PATH': '/home/melodse/ef_ws/install/unitree_hg:/home/melodse/ef_ws/install/unitree_description:/home/melodse/ros2_ws/install/unitree_description:/opt/ros/jazzy/opt/gz_sim_vendor:/opt/ros/jazzy/opt/gz_sensors_vendor:/opt/ros/jazzy/opt/gz_physics_vendor:/opt/ros/jazzy/opt/sdformat_vendor:/opt/ros/jazzy/opt/gz_gui_vendor:/opt/ros/jazzy/opt/gz_transport_vendor:/opt/ros/jazzy/opt/gz_rendering_vendor:/opt/ros/jazzy/opt/gz_plugin_vendor:/opt/ros/jazzy/opt/gz_fuel_tools_vendor:/opt/ros/jazzy/opt/gz_msgs_vendor:/opt/ros/jazzy/opt/gz_common_vendor:/opt/ros/jazzy/opt/gz_math_vendor:/opt/ros/jazzy/opt/gz_utils_vendor:/opt/ros/jazzy/opt/gz_tools_vendor:/opt/ros/jazzy/opt/gz_ogre_next_vendor:/opt/ros/jazzy/opt/gz_dartsim_vendor:/opt/ros/jazzy/opt/gz_cmake_vendor:/home/melodse/cyclonedds/install:/home/melodse/ef_ws/install/g1_description:/opt/ros/jazzy', 'WSLENV': 'WT_SESSION:WT_PROFILE_ID:'}), 'shell': False}
+[10.932944] (unitree_description) StdoutLine: {'line': b'-- Install configuration: ""\n'}
+[10.934459] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/include/unitree/description/config.hh\n'}
+[10.934800] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/include/unitree/description/deprecated.hh\n'}
+[10.935120] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/include/unitree/description/warning.hh\n'}
+[10.935393] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model\n'}
+[10.936201] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2\n'}
+[10.936879] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets\n'}
+[10.939810] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/visuals\n'}
+[10.940742] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/visuals/hip.dae\n'}
+[10.947386] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/visuals/base.dae\n'}
+[10.961405] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/visuals/foot.dae\n'}
+[10.962438] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/visuals/calf_mirror.dae\n'}
+[10.964030] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/visuals/thigh.dae\n'}
+[10.965841] (-) TimerEvent: {}
+[10.970355] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/visuals/calf.dae\n'}
+[10.971696] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/visuals/thigh_mirror.dae\n'}
+[10.977673] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/collisions\n'}
+[10.978157] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/collisions/calf_lower_mirror_convex.stl\n'}
+[10.978471] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/collisions/foot_convex.stl\n'}
+[10.979038] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/collisions/thigh_convex.stl\n'}
+[10.979458] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/collisions/thigh_mirror_convex.stl\n'}
+[10.979881] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/collisions/base_convex.stl\n'}
+[10.980542] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/collisions/calf_upper_convex.stl\n'}
+[10.980898] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/collisions/hip_convex.stl\n'}
+[10.981310] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/collisions/calf_upper_mirror_convex.stl\n'}
+[10.981810] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/assets/collisions/calf_lower_convex.stl\n'}
+[10.982192] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/go2.urdf\n'}
+[10.982544] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/go2/go2.srdf\n'}
+[10.982916] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1\n'}
+[10.983401] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets\n'}
+[10.983974] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals\n'}
+[10.984515] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_elbow_link.STL\n'}
+[10.989762] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/logo_link.STL\n'}
+[10.991883] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_rubber_hand.STL\n'}
+[11.005393] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_shoulder_roll_link.STL\n'}
+[11.009297] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_wrist_yaw_link.STL\n'}
+[11.011313] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_hip_yaw_link.STL\n'}
+[11.013144] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_ankle_pitch_link.STL\n'}
+[11.013845] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/waist_yaw_link_rev_1_0.STL\n'}
+[11.017400] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_shoulder_pitch_link.STL\n'}
+[11.018673] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_shoulder_yaw_link.STL\n'}
+[11.020079] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_knee_link.STL\n'}
+[11.024395] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_rubber_hand.STL\n'}
+[11.035016] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/torso_link_rev_1_0.STL\n'}
+[11.048960] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_shoulder_pitch_link.STL\n'}
+[11.050124] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_wrist_roll_link.STL\n'}
+[11.051717] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_wrist_pitch_link.STL\n'}
+[11.052282] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_shoulder_yaw_link.STL\n'}
+[11.053496] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_hip_yaw_link.STL\n'}
+[11.055345] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/head_link.STL\n'}
+[11.060886] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_elbow_link.STL\n'}
+[11.061611] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_ankle_roll_link.STL\n'}
+[11.066769] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/pelvis.STL\n'}
+[11.066982] (-) TimerEvent: {}
+[11.072782] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_wrist_pitch_link.STL\n'}
+[11.073627] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_wrist_yaw_link.STL\n'}
+[11.076351] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_hip_pitch_link.STL\n'}
+[11.078148] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_shoulder_roll_link.STL\n'}
+[11.080639] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_knee_link.STL\n'}
+[11.084900] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/right_hip_roll_link.STL\n'}
+[11.086105] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_ankle_pitch_link.STL\n'}
+[11.086639] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_hip_pitch_link.STL\n'}
+[11.087672] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/waist_roll_link_rev_1_0.STL\n'}
+[11.088265] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_ankle_roll_link.STL\n'}
+[11.092283] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/pelvis_contour_link.STL\n'}
+[11.103053] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_hip_roll_link.STL\n'}
+[11.104289] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/visuals/left_wrist_roll_link.STL\n'}
+[11.106090] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions\n'}
+[11.106737] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/left_shoulder_roll_link_collision.STL\n'}
+[11.107412] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/right_shoulder_pitch_link_collision.STL\n'}
+[11.108331] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/left_knee_link_collision.STL\n'}
+[11.109054] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/right_shoulder_roll_link_collision.STL\n'}
+[11.109829] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/logo_link_collision.STL\n'}
+[11.110617] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/left_wrist_roll_link_collision.STL\n'}
+[11.111941] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/right_elbow_link_collision.STL\n'}
+[11.112449] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/left_hip_pitch_link_collision.STL\n'}
+[11.113161] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/right_wrist_hand_collision.STL\n'}
+[11.114507] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/head_link_collision.STL\n'}
+[11.115730] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/right_ankle_roll_link_collision.STL\n'}
+[11.116567] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/left_shoulder_pitch_link_collision.STL\n'}
+[11.117249] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/torso_waist_roll_pitch_collision.STL\n'}
+[11.118248] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/pelvis_collision.STL\n'}
+[11.120108] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/left_wrist_hand_collision.STL\n'}
+[11.121317] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/left_shoulder_yaw_link_collision.STL\n'}
+[11.121953] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/left_ankle_roll_link_collision.STL\n'}
+[11.122721] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/left_hip_yaw_link_collision.STL\n'}
+[11.123305] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/left_elbow_link_collision.STL\n'}
+[11.123759] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/left_wrist_pitch_link_collision.STL\n'}
+[11.124299] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/right_wrist_roll_link_collision.STL\n'}
+[11.125571] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/right_shoulder_yaw_link_collision.STL\n'}
+[11.126193] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/right_wrist_pitch_link_collision.STL\n'}
+[11.126881] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/right_hip_yaw_link_collision.STL\n'}
+[11.127508] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/right_hip_pitch_link_collision.STL\n'}
+[11.128380] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/right_hip_roll_link_collision.STL\n'}
+[11.129629] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/right_knee_link_collision.STL\n'}
+[11.130231] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/assets/collisions/left_hip_roll_link_collision.STL\n'}
+[11.130948] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/g1.srdf\n'}
+[11.131258] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/model/g1/g1.urdf\n'}
+[11.131764] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/launch\n'}
+[11.132198] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/launch/go2_rviz.launch.py\n'}
+[11.132483] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/launch/rviz_go2.launch.py\n'}
+[11.132927] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/rviz\n'}
+[11.133237] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/rviz/go2.rviz\n'}
+[11.134325] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/lib/python3.12/site-packages/unitree_description/__init__.py\n'}
+[11.134651] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/lib/python3.12/site-packages/unitree_description/loader.py\n'}
+[11.134928] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/lib/python3.12/site-packages/unitree_description/path.py\n'}
+[11.135344] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/lib/pkgconfig/unitree_description.pc\n'}
+[11.136101] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/ament_index/resource_index/packages/unitree_description\n'}
+[11.136533] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/hook/ament_prefix_path.dsv\n'}
+[11.136851] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/hook/python_path.dsv\n'}
+[11.137146] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/package.xml\n'}
+[11.137853] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/lib/cmake/unitree_description/unitree_descriptionConfig.cmake\n'}
+[11.138179] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/lib/cmake/unitree_description/unitree_descriptionConfigVersion.cmake\n'}
+[11.138515] (unitree_description) StdoutLine: {'line': b'-- Installing: /home/melodse/ef_ws/src/install/unitree_description/lib/cmake/unitree_description/unitree_descriptionTargets.cmake\n'}
+[11.138744] (unitree_description) StdoutLine: {'line': b'-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/lib/pkgconfig/unitree_description.pc\n'}
+[11.139230] (unitree_description) StdoutLine: {'line': b'-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/ament_index/resource_index/packages/unitree_description\n'}
+[11.139395] (unitree_description) StdoutLine: {'line': b'-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/hook/ament_prefix_path.dsv\n'}
+[11.145899] (unitree_description) StdoutLine: {'line': b'-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/hook/python_path.dsv\n'}
+[11.146241] (unitree_description) StdoutLine: {'line': b'-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/share/unitree_description/package.xml\n'}
+[11.146494] (unitree_description) StdoutLine: {'line': b'-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/lib/cmake/unitree_description/unitree_descriptionConfig.cmake\n'}
+[11.146668] (unitree_description) StdoutLine: {'line': b'-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/lib/cmake/unitree_description/unitree_descriptionConfigVersion.cmake\n'}
+[11.146834] (unitree_description) StdoutLine: {'line': b'-- Up-to-date: /home/melodse/ef_ws/src/install/unitree_description/lib/cmake/unitree_description/unitree_descriptionTargets.cmake\n'}
+[11.148034] (unitree_description) CommandEnded: {'returncode': 0}
+[11.167591] (-) TimerEvent: {}
+[11.199674] (unitree_description) JobEnded: {'identifier': 'unitree_description', 'rc': 0}
+[11.201062] (g1_description) JobStarted: {'identifier': 'g1_description'}
+[11.267763] (-) TimerEvent: {}
+[11.368176] (-) TimerEvent: {}
+[11.468821] (-) TimerEvent: {}
+[11.569812] (-) TimerEvent: {}
+[11.670182] (-) TimerEvent: {}
+[11.772773] (-) TimerEvent: {}
+[11.873424] (-) TimerEvent: {}
+[11.973760] (-) TimerEvent: {}
+[12.074201] (-) TimerEvent: {}
+[12.174904] (-) TimerEvent: {}
+[12.275316] (-) TimerEvent: {}
+[12.375722] (-) TimerEvent: {}
+[12.476186] (-) TimerEvent: {}
+[12.576647] (-) TimerEvent: {}
+[12.677145] (-) TimerEvent: {}
+[12.777865] (-) TimerEvent: {}
+[12.878176] (-) TimerEvent: {}
+[12.981170] (-) TimerEvent: {}
+[13.081986] (-) TimerEvent: {}
+[13.156647] (g1_description) Command: {'cmd': ['/usr/bin/python3', '-W', 'ignore:setup.py install is deprecated', '-W', 'ignore:easy_install command is deprecated', 'setup.py', 'egg_info', '--egg-base', '../../../../src/build/g1_description', 'build', '--build-base', '/home/melodse/ef_ws/src/build/g1_description/build', 'install', '--record', '/home/melodse/ef_ws/src/build/g1_description/install.log', '--single-version-externally-managed', 'install_data'], 'cwd': '/home/melodse/ef_ws/src/g1_rviz_simulation', 'env': {'LESSOPEN': '| /usr/bin/lesspipe %s', 'USER': 'melodse', 'GZ_CONFIG_PATH': '/opt/ros/jazzy/opt/gz_sim_vendor/share/gz:/opt/ros/jazzy/opt/sdformat_vendor/share/gz:/opt/ros/jazzy/opt/gz_gui_vendor/share/gz:/opt/ros/jazzy/opt/gz_transport_vendor/share/gz:/opt/ros/jazzy/opt/gz_rendering_vendor/share/gz:/opt/ros/jazzy/opt/gz_plugin_vendor/share/gz:/opt/ros/jazzy/opt/gz_fuel_tools_vendor/share/gz:/opt/ros/jazzy/opt/gz_msgs_vendor/share/gz:/opt/ros/jazzy/opt/gz_common_vendor/share/gz', 'ROS_PACKAGE_PATH': '/home/melodse/ef_ws/install/unitree_description/share', 'SHLVL': '1', 'LD_LIBRARY_PATH': '/home/melodse/ef_ws/install/unitree_hg/lib:/opt/ros/jazzy/opt/gz_sim_vendor/lib:/opt/ros/jazzy/opt/gz_sensors_vendor/lib:/opt/ros/jazzy/opt/gz_physics_vendor/lib:/opt/ros/jazzy/opt/sdformat_vendor/lib:/opt/ros/jazzy/opt/rviz_ogre_vendor/lib:/opt/ros/jazzy/lib/x86_64-linux-gnu:/opt/ros/jazzy/opt/gz_gui_vendor/lib:/opt/ros/jazzy/opt/gz_transport_vendor/lib:/opt/ros/jazzy/opt/gz_rendering_vendor/lib:/opt/ros/jazzy/opt/gz_plugin_vendor/lib:/opt/ros/jazzy/opt/gz_fuel_tools_vendor/lib:/opt/ros/jazzy/opt/gz_msgs_vendor/lib:/opt/ros/jazzy/opt/gz_common_vendor/lib:/opt/ros/jazzy/opt/gz_math_vendor/lib:/opt/ros/jazzy/opt/gz_utils_vendor/lib:/opt/ros/jazzy/opt/gz_tools_vendor/lib:/opt/ros/jazzy/opt/gz_ogre_next_vendor/lib:/opt/ros/jazzy/opt/gz_dartsim_vendor/lib:/opt/ros/jazzy/opt/gz_cmake_vendor/lib:/opt/ros/jazzy/lib', 'WT_PROFILE_ID': '{61c54bbd-c2c6-5271-96e7-009a87ff44bf}', 'HOME': '/home/melodse', 'CONDA_SHLVL': '0', 'OLDPWD': '/home/melodse/ef_ws', 'ROS_PYTHON_VERSION': '3', 'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/run/user/1000/bus', '_CE_M': '', 'WSL_DISTRO_NAME': 'Ubuntu', '_CONDA_ROOT': '/home/melodse/miniconda3', 'WAYLAND_DISPLAY': 'wayland-0', 'COLCON_PREFIX_PATH': '/home/melodse/ef_ws/install:/home/melodse/ros2_ws/install', 'ROS_DISTRO': 'jazzy', 'LOGNAME': 'melodse', 'NAME': 'meldose', 'WSL_INTEROP': '/run/WSL/941_interop', 'PULSE_SERVER': 'unix:/mnt/wslg/PulseServer', '_': '/usr/bin/colcon', 'ROS_VERSION': '2', 'PKG_CONFIG_PATH': '/home/melodse/ef_ws/src/install/unitree_description/lib/x86_64-linux-gnu/pkgconfig:/home/melodse/ef_ws/src/install/unitree_description/lib/pkgconfig:/home/melodse/ros2_ws/install/unitree_description/lib/x86_64-linux-gnu/pkgconfig:/home/melodse/ros2_ws/install/unitree_description/lib/pkgconfig:/home/melodse/ef_ws/install/unitree_description/lib/x86_64-linux-gnu/pkgconfig:/home/melodse/ef_ws/install/unitree_description/lib/pkgconfig', 'TERM': 'xterm-256color', '_CE_CONDA': '', 'PATH': '/home/melodse/miniconda3/condabin:/home/melodse/.local/bin:/opt/ros/jazzy/opt/gz_msgs_vendor/bin:/opt/ros/jazzy/opt/gz_tools_vendor/bin:/opt/ros/jazzy/opt/gz_ogre_next_vendor/bin:/opt/ros/jazzy/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/lib/wsl/lib:/mnt/c/WINDOWS/system32:/mnt/c/WINDOWS:/mnt/c/WINDOWS/System32/Wbem:/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/:/mnt/c/WINDOWS/System32/OpenSSH/:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/usbipd-win/:/mnt/c/Users/meldo/.local/bin:/mnt/c/Users/meldo/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/meldo/AppData/Local/Programs/Microsoft VS Code/bin:/mnt/c/Users/meldo/AppData/Local/GitHubDesktop/bin:/mnt/c/Users/meldo/AppData/Local/Microsoft/WinGet/Links:/snap/bin', 'WT_SESSION': 'a9e1e428-6c3c-497b-a75c-948383879a0e', 'XDG_RUNTIME_DIR': '/run/user/1000/', 'DISPLAY': ':0', 'LANG': 'en_US.UTF-8', 'RMW_IMPLEMENTATION': 'rmw_cyclonedds_cpp', 'CYCLONEDDS_HOME': '/home/melodse/cyclonedds/install', 'LS_COLORS': 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=00:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.avif=01;35:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:*~=00;90:*#=00;90:*.bak=00;90:*.crdownload=00;90:*.dpkg-dist=00;90:*.dpkg-new=00;90:*.dpkg-old=00;90:*.dpkg-tmp=00;90:*.old=00;90:*.orig=00;90:*.part=00;90:*.rej=00;90:*.rpmnew=00;90:*.rpmorig=00;90:*.rpmsave=00;90:*.swp=00;90:*.tmp=00;90:*.ucf-dist=00;90:*.ucf-new=00;90:*.ucf-old=00;90:', 'AMENT_PREFIX_PATH': '/home/melodse/ros2_ws/install/unitree_description:/home/melodse/ef_ws/install/unitree_hg:/home/melodse/ef_ws/install/g1_description:/opt/ros/jazzy', 'CONDA_PYTHON_EXE': '/home/melodse/miniconda3/bin/python', 'SHELL': '/bin/bash', 'LESSCLOSE': '/usr/bin/lesspipe %s %s', '_CONDA_EXE': '/home/melodse/miniconda3/bin/conda', 'ROS_AUTOMATIC_DISCOVERY_RANGE': 'SUBNET', 'PWD': '/home/melodse/ef_ws/src/build/g1_description', 'CONDA_EXE': '/home/melodse/miniconda3/bin/conda', 'XDG_DATA_DIRS': '/usr/local/share:/usr/share:/var/lib/snapd/desktop', 'PYTHONPATH': '/home/melodse/ef_ws/src/build/g1_description/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/melodse/ef_ws/src/install/g1_description/lib/python3.12/site-packages:/home/melodse/ef_ws/src/install/unitree_description/lib/python3.12/site-packages:/home/melodse/ros2_ws/install/unitree_description/lib/python3.12/site-packages:/home/melodse/ef_ws/install/unitree_hg/lib/python3.12/site-packages:/home/melodse/ef_ws/install/g1_description/lib/python3.12/site-packages:/opt/ros/jazzy/lib/python3.12/site-packages', 'COLCON': '1', 'WSL2_GUI_APPS_ENABLED': '1', 'HOSTTYPE': 'x86_64', 'CMAKE_PREFIX_PATH': '/home/melodse/ef_ws/src/install/unitree_description:/home/melodse/ef_ws/install/unitree_hg:/home/melodse/ef_ws/install/unitree_description:/home/melodse/ros2_ws/install/unitree_description:/opt/ros/jazzy/opt/gz_sim_vendor:/opt/ros/jazzy/opt/gz_sensors_vendor:/opt/ros/jazzy/opt/gz_physics_vendor:/opt/ros/jazzy/opt/sdformat_vendor:/opt/ros/jazzy/opt/gz_gui_vendor:/opt/ros/jazzy/opt/gz_transport_vendor:/opt/ros/jazzy/opt/gz_rendering_vendor:/opt/ros/jazzy/opt/gz_plugin_vendor:/opt/ros/jazzy/opt/gz_fuel_tools_vendor:/opt/ros/jazzy/opt/gz_msgs_vendor:/opt/ros/jazzy/opt/gz_common_vendor:/opt/ros/jazzy/opt/gz_math_vendor:/opt/ros/jazzy/opt/gz_utils_vendor:/opt/ros/jazzy/opt/gz_tools_vendor:/opt/ros/jazzy/opt/gz_ogre_next_vendor:/opt/ros/jazzy/opt/gz_dartsim_vendor:/opt/ros/jazzy/opt/gz_cmake_vendor:/home/melodse/cyclonedds/install', 'WSLENV': 'WT_SESSION:WT_PROFILE_ID:'}, 'shell': False}
+[13.182289] (-) TimerEvent: {}
+[13.282863] (-) TimerEvent: {}
+[13.383235] (-) TimerEvent: {}
+[13.483805] (-) TimerEvent: {}
+[13.584349] (-) TimerEvent: {}
+[13.674534] (g1_description) StdoutLine: {'line': b'running egg_info\n'}
+[13.675018] (g1_description) StdoutLine: {'line': b'creating ../../../../src/build/g1_description/g1_description.egg-info\n'}
+[13.684554] (-) TimerEvent: {}
+[13.711155] (g1_description) StdoutLine: {'line': b'writing ../../../../src/build/g1_description/g1_description.egg-info/PKG-INFO\n'}
+[13.711642] (g1_description) StdoutLine: {'line': b'writing dependency_links to ../../../../src/build/g1_description/g1_description.egg-info/dependency_links.txt\n'}
+[13.712021] (g1_description) StdoutLine: {'line': b'writing entry points to ../../../../src/build/g1_description/g1_description.egg-info/entry_points.txt\n'}
+[13.712272] (g1_description) StdoutLine: {'line': b'writing requirements to ../../../../src/build/g1_description/g1_description.egg-info/requires.txt\n'}
+[13.712620] (g1_description) StdoutLine: {'line': b'writing top-level names to ../../../../src/build/g1_description/g1_description.egg-info/top_level.txt\n'}
+[13.712740] (g1_description) StdoutLine: {'line': b"writing manifest file '../../../../src/build/g1_description/g1_description.egg-info/SOURCES.txt'\n"}
+[13.784801] (-) TimerEvent: {}
+[13.802923] (g1_description) StdoutLine: {'line': b"reading manifest file '../../../../src/build/g1_description/g1_description.egg-info/SOURCES.txt'\n"}
+[13.805785] (g1_description) StdoutLine: {'line': b"writing manifest file '../../../../src/build/g1_description/g1_description.egg-info/SOURCES.txt'\n"}
+[13.806917] (g1_description) StdoutLine: {'line': b'running build\n'}
+[13.807218] (g1_description) StdoutLine: {'line': b'running build_py\n'}
+[13.807482] (g1_description) StdoutLine: {'line': b'creating /home/melodse/ef_ws/src/build/g1_description/build\n'}
+[13.807899] (g1_description) StdoutLine: {'line': b'creating /home/melodse/ef_ws/src/build/g1_description/build/lib\n'}
+[13.808044] (g1_description) StdoutLine: {'line': b'creating /home/melodse/ef_ws/src/build/g1_description/build/lib/g1_description\n'}
+[13.808137] (g1_description) StdoutLine: {'line': b'copying g1_description/demo_joint_motion.py -> /home/melodse/ef_ws/src/build/g1_description/build/lib/g1_description\n'}
+[13.808331] (g1_description) StdoutLine: {'line': b'copying g1_description/rviz_joint_motion.py -> /home/melodse/ef_ws/src/build/g1_description/build/lib/g1_description\n'}
+[13.808881] (g1_description) StdoutLine: {'line': b'copying g1_description/__init__.py -> /home/melodse/ef_ws/src/build/g1_description/build/lib/g1_description\n'}
+[13.809158] (g1_description) StdoutLine: {'line': b'copying g1_description/lowstate_jointstate_bridge.py -> /home/melodse/ef_ws/src/build/g1_description/build/lib/g1_description\n'}
+[13.809699] (g1_description) StdoutLine: {'line': b'running install\n'}
+[13.824534] (g1_description) StdoutLine: {'line': b'running install_lib\n'}
+[13.855522] (g1_description) StdoutLine: {'line': b'creating /home/melodse/ef_ws/src/install/g1_description/lib/python3.12/site-packages/g1_description\n'}
+[13.856180] (g1_description) StdoutLine: {'line': b'copying /home/melodse/ef_ws/src/build/g1_description/build/lib/g1_description/demo_joint_motion.py -> /home/melodse/ef_ws/src/install/g1_description/lib/python3.12/site-packages/g1_description\n'}
+[13.856709] (g1_description) StdoutLine: {'line': b'copying /home/melodse/ef_ws/src/build/g1_description/build/lib/g1_description/rviz_joint_motion.py -> /home/melodse/ef_ws/src/install/g1_description/lib/python3.12/site-packages/g1_description\n'}
+[13.857126] (g1_description) StdoutLine: {'line': b'copying /home/melodse/ef_ws/src/build/g1_description/build/lib/g1_description/__init__.py -> /home/melodse/ef_ws/src/install/g1_description/lib/python3.12/site-packages/g1_description\n'}
+[13.857418] (g1_description) StdoutLine: {'line': b'copying /home/melodse/ef_ws/src/build/g1_description/build/lib/g1_description/lowstate_jointstate_bridge.py -> /home/melodse/ef_ws/src/install/g1_description/lib/python3.12/site-packages/g1_description\n'}
+[13.858433] (g1_description) StdoutLine: {'line': b'byte-compiling /home/melodse/ef_ws/src/install/g1_description/lib/python3.12/site-packages/g1_description/demo_joint_motion.py to demo_joint_motion.cpython-312.pyc\n'}
+[13.860545] (g1_description) StdoutLine: {'line': b'byte-compiling /home/melodse/ef_ws/src/install/g1_description/lib/python3.12/site-packages/g1_description/rviz_joint_motion.py to rviz_joint_motion.cpython-312.pyc\n'}
+[13.862074] (g1_description) StdoutLine: {'line': b'byte-compiling /home/melodse/ef_ws/src/install/g1_description/lib/python3.12/site-packages/g1_description/__init__.py to __init__.cpython-312.pyc\n'}
+[13.862401] (g1_description) StdoutLine: {'line': b'byte-compiling /home/melodse/ef_ws/src/install/g1_description/lib/python3.12/site-packages/g1_description/lowstate_jointstate_bridge.py to lowstate_jointstate_bridge.cpython-312.pyc\n'}
+[13.864757] (g1_description) StdoutLine: {'line': b'running install_data\n'}
+[13.864958] (g1_description) StdoutLine: {'line': b'creating /home/melodse/ef_ws/src/install/g1_description/share/ament_index\n'}
+[13.865412] (g1_description) StdoutLine: {'line': b'creating /home/melodse/ef_ws/src/install/g1_description/share/ament_index/resource_index\n'}
+[13.865761] (g1_description) StdoutLine: {'line': b'creating /home/melodse/ef_ws/src/install/g1_description/share/ament_index/resource_index/packages\n'}
+[13.866193] (g1_description) StdoutLine: {'line': b'copying resource/g1_description -> /home/melodse/ef_ws/src/install/g1_description/share/ament_index/resource_index/packages\n'}
+[13.866594] (g1_description) StdoutLine: {'line': b'copying package.xml -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description\n'}
+[13.866851] (g1_description) StdoutLine: {'line': b'creating /home/melodse/ef_ws/src/install/g1_description/share/g1_description/launch\n'}
+[13.867188] (g1_description) StdoutLine: {'line': b'copying launch/rviz_sim.launch.py -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/launch\n'}
+[13.867431] (g1_description) StdoutLine: {'line': b'copying launch/robot_state_publisher.launch.py -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/launch\n'}
+[13.867654] (g1_description) StdoutLine: {'line': b'creating /home/melodse/ef_ws/src/install/g1_description/share/g1_description/rviz\n'}
+[13.868181] (g1_description) StdoutLine: {'line': b'copying rviz/g1.rviz -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/rviz\n'}
+[13.868448] (g1_description) StdoutLine: {'line': b'creating /home/melodse/ef_ws/src/install/g1_description/share/g1_description/urdf\n'}
+[13.868797] (g1_description) StdoutLine: {'line': b'copying urdf/g1_29dof_with_hand_rev_1_0_pkg.urdf -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/urdf\n'}
+[13.869503] (g1_description) StdoutLine: {'line': b'creating /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[13.869996] (g1_description) StdoutLine: {'line': b'copying meshes/right_elbow_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[13.870880] (g1_description) StdoutLine: {'line': b'copying meshes/logo_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[13.872656] (g1_description) StdoutLine: {'line': b'copying meshes/left_palm_force_sensor.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[13.883116] (g1_description) StdoutLine: {'line': b'copying meshes/dex1_col_1.stl -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[13.884057] (g1_description) StdoutLine: {'line': b'copying meshes/left_middle_2.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[13.884987] (-) TimerEvent: {}
+[13.886924] (g1_description) StdoutLine: {'line': b'copying meshes/right_ring_force_sensor_3.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[13.888182] (g1_description) StdoutLine: {'line': b'copying meshes/right_wrist_yaw_link_5010.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[13.892780] (g1_description) StdoutLine: {'line': b'copying meshes/left_rubber_hand.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[13.908971] (g1_description) StdoutLine: {'line': b'copying meshes/left_shoulder_roll_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[13.911171] (g1_description) StdoutLine: {'line': b'copying meshes/right_hand_index_1_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[13.918229] (g1_description) StdoutLine: {'line': b'copying meshes/left_wrist_yaw_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[13.920022] (g1_description) StdoutLine: {'line': b'copying meshes/left_index_force_sensor_3.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[13.920943] (g1_description) StdoutLine: {'line': b'copying meshes/left_little_1.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[13.924732] (g1_description) StdoutLine: {'line': b'copying meshes/right_hip_yaw_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[13.926716] (g1_description) StdoutLine: {'line': b'copying meshes/right_ankle_pitch_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[13.927474] (g1_description) StdoutLine: {'line': b'copying meshes/left_middle_force_sensor_3.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[13.928267] (g1_description) StdoutLine: {'line': b'copying meshes/dex1_col_2.stl -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[13.928905] (g1_description) StdoutLine: {'line': b'copying meshes/waist_support_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[13.930379] (g1_description) StdoutLine: {'line': b'copying meshes/torso_constraint_R_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[13.932112] (g1_description) StdoutLine: {'line': b'copying meshes/Link16_L.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[13.934413] (g1_description) StdoutLine: {'line': b'copying meshes/waist_constraint_R.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[13.935303] (g1_description) StdoutLine: {'line': b'copying meshes/left_thumb_force_sensor_2.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[13.936237] (g1_description) StdoutLine: {'line': b'copying meshes/d455_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[13.946946] (g1_description) StdoutLine: {'line': b'copying meshes/left_little_2.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[13.950454] (g1_description) StdoutLine: {'line': b'copying meshes/right_middle_force_sensor_2.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[13.952772] (g1_description) StdoutLine: {'line': b'copying meshes/left_little_force_sensor_2.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[13.955504] (g1_description) StdoutLine: {'line': b'copying meshes/Dex1_finger_link_2.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[13.957678] (g1_description) StdoutLine: {'line': b'copying meshes/waist_yaw_link_rev_1_0.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[13.962158] (g1_description) StdoutLine: {'line': b'copying meshes/left_hand_thumb_1_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[13.965799] (g1_description) StdoutLine: {'line': b'copying meshes/right_shoulder_pitch_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[13.966926] (g1_description) StdoutLine: {'line': b'copying meshes/left_shoulder_yaw_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[13.968514] (g1_description) StdoutLine: {'line': b'copying meshes/left_little_force_sensor_3.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[13.969183] (g1_description) StdoutLine: {'line': b'copying meshes/right_base_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[13.986986] (-) TimerEvent: {}
+[14.004149] (g1_description) StdoutLine: {'line': b'copying meshes/left_index_2.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.006517] (g1_description) StdoutLine: {'line': b'copying meshes/left_wrist_roll_rubber_hand.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.028327] (g1_description) StdoutLine: {'line': b'copying meshes/right_thumb_force_sensor_2.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.030055] (g1_description) StdoutLine: {'line': b'copying meshes/right_thumb_1.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.030836] (g1_description) StdoutLine: {'line': b'copying meshes/left_middle_1.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.035035] (g1_description) StdoutLine: {'line': b'copying meshes/Link22_R.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.038320] (g1_description) StdoutLine: {'line': b'copying meshes/right_hand_palm_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.058390] (g1_description) StdoutLine: {'line': b'copying meshes/right_index_force_sensor_3.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.059342] (g1_description) StdoutLine: {'line': b'copying meshes/right_knee_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.065269] (g1_description) StdoutLine: {'line': b'copying meshes/right_rubber_hand.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.078438] (g1_description) StdoutLine: {'line': b'copying meshes/Link11_L.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.079148] (g1_description) StdoutLine: {'line': b'copying meshes/torso_link_rev_1_0.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.087230] (-) TimerEvent: {}
+[14.093032] (g1_description) StdoutLine: {'line': b'copying meshes/waist_constraint_L.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.093838] (g1_description) StdoutLine: {'line': b'copying meshes/left_middle_force_sensor_1.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.096493] (g1_description) StdoutLine: {'line': b'copying meshes/right_little_force_sensor_2.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.099093] (g1_description) StdoutLine: {'line': b'copying meshes/right_hand_thumb_1_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.101540] (g1_description) StdoutLine: {'line': b'copying meshes/left_shoulder_pitch_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.102760] (g1_description) StdoutLine: {'line': b'copying meshes/right_middle_force_sensor_1.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.104634] (g1_description) StdoutLine: {'line': b'copying meshes/right_thumb_3.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.106797] (g1_description) StdoutLine: {'line': b'copying meshes/torso_constraint_R_rod_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.107506] (g1_description) StdoutLine: {'line': b'copying meshes/right_wrist_roll_link_5010.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.112075] (g1_description) StdoutLine: {'line': b'copying meshes/right_index_1.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.116726] (g1_description) StdoutLine: {'line': b'copying meshes/Link13_R.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.119635] (g1_description) StdoutLine: {'line': b'copying meshes/Link17_R.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.121956] (g1_description) StdoutLine: {'line': b'copying meshes/right_wrist_roll_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.123929] (g1_description) StdoutLine: {'line': b'copying meshes/left_middle_force_sensor_2.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.126044] (g1_description) StdoutLine: {'line': b'copying meshes/right_little_force_sensor_3.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.126625] (g1_description) StdoutLine: {'line': b'copying meshes/Link12_L.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.131761] (g1_description) StdoutLine: {'line': b'copying meshes/right_index_force_sensor_2.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.133654] (g1_description) StdoutLine: {'line': b'copying meshes/Dex1_base_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.147320] (g1_description) StdoutLine: {'line': b'copying meshes/waist_roll_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.147622] (g1_description) StdoutLine: {'line': b'copying meshes/right_ring_force_sensor_2.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.150290] (g1_description) StdoutLine: {'line': b'copying meshes/torso_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.164070] (g1_description) StdoutLine: {'line': b'copying meshes/right_index_2.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.166213] (g1_description) StdoutLine: {'line': b'copying meshes/left_ring_1.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.169906] (g1_description) StdoutLine: {'line': b'copying meshes/left_thumb_1.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.170245] (g1_description) StdoutLine: {'line': b'copying meshes/right_wrist_pitch_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.170849] (g1_description) StdoutLine: {'line': b'copying meshes/Link13_L.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.173243] (g1_description) StdoutLine: {'line': b'copying meshes/left_hand_palm_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.185514] (g1_description) StdoutLine: {'line': b'copying meshes/right_shoulder_yaw_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.186938] (g1_description) StdoutLine: {'line': b'copying meshes/left_hip_yaw_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.187345] (-) TimerEvent: {}
+[14.189686] (g1_description) StdoutLine: {'line': b'copying meshes/right_little_2.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.199223] (g1_description) StdoutLine: {'line': b'copying meshes/left_base_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.220441] (g1_description) StdoutLine: {'line': b'copying meshes/left_hand_index_1_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.228399] (g1_description) StdoutLine: {'line': b'copying meshes/left_index_force_sensor_2.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.230666] (g1_description) StdoutLine: {'line': b'copying meshes/right_thumb_2.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.235750] (g1_description) StdoutLine: {'line': b'copying meshes/Link20_L.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.238302] (g1_description) StdoutLine: {'line': b'copying meshes/left_hand_thumb_2_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.253432] (g1_description) StdoutLine: {'line': b'copying meshes/left_wrist_yaw_link_5010.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.257784] (g1_description) StdoutLine: {'line': b'copying meshes/left_hand_middle_0_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.260956] (g1_description) StdoutLine: {'line': b'copying meshes/Link14_L.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.263631] (g1_description) StdoutLine: {'line': b'copying meshes/R_hand_base_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.272466] (g1_description) StdoutLine: {'line': b'copying meshes/left_thumb_3.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.275532] (g1_description) StdoutLine: {'line': b'copying meshes/Link16_R.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.278149] (g1_description) StdoutLine: {'line': b'copying meshes/right_middle_2.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.280943] (g1_description) StdoutLine: {'line': b'copying meshes/Dex1_finger_link_1.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.283384] (g1_description) StdoutLine: {'line': b'copying meshes/Link14_R.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.284421] (g1_description) StdoutLine: {'line': b'copying meshes/left_wrist_roll_link_5010.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.287511] (-) TimerEvent: {}
+[14.289620] (g1_description) StdoutLine: {'line': b'copying meshes/head_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.295316] (g1_description) StdoutLine: {'line': b'copying meshes/head_servo_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.299491] (g1_description) StdoutLine: {'line': b'copying meshes/right_middle_1.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.303863] (g1_description) StdoutLine: {'line': b'copying meshes/Link22_L.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.306059] (g1_description) StdoutLine: {'line': b'copying meshes/right_hand_middle_1_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.312963] (g1_description) StdoutLine: {'line': b'copying meshes/right_hand_thumb_2_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.322536] (g1_description) StdoutLine: {'line': b'copying meshes/torso_constraint_L_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.324074] (g1_description) StdoutLine: {'line': b'copying meshes/right_little_force_sensor_1.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.326503] (g1_description) StdoutLine: {'line': b'copying meshes/left_elbow_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.327309] (g1_description) StdoutLine: {'line': b'copying meshes/left_ring_force_sensor_1.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.329788] (g1_description) StdoutLine: {'line': b'copying meshes/left_thumb_force_sensor_3.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.331820] (g1_description) StdoutLine: {'line': b'copying meshes/torso_constraint_L_rod_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.332703] (g1_description) StdoutLine: {'line': b'copying meshes/right_thumb_4.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.335722] (g1_description) StdoutLine: {'line': b'copying meshes/L_hand_base_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.341832] (g1_description) StdoutLine: {'line': b'copying meshes/Link17_L.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.343938] (g1_description) StdoutLine: {'line': b'copying meshes/right_ring_force_sensor_1.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.345932] (g1_description) StdoutLine: {'line': b'copying meshes/right_wrist_pitch_link_5010.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.346707] (g1_description) StdoutLine: {'line': b'copying meshes/left_ring_2.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.348672] (g1_description) StdoutLine: {'line': b'copying meshes/Link18_R.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.349963] (g1_description) StdoutLine: {'line': b'copying meshes/right_ankle_roll_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.354637] (g1_description) StdoutLine: {'line': b'copying meshes/left_hand_thumb_0_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.354933] (g1_description) StdoutLine: {'line': b'copying meshes/pelvis.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.361563] (g1_description) StdoutLine: {'line': b'copying meshes/Link19_R.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.363641] (g1_description) StdoutLine: {'line': b'copying meshes/left_wrist_pitch_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.364225] (g1_description) StdoutLine: {'line': b'copying meshes/right_wrist_yaw_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.366266] (g1_description) StdoutLine: {'line': b'copying meshes/right_little_1.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.370764] (g1_description) StdoutLine: {'line': b'copying meshes/right_hip_pitch_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.371959] (g1_description) StdoutLine: {'line': b'copying meshes/left_index_1.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.375792] (g1_description) StdoutLine: {'line': b'copying meshes/right_shoulder_roll_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.378188] (g1_description) StdoutLine: {'line': b'copying meshes/left_index_force_sensor_1.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.380128] (g1_description) StdoutLine: {'line': b'copying meshes/left_little_force_sensor_1.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.382224] (g1_description) StdoutLine: {'line': b'copying meshes/Link18_L.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.384166] (g1_description) StdoutLine: {'line': b'copying meshes/left_knee_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.387676] (-) TimerEvent: {}
+[14.389079] (g1_description) StdoutLine: {'line': b'copying meshes/right_ring_2.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.391846] (g1_description) StdoutLine: {'line': b'copying meshes/left_ring_force_sensor_3.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.392981] (g1_description) StdoutLine: {'line': b'copying meshes/right_hand_middle_0_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.403635] (g1_description) StdoutLine: {'line': b'copying meshes/Link15_R.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.406821] (g1_description) StdoutLine: {'line': b'copying meshes/left_hand_middle_1_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.419177] (g1_description) StdoutLine: {'line': b'copying meshes/torso_link_23dof_rev_1_0.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.472479] (g1_description) StdoutLine: {'line': b'copying meshes/right_hand_index_0_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.475596] (g1_description) StdoutLine: {'line': b'copying meshes/right_hip_roll_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.477202] (g1_description) StdoutLine: {'line': b'copying meshes/left_ankle_pitch_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.478314] (g1_description) StdoutLine: {'line': b'copying meshes/right_hand_thumb_0_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.478797] (g1_description) StdoutLine: {'line': b'copying meshes/right_thumb_force_sensor_4.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.479517] (g1_description) StdoutLine: {'line': b'copying meshes/left_hip_pitch_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.481115] (g1_description) StdoutLine: {'line': b'copying meshes/left_thumb_force_sensor_1.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.483905] (g1_description) StdoutLine: {'line': b'copying meshes/Link15_L.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.487071] (g1_description) StdoutLine: {'line': b'copying meshes/right_thumb_force_sensor_3.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.487821] (-) TimerEvent: {}
+[14.489753] (g1_description) StdoutLine: {'line': b'copying meshes/right_palm_force_sensor.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.499862] (g1_description) StdoutLine: {'line': b'copying meshes/left_thumb_force_sensor_4.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.500666] (g1_description) StdoutLine: {'line': b'copying meshes/Link11_R.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.501188] (g1_description) StdoutLine: {'line': b'copying meshes/waist_roll_link_rev_1_0.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.502212] (g1_description) StdoutLine: {'line': b'copying meshes/left_ankle_roll_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.506495] (g1_description) StdoutLine: {'line': b'copying meshes/Link19_L.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.508694] (g1_description) StdoutLine: {'line': b'copying meshes/right_ring_1.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.513881] (g1_description) StdoutLine: {'line': b'copying meshes/right_thumb_force_sensor_1.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.515786] (g1_description) StdoutLine: {'line': b'copying meshes/right_middle_force_sensor_3.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.516363] (g1_description) StdoutLine: {'line': b'copying meshes/pelvis_contour_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.524491] (g1_description) StdoutLine: {'line': b'copying meshes/Link12_R.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.530931] (g1_description) StdoutLine: {'line': b'copying meshes/left_ring_force_sensor_2.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.533488] (g1_description) StdoutLine: {'line': b'copying meshes/left_thumb_2.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.537332] (g1_description) StdoutLine: {'line': b'copying meshes/left_hip_roll_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.538769] (g1_description) StdoutLine: {'line': b'copying meshes/left_wrist_pitch_link_5010.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.539561] (g1_description) StdoutLine: {'line': b'copying meshes/waist_yaw_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.541805] (g1_description) StdoutLine: {'line': b'copying meshes/left_thumb_swing.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.542199] (g1_description) StdoutLine: {'line': b'copying meshes/right_wrist_roll_rubber_hand.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.558436] (g1_description) StdoutLine: {'line': b'copying meshes/Link21_L.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.560778] (g1_description) StdoutLine: {'line': b'copying meshes/left_hand_index_0_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.563398] (g1_description) StdoutLine: {'line': b'copying meshes/right_index_force_sensor_1.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.565266] (g1_description) StdoutLine: {'line': b'copying meshes/left_thumb_4.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.568124] (g1_description) StdoutLine: {'line': b'copying meshes/xl330_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.570239] (g1_description) StdoutLine: {'line': b'copying meshes/Link20_R.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.571951] (g1_description) StdoutLine: {'line': b'copying meshes/left_wrist_roll_link.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.573742] (g1_description) StdoutLine: {'line': b'copying meshes/Link21_R.STL -> /home/melodse/ef_ws/src/install/g1_description/share/g1_description/meshes\n'}
+[14.576040] (g1_description) StdoutLine: {'line': b'running install_egg_info\n'}
+[14.588098] (-) TimerEvent: {}
+[14.619475] (g1_description) StdoutLine: {'line': b'Copying ../../../../src/build/g1_description/g1_description.egg-info to /home/melodse/ef_ws/src/install/g1_description/lib/python3.12/site-packages/g1_description-0.0.0-py3.12.egg-info\n'}
+[14.621047] (g1_description) StdoutLine: {'line': b'running install_scripts\n'}
+[14.688636] (-) TimerEvent: {}
+[14.789611] (-) TimerEvent: {}
+[14.877458] (g1_description) StdoutLine: {'line': b'Installing demo_joint_motion script to /home/melodse/ef_ws/src/install/g1_description/lib/g1_description\n'}
+[14.877701] (g1_description) StdoutLine: {'line': b'Installing lowstate_jointstate_bridge script to /home/melodse/ef_ws/src/install/g1_description/lib/g1_description\n'}
+[14.877863] (g1_description) StdoutLine: {'line': b'Installing rviz_joint_motion script to /home/melodse/ef_ws/src/install/g1_description/lib/g1_description\n'}
+[14.878765] (g1_description) StdoutLine: {'line': b"writing list of installed files to '/home/melodse/ef_ws/src/build/g1_description/install.log'\n"}
+[14.889891] (-) TimerEvent: {}
+[14.917971] (g1_description) CommandEnded: {'returncode': 0}
+[14.926467] (g1_description) JobEnded: {'identifier': 'g1_description', 'rc': 0}
+[14.928088] (-) EventReactorShutdown: {}

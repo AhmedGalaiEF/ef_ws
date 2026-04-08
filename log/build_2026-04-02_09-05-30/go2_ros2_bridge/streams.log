@@ -1,0 +1,20 @@
+[2.076s] Invoking command in '/home/melodse/ef_ws/build/go2_ros2_bridge': PYTHONPATH=/home/melodse/ef_ws/build/go2_ros2_bridge/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/melodse/ef_ws/install/go2_ros2_bridge/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py develop --editable --build-directory /home/melodse/ef_ws/build/go2_ros2_bridge/build --no-deps symlink_data --force
+[2.585s] running develop
+[2.935s] running egg_info
+[2.966s] writing go2_ros2_bridge.egg-info/PKG-INFO
+[2.966s] writing dependency_links to go2_ros2_bridge.egg-info/dependency_links.txt
+[2.967s] writing entry points to go2_ros2_bridge.egg-info/entry_points.txt
+[2.967s] writing requirements to go2_ros2_bridge.egg-info/requires.txt
+[2.968s] writing top-level names to go2_ros2_bridge.egg-info/top_level.txt
+[3.031s] reading manifest file 'go2_ros2_bridge.egg-info/SOURCES.txt'
+[3.034s] writing manifest file 'go2_ros2_bridge.egg-info/SOURCES.txt'
+[3.066s] running build_ext
+[3.066s] Creating /home/melodse/ef_ws/install/go2_ros2_bridge/lib/python3.12/site-packages/go2-ros2-bridge.egg-link (link to .)
+[3.067s] Installing go2_state_bridge script to /home/melodse/ef_ws/install/go2_ros2_bridge/lib/go2_ros2_bridge
+[3.068s] 
+[3.068s] Installed /home/melodse/ef_ws/build/go2_ros2_bridge
+[3.069s] running symlink_data
+[3.071s] symbolically linking /home/melodse/ef_ws/build/go2_ros2_bridge/resource/go2_ros2_bridge -> /home/melodse/ef_ws/install/go2_ros2_bridge/share/ament_index/resource_index/packages
+[3.072s] symbolically linking /home/melodse/ef_ws/build/go2_ros2_bridge/package.xml -> /home/melodse/ef_ws/install/go2_ros2_bridge/share/{package_name}
+[3.073s] symbolically linking /home/melodse/ef_ws/build/go2_ros2_bridge/launch/go2_state_bridge.launch.py -> /home/melodse/ef_ws/install/go2_ros2_bridge/share/{package_name}/launch
+[3.116s] Invoked command in '/home/melodse/ef_ws/build/go2_ros2_bridge' returned '0': PYTHONPATH=/home/melodse/ef_ws/build/go2_ros2_bridge/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/melodse/ef_ws/install/go2_ros2_bridge/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py develop --editable --build-directory /home/melodse/ef_ws/build/go2_ros2_bridge/build --no-deps symlink_data --force

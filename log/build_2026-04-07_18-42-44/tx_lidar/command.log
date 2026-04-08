@@ -1,0 +1,2 @@
+Invoking command in '/home/melodse/ef_ws/build/tx_lidar': /usr/bin/cmake /home/melodse/ef_ws/g1/scripts/sensors/manual_streaming -DCMAKE_INSTALL_PREFIX=/home/melodse/ef_ws/install/tx_lidar
+Invoked command in '/home/melodse/ef_ws/build/tx_lidar' returned '1': /usr/bin/cmake /home/melodse/ef_ws/g1/scripts/sensors/manual_streaming -DCMAKE_INSTALL_PREFIX=/home/melodse/ef_ws/install/tx_lidar

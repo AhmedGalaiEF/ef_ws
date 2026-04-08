@@ -1,0 +1,17 @@
+source;share/unitree_description/hook/cmake_prefix_path.ps1
+source;share/unitree_description/hook/cmake_prefix_path.dsv
+source;share/unitree_description/hook/cmake_prefix_path.sh
+source;share/unitree_description/hook/pkg_config.ps1
+source;share/unitree_description/hook/pkg_config.dsv
+source;share/unitree_description/hook/pkg_config.sh
+source;share/unitree_description/hook/pythonpath.ps1
+source;share/unitree_description/hook/pythonpath.dsv
+source;share/unitree_description/hook/pythonpath.sh
+source;share/unitree_description/hook/pkg_config_path.ps1
+source;share/unitree_description/hook/pkg_config_path.dsv
+source;share/unitree_description/hook/pkg_config_path.sh
+source;share/unitree_description/hook/pkg_config_path_multiarch.ps1
+source;share/unitree_description/hook/pkg_config_path_multiarch.dsv
+source;share/unitree_description/hook/pkg_config_path_multiarch.sh
+source;share/unitree_description/hook/ament_prefix_path.dsv
+source;share/unitree_description/hook/python_path.dsv
