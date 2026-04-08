@@ -26,7 +26,7 @@ def load_joint_names():
 class StepInPlace(Node):
     def __init__(self):
         super().__init__("rviz_joint_step")
-        self.pub = self.create_publisher(JointState, "/joint_states", 10)
+        self.pub = self.create_publisher(JointState, "/joint_states", 10) # publish to the /joint_states topic with a queue size of 10
         self.joint_names = load_joint_names()
         self.start = self.get_clock().now()
         self.timer = self.create_timer(0.02, self.tick)
@@ -57,8 +57,8 @@ class StepInPlace(Node):
             self.set_joint(msg, f"{side}_knee_joint", knee)
             self.set_joint(msg, f"{side}_ankle_pitch_joint", ankle)
 
-        self.set_joint(msg, "left_shoulder_pitch_joint", -0.4 * left_phase)
-        self.set_joint(msg, "right_shoulder_pitch_joint", -0.4 * right_phase)
+        self.set_joint(msg, "left_shoulder_pitch_joint", -0.8 * left_phase) # move joint fast/slow in opposite phase to the legs to create a more natural walking motion
+        self.set_joint(msg, "right_shoulder_pitch_joint", -0.8 * right_phase) # move joint fast/slow in opposite phase to the legs to create a more natural walking motion
 
         self.pub.publish(msg)
 
