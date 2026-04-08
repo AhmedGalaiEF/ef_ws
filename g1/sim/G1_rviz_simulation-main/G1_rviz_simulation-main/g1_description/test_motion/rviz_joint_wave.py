@@ -2,12 +2,14 @@
 import math
 import xml.etree.ElementTree as ET
 
+# importing ros2 package utilities to find the URDF file
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from ament_index_python.packages import get_package_share_directory
 
 
+# This node publishes a JointState message to /joint_states with a few joints
 def load_joint_names():
     urdf_path = (
         get_package_share_directory("g1_description")
@@ -21,7 +23,7 @@ def load_joint_names():
         names.append(joint.get("name"))
     return names
 
-
+# This node publishes a JointState message to /joint_states with a few joints
 class JointWave(Node):
     def __init__(self):
         super().__init__("rviz_joint_wave")
@@ -48,6 +50,7 @@ class JointWave(Node):
             f"Publishing {len(self.joint_names)} joints to /joint_states"
         )
 
+# This function is called every 20ms by the timer. It computes the current time, creates a JointState message, and fills in the positions of the animated joints using sine waves.
     def tick(self):
         t = (self.get_clock().now() - self.start).nanoseconds / 1e9
         msg = JointState()
@@ -67,7 +70,7 @@ class JointWave(Node):
 
         self.pub.publish(msg)
 
-
+# def main() initializes the ROS2 node, creates an instance of the JointWave class, and starts
 def main():
     rclpy.init()
     node = JointWave()
@@ -78,6 +81,6 @@ def main():
     node.destroy_node()
     rclpy.shutdown()
 
-
+# calls the main function when the script is executed
 if __name__ == "__main__":
     main()
