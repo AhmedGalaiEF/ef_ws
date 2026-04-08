@@ -2,12 +2,13 @@
 import math
 import xml.etree.ElementTree as ET
 
+# This node publishes a simple stepping motion to /joint_states for visualization in RViz.
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from ament_index_python.packages import get_package_share_directory
 
-
+# Load the joint names from the URDF file, excluding fixed joints.
 def load_joint_names():
     urdf_path = (
         get_package_share_directory("unitree_description")
@@ -21,7 +22,7 @@ def load_joint_names():
         names.append(joint.get("name"))
     return names
 
-
+# This node publishes a simple stepping motion to /joint_states for visualization in RViz.
 class Step(Node):
     def __init__(self):
         super().__init__("go2_joint_step")
@@ -31,11 +32,13 @@ class Step(Node):
         self.timer = self.create_timer(0.02, self.tick)
         self.get_logger().info("Publishing step motion to /joint_states")
 
+#   Helper function to set joint values in the message.
     def set_joint(self, msg, name, value):
         if name in self.joint_names:
             i = self.joint_names.index(name)
             msg.position[i] = value
 
+#   Calculate the joint angles for a simple stepping motion and publish them.
     def tick(self):
         t = (self.get_clock().now() - self.start).nanoseconds / 1e9
         left = math.sin(2.0 * t)
@@ -56,7 +59,7 @@ class Step(Node):
 
         self.pub.publish(msg)
 
-
+# Main function to initialize the node and start spinning.
 def main():
     rclpy.init()
     node = Step()
@@ -67,6 +70,6 @@ def main():
     node.destroy_node()
     rclpy.shutdown()
 
-
+# call the main function when the script is executed
 if __name__ == "__main__":
     main()
