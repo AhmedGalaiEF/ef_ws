@@ -57,8 +57,8 @@ class StepInPlace(Node):
             self.set_joint(msg, f"{side}_knee_joint", knee)
             self.set_joint(msg, f"{side}_ankle_pitch_joint", ankle)
 
-        self.set_joint(msg, "left_shoulder_pitch_joint", -0.8 * left_phase) # move joint fast/slow in opposite phase to the legs to create a more natural walking motion
-        self.set_joint(msg, "right_shoulder_pitch_joint", -0.8 * right_phase) # move joint fast/slow in opposite phase to the legs to create a more natural walking motion
+        self.set_joint(msg, "left_shoulder_pitch_joint", -0.8 * left_phase) # move joint fast/slow  depending on the phase of the step
+        self.set_joint(msg, "right_shoulder_pitch_joint", -0.8 * right_phase) # move joint fast/slow  depending on the phase of the step
 
         self.pub.publish(msg)
 
