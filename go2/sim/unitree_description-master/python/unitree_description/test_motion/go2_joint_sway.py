@@ -30,7 +30,7 @@ class Sway(Node):
         self.pub = self.create_publisher(JointState, "/joint_states", 10)
         self.joint_names = load_joint_names()
         self.start = self.get_clock().now()
-        self.timer = self.create_timer(0.02, self.tick)
+        self.timer = self.create_timer(0.02, self.tick)  # 50 Hz update
         self.get_logger().info("Publishing side-to-side sway to /joint_states")
 
 # Helper function to set joint values in the message.
@@ -42,14 +42,17 @@ class Sway(Node):
 # Calculate the joint angles for a simple side-to-side sway motion and publish them.
     def tick(self):
         t = (self.get_clock().now() - self.start).nanoseconds / 1e9
+        # Sway moves the body left/right.
         sway = 0.25 * math.sin(1.5 * t)
 
+        # Build and publish the JointState message.
         msg = JointState()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.name = list(self.joint_names)
         msg.position = [0.0] * len(self.joint_names)
 
         for leg, sign in (("FL", 1.0), ("RL", 1.0), ("FR", -1.0), ("RR", -1.0)):
+            # Joint angles are in radians.
             self.set_joint(msg, f"{leg}_hip_joint", sway * sign)
             self.set_joint(msg, f"{leg}_thigh_joint", 0.8)
             self.set_joint(msg, f"{leg}_calf_joint", -1.4)

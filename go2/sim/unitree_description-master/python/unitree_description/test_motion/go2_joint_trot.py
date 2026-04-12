@@ -30,7 +30,7 @@ class Trot(Node):
         self.pub = self.create_publisher(JointState, "/joint_states", 10)
         self.joint_names = load_joint_names()
         self.start = self.get_clock().now()
-        self.timer = self.create_timer(0.02, self.tick)
+        self.timer = self.create_timer(0.02, self.tick)  # 50 Hz update
         self.get_logger().info("Publishing trot motion to /joint_states")
 
 #   Helper function to set joint values in the message.
@@ -42,15 +42,18 @@ class Trot(Node):
 #  Calculate the joint angles for a simple trotting motion and publish them.
     def tick(self):
         t = (self.get_clock().now() - self.start).nanoseconds / 1e9
+        # Diagonal legs move together in a trot.
         diag_a = math.sin(2.2 * t)
         diag_b = math.sin(2.2 * t + math.pi)
 
+        # Build and publish the JointState message.
         msg = JointState()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.name = list(self.joint_names)
         msg.position = [0.0] * len(self.joint_names)
 
         for leg, phase in (("FL", diag_a), ("RR", diag_a), ("FR", diag_b), ("RL", diag_b)):
+            # Joint angles are in radians.
             hip = 0.2 * phase
             thigh = 0.8 + 0.4 * phase
             calf = -1.4 - 0.5 * phase

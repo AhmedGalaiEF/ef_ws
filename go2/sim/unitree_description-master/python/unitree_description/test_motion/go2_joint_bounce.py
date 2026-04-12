@@ -29,7 +29,7 @@ class Bounce(Node):
         self.pub = self.create_publisher(JointState, "/joint_states", 10)
         self.joint_names = load_joint_names()
         self.start = self.get_clock().now()
-        self.timer = self.create_timer(0.02, self.tick)
+        self.timer = self.create_timer(0.02, self.tick)  # 50 Hz update
         self.get_logger().info("Publishing bounce motion to /joint_states")
 
 # Helper function to set joint values in the message.
@@ -41,16 +41,19 @@ class Bounce(Node):
 # Calculate the joint angles for a simple bouncing motion and publish them.
     def tick(self):
         t = (self.get_clock().now() - self.start).nanoseconds / 1e9
-        phase = 0.5 * (1.0 + math.sin(1.5 * t))
+        phase = 0.5 * (1.0 + math.sin(1.5 * t))  # 0..1 smooth cycle
+        # Joint angles are in radians.
         hip = 0.0
         thigh = 0.7 + 0.4 * phase
         calf = -1.3 - 0.5 * phase
 
+        # Build and publish the JointState message.
         msg = JointState()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.name = list(self.joint_names)
         msg.position = [0.0] * len(self.joint_names)
 
+        # Apply the same pose to all four legs.
         for leg in ("FL", "FR", "RL", "RR"):
             self.set_joint(msg, f"{leg}_hip_joint", hip)
             self.set_joint(msg, f"{leg}_thigh_joint", thigh)

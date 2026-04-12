@@ -29,7 +29,7 @@ class March(Node):
         self.pub = self.create_publisher(JointState, "/joint_states", 10)
         self.joint_names = load_joint_names()
         self.start = self.get_clock().now()
-        self.timer = self.create_timer(0.02, self.tick)
+        self.timer = self.create_timer(0.02, self.tick)  # 50 Hz update
         self.get_logger().info("Publishing marching motion to /joint_states")
 
 # Helper function to set joint values in the message.
@@ -41,15 +41,18 @@ class March(Node):
 # Calculate the joint angles for a simple marching motion and publish them.
     def tick(self):
         t = (self.get_clock().now() - self.start).nanoseconds / 1e9
+        # Left and right legs move opposite each other.
         left_phase = math.sin(1.6 * t)
         right_phase = math.sin(1.6 * t + math.pi)
 
+        # Build and publish the JointState message.
         msg = JointState()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.name = list(self.joint_names)
         msg.position = [0.0] * len(self.joint_names)
 
         for leg, phase in (("FL", left_phase), ("RL", left_phase), ("FR", right_phase), ("RR", right_phase)):
+            # Joint angles are in radians.
             lift = max(0.0, phase)
             hip = 0.15 * phase
             thigh = 0.75 + 0.55 * lift
