@@ -29,7 +29,7 @@ class LegKick(Node):
         self.pub = self.create_publisher(JointState, "/joint_states", 10)
         self.joint_names = load_joint_names()
         self.start = self.get_clock().now()
-        self.timer = self.create_timer(0.02, self.tick)
+        self.timer = self.create_timer(0.02, self.tick)  # 50 Hz update
         self.get_logger().info("Publishing leg kick motion to /joint_states")
 
 # set_joint is a helper function that sets the position of a joint in the JointState message if the joint name exists in the list of joint names.
@@ -43,6 +43,7 @@ class LegKick(Node):
         t = (self.get_clock().now() - self.start).nanoseconds / 1e9
         lift = max(0.0, math.sin(1.4 * t))
 
+        # Joint angles are in radians.
         msg = JointState()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.name = list(self.joint_names)

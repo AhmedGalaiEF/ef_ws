@@ -29,7 +29,7 @@ class Bow(Node):
         self.pub = self.create_publisher(JointState, "/joint_states", 10)
         self.joint_names = load_joint_names()
         self.start = self.get_clock().now()
-        self.timer = self.create_timer(0.02, self.tick)
+        self.timer = self.create_timer(0.02, self.tick)  # 50 Hz update
         self.get_logger().info("Publishing bow motion to /joint_states")
 
 # set_joint is a helper function that sets the position of a joint in the JointState message if the joint name exists in the list of joint names.
@@ -41,7 +41,8 @@ class Bow(Node):
 # This function is called every 20ms by the timer. It computes the current time, creates a JointState message, and fills in the positions of the animated joints using sine waves.
     def tick(self):
         t = (self.get_clock().now() - self.start).nanoseconds / 1e9
-        phase = 0.5 * (1.0 + math.sin(1.2 * t))
+        phase = 0.5 * (1.0 + math.sin(1.2 * t))  # 0..1 smooth cycle
+        # Joint angles are in radians.
         waist_pitch = -0.35 * phase
         hip_pitch = -0.15 * phase
         knee = 0.15 * phase

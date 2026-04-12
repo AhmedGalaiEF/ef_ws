@@ -29,7 +29,7 @@ class March(Node):
         self.pub = self.create_publisher(JointState, "/joint_states", 10)
         self.joint_names = load_joint_names()
         self.start = self.get_clock().now()
-        self.timer = self.create_timer(0.02, self.tick)
+        self.timer = self.create_timer(0.02, self.tick)  # 50 Hz update
         self.get_logger().info("Publishing marching motion to /joint_states")
 
 # set_joint is a helper function that sets the position of a joint in the JointState message if the joint name exists in the list of joint names.
@@ -41,9 +41,11 @@ class March(Node):
 # This function is called every 20ms by the timer. It computes the current time, creates a JointState message, and fills in the positions of the animated joints using sine waves.
     def tick(self):
         t = (self.get_clock().now() - self.start).nanoseconds / 1e9
+        # Left and right legs move opposite each other.
         left_phase = math.sin(1.6 * t)
         right_phase = math.sin(1.6 * t + math.pi)
 
+        # Joint angles are in radians.
         msg = JointState()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.name = list(self.joint_names)

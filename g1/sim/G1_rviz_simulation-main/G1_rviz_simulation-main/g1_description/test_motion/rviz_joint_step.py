@@ -29,7 +29,7 @@ class StepInPlace(Node):
         self.pub = self.create_publisher(JointState, "/joint_states", 10) # publish to the /joint_states topic with a queue size of 10
         self.joint_names = load_joint_names()
         self.start = self.get_clock().now()
-        self.timer = self.create_timer(0.02, self.tick)
+        self.timer = self.create_timer(0.02, self.tick)  # 50 Hz update
         self.get_logger().info("Publishing step-in-place motion to /joint_states")
 
 # set_joint is a helper function that sets the position of a joint in the JointState message if the joint name exists in the list of joint names.
@@ -41,6 +41,7 @@ class StepInPlace(Node):
 # This function is called every 20ms by the timer. It computes the current time, creates a JointState message, and fills in the positions of the animated joints using sine waves.
     def tick(self):
         t = (self.get_clock().now() - self.start).nanoseconds / 1e9
+        # Left and right legs move opposite each other.
         left_phase = math.sin(2.0 * t)
         right_phase = math.sin(2.0 * t + math.pi)
 
@@ -50,6 +51,7 @@ class StepInPlace(Node):
         msg.position = [0.0] * len(self.joint_names)
 
         for side, phase in (("left", left_phase), ("right", right_phase)):
+            # Joint angles are in radians.
             hip = -0.25 + 0.25 * phase
             knee = 0.5 + 0.4 * max(0.0, phase)
             ankle = -0.25 - 0.2 * phase

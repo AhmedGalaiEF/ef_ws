@@ -30,7 +30,7 @@ class JointWave(Node):
         self.pub = self.create_publisher(JointState, "/joint_states", 10)
         self.joint_names = load_joint_names()
         self.start = self.get_clock().now()
-        self.timer = self.create_timer(0.02, self.tick)
+        self.timer = self.create_timer(0.02, self.tick)  # 50 Hz update
 
         # Choose a few joints to animate; others stay at zero.
         self.animated = [
@@ -53,6 +53,7 @@ class JointWave(Node):
 # This function is called every 20ms by the timer. It computes the current time, creates a JointState message, and fills in the positions of the animated joints using sine waves.
     def tick(self):
         t = (self.get_clock().now() - self.start).nanoseconds / 1e9
+        # Joint angles are in radians.
         msg = JointState()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.name = list(self.joint_names)
