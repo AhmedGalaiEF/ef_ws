@@ -1,0 +1,26 @@
+Safety FAQ (navigation/obstacle_avoidance/safety)
+=================================================
+
+Q: What scripts are in this folder?
+A: `hanger_boot_sequence.py` and `keyboard_controller.py`.
+
+Q: Why use these before navigation scripts?
+A: They provide controlled startup and manual tele-op for positioning before
+   running map/planning scripts in this directory.
+
+Q: How do I run keyboard tele-op?
+A: `python3 keyboard_controller.py --iface enp1s0`
+
+Q: Input backend options?
+A: `--input pynput` (default) or `--input curses`.
+
+Q: Keyboard controls?
+A: `W/S` forward/back, `Q/E` strafe, `A/D` yaw, `Space` stop,
+   `Z` Damp + exit, `Esc` StopMove + ZeroTorque + exit.
+
+Q: Does this folder include a USB gamepad controller?
+A: No. There is no `usb_controller.py` in this folder.
+
+Q: Safety warning?
+A: Keep a spotter and clear route before handing control to autonomous
+   navigation scripts.

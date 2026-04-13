@@ -1,0 +1,58 @@
+Obstacle Avoidance / Navigation FAQ
+===================================
+
+Q: What are the main scripts in this folder?
+A: Core workflow scripts include:
+   - `real_time_path_steps_dynamic.py` (recommended dynamic planner runner)
+   - `navigate.py` (integrated navigation + SLAM service options)
+   - `create_map.py`, `slam_map.py`, `path_planner.py`, `locomotion.py`,
+     `obstacle_detection.py`, `map_viewer.py`
+
+Q: Which script should I start with?
+A: Usually `real_time_path_steps_dynamic.py` if you already have a map or
+   point cloud and want live replanning against SLAM updates.
+
+Q: Minimal example command?
+A: `python3 real_time_path_steps_dynamic.py --map maps/live_slam_latest.npz --iface enp1s0 --goal-x 2.0 --goal-y 0.0`
+
+Q: What map formats are supported?
+A: Saved occupancy `.npz` and point-cloud sources like `.pcd`/`.ply` (via
+   conversion settings such as `--map-resolution`, `--map-height-threshold`).
+
+Q: How does live SLAM integration work?
+A: It subscribes to the SLAM map topic (`--slam-map-topic`, default
+   `rt/utlidar/map_state`) and can replan when the live map blocks the path.
+
+Q: How do I disable live-map replanning?
+A: Pass `--no-live-map`.
+
+Q: Common tuning flags for `real_time_path_steps_dynamic.py`?
+A: `--inflation`, `--smooth`, `--spacing`, `--max-replans`, `--max-speed`,
+   `--timeout`, `--pose-mismatch`, `--slam-update-period`, `--no-viz`.
+
+Q: What does `navigate.py` add?
+A: Broader orchestration: SLAM service RPC toggles (start/end/init/nav/pause),
+   selectable pose source (`slam`/`sport`), map picking/visualization options,
+   and traditional map-size/resolution args.
+
+Q: Which DDS topics matter most here?
+A: Common defaults:
+   - sport state: `rt/odommodestate`
+   - SLAM map: `rt/utlidar/map_state`
+   - SLAM odom: `rt/unitree/slam_mapping/odom`
+   - optional lidar cloud: `rt/utlidar/cloud_livox_mid360`
+
+Q: Why does planning fail with "out of bounds"?
+A: Start/goal may not fit the current map extents. Use explicit start/goal
+   overrides or regenerate/expand the map.
+
+Q: Why does A* fail even with in-bounds poses?
+A: Inflation or obstacle thresholds may block corridors. Reduce inflation,
+   adjust height thresholds, or use a cleaner map input.
+
+Q: What are safe operating defaults?
+A: Start with low speed (`--max-speed 0.15-0.25`), conservative inflation, and
+   visualization enabled during tuning.
+
+Q: Related files for SLAM service API?
+A: `slam_service.py` is the focused RPC wrapper for `slam_operate`.

@@ -1,0 +1,43 @@
+Safety FAQ (basic/safety)
+=========================
+
+Q: What scripts are in this folder?
+A: `hanger_boot_sequence.py`, `keyboard_controller.py`, `usb_controller.py`.
+
+Q: What does `hanger_boot_sequence.py` do?
+A: It performs a safe startup flow and returns an initialized `LocoClient`
+   in a walking-ready balanced state (FSM-200 path).
+
+Q: What does `keyboard_controller.py` do?
+A: Curses tele-op with key-hold behavior (default `--input pynput`) after
+   hanger boot.
+
+Q: How do I run keyboard tele-op?
+A: `python3 keyboard_controller.py --iface enp1s0`
+
+Q: Which input backends are supported?
+A: `--input pynput` (default, true key-up/key-down) and `--input curses`
+   (legacy polling behavior).
+
+Q: Keyboard controls?
+A: `W/S` forward/back, `Q/E` strafe, `A/D` yaw, `Space` stop,
+   `Z` Damp + exit, `Esc` StopMove + ZeroTorque + exit.
+
+Q: What does `usb_controller.py` do?
+A: Xbox-style gamepad tele-op (`pygame`) with stick velocity control and
+   button actions for Damp/BalanceStand/DevMode/ZeroTorque.
+
+Q: How do I run USB tele-op?
+A: `python3 usb_controller.py --iface enp1s0 --joy 0`
+
+Q: USB controller mappings?
+A: Left stick Y -> `vx`, left stick X -> `vy`, right stick X -> `vyaw`.
+   Buttons: `A` Damp, `B` BalanceStand, `X` Dev/Start mode, `Y` ZeroTorque,
+   `Start` StopMove.
+
+Q: Wayland/X11 input caveats?
+A: `pynput` may need extra permissions on some Wayland setups. X11 is usually
+   straightforward.
+
+Q: Safety warning?
+A: `ZeroTorque` removes support. Keep a spotter and clear workspace.

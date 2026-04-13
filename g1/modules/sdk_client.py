@@ -19,7 +19,19 @@ from typing import Any, Optional
 
 from sdk_audio import RobotAudio
 from sdk_boot import create_loco_client, hanger_boot_sequence, rpc_get_int
-from sdk_slam import SlamInfoSubscriber, SlamOperateClient, SlamResponse
+from sdk_hand import Dex3HandController
+from sdk_sensors import (
+    LatestSubscriber,
+    LidarImu_,
+    LowStateSnapshot,
+    Odometry_,
+    decode_video_frame_bgr,
+    load_video_client_type,
+    lowstate_snapshot_from_msg,
+    odom_pose_from_msg,
+    resolve_lowstate_type,
+)
+from sdk_slam import SlamInfoSubscriber, SlamOdomSubscriber, SlamOperateClient, SlamResponse
 
 try:
     from unitree_sdk2py.core.channel import ChannelSubscriber
@@ -84,10 +96,17 @@ class Robot:
         self._sport_sub: ChannelSubscriber | None = None
         self._lidar_map_sub: ChannelSubscriber | None = None
         self._lidar_cloud_sub: ChannelSubscriber | None = None
+        self._lowstate_sub: LatestSubscriber | None = None
+        self._odom_sub: LatestSubscriber | None = None
+        self._lidar_imu_sub: LatestSubscriber | None = None
+        self._slam_info_sub: SlamInfoSubscriber | None = None
+        self._slam_odom_sub: SlamOdomSubscriber | None = None
 
         self._path_points: list[tuple[float, float, float]] = []
         self._slam_client: SlamOperateClient | None = None
         self._audio: RobotAudio | None = None
+        self._video_client: Any = None
+        self._hands: dict[str, Dex3HandController] = {}
         self.slam_is_running = False
 
         if safety_boot:
@@ -110,6 +129,32 @@ class Robot:
             self._audio = RobotAudio()
         return self._audio
 
+    def _get_video_client(self) -> Any:
+        if self._video_client is None:
+            video_client_cls = load_video_client_type()
+            self._video_client = video_client_cls()
+            self._video_client.SetTimeout(2.0)
+            self._video_client.Init()
+        return self._video_client
+
+    def _get_hand(self, hand: str = "right") -> Dex3HandController:
+        side = str(hand).strip().lower()
+        if side not in self._hands:
+            self._hands[side] = Dex3HandController(side)
+        return self._hands[side]
+
+    def _ensure_slam_info_subscriber(self) -> SlamInfoSubscriber:
+        if self._slam_info_sub is None:
+            self._slam_info_sub = SlamInfoSubscriber(self.slam_info_topic, self.slam_key_topic)
+            self._slam_info_sub.start()
+        return self._slam_info_sub
+
+    def _ensure_slam_odom_subscriber(self) -> SlamOdomSubscriber:
+        if self._slam_odom_sub is None:
+            self._slam_odom_sub = SlamOdomSubscriber()
+            self._slam_odom_sub.start()
+        return self._slam_odom_sub
+
     # ------------------------------------------------------------------
     # Sensor subscriptions
     # ------------------------------------------------------------------
@@ -124,6 +169,16 @@ class Robot:
         if self._lidar_cloud_sub is None:
             self._lidar_cloud_sub = ChannelSubscriber(self.lidar_cloud_topic, PointCloud2_)
             self._lidar_cloud_sub.Init(self._lidar_cloud_cb, 10)
+        lowstate_type = resolve_lowstate_type()
+        if lowstate_type is not None and self._lowstate_sub is None:
+            self._lowstate_sub = LatestSubscriber("rt/lowstate", lowstate_type)
+            self._lowstate_sub.start()
+        if Odometry_ is not None and self._odom_sub is None:
+            self._odom_sub = LatestSubscriber("rt/odom", Odometry_)
+            self._odom_sub.start()
+        if LidarImu_ is not None and self._lidar_imu_sub is None:
+            self._lidar_imu_sub = LatestSubscriber("rt/utlidar/imu_livox_mid360", LidarImu_)
+            self._lidar_imu_sub.start()
 
     def _sport_cb(self, msg: SportModeState_) -> None:
         with self._lock:
@@ -178,11 +233,20 @@ class Robot:
 
     def get_sensor_timestamps(self) -> dict[str, float]:
         with self._lock:
-            return {
+            timestamps = {
                 "sport": float(self._last_sport_ts),
                 "lidar_map": float(self._last_lidar_map_ts),
                 "lidar_cloud": float(self._last_lidar_cloud_ts),
             }
+        if self._lowstate_sub is not None:
+            timestamps["lowstate"] = float(self._lowstate_sub.get_latest()[1])
+        if self._odom_sub is not None:
+            timestamps["odom"] = float(self._odom_sub.get_latest()[1])
+        if self._lidar_imu_sub is not None:
+            timestamps["lidar_imu"] = float(self._lidar_imu_sub.get_latest()[1])
+        if self._slam_odom_sub is not None:
+            timestamps["slam_odom"] = float(self._slam_odom_sub.get_latest()[1])
+        return timestamps
 
     def sensors_stale(self, max_age: float = 1.0) -> dict[str, bool]:
         now = time.time()
@@ -198,6 +262,16 @@ class Robot:
                 return True
             time.sleep(0.05)
         return self.get_sport_state() is not None
+
+    def wait_for_low_state(self, timeout: float = 2.0) -> bool:
+        if self._lowstate_sub is None:
+            return False
+        t0 = time.time()
+        while time.time() - t0 < max(0.0, timeout):
+            if self._lowstate_sub.get_latest()[0] is not None:
+                return True
+            time.sleep(0.05)
+        return self._lowstate_sub.get_latest()[0] is not None
 
     def get_mode(self) -> int | None:
         msg = self.get_sport_state()
@@ -257,6 +331,52 @@ class Robot:
                 return vec
         return None
 
+    def get_low_state(self) -> Any | None:
+        if self._lowstate_sub is None:
+            return None
+        return self._lowstate_sub.get_latest()[0]
+
+    def get_low_state_snapshot(self) -> LowStateSnapshot | None:
+        msg = self.get_low_state()
+        if msg is None:
+            return None
+        return lowstate_snapshot_from_msg(msg)
+
+    def get_joint_positions(self) -> list[float]:
+        snap = self.get_low_state_snapshot()
+        return [] if snap is None else list(snap.joint_positions)
+
+    def get_joint_velocities(self) -> list[float]:
+        snap = self.get_low_state_snapshot()
+        return [] if snap is None else list(snap.joint_velocities)
+
+    def get_joint_torques(self) -> list[float]:
+        snap = self.get_low_state_snapshot()
+        return [] if snap is None else list(snap.joint_torques)
+
+    def get_joint_position(self, joint_index: int) -> float | None:
+        positions = self.get_joint_positions()
+        idx = int(joint_index)
+        if idx < 0 or idx >= len(positions):
+            return None
+        return float(positions[idx])
+
+    def get_odom(self) -> Any | None:
+        if self._odom_sub is None:
+            return None
+        return self._odom_sub.get_latest()[0]
+
+    def get_odom_pose(self) -> tuple[float, float, float] | None:
+        msg = self.get_odom()
+        if msg is None:
+            return None
+        return odom_pose_from_msg(msg)
+
+    def get_lidar_imu(self) -> Any | None:
+        if self._lidar_imu_sub is None:
+            return None
+        return self._lidar_imu_sub.get_latest()[0]
+
     def get_yaw(self) -> float | None:
         imu = self.get_imu()
         if imu is None:
@@ -281,6 +401,9 @@ class Robot:
             "yaw": self.get_yaw(),
             "is_moving": self.is_moving(),
             "imu": self.get_imu(),
+            "odom_pose": self.get_odom_pose(),
+            "slam_pose": self.get_slam_pose(),
+            "joint_count": len(self.get_joint_positions()),
             "sensor_timestamps": self.get_sensor_timestamps(),
             "sensor_stale": self.sensors_stale(),
             "slam_is_running": bool(self.slam_is_running),
@@ -294,11 +417,213 @@ class Robot:
     def loco_move(self, vx: float, vy: float, vyaw: float) -> int:
         return int(self._client.Move(float(vx), float(vy), float(vyaw), continous_move=True))
 
+    def walk(self, vx: float = 0.0, vy: float = 0.0, vyaw: float = 0.0) -> int:
+        self.set_gait_type(0)
+        return int(self.loco_move(vx, vy, vyaw))
+
+    def run(self, vx: float = 0.0, vy: float = 0.0, vyaw: float = 0.0) -> int:
+        self.set_gait_type(1)
+        return int(self.loco_move(vx, vy, vyaw))
+
     def stop_moving(self) -> None:
         if hasattr(self._client, "StopMove"):
             self._client.StopMove()
             return
         self._client.Move(0.0, 0.0, 0.0, continous_move=False)
+
+    def stop(self) -> None:
+        self.stop_moving()
+
+    @staticmethod
+    def _wrap_angle(value: float) -> float:
+        while value > math.pi:
+            value -= 2.0 * math.pi
+        while value < -math.pi:
+            value += 2.0 * math.pi
+        return value
+
+    @staticmethod
+    def _clamp(value: float, lo: float, hi: float) -> float:
+        return max(lo, min(hi, value))
+
+    @staticmethod
+    def _normalize_gait_type(gait_type: int | str) -> int:
+        if isinstance(gait_type, str):
+            key = gait_type.strip().lower().replace("-", "_").replace(" ", "_")
+            alias = {
+                "normal": 0,
+                "balanced": 0,
+                "balance": 0,
+                "static": 0,
+                "stand": 0,
+                "continuous": 1,
+                "walk": 1,
+                "walking": 1,
+                "dynamic": 1,
+                "run": 1,
+            }
+            if key not in alias:
+                raise ValueError(f"Unknown gait_type '{gait_type}'.")
+            return int(alias[key])
+        return int(gait_type)
+
+    def set_gait_type(self, gait_type: int | str = 0) -> int:
+        mode = self._normalize_gait_type(gait_type)
+        if hasattr(self._client, "SetGaitType"):
+            return int(self._client.SetGaitType(mode))
+        if hasattr(self._client, "SetBalanceMode"):
+            return int(self._client.SetBalanceMode(mode))
+        raise AttributeError("Current locomotion client does not support gait mode setting API.")
+
+    def balanced_stand(self, mode: int = 0) -> None:
+        if hasattr(self._client, "BalanceStand"):
+            self._client.BalanceStand(int(mode))
+        else:
+            self.set_gait_type(int(mode))
+
+    def _move_for_feedback(
+        self,
+        distance: float,
+        gait_type: int,
+        max_vx: float,
+        max_vyaw: float,
+        pos_tolerance: float,
+        yaw_tolerance: float,
+        timeout: float,
+        tick: float,
+        kp_lin: float,
+        kp_yaw: float,
+    ) -> bool:
+        pos0 = self.get_position()
+        yaw0 = self.get_yaw()
+        if pos0 is None or yaw0 is None:
+            raise RuntimeError("walk_for/run_for requires live position and IMU yaw.")
+
+        if abs(float(distance)) <= float(pos_tolerance):
+            self.stop()
+            return True
+
+        sign = 1.0 if float(distance) >= 0.0 else -1.0
+        target_x = float(pos0[0]) + float(distance) * math.cos(float(yaw0))
+        target_y = float(pos0[1]) + float(distance) * math.sin(float(yaw0))
+
+        self.set_gait_type(int(gait_type))
+        t0 = time.time()
+        ok = False
+        try:
+            while (time.time() - t0) <= max(0.1, float(timeout)):
+                pos = self.get_position()
+                yaw = self.get_yaw()
+                if pos is None or yaw is None:
+                    time.sleep(max(0.01, float(tick)))
+                    continue
+                dx = target_x - float(pos[0])
+                dy = target_y - float(pos[1])
+                dist = math.hypot(dx, dy)
+                if dist <= float(pos_tolerance):
+                    ok = True
+                    break
+                target_heading = math.atan2(dy, dx)
+                heading_err = self._wrap_angle(target_heading - float(yaw))
+                if abs(heading_err) > float(yaw_tolerance):
+                    vx_cmd = 0.0
+                else:
+                    vx_cmd = sign * self._clamp(float(kp_lin) * dist, 0.0, max(0.0, float(max_vx)))
+                vyaw_cmd = self._clamp(float(kp_yaw) * heading_err, -max_vyaw, max_vyaw)
+                self.loco_move(vx_cmd, 0.0, vyaw_cmd)
+                time.sleep(max(0.01, float(tick)))
+        finally:
+            self.stop()
+        return ok
+
+    def walk_for(
+        self,
+        distance: float,
+        max_vx: float = 0.25,
+        max_vyaw: float = 0.5,
+        pos_tolerance: float = 0.05,
+        yaw_tolerance: float = 0.20,
+        timeout: float = 20.0,
+        tick: float = 0.05,
+        kp_lin: float = 0.9,
+        kp_yaw: float = 1.6,
+    ) -> bool:
+        return self._move_for_feedback(
+            distance=distance,
+            gait_type=0,
+            max_vx=max_vx,
+            max_vyaw=max_vyaw,
+            pos_tolerance=pos_tolerance,
+            yaw_tolerance=yaw_tolerance,
+            timeout=timeout,
+            tick=tick,
+            kp_lin=kp_lin,
+            kp_yaw=kp_yaw,
+        )
+
+    def run_for(
+        self,
+        distance: float,
+        max_vx: float = 0.45,
+        max_vyaw: float = 0.8,
+        pos_tolerance: float = 0.07,
+        yaw_tolerance: float = 0.25,
+        timeout: float = 15.0,
+        tick: float = 0.05,
+        kp_lin: float = 1.0,
+        kp_yaw: float = 1.8,
+    ) -> bool:
+        return self._move_for_feedback(
+            distance=distance,
+            gait_type=1,
+            max_vx=max_vx,
+            max_vyaw=max_vyaw,
+            pos_tolerance=pos_tolerance,
+            yaw_tolerance=yaw_tolerance,
+            timeout=timeout,
+            tick=tick,
+            kp_lin=kp_lin,
+            kp_yaw=kp_yaw,
+        )
+
+    def turn_for(
+        self,
+        angle_deg: float,
+        max_vyaw: float = 0.8,
+        yaw_tolerance_deg: float = 2.5,
+        timeout: float = 10.0,
+        tick: float = 0.05,
+        kp_yaw: float = 1.8,
+        gait_type: int = 0,
+    ) -> bool:
+        yaw0 = self.get_yaw()
+        if yaw0 is None:
+            raise RuntimeError("turn_for requires live IMU yaw.")
+        delta = math.radians(float(angle_deg))
+        tol = math.radians(max(0.1, float(yaw_tolerance_deg)))
+        if abs(delta) <= tol:
+            self.stop()
+            return True
+        target = self._wrap_angle(float(yaw0) + delta)
+        self.set_gait_type(int(gait_type))
+        t0 = time.time()
+        ok = False
+        try:
+            while (time.time() - t0) <= max(0.1, float(timeout)):
+                yaw = self.get_yaw()
+                if yaw is None:
+                    time.sleep(max(0.01, float(tick)))
+                    continue
+                err = self._wrap_angle(target - float(yaw))
+                if abs(err) <= tol:
+                    ok = True
+                    break
+                vyaw_cmd = self._clamp(float(kp_yaw) * err, -max_vyaw, max_vyaw)
+                self.loco_move(0.0, 0.0, vyaw_cmd)
+                time.sleep(max(0.01, float(tick)))
+        finally:
+            self.stop()
+        return ok
 
     def _rpc_get_int(self, api_id: int) -> Optional[int]:
         return rpc_get_int(self._client, api_id)
@@ -324,6 +649,9 @@ class Robot:
     def fsm_2_airborne(self) -> None:
         if hasattr(self._client, "SetFsmId"):
             self._client.SetFsmId(2)
+
+    def fsm_2_squat(self) -> None:
+        self.fsm_2_airborne()
 
     # ------------------------------------------------------------------
     # IMU + lidar getters
@@ -411,6 +739,21 @@ class Robot:
             return []
         return self._extract_xyz_from_cloud(msg, max_points=max_points)
 
+    def get_camera_image_jpeg(self) -> bytes:
+        code, data = self._get_video_client().GetImageSample()
+        if int(code) != 0:
+            raise RuntimeError(f"GetImageSample failed with code={code}")
+        return bytes(data)
+
+    def get_camera_frame_bgr(self):
+        return decode_video_frame_bgr(self.get_camera_image_jpeg())
+
+    def get_camera_frame_rgb(self):
+        import cv2
+
+        frame = self.get_camera_frame_bgr()
+        return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
     # ------------------------------------------------------------------
     # SLAM + navigation
     # ------------------------------------------------------------------
@@ -428,6 +771,12 @@ class Robot:
 
     def set_path_point(self, x: float, y: float, yaw: float = 0.0) -> None:
         self._path_points.append((float(x), float(y), float(yaw)))
+
+    def get_path_points(self) -> list[tuple[float, float, float]]:
+        return list(self._path_points)
+
+    def clear_path_points(self) -> None:
+        self._path_points.clear()
 
     def _run_pose_nav(self, x: float, y: float, yaw: float = 0.0) -> int:
         client = self._get_slam_client()
@@ -452,6 +801,25 @@ class Robot:
             if clear_on_finish:
                 self._path_points.clear()
         return ok
+
+    def get_slam_info(self) -> str | None:
+        return self._ensure_slam_info_subscriber().get_info()
+
+    def get_slam_key(self) -> str | None:
+        return self._ensure_slam_info_subscriber().get_key()
+
+    def get_slam_pose(self, timeout_s: float = 0.4) -> tuple[float, float, float] | None:
+        sub = self._ensure_slam_info_subscriber()
+        t0 = time.time()
+        while time.time() - t0 < max(0.05, float(timeout_s)):
+            pose = sub.get_pose()
+            if pose is not None:
+                return pose
+            time.sleep(0.03)
+        return None
+
+    def get_slam_odom_pose(self) -> tuple[float, float, float] | None:
+        return self._ensure_slam_odom_subscriber().get_pose()
 
     def debug_api(
         self,
@@ -543,6 +911,9 @@ class Robot:
     def hanged_boot(self) -> None:
         self._client = hanger_boot_sequence(iface=self.iface, domain_id=self.domain_id)
 
+    def hanging_boot(self) -> None:
+        self.balanced_stand(0)
+
     def say(self, text: str = "what would you like me to say?", volume: int | None = None) -> int:
         return self._get_audio().speak(text, volume=volume)
 
@@ -556,6 +927,34 @@ class Robot:
         duration: float | None = None,
     ) -> int:
         return self._get_audio().set_headlight(color=color, intensity=intensity, duration=duration)
+
+    def hand_open(self, hand: str = "right", hold_s: float = 0.6, rate_hz: float = 50.0) -> None:
+        self._get_hand(hand).open(hold_s=hold_s, rate_hz=rate_hz)
+
+    def hand_close(self, hand: str = "right", hold_s: float = 0.6, rate_hz: float = 50.0) -> None:
+        self._get_hand(hand).close(hold_s=hold_s, rate_hz=rate_hz)
+
+    def hand_pose(
+        self,
+        targets: list[float],
+        hand: str = "right",
+        hold_s: float = 0.6,
+        rate_hz: float = 50.0,
+        kp: float = 1.2,
+        kd: float = 0.05,
+        tau: float = 0.05,
+    ) -> None:
+        self._get_hand(hand).set_targets(targets, hold_s=hold_s, rate_hz=rate_hz, kp=kp, kd=kd, tau=tau)
+
+    def hand_move_finger(
+        self,
+        finger_name: str,
+        hand: str = "right",
+        hold_s: float = 1.0,
+        settle_s: float = 0.6,
+        rate_hz: float = 50.0,
+    ) -> None:
+        self._get_hand(hand).move_finger(finger_name, hold_s=hold_s, settle_s=settle_s, rate_hz=rate_hz)
 
 
 __all__ = ["Robot", "ImuData"]

@@ -1,0 +1,38 @@
+Object Detection FAQ (obj_detection)
+====================================
+
+Q: Which script is the canonical starting point?
+A: `soda_can_detect.py`. This is the clean, documented baseline in this folder.
+
+Q: What does `soda_can_detect.py` do?
+A: Captures one RGB frame via Unitree `VideoClient` and classifies soda-can
+   presence using CLIP zero-shot inference.
+
+Q: How do I run it?
+A: `python3 soda_can_detect.py --iface eth0`
+
+Q: Common CLI args?
+A: `--iface`, `--threshold`, `--timeout`, `--save`, `--show`.
+
+Q: Example with saved annotated image?
+A: `python3 soda_can_detect.py --iface eth0 --threshold 0.6 --save /tmp/soda.jpg`
+
+Q: Does this script use depth?
+A: No. `soda_can_detect.py` uses single-frame RGB from `VideoClient`.
+
+Q: Where are RGBD/CLIP streaming variants?
+A: See `g1/scripts/sensors/manual_streaming/receive_realsense_gst_clip_can.py`
+   and related streaming scripts in `manual_streaming/`.
+
+Q: Why are there duplicate files in this folder?
+A: This folder contains experiments/copies (filenames with spaces, `(1)`, or
+   repeated suffixes). Prefer `soda_can_detect.py` unless you are debugging
+   a specific variant.
+
+Q: Typical failure causes?
+A: Wrong NIC in `--iface`, robot/videohub unreachable, or missing ML/runtime
+   deps (`torch`, `transformers`, `opencv-python`, `unitree_sdk2py`).
+
+Q: How do I test connectivity quickly?
+A: Verify robot network and run with a longer timeout:
+   `python3 soda_can_detect.py --iface eth0 --timeout 5.0 --show`
