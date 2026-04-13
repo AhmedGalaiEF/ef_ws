@@ -15,7 +15,7 @@ import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 from dash import Input, Output, State, dcc, html
 
-# dev.ef_client is imported lazily inside get_robot() so the app starts
+# dev.sdk_client is imported lazily inside get_robot() so the app starts
 # even when the SDK is not installed.
 
 
@@ -427,7 +427,7 @@ def get_robot() -> Any:
         if ROBOT_INIT_ERR is not None:
             return None
         try:
-            from dev.ef_client import Robot  # deferred import
+            from dev.sdk_client import Robot  # deferred import
             ROBOT_INSTANCE = Robot(
                 iface=ROBOT_IFACE,
                 lidar_cloud_topic=ROBOT_LIDAR_CLOUD_TOPIC,
@@ -773,7 +773,7 @@ def on_connection_action(
         # Placeholder — SDK environment setup not yet automated.
         msg = (
             "Auto-setup is not yet implemented for the SDK dashboard. "
-            "Please install dev.ef_client manually, then click Connect."
+            "Please install dev.sdk_client manually, then click Connect."
         )
         label, color = _robot_status()
         return label, color, msg

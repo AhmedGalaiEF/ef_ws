@@ -15,7 +15,7 @@ import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 from dash import Input, Output, State, dcc, html
 
-from dev.ef_client import Robot
+from dev.sdk_client import Robot
 
 
 ROBOT_LOCK = threading.Lock()

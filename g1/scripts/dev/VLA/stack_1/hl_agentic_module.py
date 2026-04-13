@@ -2,9 +2,9 @@
 """
 hl_agentic_module.py
 
-High-level agentic task executor for Unitree G1 using dev/ef_client.py.
+High-level agentic task executor for Unitree G1 using dev/sdk_client.py.
 Input is a JSON task specification. The module validates it, creates
-`ef_client.Robot`, executes actions sequentially, and prints a JSON report.
+`sdk_client.Robot`, executes actions sequentially, and prints a JSON report.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ if str(_DEV_DIR) not in sys.path:
     sys.path.insert(0, str(_DEV_DIR))
 
 if TYPE_CHECKING:
-    from ef_client import Robot  # noqa: F401
+    from sdk_client import Robot  # noqa: F401
 
 
 SUPPORTED_SCHEMA_VERSION = "1.0"
@@ -116,7 +116,7 @@ def _load_task(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _build_robot(task: dict[str, Any]) -> Robot:
-    from ef_client import Robot  # imported lazily so --print-example works without SDK deps
+    from sdk_client import Robot  # imported lazily so --print-example works without SDK deps
 
     cfg = task.get("robot", {})
     if cfg is None:
@@ -428,7 +428,7 @@ def _example_task() -> dict[str, Any]:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="High-level JSON task executor using ef_client.Robot",
+        description="High-level JSON task executor using sdk_client.Robot",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("--task-file", default="", help="Path to JSON task file")

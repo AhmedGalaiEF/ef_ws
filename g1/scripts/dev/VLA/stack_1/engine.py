@@ -4,7 +4,7 @@ engine.py
 
 Fuses three sources:
 1) RGBD feed received through sensors/manual_streaming (GStreamer UDP receiver)
-2) Robot lidar occupancy grid summary from dev/ef_client.Robot
+2) Robot lidar occupancy grid summary from dev/sdk_client.Robot
 3) Latest output from vision_module.py (JSON/JSONL)
 
 Then prompts a Hugging Face reasoning model to generate an executable task JSON
@@ -268,7 +268,7 @@ def _capture_rgbd_snapshot(rgb_port: int, depth_port: int, width: int, height: i
 
 def _lidar_occupancy_summary(iface: str, domain_id: int, wait_s: float, threshold: float = 0.15) -> dict[str, Any]:
     import numpy as np
-    from ef_client import Robot
+    from sdk_client import Robot
 
     robot = Robot(iface=iface, domain_id=domain_id, safety_boot=True, auto_start_sensors=True)
     time.sleep(max(0.2, float(wait_s)))
@@ -409,7 +409,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--prompt", default="", help="Task prompt to guide planner")
     parser.add_argument("--prompt-file", default="", help="Path to file containing prompt text")
 
-    parser.add_argument("--iface", default="eth0", help="Robot network interface passed to ef_client")
+    parser.add_argument("--iface", default="eth0", help="Robot network interface passed to sdk_client")
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id")
 
     parser.add_argument("--rgb-port", type=int, default=5600)

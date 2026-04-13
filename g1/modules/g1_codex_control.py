@@ -21,7 +21,7 @@ MODULES_DIR = Path(__file__).resolve().parent
 if str(MODULES_DIR) not in sys.path:
     sys.path.insert(0, str(MODULES_DIR))
 
-from ef_client import Robot
+from sdk_client import Robot
 
 # ---------------------------------------------------------------------------
 # Helpers

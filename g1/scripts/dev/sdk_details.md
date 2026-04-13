@@ -1,6 +1,6 @@
 # Unitree G1 SDK Grundlagen (ohne High-Level-Wrapper)
 
-Diese Anleitung zeigt das Low-Level-Muster zur Steuerung des G1 direkt mit `unitree_sdk2py`, ohne `ef_client`.
+Diese Anleitung zeigt das Low-Level-Muster zur Steuerung des G1 direkt mit `unitree_sdk2py`, ohne `sdk_client`.
 
 ---
 

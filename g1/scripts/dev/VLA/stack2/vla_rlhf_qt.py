@@ -6,7 +6,7 @@ Flow
 ====
 1. User enters a task prompt.
 2. Planner LLM (Ollama or Anthropic) generates a JSON step-by-step plan.
-3. Each step is executed via ef_client.Robot (or simulated in dry-run mode).
+3. Each step is executed via sdk_client.Robot (or simulated in dry-run mode).
 4. After each step the user rates it: "Wrong Action" | "Correct Action".
 5. After all steps the user rates the outcome: "Task Incomplete" | "Task Complete".
 6. Per-session feedback is logged to rlhf_log.jsonl beside this file.
@@ -28,7 +28,7 @@ except ImportError as exc:
     raise SystemExit("PySide6 is required.  Install with: pip install PySide6") from exc
 
 # ---------------------------------------------------------------------------
-# Path setup — makes ef_client importable
+# Path setup — makes sdk_client importable
 # ---------------------------------------------------------------------------
 
 _THIS = Path(__file__).resolve()
@@ -203,7 +203,7 @@ def _extract_json_array(text: str) -> list[dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
-# Action dispatcher — thin wrapper around ef_client.Robot
+# Action dispatcher — thin wrapper around sdk_client.Robot
 # ---------------------------------------------------------------------------
 
 def _dispatch_action(robot: Any, action: dict[str, Any]) -> Any:
@@ -396,7 +396,7 @@ class PlanWorker(QtCore.QObject):
         # 2. Initialise robot
         robot = None
         if not self._dry_run:
-            from ef_client import Robot  # noqa: PLC0415
+            from sdk_client import Robot  # noqa: PLC0415
             robot = Robot(
                 iface=self._iface,
                 domain_id=self._domain_id,

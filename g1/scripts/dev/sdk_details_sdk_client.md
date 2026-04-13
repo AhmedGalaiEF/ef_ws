@@ -1,13 +1,13 @@
-# Unitree G1 SDK Grundlagen mit `ef_client.Robot`
+# Unitree G1 SDK Grundlagen mit `sdk_client.Robot`
 
-Diese Anleitung entspricht inhaltlich der Low-Level-Variante, verwendet aber den High-Level-Wrapper `ef_client.Robot`.
+Diese Anleitung entspricht inhaltlich der Low-Level-Variante, verwendet aber den High-Level-Wrapper `sdk_client.Robot`.
 
 ---
 
 ## 1) Minimaler Import
 
 ```python
-from ef_client import Robot
+from sdk_client import Robot
 ```
 
 ---
@@ -110,7 +110,7 @@ robot.run(0.4, 0.0, 0.0)
 
 ```python
 import time
-from ef_client import Robot
+from sdk_client import Robot
 
 robot = Robot(iface="enp1s0", domain_id=0)
 time.sleep(0.5)  # kurze Wartezeit bis erste Sensordaten verfuegbar sind

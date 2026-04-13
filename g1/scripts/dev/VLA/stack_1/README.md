@@ -4,7 +4,7 @@ This folder contains a minimal but practical Vision-Language-Action pipeline for
 
 - `vision_module.py`: turns RGB feed into structured semantic state
 - `engine.py`: fuses vision + RGBD + lidar occupancy and asks a Hugging Face reasoning model to produce `task.json`
-- `hl_agentic_module.py`: validates and executes `task.json` with `dev/ef_client.py`
+- `hl_agentic_module.py`: validates and executes `task.json` with `dev/sdk_client.py`
 
 The design goal is safe, short-horizon, high-level robot task generation for humanoid locomotion and dexterous actions.
 
@@ -35,13 +35,13 @@ This stack splits responsibilities cleanly:
 - Planning (`engine.py`)
 - Reads latest vision JSON output
 - Captures one RGB + depth-visual snapshot from manual streaming (`payload=96/97`)
-- Reads lidar height map via `ef_client.Robot` and computes occupancy summary
+- Reads lidar height map via `sdk_client.Robot` and computes occupancy summary
 - Builds a fused world-state prompt and queries a Hugging Face causal model
 - Produces normalized `task.json` for execution
 
 - Execution (`hl_agentic_module.py`)
 - Validates `task.json` (`schema_version: "1.0"`)
-- Instantiates `ef_client.Robot`
+- Instantiates `sdk_client.Robot`
 - Runs action list sequentially with per-action status/timing
 - Returns execution report as JSON
 
@@ -80,7 +80,7 @@ System packages (GStreamer path):
 Robot/runtime dependencies:
 
 - `unitree_sdk2py`
-- `dev/ef_client.py` dependencies in this repo
+- `dev/sdk_client.py` dependencies in this repo
 - reachable robot interface (`eth0` or your actual NIC)
 
 ## Quick Start

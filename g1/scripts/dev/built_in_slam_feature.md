@@ -1,6 +1,6 @@
 # Eingebaute SLAM-Funktion (G1) - Kurzuebersicht
 
-Diese Notiz fasst den eingebauten SLAM-Stack im Repo zusammen (`slam_operate` + DDS-Map/Odom-Themen), das aktuelle Verhalten in `ef_client` sowie den Vergleich zu externem SLAM.
+Diese Notiz fasst den eingebauten SLAM-Stack im Repo zusammen (`slam_operate` + DDS-Map/Odom-Themen), das aktuelle Verhalten in `sdk_client` sowie den Vergleich zu externem SLAM.
 
 ---
 
@@ -42,7 +42,7 @@ Der lokale/eingebaute SLAM-Pfad in diesem Workspace nutzt:
 - Livox SDK2 Shared Library (ueber `livox2_python.py`)
 - `kiss-icp` (in den Notizen kompatibel mit API von `v1.2.3`)
 - Open3D (`Visualizer`) bzw. headless Varianten
-- PyQt/PySide in GUI-Wrappern (`run_geoff_gui*`, `ef_client.slam_service`)
+- PyQt/PySide in GUI-Wrappern (`run_geoff_gui*`, `sdk_client.slam_service`)
 - Unitree SDK2 Python (`unitree_sdk2py`)
 
 Laufzeit-Hinweise aus den Logdateien:
@@ -51,9 +51,9 @@ Laufzeit-Hinweise aus den Logdateien:
 
 ---
 
-## 4) Eingebauter SLAM-Flow mit `ef_client.Robot`
+## 4) Eingebauter SLAM-Flow mit `sdk_client.Robot`
 
-Wichtige Einstiege in `ef_client.py`:
+Wichtige Einstiege in `sdk_client.py`:
 - `start_slam(viz=False)` / `stop_slam()`
 - `slam_service(...)` (PyQt-Bedienfenster)
 - `set_path_point(x, y, yaw)` + `navigate_path(...)`

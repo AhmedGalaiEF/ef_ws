@@ -31,7 +31,7 @@ sub.Init(cb, 10)
 
 Used in:
 - `g1/scripts/basic/g1_hl_gait_measure.py`
-- `g1/scripts/dev/ef_client.py`
+- `g1/scripts/dev/sdk_client.py`
 
 ## 3) Locomotion Control (`LocoClient`)
 Main locomotion client for move/stop/gait/FSM operations.
@@ -56,7 +56,7 @@ Common calls:
 See:
 - `g1/scripts/basic/g1_loco_client_example.py`
 - `g1/scripts/basic/g1_hl_motion_sequence.py`
-- `g1/scripts/dev/ef_client.py`
+- `g1/scripts/dev/sdk_client.py`
 
 ## 4) Arm/Low-Level Motion (Publish `LowCmd_`)
 For direct arm or full-body low-level command streams:
@@ -133,14 +133,14 @@ resp = client.start_mapping("indoor")
 
 See:
 - `g1/scripts/navigation/obstacle_avoidance/slam_service.py`
-- `g1/scripts/dev/ef_client.py` (high-level wrappers)
+- `g1/scripts/dev/sdk_client.py` (high-level wrappers)
 
-## 8) High-Level Wrapper: `ef_client.Robot`
+## 8) High-Level Wrapper: `sdk_client.Robot`
 If you do not need raw SDK calls, use:
 
 ```python
 # typically run from within g1/scripts
-from dev.ef_client import Robot
+from dev.sdk_client import Robot
 
 robot = Robot(iface="enp1s0")
 robot.walk(0.2, 0.0, 0.0)
@@ -168,6 +168,6 @@ Used broadly in `g1/scripts/basic`, `g1/scripts/arm_motion/pbd`, and `g1/scripts
 ## 10) Where To Read Next
 - Root overview: `README.md`
 - Script index: `g1/scripts/README.md`
-- `ef_client` details: `g1/scripts/dev/sdk_details_ef_client.md`
+- `sdk_client` details: `g1/scripts/dev/sdk_details_sdk_client.md`
 - G1 docs index: `g1/docs/index.md`
 - RealSense docs: `g1/docs/quick_start.md`, `g1/docs/how_it_works.md`

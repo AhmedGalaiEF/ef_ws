@@ -130,7 +130,7 @@ Provide repo and runtime constraints.
 
 **Example**
 ```text
-Repo root is /home/ag/ef_ws, use g1/scripts/dev/ef_client.py conventions, do not touch unrelated files.
+Repo root is /home/ag/ef_ws, use g1/scripts/dev/sdk_client.py conventions, do not touch unrelated files.
 ```
 
 ### Task
@@ -183,14 +183,14 @@ Acceptance Criteria:
 
 ---
 
-## G1 Entry Point: `ef_client.Robot`
+## G1 Entry Point: `sdk_client.Robot`
 
-For most real-robot workflows, start with `g1/scripts/dev/ef_client.py` and its `Robot` class.
+For most real-robot workflows, start with `g1/scripts/dev/sdk_client.py` and its `Robot` class.
 
 **Typical use** (from inside `g1/scripts`):
 
 ```python
-from dev.ef_client import Robot
+from dev.sdk_client import Robot
 
 robot = Robot(iface="enp1s0", domain_id=0, safety_boot=True)
 robot.walk(0.2, 0.0, 0.0)   # balanced gait command
@@ -220,7 +220,7 @@ robot.stop()
 
 **See also**
 - `g1/scripts/dev/sdk_details.md`
-- `g1/scripts/dev/sdk_details_ef_client.md`
+- `g1/scripts/dev/sdk_details_sdk_client.md`
 
 ---
 

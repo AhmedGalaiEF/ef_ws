@@ -1,6 +1,6 @@
 """
-ef_client.py
-============
+sdk_client.py
+=============
 
 Pragmatic high-level client for Unitree G1.
 
@@ -852,7 +852,7 @@ __all__ = ["Robot", "ImuData"]
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Smoke test for ef_client Robot wrapper")
+    parser = argparse.ArgumentParser(description="Smoke test for sdk_client Robot wrapper")
     parser.add_argument("--iface", default="eth0")
     parser.add_argument("--no-safety", action="store_true")
     args = parser.parse_args()

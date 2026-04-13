@@ -150,7 +150,7 @@
  1175  ls
  1176  cd troubleshooting/
  1177  ls
- 1178  py ef_client.py --iface enp1s0
+ 1178  py sdk_client.py --iface enp1s0
  1179  ls
  1180  cd ..
  1181  ls
@@ -268,7 +268,7 @@
  1293  ls
  1294  ipy
  1295  ls
- 1296  py ef_client.py --iface enp1s0
+ 1296  py sdk_client.py --iface enp1s0
  1297  nmap -sn 192.168.123.0/24
  1298  ssh unitree@192.168.123.164
  1299  ssh unitree@192.168.12.1

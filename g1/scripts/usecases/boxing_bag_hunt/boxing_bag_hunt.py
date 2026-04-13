@@ -31,7 +31,7 @@ DEV_DIR = SCRIPTS_ROOT / "dev"
 if str(DEV_DIR) not in sys.path:
     sys.path.insert(0, str(DEV_DIR))
 
-from ef_client import Robot  # type: ignore  # noqa: E402
+from sdk_client import Robot  # type: ignore  # noqa: E402
 
 
 @dataclass
