@@ -1,0 +1,218 @@
+[1.438s] Invoking command in '/home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main': PYTHONPATH=/home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/build/g1_description/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base build/g1_description build --build-base /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/build/g1_description/build install --record /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/build/g1_description/install.log --single-version-externally-managed install_data
+[1.767s] running egg_info
+[1.767s] creating build/g1_description/g1_description.egg-info
+[1.794s] writing build/g1_description/g1_description.egg-info/PKG-INFO
+[1.794s] writing dependency_links to build/g1_description/g1_description.egg-info/dependency_links.txt
+[1.795s] writing entry points to build/g1_description/g1_description.egg-info/entry_points.txt
+[1.795s] writing requirements to build/g1_description/g1_description.egg-info/requires.txt
+[1.795s] writing top-level names to build/g1_description/g1_description.egg-info/top_level.txt
+[1.795s] writing manifest file 'build/g1_description/g1_description.egg-info/SOURCES.txt'
+[1.850s] reading manifest file 'build/g1_description/g1_description.egg-info/SOURCES.txt'
+[1.852s] writing manifest file 'build/g1_description/g1_description.egg-info/SOURCES.txt'
+[1.853s] running build
+[1.853s] running build_py
+[1.854s] creating /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/build/g1_description/build
+[1.855s] creating /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/build/g1_description/build/lib
+[1.855s] creating /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/build/g1_description/build/lib/g1_description
+[1.855s] copying g1_description/demo_joint_motion.py -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/build/g1_description/build/lib/g1_description
+[1.855s] copying g1_description/rviz_joint_motion.py -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/build/g1_description/build/lib/g1_description
+[1.856s] copying g1_description/__init__.py -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/build/g1_description/build/lib/g1_description
+[1.856s] copying g1_description/lowstate_jointstate_bridge.py -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/build/g1_description/build/lib/g1_description
+[1.856s] running install
+[1.861s] running install_lib
+[1.883s] creating /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/lib/python3.12/site-packages/g1_description
+[1.883s] copying /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/build/g1_description/build/lib/g1_description/demo_joint_motion.py -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/lib/python3.12/site-packages/g1_description
+[1.883s] copying /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/build/g1_description/build/lib/g1_description/rviz_joint_motion.py -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/lib/python3.12/site-packages/g1_description
+[1.883s] copying /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/build/g1_description/build/lib/g1_description/__init__.py -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/lib/python3.12/site-packages/g1_description
+[1.883s] copying /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/build/g1_description/build/lib/g1_description/lowstate_jointstate_bridge.py -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/lib/python3.12/site-packages/g1_description
+[1.884s] byte-compiling /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/lib/python3.12/site-packages/g1_description/demo_joint_motion.py to demo_joint_motion.cpython-312.pyc
+[1.885s] byte-compiling /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/lib/python3.12/site-packages/g1_description/rviz_joint_motion.py to rviz_joint_motion.cpython-312.pyc
+[1.888s] byte-compiling /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/lib/python3.12/site-packages/g1_description/__init__.py to __init__.cpython-312.pyc
+[1.888s] byte-compiling /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/lib/python3.12/site-packages/g1_description/lowstate_jointstate_bridge.py to lowstate_jointstate_bridge.cpython-312.pyc
+[1.889s] running install_data
+[1.889s] creating /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/ament_index
+[1.890s] creating /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/ament_index/resource_index
+[1.890s] creating /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/ament_index/resource_index/packages
+[1.891s] copying resource/g1_description -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/ament_index/resource_index/packages
+[1.891s] copying package.xml -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description
+[1.891s] creating /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/launch
+[1.891s] copying launch/rviz_sim.launch.py -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/launch
+[1.891s] copying launch/robot_state_publisher.launch.py -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/launch
+[1.891s] creating /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/rviz
+[1.891s] copying rviz/g1.rviz -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/rviz
+[1.892s] creating /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/urdf
+[1.892s] copying urdf/g1_29dof_with_hand_rev_1_0_pkg.urdf -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/urdf
+[1.892s] creating /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.892s] copying meshes/right_elbow_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.895s] copying meshes/logo_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.895s] copying meshes/left_palm_force_sensor.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.899s] copying meshes/dex1_col_1.stl -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.900s] copying meshes/left_middle_2.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.901s] copying meshes/right_ring_force_sensor_3.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.902s] copying meshes/right_wrist_yaw_link_5010.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.904s] copying meshes/left_rubber_hand.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.909s] copying meshes/left_shoulder_roll_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.910s] copying meshes/right_hand_index_1_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.913s] copying meshes/left_wrist_yaw_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.915s] copying meshes/left_index_force_sensor_3.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.915s] copying meshes/left_little_1.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.923s] copying meshes/right_hip_yaw_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.926s] copying meshes/right_ankle_pitch_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.927s] copying meshes/left_middle_force_sensor_3.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.928s] copying meshes/dex1_col_2.stl -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.929s] copying meshes/waist_support_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.930s] copying meshes/torso_constraint_R_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.932s] copying meshes/Link16_L.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.933s] copying meshes/waist_constraint_R.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.934s] copying meshes/left_thumb_force_sensor_2.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.935s] copying meshes/d455_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.943s] copying meshes/left_little_2.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.945s] copying meshes/right_middle_force_sensor_2.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.946s] copying meshes/left_little_force_sensor_2.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.948s] copying meshes/Dex1_finger_link_2.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.949s] copying meshes/waist_yaw_link_rev_1_0.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.951s] copying meshes/left_hand_thumb_1_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.952s] copying meshes/right_shoulder_pitch_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.953s] copying meshes/left_shoulder_yaw_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.954s] copying meshes/left_little_force_sensor_3.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.955s] copying meshes/right_base_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.971s] copying meshes/left_index_2.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.972s] copying meshes/left_wrist_roll_rubber_hand.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.979s] copying meshes/right_thumb_force_sensor_2.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.980s] copying meshes/right_thumb_1.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.981s] copying meshes/left_middle_1.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.983s] copying meshes/Link22_R.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.985s] copying meshes/right_hand_palm_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.991s] copying meshes/right_index_force_sensor_3.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.992s] copying meshes/right_knee_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[1.994s] copying meshes/right_rubber_hand.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.000s] copying meshes/Link11_L.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.000s] copying meshes/torso_link_rev_1_0.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.007s] copying meshes/waist_constraint_L.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.008s] copying meshes/left_middle_force_sensor_1.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.009s] copying meshes/right_little_force_sensor_2.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.010s] copying meshes/right_hand_thumb_1_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.012s] copying meshes/left_shoulder_pitch_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.013s] copying meshes/right_middle_force_sensor_1.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.015s] copying meshes/right_thumb_3.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.017s] copying meshes/torso_constraint_R_rod_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.017s] copying meshes/right_wrist_roll_link_5010.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.023s] copying meshes/right_index_1.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.027s] copying meshes/Link13_R.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.030s] copying meshes/Link17_R.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.031s] copying meshes/right_wrist_roll_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.032s] copying meshes/left_middle_force_sensor_2.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.033s] copying meshes/right_little_force_sensor_3.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.034s] copying meshes/Link12_L.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.037s] copying meshes/right_index_force_sensor_2.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.038s] copying meshes/Dex1_base_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.046s] copying meshes/waist_roll_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.047s] copying meshes/right_ring_force_sensor_2.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.049s] copying meshes/torso_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.054s] copying meshes/right_index_2.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.056s] copying meshes/left_ring_1.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.058s] copying meshes/left_thumb_1.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.058s] copying meshes/right_wrist_pitch_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.058s] copying meshes/Link13_L.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.060s] copying meshes/left_hand_palm_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.068s] copying meshes/right_shoulder_yaw_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.069s] copying meshes/left_hip_yaw_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.071s] copying meshes/right_little_2.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.072s] copying meshes/left_base_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.079s] copying meshes/left_hand_index_1_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.083s] copying meshes/left_index_force_sensor_2.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.084s] copying meshes/right_thumb_2.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.085s] copying meshes/Link20_L.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.087s] copying meshes/left_hand_thumb_2_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.091s] copying meshes/left_wrist_yaw_link_5010.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.093s] copying meshes/left_hand_middle_0_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.095s] copying meshes/Link14_L.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.097s] copying meshes/R_hand_base_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.102s] copying meshes/left_thumb_3.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.104s] copying meshes/Link16_R.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.105s] copying meshes/right_middle_2.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.106s] copying meshes/Dex1_finger_link_1.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.108s] copying meshes/Link14_R.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.109s] copying meshes/left_wrist_roll_link_5010.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.111s] copying meshes/head_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.113s] copying meshes/head_servo_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.115s] copying meshes/right_middle_1.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.118s] copying meshes/Link22_L.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.120s] copying meshes/right_hand_middle_1_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.124s] copying meshes/right_hand_thumb_2_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.133s] copying meshes/torso_constraint_L_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.135s] copying meshes/right_little_force_sensor_1.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.138s] copying meshes/left_elbow_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.138s] copying meshes/left_ring_force_sensor_1.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.140s] copying meshes/left_thumb_force_sensor_3.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.141s] copying meshes/torso_constraint_L_rod_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.142s] copying meshes/right_thumb_4.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.144s] copying meshes/L_hand_base_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.148s] copying meshes/Link17_L.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.150s] copying meshes/right_ring_force_sensor_1.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.151s] copying meshes/right_wrist_pitch_link_5010.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.152s] copying meshes/left_ring_2.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.153s] copying meshes/Link18_R.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.154s] copying meshes/right_ankle_roll_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.156s] copying meshes/left_hand_thumb_0_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.157s] copying meshes/pelvis.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.159s] copying meshes/Link19_R.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.161s] copying meshes/left_wrist_pitch_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.161s] copying meshes/right_wrist_yaw_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.162s] copying meshes/right_little_1.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.166s] copying meshes/right_hip_pitch_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.167s] copying meshes/left_index_1.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.170s] copying meshes/right_shoulder_roll_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.171s] copying meshes/left_index_force_sensor_1.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.173s] copying meshes/left_little_force_sensor_1.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.174s] copying meshes/Link18_L.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.175s] copying meshes/left_knee_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.178s] copying meshes/right_ring_2.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.179s] copying meshes/left_ring_force_sensor_3.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.180s] copying meshes/right_hand_middle_0_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.181s] copying meshes/Link15_R.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.183s] copying meshes/left_hand_middle_1_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.186s] copying meshes/torso_link_23dof_rev_1_0.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.213s] copying meshes/right_hand_index_0_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.215s] copying meshes/right_hip_roll_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.216s] copying meshes/left_ankle_pitch_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.216s] copying meshes/right_hand_thumb_0_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.217s] copying meshes/right_thumb_force_sensor_4.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.217s] copying meshes/left_hip_pitch_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.219s] copying meshes/left_thumb_force_sensor_1.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.220s] copying meshes/Link15_L.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.222s] copying meshes/right_thumb_force_sensor_3.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.223s] copying meshes/right_palm_force_sensor.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.227s] copying meshes/left_thumb_force_sensor_4.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.228s] copying meshes/Link11_R.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.228s] copying meshes/waist_roll_link_rev_1_0.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.229s] copying meshes/left_ankle_roll_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.237s] copying meshes/Link19_L.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.239s] copying meshes/right_ring_1.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.242s] copying meshes/right_thumb_force_sensor_1.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.244s] copying meshes/right_middle_force_sensor_3.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.244s] copying meshes/pelvis_contour_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.248s] copying meshes/Link12_R.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.251s] copying meshes/left_ring_force_sensor_2.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.253s] copying meshes/left_thumb_2.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.254s] copying meshes/left_hip_roll_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.256s] copying meshes/left_wrist_pitch_link_5010.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.256s] copying meshes/waist_yaw_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.258s] copying meshes/left_thumb_swing.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.259s] copying meshes/right_wrist_roll_rubber_hand.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.267s] copying meshes/Link21_L.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.269s] copying meshes/left_hand_index_0_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.270s] copying meshes/right_index_force_sensor_1.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.271s] copying meshes/left_thumb_4.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.273s] copying meshes/xl330_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.275s] copying meshes/Link20_R.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.276s] copying meshes/left_wrist_roll_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.277s] copying meshes/Link21_R.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+[2.278s] running install_egg_info
+[2.304s] Copying build/g1_description/g1_description.egg-info to /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/lib/python3.12/site-packages/g1_description-0.0.0-py3.12.egg-info
+[2.305s] running install_scripts
+[2.476s] Installing demo_joint_motion script to /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/lib/g1_description
+[2.477s] Installing lowstate_jointstate_bridge script to /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/lib/g1_description
+[2.477s] Installing rviz_joint_motion script to /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/lib/g1_description
+[2.478s] writing list of installed files to '/home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/build/g1_description/install.log'
+[2.517s] Invoked command in '/home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main' returned '0': PYTHONPATH=/home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/build/g1_description/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base build/g1_description build --build-base /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/build/g1_description/build install --record /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/build/g1_description/install.log --single-version-externally-managed install_data
