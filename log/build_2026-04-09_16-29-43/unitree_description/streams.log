@@ -1,0 +1,44 @@
+[0.022s] Invoking command in '/home/melodse/ef_ws/build/unitree_description': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/melodse/ef_ws/install/g1_description:/opt/ros/jazzy /usr/bin/cmake --build /home/melodse/ef_ws/build/unitree_description -- -j12 -l12
+[0.077s] /usr/bin/cmake -S/home/melodse/ef_ws/go2/sim/unitree_description-master -B/home/melodse/ef_ws/build/unitree_description --check-build-system CMakeFiles/Makefile.cmake 0
+[0.782s] -- JRL cmakemodules not found. Let's fetch it.
+[1.991s] -- Configuring "unitree_description" (https://github.com/inria-paris-robotics-lab/unitree_description)
+[1.991s] -- Package version (ROS package.xml): 0.0.0
+[2.547s] -- Could NOT find Doxygen (missing: DOXYGEN_EXECUTABLE) 
+[2.548s] -- Failed to find Doxygen, documentation will not be generated.
+[2.617s] -- PythonLibraryDirs: /usr/lib/x86_64-linux-gnu
+[2.617s] -- PythonLibVersionString: 3.12.3
+[2.638s] -- Python site lib: lib/python3.12/site-packages
+[2.639s] -- Python include dirs: /usr/include/python3.12
+[2.699s] -- Create files for AMENT (ROS 2)
+[2.704s] -- Create files for AMENT (ROS 2)
+[2.706s] -- Configuring done (2.6s)
+[2.796s] -- Generating done (0.1s)
+[2.816s] -- Build files have been written to: /home/melodse/ef_ws/build/unitree_description
+[2.820s] /usr/bin/cmake -E cmake_progress_start /home/melodse/ef_ws/build/unitree_description/CMakeFiles /home/melodse/ef_ws/build/unitree_description//CMakeFiles/progress.marks
+[2.828s] /usr/bin/gmake  -f CMakeFiles/Makefile2 all
+[2.830s] gmake[1]: Entering directory '/home/melodse/ef_ws/build/unitree_description'
+[2.830s] /usr/bin/gmake  -f python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_go2_sim_unitree_description-master_python.dir/build.make python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_go2_sim_unitree_description-master_python.dir/depend
+[2.833s] gmake[2]: Entering directory '/home/melodse/ef_ws/build/unitree_description'
+[2.834s] cd /home/melodse/ef_ws/build/unitree_description && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/melodse/ef_ws/go2/sim/unitree_description-master /home/melodse/ef_ws/go2/sim/unitree_description-master/python /home/melodse/ef_ws/build/unitree_description /home/melodse/ef_ws/build/unitree_description/python /home/melodse/ef_ws/build/unitree_description/python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_go2_sim_unitree_description-master_python.dir/DependInfo.cmake "--color="
+[2.844s] gmake[2]: Leaving directory '/home/melodse/ef_ws/build/unitree_description'
+[2.844s] /usr/bin/gmake  -f python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_go2_sim_unitree_description-master_python.dir/build.make python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_go2_sim_unitree_description-master_python.dir/build
+[2.845s] gmake[2]: Entering directory '/home/melodse/ef_ws/build/unitree_description'
+[2.845s] cd /home/melodse/ef_ws/build/unitree_description/python && /usr/bin/cmake -E make_directory /home/melodse/ef_ws/build/unitree_description/python/unitree_description
+[2.854s] cd /home/melodse/ef_ws/build/unitree_description/python && /usr/bin/python -c "import py_compile; py_compile.compile(\"/home/melodse/ef_ws/go2/sim/unitree_description-master/python/unitree_description/__init__.py\",\"/home/melodse/ef_ws/build/unitree_description/python/unitree_description/__init__.pyc\")"
+[2.891s] cd /home/melodse/ef_ws/build/unitree_description/python && /usr/bin/cmake -E make_directory /home/melodse/ef_ws/build/unitree_description/python/unitree_description
+[2.903s] cd /home/melodse/ef_ws/build/unitree_description/python && /usr/bin/python -c "import py_compile; py_compile.compile(\"/home/melodse/ef_ws/go2/sim/unitree_description-master/python/unitree_description/loader.py\",\"/home/melodse/ef_ws/build/unitree_description/python/unitree_description/loader.pyc\")"
+[2.943s] cd /home/melodse/ef_ws/build/unitree_description/python && /usr/bin/cmake -E make_directory /home/melodse/ef_ws/build/unitree_description/python/unitree_description
+[2.954s] cd /home/melodse/ef_ws/build/unitree_description/python && /usr/bin/python -c "import py_compile; py_compile.compile(\"/home/melodse/ef_ws/go2/sim/unitree_description-master/python/unitree_description/go2_joint_trot.py\",\"/home/melodse/ef_ws/build/unitree_description/python/unitree_description/go2_joint_trot.pyc\")"
+[3.080s] Traceback (most recent call last):
+[3.080s]   File "<string>", line 1, in <module>
+[3.080s]   File "/usr/lib/python3.12/py_compile.py", line 142, in compile
+[3.082s]     source_bytes = loader.get_data(file)
+[3.082s]                    ^^^^^^^^^^^^^^^^^^^^^
+[3.082s]   File "<frozen importlib._bootstrap_external>", line 1186, in get_data
+[3.083s] FileNotFoundError: [Errno 2] No such file or directory: '/home/melodse/ef_ws/go2/sim/unitree_description-master/python/unitree_description/go2_joint_trot.py'
+[3.097s] gmake[2]: Leaving directory '/home/melodse/ef_ws/build/unitree_description'
+[3.098s] gmake[2]: *** [python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_go2_sim_unitree_description-master_python.dir/build.make:78: unitree_description_compile_pyc__home_melodse_ef_ws_go2_sim_unitree_description-master_python] Error 1
+[3.098s] gmake[1]: *** [CMakeFiles/Makefile2:2009: python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_go2_sim_unitree_description-master_python.dir/all] Error 2
+[3.098s] gmake: *** [Makefile:149: all] Error 2
+[3.099s] gmake[1]: Leaving directory '/home/melodse/ef_ws/build/unitree_description'
+[3.101s] Invoked command in '/home/melodse/ef_ws/build/unitree_description' returned '2': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/melodse/ef_ws/install/g1_description:/opt/ros/jazzy /usr/bin/cmake --build /home/melodse/ef_ws/build/unitree_description -- -j12 -l12

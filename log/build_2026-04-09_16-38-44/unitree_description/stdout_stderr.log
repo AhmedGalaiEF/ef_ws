@@ -1,0 +1,28 @@
+/usr/bin/cmake -S/home/melodse/ef_ws/go2/sim/unitree_description-master -B/home/melodse/ef_ws/build/unitree_description --check-build-system CMakeFiles/Makefile.cmake 0
+/usr/bin/cmake -E cmake_progress_start /home/melodse/ef_ws/build/unitree_description/CMakeFiles /home/melodse/ef_ws/build/unitree_description//CMakeFiles/progress.marks
+/usr/bin/gmake  -f CMakeFiles/Makefile2 all
+gmake[1]: Entering directory '/home/melodse/ef_ws/build/unitree_description'
+/usr/bin/gmake  -f python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_go2_sim_unitree_description-master_python.dir/build.make python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_go2_sim_unitree_description-master_python.dir/depend
+gmake[2]: Entering directory '/home/melodse/ef_ws/build/unitree_description'
+cd /home/melodse/ef_ws/build/unitree_description && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/melodse/ef_ws/go2/sim/unitree_description-master /home/melodse/ef_ws/go2/sim/unitree_description-master/python /home/melodse/ef_ws/build/unitree_description /home/melodse/ef_ws/build/unitree_description/python /home/melodse/ef_ws/build/unitree_description/python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_go2_sim_unitree_description-master_python.dir/DependInfo.cmake "--color="
+gmake[2]: Leaving directory '/home/melodse/ef_ws/build/unitree_description'
+/usr/bin/gmake  -f python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_go2_sim_unitree_description-master_python.dir/build.make python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_go2_sim_unitree_description-master_python.dir/build
+gmake[2]: Entering directory '/home/melodse/ef_ws/build/unitree_description'
+cd /home/melodse/ef_ws/build/unitree_description/python && /usr/bin/cmake -E make_directory /home/melodse/ef_ws/build/unitree_description/python/unitree_description
+cd /home/melodse/ef_ws/build/unitree_description/python && /usr/bin/python -c "import py_compile; py_compile.compile(\"/home/melodse/ef_ws/go2/sim/unitree_description-master/python/unitree_description/__init__.py\",\"/home/melodse/ef_ws/build/unitree_description/python/unitree_description/__init__.pyc\")"
+cd /home/melodse/ef_ws/build/unitree_description/python && /usr/bin/cmake -E make_directory /home/melodse/ef_ws/build/unitree_description/python/unitree_description
+cd /home/melodse/ef_ws/build/unitree_description/python && /usr/bin/python -c "import py_compile; py_compile.compile(\"/home/melodse/ef_ws/go2/sim/unitree_description-master/python/unitree_description/loader.py\",\"/home/melodse/ef_ws/build/unitree_description/python/unitree_description/loader.pyc\")"
+cd /home/melodse/ef_ws/build/unitree_description/python && /usr/bin/cmake -E make_directory /home/melodse/ef_ws/build/unitree_description/python/unitree_description
+cd /home/melodse/ef_ws/build/unitree_description/python && /usr/bin/python -c "import py_compile; py_compile.compile(\"/home/melodse/ef_ws/go2/sim/unitree_description-master/python/unitree_description/go2_joint_trot.py\",\"/home/melodse/ef_ws/build/unitree_description/python/unitree_description/go2_joint_trot.pyc\")"
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+  File "/usr/lib/python3.12/py_compile.py", line 142, in compile
+    source_bytes = loader.get_data(file)
+                   ^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen importlib._bootstrap_external>", line 1186, in get_data
+FileNotFoundError: [Errno 2] No such file or directory: '/home/melodse/ef_ws/go2/sim/unitree_description-master/python/unitree_description/go2_joint_trot.py'
+gmake[2]: Leaving directory '/home/melodse/ef_ws/build/unitree_description'
+gmake[2]: *** [python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_go2_sim_unitree_description-master_python.dir/build.make:78: unitree_description_compile_pyc__home_melodse_ef_ws_go2_sim_unitree_description-master_python] Error 1
+gmake[1]: *** [CMakeFiles/Makefile2:2009: python/CMakeFiles/unitree_description_compile_pyc__home_melodse_ef_ws_go2_sim_unitree_description-master_python.dir/all] Error 2
+gmake[1]: Leaving directory '/home/melodse/ef_ws/build/unitree_description'
+gmake: *** [Makefile:149: all] Error 2
