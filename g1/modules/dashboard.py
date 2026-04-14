@@ -83,12 +83,44 @@ app.layout = dbc.Container(
                         dbc.Row(
                             [
                                 dbc.Col(dbc.Button("Balanced Stand", id="btn-stand", color="primary", className="w-100"), md=3),
-                                dbc.Col(dbc.Button("Walk 0.3m", id="btn-walk", color="success", className="w-100"), md=3),
-                                dbc.Col(dbc.Button("Turn 20deg", id="btn-turn", color="warning", className="w-100"), md=3),
                                 dbc.Col(dbc.Button("Stop", id="btn-stop", color="secondary", className="w-100"), md=3),
                             ],
                             className="g-2 mt-2",
-                        )
+                        ),
+                        dbc.Row(
+                            [
+                                dbc.Col(
+                                    [
+                                        html.H6("Linear Velocity", className="mt-4"),
+                                        html.Div("Left joystick: forward/back and strafe", className="small text-muted mb-2"),
+                                        dbc.Row(
+                                            [
+                                                dbc.Col(dbc.Input(id="joy-linear-x", type="number", value=0.0, step=0.05, placeholder="vx"), md=6),
+                                                dbc.Col(dbc.Input(id="joy-linear-y", type="number", value=0.0, step=0.05, placeholder="vy"), md=6),
+                                            ],
+                                            className="g-2",
+                                        ),
+                                    ],
+                                    md=6,
+                                ),
+                                dbc.Col(
+                                    [
+                                        html.H6("Angular Velocity", className="mt-4"),
+                                        html.Div("Right joystick: yaw rate", className="small text-muted mb-2"),
+                                        dbc.Input(id="joy-angular-z", type="number", value=0.0, step=0.05, placeholder="vyaw"),
+                                    ],
+                                    md=6,
+                                ),
+                            ],
+                            className="g-3",
+                        ),
+                        dbc.Row(
+                            [
+                                dbc.Col(dbc.Button("Send Joystick Command", id="btn-joy-send", color="success", className="w-100 mt-3"), md=6),
+                                dbc.Col(dbc.Button("Center Joysticks", id="btn-joy-center", color="secondary", className="w-100 mt-3"), md=6),
+                            ],
+                            className="g-2",
+                        ),
                     ],
                 ),
                 dbc.Tab(
@@ -175,15 +207,18 @@ def on_connect(_n: int, iface: str | None, domain_id: int | None) -> tuple[str, 
     Output("action-status", "children"),
     Output("action-status", "color"),
     Input("btn-stand", "n_clicks"),
-    Input("btn-walk", "n_clicks"),
-    Input("btn-turn", "n_clicks"),
     Input("btn-stop", "n_clicks"),
+    Input("btn-joy-send", "n_clicks"),
+    Input("btn-joy-center", "n_clicks"),
     Input("btn-hand-open", "n_clicks"),
     Input("btn-hand-close", "n_clicks"),
     Input("btn-say", "n_clicks"),
     Input("btn-slam-start", "n_clicks"),
     Input("btn-slam-pose", "n_clicks"),
     Input("btn-slam-stop", "n_clicks"),
+    State("joy-linear-x", "value"),
+    State("joy-linear-y", "value"),
+    State("joy-angular-z", "value"),
     State("say-text", "value"),
     State("slam-type", "value"),
     State("slam-save-path", "value"),
@@ -191,15 +226,18 @@ def on_connect(_n: int, iface: str | None, domain_id: int | None) -> tuple[str, 
 )
 def on_action(
     _stand: int | None,
-    _walk: int | None,
-    _turn: int | None,
     _stop: int | None,
+    _joy_send: int | None,
+    _joy_center: int | None,
     _hand_open: int | None,
     _hand_close: int | None,
     _say: int | None,
     _slam_start: int | None,
     _slam_pose: int | None,
     _slam_stop: int | None,
+    joy_linear_x: float | None,
+    joy_linear_y: float | None,
+    joy_angular_z: float | None,
     say_text: str | None,
     slam_type: str | None,
     slam_save_path: str | None,
@@ -214,15 +252,18 @@ def on_action(
         if trigger == "btn-stand":
             robot.balanced_stand()
             return "Balanced stand command sent.", "primary"
-        if trigger == "btn-walk":
-            ok = robot.walk_for(distance=0.3, timeout=8.0)
-            return f"walk_for finished: {ok}", "success"
-        if trigger == "btn-turn":
-            ok = robot.turn_for(angle_deg=20.0, timeout=6.0)
-            return f"turn_for finished: {ok}", "warning"
         if trigger == "btn-stop":
             robot.stop()
             return "Stop command sent.", "secondary"
+        if trigger == "btn-joy-send":
+            vx = float(joy_linear_x or 0.0)
+            vy = float(joy_linear_y or 0.0)
+            vyaw = float(joy_angular_z or 0.0)
+            robot.walk(vx=vx, vy=vy, vyaw=vyaw)
+            return f"Joystick command sent: vx={vx:.2f}, vy={vy:.2f}, vyaw={vyaw:.2f}", "success"
+        if trigger == "btn-joy-center":
+            robot.stop()
+            return "Joysticks centered. Stop command sent.", "secondary"
         if trigger == "btn-hand-open":
             robot.hand_open(hand="right", hold_s=0.5)
             return "Right hand open sent.", "info"

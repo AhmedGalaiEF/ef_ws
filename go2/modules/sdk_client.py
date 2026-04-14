@@ -22,6 +22,7 @@ try:
     from unitree_sdk2py.idl.nav_msgs.msg.dds_ import Odometry_
     from unitree_sdk2py.idl.unitree_go.msg.dds_ import LowState_, SportModeState_
     from unitree_sdk2py.go2.sport.sport_client import SportClient
+    from unitree_sdk2py.go2.video.video_client import VideoClient
 except ImportError as exc:
     raise SystemExit(
         "unitree_sdk2py is not installed. Install it with:\n"
@@ -68,6 +69,7 @@ class Robot:
         self._sport_sub: ChannelSubscriber | None = None
         self._lowstate_sub: ChannelSubscriber | None = None
         self._odom_sub: ChannelSubscriber | None = None
+        self._video_client: VideoClient | None = None
 
         self._client = SportClient()
         self._client.SetTimeout(self.timeout)
@@ -109,6 +111,13 @@ class Robot:
         with self._lock:
             self._odom = msg
             self._last_odom_ts = time.time()
+
+    def _get_video_client(self) -> VideoClient:
+        if self._video_client is None:
+            self._video_client = VideoClient()
+            self._video_client.SetTimeout(3.0)
+            self._video_client.Init()
+        return self._video_client
 
     # ------------------------------------------------------------------
     # Generic state helpers
@@ -298,6 +307,28 @@ class Robot:
         except Exception:
             return None
 
+    def get_imu(self) -> dict[str, Any] | None:
+        msg = self.get_low_state()
+        if msg is None:
+            return None
+        try:
+            imu = msg.imu_state
+            return {
+                "rpy": [float(imu.rpy[i]) for i in range(3)],
+                "gyro": [float(imu.gyroscope[i]) for i in range(3)],
+                "acc": [float(imu.accelerometer[i]) for i in range(3)],
+                "quat": [float(imu.quaternion[i]) for i in range(4)],
+                "temp": float(getattr(imu, "temperature", 0.0)),
+            }
+        except Exception:
+            return None
+
+    def get_camera_image_jpeg(self) -> bytes:
+        code, data = self._get_video_client().GetImageSample()
+        if int(code) != 0:
+            raise RuntimeError(f"GetImageSample failed with code={code}")
+        return bytes(data)
+
     def is_moving(self, linear_eps: float = 0.03, yaw_eps: float = 0.08) -> bool:
         velocity = self.get_velocity()
         yaw_speed = self.get_yaw_speed()
@@ -315,6 +346,7 @@ class Robot:
             "position": self.get_position(),
             "velocity": self.get_velocity(),
             "yaw_speed": self.get_yaw_speed(),
+            "imu": self.get_imu(),
             "odom_pose": self.get_odom_pose(),
             "joint_count": len(self.get_joint_positions()),
             "is_moving": self.is_moving(),
