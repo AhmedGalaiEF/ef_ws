@@ -1,0 +1,2 @@
+python g1_test.py --balance-control --contact-links all --render-mode minimal --double-support-duration 0.22 --swing-duration 0.28 --com-balance-kp
+  3.6 --com-balance-kd 1.4 --com-balance-roll-kp 3.0 --com-balance-roll-kd 1.2 --step-placement-kp 0.7 --step-placement-kd 0.24
