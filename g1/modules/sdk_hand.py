@@ -5,7 +5,7 @@ import time
 from typing import Dict
 
 from unitree_sdk2py.core import channel as channel_module
-from unitree_sdk2py.core.channel import ChannelPublisher
+from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelPublisher
 from unitree_sdk2py.idl.default import unitree_hg_msg_dds__HandCmd_
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import HandCmd_
 
@@ -84,11 +84,14 @@ def build_hand_msg(targets: list[float], kp: float, kd: float, tau: float) -> Ha
 
 
 class Dex3HandController:
-    def __init__(self, hand: str = "right") -> None:
+    def __init__(self, hand: str = "right", iface: str = "eth0", domain_id: int = 0) -> None:
         side = str(hand).strip().lower()
         if side not in TOPIC_HAND_BY_SIDE:
             raise ValueError(f"Invalid hand '{hand}'.")
         self.hand = side
+        self.iface = str(iface)
+        self.domain_id = int(domain_id)
+        ChannelFactoryInitialize(self.domain_id, self.iface)
         self._pub = ChannelPublisher(TOPIC_HAND_BY_SIDE[self.hand], HandCmd_)
         self._pub.Init()
         self._last_targets: list[float] | None = None

@@ -1,3 +1,4 @@
+import argparse
 import os
 import sys
 
@@ -18,9 +19,11 @@ except ImportError:
     sys.exit(1)
 
 class GrippingApp(QWidget):
-    def __init__(self, hand: str = "right"):
+    def __init__(self, hand: str = "right", iface: str = "eth0", domain_id: int = 0):
         super().__init__()
         self.hand = hand
+        self.iface = str(iface)
+        self.domain_id = int(domain_id)
         self.controller = None
         self._set_controller(self.hand)
 
@@ -28,7 +31,11 @@ class GrippingApp(QWidget):
 
     def _set_controller(self, hand: str) -> None:
         try:
-            self.controller = Dex3HandController(hand=hand)
+            self.controller = Dex3HandController(
+                hand=hand,
+                iface=self.iface,
+                domain_id=self.domain_id,
+            )
             self.hand = hand
         except Exception as e:
             print(f"Failed to initialize hand controller: {e}")
@@ -87,10 +94,17 @@ class GrippingApp(QWidget):
             # 0.02s corresponds to one step at 50Hz.
             self.controller.set_targets(targets, hold_s=0.02, rate_hz=50.0)
 
+
+def parse_args() -> tuple[argparse.Namespace, list[str]]:
+    parser = argparse.ArgumentParser(description="Dex3 hand grip control UI.")
+    parser.add_argument("hand", nargs="?", choices=("left", "right"), default="right")
+    parser.add_argument("--iface", default="eth0", help="Network interface for DDS traffic.")
+    parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id.")
+    args, remaining = parser.parse_known_args()
+    return args, [sys.argv[0], *remaining]
+
 if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    default_hand = "right"
-    if len(sys.argv) > 1 and sys.argv[1] in {"left", "right"}:
-        default_hand = sys.argv[1]
-    ex = GrippingApp(hand=default_hand)
+    args, qt_argv = parse_args()
+    app = QApplication(qt_argv)
+    ex = GrippingApp(hand=args.hand, iface=args.iface, domain_id=args.domain_id)
     sys.exit(app.exec_())

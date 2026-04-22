@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import Optional
 
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize
@@ -38,6 +39,34 @@ def fsm_mode(client: LocoClient) -> Optional[int]:
     return rpc_get_int(client, ROBOT_API_ID_LOCO_GET_FSM_MODE)
 
 
+def read_fsm_state(
+    client: LocoClient,
+    retries: int = 5,
+    retry_delay: float = 0.1,
+) -> tuple[Optional[int], Optional[int]]:
+    attempts = max(1, int(retries))
+    delay_s = max(0.0, float(retry_delay))
+    last_id: Optional[int] = None
+    last_mode: Optional[int] = None
+    for attempt in range(attempts):
+        cur_id = fsm_id(client)
+        cur_mode = fsm_mode(client)
+        if cur_id is not None:
+            last_id = cur_id
+        if cur_mode is not None:
+            last_mode = cur_mode
+        if last_id is not None and last_mode is not None:
+            break
+        if attempt + 1 < attempts and delay_s > 0.0:
+            time.sleep(delay_s)
+    return last_id, last_mode
+
+
+def is_balanced_stand(client: LocoClient) -> bool:
+    cur_id, cur_mode = read_fsm_state(client)
+    return cur_id == 200 and cur_mode == 0
+
+
 def hanger_boot_sequence(
     iface: str,
     domain_id: int = 0,
@@ -52,9 +81,8 @@ def hanger_boot_sequence(
     bot = create_loco_client(domain_id=domain_id, iface=iface)
 
     try:
-        cur_id = fsm_id(bot)
-        cur_mode = fsm_mode(bot)
-        if cur_id == 200 and cur_mode is not None and cur_mode != 2:
+        cur_id, cur_mode = read_fsm_state(bot)
+        if cur_id == 200 and cur_mode == 0:
             logger.info(
                 "Robot already in balanced stand (FSM 200, mode %s); skipping boot sequence.",
                 cur_mode,
@@ -64,7 +92,8 @@ def hanger_boot_sequence(
         pass
 
     def show(tag: str) -> None:
-        logger.info("%-12s -> FSM %s   mode %s", tag, fsm_id(bot), fsm_mode(bot))
+        cur_id, cur_mode = read_fsm_state(bot, retries=2, retry_delay=0.05)
+        logger.info("%-12s -> FSM %s   mode %s", tag, cur_id, cur_mode)
 
     bot.Damp()
     show("damp")
@@ -106,4 +135,10 @@ def hanger_boot_sequence(
     return bot
 
 
-__all__ = ["create_loco_client", "rpc_get_int", "hanger_boot_sequence"]
+__all__ = [
+    "create_loco_client",
+    "rpc_get_int",
+    "read_fsm_state",
+    "is_balanced_stand",
+    "hanger_boot_sequence",
+]

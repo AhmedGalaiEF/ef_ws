@@ -546,7 +546,7 @@ class RegressionArmMotionWindow(QWidget):
         super().closeEvent(event)
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args() -> tuple[argparse.Namespace, list[str]]:
     parser = argparse.ArgumentParser(
         description="Teach arm poses from six discrete input commands and fit a regression model."
     )
@@ -567,11 +567,12 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="skip hanger boot sequence if the robot is already standing safely",
     )
-    return parser.parse_args()
+    args, remaining = parser.parse_known_args()
+    return args, [sys.argv[0], *remaining]
 
 
 def main() -> int:
-    args = parse_args()
+    args, qt_argv = parse_args()
 
     if not args.no_safety_boot:
         try:
@@ -582,7 +583,7 @@ def main() -> int:
     else:
         ChannelFactoryInitialize(int(args.domain_id), args.iface)
 
-    app = QApplication(sys.argv)
+    app = QApplication(qt_argv)
     window = RegressionArmMotionWindow(
         arm=args.arm,
         sample_hz=args.sample_hz,

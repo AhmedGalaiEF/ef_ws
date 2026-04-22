@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import argparse
 import json
 import threading
 import time
@@ -18,6 +19,16 @@ ROBOT_INSTANCE: Robot | None = None
 ROBOT_ERROR: str | None = None
 ROBOT_IFACE = "enp1s0"
 ROBOT_DOMAIN_ID = 0
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Web dashboard for basic G1 robot controls.")
+    parser.add_argument("--iface", default=ROBOT_IFACE, help="Network interface for the robot SDK.")
+    parser.add_argument("--domain-id", type=int, default=ROBOT_DOMAIN_ID, help="DDS domain id.")
+    parser.add_argument("--host", default="0.0.0.0", help="Dash server bind host.")
+    parser.add_argument("--port", type=int, default=8050, help="Dash server bind port.")
+    parser.add_argument("--debug", action="store_true", help="Run the Dash server in debug mode.")
+    return parser.parse_args()
 
 
 def _connect_robot(iface: str, domain_id: int) -> tuple[Robot | None, str]:
@@ -328,4 +339,7 @@ def update_sensors(_tick: int) -> tuple[str, str]:
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=8050)
+    args = parse_args()
+    ROBOT_IFACE = args.iface
+    ROBOT_DOMAIN_ID = args.domain_id
+    app.run(debug=args.debug, host=args.host, port=args.port)
