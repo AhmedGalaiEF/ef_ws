@@ -74,6 +74,8 @@ class BalanceSnapshot:
     imu_state: dict
     com_error_body: tuple[float, float]
     com_velocity_body: tuple[float, float]
+    capture_point_body: tuple[float, float]
+    omega: float
     pitch_feedback: float
     roll_feedback: float
     assist_scale: float
@@ -165,6 +167,12 @@ def compute_balance_snapshot(body_id, plane_id, mass_properties, foot_link_indic
         yaw,
     )
     com_velocity_body = project_world_vector_to_body_frame((com_velocity[0], com_velocity[1]), yaw)
+    nominal_com_height = max(args.nominal_com_height, com_position[2] - args.support_polygon_height)
+    omega = math.sqrt(9.81 / max(nominal_com_height, 1e-3))
+    capture_point_body = (
+        com_error_body[0] + com_velocity_body[0] / omega,
+        com_error_body[1] + com_velocity_body[1] / omega,
+    )
 
     pitch_feedback = -(
         args.com_pitch_kp * com_error_body[0]
@@ -195,6 +203,8 @@ def compute_balance_snapshot(body_id, plane_id, mass_properties, foot_link_indic
         imu_state=imu_state,
         com_error_body=com_error_body,
         com_velocity_body=com_velocity_body,
+        capture_point_body=capture_point_body,
+        omega=omega,
         pitch_feedback=pitch_feedback,
         roll_feedback=roll_feedback,
         assist_scale=assist_scale,
@@ -204,26 +214,27 @@ def compute_balance_snapshot(body_id, plane_id, mass_properties, foot_link_indic
 def update_step_state(step_state, snapshot, args):
     step_state.cooldown = max(0.0, step_state.cooldown - args.dt)
     if step_state.mode == "stand":
-        large_error = abs(snapshot.com_error_body[0]) > args.step_trigger_com or abs(snapshot.com_error_body[1]) > args.step_trigger_com
+        capture_point_outside = (
+            abs(snapshot.capture_point_body[0]) > args.capture_trigger_x
+            or abs(snapshot.capture_point_body[1]) > args.capture_trigger_y
+        )
         large_velocity = (
             abs(snapshot.com_velocity_body[0]) > args.step_trigger_velocity
             or abs(snapshot.com_velocity_body[1]) > args.step_trigger_velocity
         )
-        if snapshot.support_margin < args.step_trigger_margin or (large_error and large_velocity and step_state.cooldown <= 0.0):
+        if snapshot.support_margin < args.step_trigger_margin or (capture_point_outside and large_velocity and step_state.cooldown <= 0.0):
             step_state.mode = "step"
             step_state.phase = "double_support"
             step_state.phase_time = 0.0
             step_state.swing_side = choose_recovery_swing_side(snapshot)
             step_state.desired_forward_step = clamp(
                 args.nominal_step_length
-                + args.step_placement_kp * snapshot.com_error_body[0]
-                + args.step_placement_kd * snapshot.com_velocity_body[0],
+                + args.capture_step_gain_x * snapshot.capture_point_body[0],
                 -args.max_step_length,
                 args.max_step_length,
             )
             step_state.desired_lateral_step = clamp(
-                args.lateral_step_kp * snapshot.com_error_body[1]
-                + args.lateral_step_kd * snapshot.com_velocity_body[1],
+                args.capture_step_gain_y * snapshot.capture_point_body[1],
                 -args.max_lateral_step,
                 args.max_lateral_step,
             )
@@ -373,6 +384,7 @@ def update_status_text(debug_item_id, snapshot, step_state, harness_enabled):
         f"mode: {mode}\n"
         f"swing: {step_state.swing_side}\n"
         f"com err body: ({snapshot.com_error_body[0]:+.3f}, {snapshot.com_error_body[1]:+.3f})\n"
+        f"cp body: ({snapshot.capture_point_body[0]:+.3f}, {snapshot.capture_point_body[1]:+.3f})\n"
         f"margin: {snapshot.support_margin:+.3f}\n"
         f"pitch fb: {snapshot.pitch_feedback:+.3f}\n"
         f"roll fb: {snapshot.roll_feedback:+.3f}\n"
@@ -405,6 +417,7 @@ def parse_args():
     parser.add_argument("--com-pitch-kd", type=float, default=1.6, help="COM sagittal velocity gain.")
     parser.add_argument("--com-roll-kp", type=float, default=4.4, help="COM lateral position gain.")
     parser.add_argument("--com-roll-kd", type=float, default=1.4, help="COM lateral velocity gain.")
+    parser.add_argument("--nominal-com-height", type=float, default=0.78, help="Reduced-order COM height used for capture-point planning.")
     parser.add_argument("--imu-pitch-kp", type=float, default=1.7, help="IMU pitch angle gain.")
     parser.add_argument("--imu-pitch-kd", type=float, default=0.22, help="IMU pitch rate gain.")
     parser.add_argument("--imu-roll-kp", type=float, default=1.4, help="IMU roll angle gain.")
@@ -412,18 +425,17 @@ def parse_args():
     parser.add_argument("--pitch-limit", type=float, default=0.16, help="Pitch correction clamp in radians.")
     parser.add_argument("--roll-limit", type=float, default=0.12, help="Roll correction clamp in radians.")
     parser.add_argument("--step-trigger-margin", type=float, default=0.02, help="Support margin threshold that triggers a recovery step.")
-    parser.add_argument("--step-trigger-com", type=float, default=0.03, help="Body-frame COM error threshold for step triggering.")
     parser.add_argument("--step-trigger-velocity", type=float, default=0.08, help="Body-frame COM velocity threshold for step triggering.")
+    parser.add_argument("--capture-trigger-x", type=float, default=0.035, help="Forward capture-point threshold for step triggering.")
+    parser.add_argument("--capture-trigger-y", type=float, default=0.030, help="Lateral capture-point threshold for step triggering.")
     parser.add_argument("--double-support-duration", type=float, default=0.12, help="Pre-step weight-shift duration.")
     parser.add_argument("--swing-duration", type=float, default=0.26, help="Swing duration for the synthesized step.")
     parser.add_argument("--step-cooldown", type=float, default=0.20, help="Minimum time between completed steps.")
     parser.add_argument("--nominal-step-length", type=float, default=0.06, help="Baseline swing hip pitch offset.")
     parser.add_argument("--max-step-length", type=float, default=0.18, help="Maximum forward swing offset.")
     parser.add_argument("--max-lateral-step", type=float, default=0.12, help="Maximum lateral swing offset.")
-    parser.add_argument("--step-placement-kp", type=float, default=0.80, help="Forward step placement gain from COM error.")
-    parser.add_argument("--step-placement-kd", type=float, default=0.30, help="Forward step placement gain from COM velocity.")
-    parser.add_argument("--lateral-step-kp", type=float, default=1.10, help="Lateral step placement gain from COM error.")
-    parser.add_argument("--lateral-step-kd", type=float, default=0.40, help="Lateral step placement gain from COM velocity.")
+    parser.add_argument("--capture-step-gain-x", type=float, default=1.35, help="Forward step placement gain from the capture point.")
+    parser.add_argument("--capture-step-gain-y", type=float, default=1.55, help="Lateral step placement gain from the capture point.")
     parser.add_argument("--support-shift-roll", type=float, default=0.09, help="Roll bias toward the stance foot during stepping.")
     parser.add_argument("--base-target-height", type=float, default=0.82, help="Virtual harness target pelvis height.")
     parser.add_argument("--harness-xy-kp", type=float, default=40.0, help="Virtual harness planar position gain.")
