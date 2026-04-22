@@ -128,8 +128,28 @@ app.layout = dbc.Container(
                     children=[
                         dbc.Row(
                             [
-                                dbc.Col(dbc.Button("Open Right Hand", id="btn-hand-open", color="info", className="w-100"), md=6),
-                                dbc.Col(dbc.Button("Close Right Hand", id="btn-hand-close", color="info", className="w-100"), md=6),
+                                dbc.Col(
+                                    [
+                                        html.Div("Dex3 Hand", className="small text-muted mb-2"),
+                                        dbc.RadioItems(
+                                            id="hand-side",
+                                            options=[
+                                                {"label": "Right", "value": "right"},
+                                                {"label": "Left", "value": "left"},
+                                            ],
+                                            value="right",
+                                            inline=True,
+                                        ),
+                                    ],
+                                    md=12,
+                                ),
+                            ],
+                            className="g-2 mt-2",
+                        ),
+                        dbc.Row(
+                            [
+                                dbc.Col(dbc.Button("Open Hand", id="btn-hand-open", color="info", className="w-100"), md=6),
+                                dbc.Col(dbc.Button("Close Hand", id="btn-hand-close", color="info", className="w-100"), md=6),
                             ],
                             className="g-2 mt-2",
                         )
@@ -219,6 +239,7 @@ def on_connect(_n: int, iface: str | None, domain_id: int | None) -> tuple[str, 
     State("joy-linear-x", "value"),
     State("joy-linear-y", "value"),
     State("joy-angular-z", "value"),
+    State("hand-side", "value"),
     State("say-text", "value"),
     State("slam-type", "value"),
     State("slam-save-path", "value"),
@@ -238,6 +259,7 @@ def on_action(
     joy_linear_x: float | None,
     joy_linear_y: float | None,
     joy_angular_z: float | None,
+    hand_side: str | None,
     say_text: str | None,
     slam_type: str | None,
     slam_save_path: str | None,
@@ -265,11 +287,13 @@ def on_action(
             robot.stop()
             return "Joysticks centered. Stop command sent.", "secondary"
         if trigger == "btn-hand-open":
-            robot.hand_open(hand="right", hold_s=0.5)
-            return "Right hand open sent.", "info"
+            selected_hand = hand_side or "right"
+            robot.hand_open(hand=selected_hand, hold_s=0.5)
+            return f"{selected_hand.title()} hand open sent.", "info"
         if trigger == "btn-hand-close":
-            robot.hand_close(hand="right", hold_s=0.5)
-            return "Right hand close sent.", "info"
+            selected_hand = hand_side or "right"
+            robot.hand_close(hand=selected_hand, hold_s=0.5)
+            return f"{selected_hand.title()} hand close sent.", "info"
         if trigger == "btn-say":
             code = robot.say(say_text or "Hello from the G1 dashboard.")
             return f"say() returned {code}", "success"

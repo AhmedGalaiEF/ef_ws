@@ -25,11 +25,11 @@ def basic_locomotion(robot: Robot) -> None:
     print_section("Locomotion Result", {"walked": walked, "turned": turned})
 
 
-def basic_arm_motion(robot: Robot) -> None:
-    print_section("Arm Motion", "right hand open -> close")
-    robot.hand_open(hand="right", hold_s=0.5)
+def basic_arm_motion(robot: Robot, hand: str) -> None:
+    print_section("Arm Motion", f"{hand} hand open -> close")
+    robot.hand_open(hand=hand, hold_s=0.5)
     time.sleep(0.4)
-    robot.hand_close(hand="right", hold_s=0.5)
+    robot.hand_close(hand=hand, hold_s=0.5)
 
 
 def basic_sensors(robot: Robot) -> None:
@@ -68,6 +68,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Basic usage example for the G1 Robot wrapper.")
     parser.add_argument("--iface", default="eth0")
     parser.add_argument("--domain-id", type=int, default=0)
+    parser.add_argument("--hand", choices=("left", "right"), default="right")
     parser.add_argument("--no-safety-boot", action="store_true")
     parser.add_argument("--skip-slam", action="store_true")
     parser.add_argument("--slam-type", default="indoor")
@@ -82,7 +83,7 @@ def main() -> None:
     )
 
     basic_locomotion(robot)
-    basic_arm_motion(robot)
+    basic_arm_motion(robot, hand=args.hand)
     basic_sensors(robot)
     basic_text_to_speech(robot)
 
