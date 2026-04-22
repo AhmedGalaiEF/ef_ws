@@ -91,6 +91,34 @@ class Dex3HandController:
         self.hand = side
         self._pub = ChannelPublisher(TOPIC_HAND_BY_SIDE[self.hand], HandCmd_)
         self._pub.Init()
+        self._last_targets: list[float] | None = None
+
+    @staticmethod
+    def _interpolate_targets(
+        start: list[float],
+        stop: list[float],
+        *,
+        alpha: float,
+    ) -> list[float]:
+        blend = min(1.0, max(0.0, float(alpha)))
+        return [s + (e - s) * blend for s, e in zip(start, stop)]
+
+    def _publish_targets_for(
+        self,
+        targets: list[float],
+        *,
+        seconds: float,
+        rate_hz: float,
+        kp: float,
+        kd: float,
+        tau: float,
+    ) -> None:
+        self.publish_for(
+            build_hand_msg(targets, kp=kp, kd=kd, tau=tau),
+            seconds=seconds,
+            rate_hz=rate_hz,
+        )
+        self._last_targets = list(targets)
 
     def publish_for(self, msg: HandCmd_, seconds: float, rate_hz: float = 50.0) -> None:
         steps = max(1, int(max(0.01, float(seconds)) * max(1.0, float(rate_hz))))
@@ -107,14 +135,51 @@ class Dex3HandController:
         kp: float = 1.2,
         kd: float = 0.05,
         tau: float = 0.05,
+        ramp_s: float | None = None,
     ) -> None:
-        self.publish_for(build_hand_msg(targets, kp=kp, kd=kd, tau=tau), seconds=hold_s, rate_hz=rate_hz)
+        if len(targets) != 7:
+            raise ValueError("Hand targets must contain 7 joint values.")
 
-    def open(self, hold_s: float = 0.6, rate_hz: float = 50.0) -> None:
-        self.set_targets(list(HAND_OPEN), hold_s=hold_s, rate_hz=rate_hz)
+        target_list = [float(value) for value in targets]
+        rate = max(1.0, float(rate_hz))
+        total_hold_s = max(0.0, float(hold_s))
+        ramp_duration_s = min(
+            total_hold_s,
+            max(1.0 / rate, 0.25 if ramp_s is None else float(ramp_s)),
+        )
 
-    def close(self, hold_s: float = 0.6, rate_hz: float = 50.0) -> None:
-        self.set_targets(list(HAND_CLOSED), hold_s=hold_s, rate_hz=rate_hz, tau=0.12)
+        start_targets = list(HAND_OPEN) if self._last_targets is None else list(self._last_targets)
+        if any(abs(dst - src) > 1e-6 for src, dst in zip(start_targets, target_list)) and ramp_duration_s > 0.0:
+            ramp_steps = max(2, int(round(ramp_duration_s * rate)))
+            step_dt = ramp_duration_s / float(ramp_steps)
+            for step_idx in range(1, ramp_steps + 1):
+                alpha = float(step_idx) / float(ramp_steps)
+                interp_targets = self._interpolate_targets(start_targets, target_list, alpha=alpha)
+                self._publish_targets_for(
+                    interp_targets,
+                    seconds=step_dt,
+                    rate_hz=rate,
+                    kp=kp,
+                    kd=kd,
+                    tau=tau,
+                )
+
+        remaining_hold_s = max(0.0, total_hold_s - ramp_duration_s)
+        if remaining_hold_s > 0.0 or self._last_targets is None:
+            self._publish_targets_for(
+                target_list,
+                seconds=remaining_hold_s if remaining_hold_s > 0.0 else (1.0 / rate),
+                rate_hz=rate,
+                kp=kp,
+                kd=kd,
+                tau=tau,
+            )
+
+    def open(self, hold_s: float = 0.6, rate_hz: float = 50.0, ramp_s: float | None = None) -> None:
+        self.set_targets(list(HAND_OPEN), hold_s=hold_s, rate_hz=rate_hz, ramp_s=ramp_s)
+
+    def close(self, hold_s: float = 0.6, rate_hz: float = 50.0, ramp_s: float | None = None) -> None:
+        self.set_targets(list(HAND_CLOSED), hold_s=hold_s, rate_hz=rate_hz, tau=0.12, ramp_s=ramp_s)
 
     def move_finger(self, finger_name: str, hold_s: float = 1.0, settle_s: float = 0.6, rate_hz: float = 50.0) -> None:
         finger = str(finger_name).strip().lower()

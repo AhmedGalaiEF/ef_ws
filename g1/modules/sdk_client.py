@@ -107,6 +107,8 @@ class Robot:
         self._audio: RobotAudio | None = None
         self._video_client: Any = None
         self._hands: dict[str, Dex3HandController] = {}
+        self._usb_controller_thread: threading.Thread | None = None
+        self._usb_controller_stop = threading.Event()
         self.slam_is_running = False
 
         if safety_boot:
@@ -433,6 +435,181 @@ class Robot:
 
     def stop(self) -> None:
         self.stop_moving()
+
+    @staticmethod
+    def _apply_deadzone(value: float, deadzone: float) -> float:
+        dz = min(0.99, max(0.0, float(deadzone)))
+        sample = float(value)
+        if abs(sample) < dz:
+            return 0.0
+        sign = 1.0 if sample > 0.0 else -1.0
+        return sign * (abs(sample) - dz) / (1.0 - dz)
+
+    def zero_torque(self) -> None:
+        self.fsm_0_zt()
+
+    def damp(self) -> None:
+        self.fsm_1_damp()
+
+    def enter_walking_ready_mode(self) -> None:
+        if hasattr(self._client, "Damp"):
+            self._client.Damp()
+            time.sleep(0.5)
+        if hasattr(self._client, "Squat2StandUp"):
+            self._client.Squat2StandUp()
+            time.sleep(1.0)
+        if hasattr(self._client, "Start"):
+            self._client.Start()
+            return
+        self.balanced_stand()
+
+    def _usb_controller_loop(
+        self,
+        *,
+        joy_index: int,
+        send_hz: float,
+        max_vx: float,
+        max_vy: float,
+        max_vyaw: float,
+        deadzone: float,
+    ) -> None:
+        try:
+            import pygame
+        except ModuleNotFoundError as exc:
+            raise SystemExit(
+                "The 'pygame' package is required for USB controller support.\n"
+                "Install with: pip install pygame"
+            ) from exc
+
+        btn_a = 0
+        btn_b = 1
+        btn_x = 2
+        btn_y = 3
+        btn_start = 7
+        axis_lx = 0
+        axis_ly = 1
+        axis_rx = 3
+
+        pygame.init()
+        pygame.joystick.init()
+
+        if pygame.joystick.get_count() == 0:
+            pygame.quit()
+            raise RuntimeError("No joystick detected. Connect a USB gamepad and retry.")
+        if joy_index < 0 or joy_index >= pygame.joystick.get_count():
+            pygame.quit()
+            raise IndexError(f"Joystick index {joy_index} is out of range.")
+
+        joy = pygame.joystick.Joystick(int(joy_index))
+        joy.init()
+
+        active = True
+        dt = 1.0 / max(1.0, float(send_hz))
+        try:
+            while not self._usb_controller_stop.is_set():
+                pygame.event.pump()
+
+                if joy.get_numbuttons() > btn_y and joy.get_button(btn_y):
+                    self.zero_torque()
+                    active = False
+                    time.sleep(0.5)
+                    continue
+
+                if joy.get_numbuttons() > btn_a and joy.get_button(btn_a):
+                    self.damp()
+                    active = False
+                    time.sleep(0.5)
+                    continue
+
+                if joy.get_numbuttons() > btn_x and joy.get_button(btn_x):
+                    self.enter_walking_ready_mode()
+                    active = True
+                    time.sleep(0.5)
+                    continue
+
+                if joy.get_numbuttons() > btn_b and joy.get_button(btn_b):
+                    self.balanced_stand()
+                    active = True
+                    time.sleep(0.5)
+                    continue
+
+                if joy.get_numbuttons() > btn_start and joy.get_button(btn_start):
+                    self.stop()
+                    time.sleep(0.2)
+                    continue
+
+                if active:
+                    lx = self._apply_deadzone(joy.get_axis(axis_lx), deadzone)
+                    ly = self._apply_deadzone(joy.get_axis(axis_ly), deadzone)
+                    rx = self._apply_deadzone(joy.get_axis(axis_rx), deadzone)
+
+                    vx = -ly * float(max_vx)
+                    vy = -lx * float(max_vy)
+                    vyaw = -rx * float(max_vyaw)
+                    self.walk(vx=vx, vy=vy, vyaw=vyaw)
+
+                time.sleep(dt)
+        finally:
+            self.stop()
+            joy.quit()
+            pygame.joystick.quit()
+            pygame.quit()
+
+    def start_usb_controller(
+        self,
+        joy_index: int = 0,
+        send_hz: float = 10.0,
+        max_vx: float = 0.5,
+        max_vy: float = 0.3,
+        max_vyaw: float = 0.8,
+        deadzone: float = 0.1,
+    ) -> threading.Thread:
+        thread = self._usb_controller_thread
+        if thread is not None and thread.is_alive():
+            raise RuntimeError("USB controller loop is already running.")
+
+        try:
+            import pygame
+        except ModuleNotFoundError as exc:
+            raise RuntimeError(
+                "The 'pygame' package is required for USB controller support. "
+                "Install it with: pip install pygame"
+            ) from exc
+
+        pygame.init()
+        pygame.joystick.init()
+        try:
+            if pygame.joystick.get_count() == 0:
+                raise RuntimeError("No joystick detected. Connect a USB gamepad and retry.")
+            if joy_index < 0 or joy_index >= pygame.joystick.get_count():
+                raise IndexError(f"Joystick index {joy_index} is out of range.")
+        finally:
+            pygame.joystick.quit()
+            pygame.quit()
+
+        self._usb_controller_stop = threading.Event()
+        self._usb_controller_thread = threading.Thread(
+            target=self._usb_controller_loop,
+            kwargs={
+                "joy_index": int(joy_index),
+                "send_hz": float(send_hz),
+                "max_vx": float(max_vx),
+                "max_vy": float(max_vy),
+                "max_vyaw": float(max_vyaw),
+                "deadzone": float(deadzone),
+            },
+            name=f"usb-controller-{int(joy_index)}",
+            daemon=True,
+        )
+        self._usb_controller_thread.start()
+        return self._usb_controller_thread
+
+    def stop_usb_controller(self, join_timeout: float = 1.0) -> None:
+        self._usb_controller_stop.set()
+        thread = self._usb_controller_thread
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=max(0.0, float(join_timeout)))
+        self._usb_controller_thread = None
 
     @staticmethod
     def _wrap_angle(value: float) -> float:
@@ -928,11 +1105,23 @@ class Robot:
     ) -> int:
         return self._get_audio().set_headlight(color=color, intensity=intensity, duration=duration)
 
-    def hand_open(self, hand: str = "right", hold_s: float = 0.6, rate_hz: float = 50.0) -> None:
-        self._get_hand(hand).open(hold_s=hold_s, rate_hz=rate_hz)
+    def hand_open(
+        self,
+        hand: str = "right",
+        hold_s: float = 0.6,
+        rate_hz: float = 50.0,
+        ramp_s: float | None = None,
+    ) -> None:
+        self._get_hand(hand).open(hold_s=hold_s, rate_hz=rate_hz, ramp_s=ramp_s)
 
-    def hand_close(self, hand: str = "right", hold_s: float = 0.6, rate_hz: float = 50.0) -> None:
-        self._get_hand(hand).close(hold_s=hold_s, rate_hz=rate_hz)
+    def hand_close(
+        self,
+        hand: str = "right",
+        hold_s: float = 0.6,
+        rate_hz: float = 50.0,
+        ramp_s: float | None = None,
+    ) -> None:
+        self._get_hand(hand).close(hold_s=hold_s, rate_hz=rate_hz, ramp_s=ramp_s)
 
     def hand_pose(
         self,
@@ -943,8 +1132,17 @@ class Robot:
         kp: float = 1.2,
         kd: float = 0.05,
         tau: float = 0.05,
+        ramp_s: float | None = None,
     ) -> None:
-        self._get_hand(hand).set_targets(targets, hold_s=hold_s, rate_hz=rate_hz, kp=kp, kd=kd, tau=tau)
+        self._get_hand(hand).set_targets(
+            targets,
+            hold_s=hold_s,
+            rate_hz=rate_hz,
+            kp=kp,
+            kd=kd,
+            tau=tau,
+            ramp_s=ramp_s,
+        )
 
     def hand_move_finger(
         self,
