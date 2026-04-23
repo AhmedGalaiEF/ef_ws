@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import audioop
 import os
 import re
 import subprocess
@@ -55,6 +56,36 @@ def scale_color(rgb: tuple[int, int, int], intensity: int) -> tuple[int, int, in
     return (int(rgb[0] * scale), int(rgb[1] * scale), int(rgb[2] * scale))
 
 
+def _convert_wav_for_robot(src_path: Path, dst_path: Path) -> Path:
+    with wave.open(str(src_path), "rb") as wf:
+        channels = wf.getnchannels()
+        sample_width = wf.getsampwidth()
+        frame_rate = wf.getframerate()
+        pcm = wf.readframes(wf.getnframes())
+
+    if channels == 2:
+        pcm = audioop.tomono(pcm, sample_width, 0.5, 0.5)
+        channels = 1
+    elif channels != 1:
+        raise ValueError(f"WAV must be mono or stereo PCM, got {channels} channels")
+
+    if sample_width != 2:
+        pcm = audioop.lin2lin(pcm, sample_width, 2)
+        sample_width = 2
+
+    if frame_rate != 16000:
+        pcm, _state = audioop.ratecv(pcm, sample_width, channels, frame_rate, 16000, None)
+        frame_rate = 16000
+
+    with wave.open(str(dst_path), "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(16000)
+        wf.writeframes(pcm)
+
+    return dst_path
+
+
 class RobotAudio:
     def __init__(self) -> None:
         audio_client_cls = _load_audio_client()
@@ -106,8 +137,9 @@ class RobotAudio:
 
         with tempfile.TemporaryDirectory(prefix="g1_say_") as td:
             wav_path = Path(td) / "speech.wav"
+            robot_wav_path = Path(td) / "speech_robot.wav"
             subprocess.run(["espeak", "-w", str(wav_path), text], check=True)
-            return self.play_wav(wav_path, volume=volume)
+            return self.play_wav(_convert_wav_for_robot(wav_path, robot_wav_path), volume=volume)
 
 
 __all__ = ["RobotAudio", "parse_color"]
