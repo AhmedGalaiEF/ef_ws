@@ -52,11 +52,14 @@ def parse_args() -> argparse.Namespace:
     hand_group.add_argument("--right", "--right-hand", action="store_const", const="right", dest="hand", help="Extend the right hand.")
     parser.add_argument("--iface", default="eth0", help="Network interface for DDS traffic.")
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id.")
+<<<<<<< HEAD
     parser.add_argument(
         "--run-hanged-boot",
         action="store_true",
         help="Run the hanger boot sequence before arm control. Disabled by default.",
     )
+=======
+>>>>>>> d6e708edb1286ff948b8d69f6fb0fb3d4c4bea72
     args = parser.parse_args()
     if args.hand is None:
         args.hand = "right"
