@@ -69,7 +69,7 @@ class Robot:
         self,
         iface: str = "eth0",
         domain_id: int = 0,
-        safety_boot: bool = True,
+        safety_boot: bool = False,
         auto_start_sensors: bool = True,
         sport_topic: str = DEFAULT_SPORT_TOPIC,
         lidar_map_topic: str = DEFAULT_LIDAR_MAP_TOPIC,
@@ -1163,10 +1163,14 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Smoke test for sdk_client Robot wrapper")
     parser.add_argument("--iface", default="eth0")
-    parser.add_argument("--no-safety", action="store_true")
+    parser.add_argument(
+        "--safety-boot",
+        action="store_true",
+        help="Run the hanged safety boot sequence during initialization.",
+    )
     args = parser.parse_args()
 
-    bot = Robot(iface=args.iface, safety_boot=not args.no_safety)
+    bot = Robot(iface=args.iface, safety_boot=args.safety_boot)
     time.sleep(0.6)
     print("FSM:", bot.get_fsm())
     print("IMU:", bot.get_imu())

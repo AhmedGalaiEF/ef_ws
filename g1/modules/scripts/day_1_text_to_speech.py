@@ -21,9 +21,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--iface", default="eth0", help="Network interface for the robot SDK.")
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id.")
     parser.add_argument(
+        "--safety-boot",
+        action="store_true",
+        help="Run the hanged safety boot sequence during initialization. Use only when the robot is properly supported.",
+    )
+    parser.add_argument(
         "--no-safety-boot",
         action="store_true",
-        help="Skip the robot safety boot sequence during initialization.",
+        help="Deprecated no-op. Safety boot is skipped by default.",
     )
     parser.add_argument(
         "--volume",
@@ -40,7 +45,7 @@ def main() -> int:
         robot = Robot(
             iface=args.iface,
             domain_id=args.domain_id,
-            safety_boot=not args.no_safety_boot,
+            safety_boot=args.safety_boot,
             auto_start_sensors=True,
         )
     except Exception as exc:

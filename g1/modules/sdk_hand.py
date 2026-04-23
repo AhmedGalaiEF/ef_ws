@@ -41,6 +41,16 @@ TOPIC_HAND_BY_SIDE = {
     "right": "rt/dex3/right/cmd",
 }
 
+HAND_MAX_LIMITS = {
+    "left": [1.05, 1.05, 1.75, 0.0, 0.0, 0.0, 0.0],
+    "right": [1.05, 0.742, 0.0, 1.57, 1.75, 1.57, 1.75],
+}
+
+HAND_MIN_LIMITS = {
+    "left": [-1.05, -0.724, 0.0, -1.57, -1.75, -1.57, -1.75],
+    "right": [-1.05, -1.05, -1.75, 0.0, 0.0, 0.0, 0.0],
+}
+
 HAND_OPEN = [
     -0.15717165172100067,
     -0.41322529315948486,
@@ -68,13 +78,41 @@ FINGER_TO_IDXS: Dict[str, list[int]] = {
 }
 
 
-def build_hand_msg(targets: list[float], kp: float, kd: float, tau: float) -> HandCmd_:
+def hand_mid_targets(hand: str) -> list[float]:
+    side = str(hand).strip().lower()
+    return [
+        (lo + hi) / 2.0
+        for lo, hi in zip(HAND_MIN_LIMITS[side], HAND_MAX_LIMITS[side])
+    ]
+
+
+def hand_open_targets(hand: str) -> list[float]:
+    side = str(hand).strip().lower()
+    return list(HAND_MIN_LIMITS[side])
+
+
+def pack_ris_mode(motor_id: int, status: int = 1, timeout: int = 0) -> int:
+    return (
+        (int(motor_id) & 0x0F)
+        | ((int(status) & 0x07) << 4)
+        | ((int(timeout) & 0x01) << 7)
+    )
+
+
+def build_hand_msg(
+    targets: list[float],
+    kp: float,
+    kd: float,
+    tau: float,
+    *,
+    timeout: int = 0,
+) -> HandCmd_:
     if len(targets) != 7:
         raise ValueError("Hand targets must contain 7 joint values.")
     msg = unitree_hg_msg_dds__HandCmd_()
     for idx in range(7):
         cmd = msg.motor_cmd[idx]
-        cmd.mode = 1
+        cmd.mode = pack_ris_mode(idx, timeout=timeout)
         cmd.tau = float(tau)
         cmd.q = float(targets[idx])
         cmd.dq = 0.0
@@ -123,12 +161,41 @@ class Dex3HandController:
         )
         self._last_targets = list(targets)
 
-    def publish_for(self, msg: HandCmd_, seconds: float, rate_hz: float = 50.0) -> None:
+    def write_targets_once(
+        self,
+        targets: list[float],
+        *,
+        kp: float = 0.5,
+        kd: float = 0.1,
+        tau: float = 0.0,
+        timeout: int = 0,
+        first_write_timeout_s: float | None = None,
+    ) -> bool:
+        if len(targets) != 7:
+            raise ValueError("Hand targets must contain 7 joint values.")
+        msg = build_hand_msg(targets, kp=kp, kd=kd, tau=tau, timeout=timeout)
+        ok = self._pub.Write(msg, timeout=first_write_timeout_s)
+        self._last_targets = [float(value) for value in targets]
+        return ok is not False
+
+    def publish_for(
+        self,
+        msg: HandCmd_,
+        seconds: float,
+        rate_hz: float = 50.0,
+        *,
+        first_write_timeout_s: float | None = None,
+    ) -> bool:
         steps = max(1, int(max(0.01, float(seconds)) * max(1.0, float(rate_hz))))
         dt = 1.0 / max(1.0, float(rate_hz))
-        for _ in range(steps):
-            self._pub.Write(msg)
+        matched = True
+        for step_idx in range(steps):
+            timeout = first_write_timeout_s if step_idx == 0 else None
+            ok = self._pub.Write(msg, timeout=timeout)
+            if step_idx == 0 and ok is False:
+                matched = False
             time.sleep(dt)
+        return matched
 
     def set_targets(
         self,
@@ -151,7 +218,7 @@ class Dex3HandController:
             max(1.0 / rate, 0.25 if ramp_s is None else float(ramp_s)),
         )
 
-        start_targets = list(HAND_OPEN) if self._last_targets is None else list(self._last_targets)
+        start_targets = hand_open_targets(self.hand) if self._last_targets is None else list(self._last_targets)
         if any(abs(dst - src) > 1e-6 for src, dst in zip(start_targets, target_list)) and ramp_duration_s > 0.0:
             ramp_steps = max(2, int(round(ramp_duration_s * rate)))
             step_dt = ramp_duration_s / float(ramp_steps)
@@ -179,21 +246,33 @@ class Dex3HandController:
             )
 
     def open(self, hold_s: float = 0.6, rate_hz: float = 50.0, ramp_s: float | None = None) -> None:
-        self.set_targets(list(HAND_OPEN), hold_s=hold_s, rate_hz=rate_hz, ramp_s=ramp_s)
+        self.set_targets(hand_open_targets(self.hand), hold_s=hold_s, rate_hz=rate_hz, ramp_s=ramp_s)
 
     def close(self, hold_s: float = 0.6, rate_hz: float = 50.0, ramp_s: float | None = None) -> None:
-        self.set_targets(list(HAND_CLOSED), hold_s=hold_s, rate_hz=rate_hz, tau=0.12, ramp_s=ramp_s)
+        self.set_targets(hand_mid_targets(self.hand), hold_s=hold_s, rate_hz=rate_hz, tau=0.0, ramp_s=ramp_s)
 
     def move_finger(self, finger_name: str, hold_s: float = 1.0, settle_s: float = 0.6, rate_hz: float = 50.0) -> None:
         finger = str(finger_name).strip().lower()
         if finger not in FINGER_TO_IDXS:
             raise ValueError(f"Unknown finger '{finger_name}'.")
-        targets = list(HAND_OPEN)
+        targets = hand_open_targets(self.hand)
+        mid_targets = hand_mid_targets(self.hand)
         for idx in FINGER_TO_IDXS[finger]:
-            targets[idx] = HAND_CLOSED[idx]
+            targets[idx] = mid_targets[idx]
         self.open(hold_s=settle_s, rate_hz=rate_hz)
         self.set_targets(targets, hold_s=hold_s, rate_hz=rate_hz, tau=0.12)
         self.open(hold_s=settle_s, rate_hz=rate_hz)
 
 
-__all__ = ["Dex3HandController", "HAND_CLOSED", "HAND_OPEN", "build_hand_msg"]
+__all__ = [
+    "Dex3HandController",
+    "FINGER_TO_IDXS",
+    "HAND_CLOSED",
+    "HAND_MAX_LIMITS",
+    "HAND_MIN_LIMITS",
+    "HAND_OPEN",
+    "build_hand_msg",
+    "hand_mid_targets",
+    "hand_open_targets",
+    "pack_ris_mode",
+]
