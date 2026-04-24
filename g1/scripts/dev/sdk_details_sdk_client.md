@@ -75,9 +75,11 @@ Hinweise:
 
 ---
 
-## 6) Sicherer Start via `hanger_boot_sequence` (ueber `Robot`)
+## 6) Sicherer Start via `secure_boot` (ueber `Robot`)
 
-`Robot(...)` nutzt standardmaessig bereits `hanger_boot_sequence` (`safety_boot=True`).
+`Robot(...)` nutzt standardmaessig bereits `secure_boot` (`safety_boot=True`).
+Dabei wird zuerst `hanger_boot_sequence` ausgefuehrt und anschliessend
+explizit Gait-Type `0` (normaler Walk/Balanced-Gait, kein Run-Gait) gesetzt.
 
 Wenn die sichere Sequenz spaeter erneut gestartet werden soll:
 

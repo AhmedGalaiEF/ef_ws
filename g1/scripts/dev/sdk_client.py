@@ -59,10 +59,7 @@ except ImportError as exc:
         "  pip install -e <path-to-unitree_sdk2_python>"
     ) from exc
 
-try:
-    from safety.hanger_boot_sequence import hanger_boot_sequence
-except Exception:
-    from hanger_boot_sequence import hanger_boot_sequence  # type: ignore
+from secure_boot import force_normal_gait, secure_boot
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -334,7 +331,7 @@ class Robot:
         self._slam_info_sub: Any | None = None
 
         if safety_boot:
-            self._client = hanger_boot_sequence(iface=self.iface)
+            self._client = secure_boot(iface=self.iface, domain_id=self.domain_id)
         else:
             ChannelFactoryInitialize(self.domain_id, self.iface)
             self._client = LocoClient()
@@ -346,11 +343,7 @@ class Robot:
             self.start_sensors()
 
     def _ensure_balanced_gait_mode(self) -> None:
-        try:
-            if hasattr(self._client, "BalanceStand"):
-                self._client.BalanceStand(0)
-        except Exception:
-            pass
+        force_normal_gait(self._client)
 
     # ------------------------------------------------------------------
     # Sensor subscriptions
@@ -2203,12 +2196,12 @@ class Robot:
             self._ensure_balanced_gait_mode()
 
     def hanging_boot(self) -> None:
-        """Backward-compatible alias; use balanced_stand()."""
-        self.balanced_stand(0)
+        """Run the hanging boot flow and force normal gait mode."""
+        self._client = secure_boot(iface=self.iface, domain_id=self.domain_id)
 
     def hanged_boot(self) -> None:
-        """Backward-compatible alias; use balanced_stand()."""
-        self.balanced_stand(0)
+        """Backward-compatible alias for hanging_boot()."""
+        self.hanging_boot()
 
     @staticmethod
     def _normalize_arm_joint_name(name: str) -> str:

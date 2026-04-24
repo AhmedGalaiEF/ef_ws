@@ -18,8 +18,9 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 from sdk_audio import RobotAudio
-from sdk_boot import create_loco_client, hanger_boot_sequence, rpc_get_int
+from sdk_boot import create_loco_client, rpc_get_int
 from sdk_hand import Dex3HandController
+from secure_boot import force_normal_gait, secure_boot
 from sdk_sensors import (
     LatestSubscriber,
     LidarImu_,
@@ -112,9 +113,10 @@ class Robot:
         self.slam_is_running = False
 
         if safety_boot:
-            self._client = hanger_boot_sequence(iface=self.iface, domain_id=self.domain_id)
+            self._client = secure_boot(iface=self.iface, domain_id=self.domain_id)
         else:
             self._client = create_loco_client(domain_id=self.domain_id, iface=self.iface)
+            force_normal_gait(self._client)
 
         if auto_start_sensors:
             self.start_sensors()
@@ -1221,10 +1223,10 @@ class Robot:
     # ------------------------------------------------------------------
 
     def hanged_boot(self) -> None:
-        self._client = hanger_boot_sequence(iface=self.iface, domain_id=self.domain_id)
+        self._client = secure_boot(iface=self.iface, domain_id=self.domain_id)
 
     def hanging_boot(self) -> None:
-        self.balanced_stand(0)
+        self._client = secure_boot(iface=self.iface, domain_id=self.domain_id)
 
     def say(self, text: str = "what would you like me to say?", volume: int | None = None) -> int:
         return self._get_audio().speak(text, volume=volume)
