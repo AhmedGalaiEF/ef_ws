@@ -4,6 +4,8 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import threading
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -57,6 +59,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--target",
+        "--search-prompt",
+        dest="target",
         default="a soda can",
         help="Positive text prompt for CLIP zero-shot perception.",
     )
@@ -275,6 +279,159 @@ def annotate_frame(
     return annotated
 
 
+def analyze_frame(
+    frame_bgr: np.ndarray,
+    model: CLIPModel,
+    processor: CLIPProcessor,
+    device: str,
+    positive_prompt: str,
+    negative_prompt: str,
+    threshold: float,
+    localize: bool,
+    downscale: float,
+) -> tuple[dict[str, Any], Box | None, float | None]:
+    inference_frame, scale = resize_for_inference(frame_bgr, downscale)
+    result = classify_frame(
+        inference_frame,
+        model,
+        processor,
+        device,
+        positive_prompt=positive_prompt,
+        negative_prompt=negative_prompt,
+        threshold=threshold,
+    )
+
+    localized_box = None
+    localized_score = None
+    if localize and result["detected"]:
+        localized_score, box_small = find_best_box(
+            inference_frame,
+            model,
+            processor,
+            device,
+            positive_prompt=positive_prompt,
+            negative_prompt=negative_prompt,
+        )
+        localized_box = upscale_box(box_small, inverse_scale=(1.0 / scale))
+
+    return result, localized_box, localized_score
+
+
+def show_live_preview(
+    robot: Robot,
+    timeout: float,
+    model: CLIPModel,
+    processor: CLIPProcessor,
+    device: str,
+    positive_prompt: str,
+    negative_prompt: str,
+    threshold: float,
+    downscale: float,
+    localize: bool,
+) -> None:
+    frame_interval_s = 1.0 / 30.0
+    state: dict[str, Any] = {
+        "pending_frame": None,
+        "latest_frame": None,
+        "latest_result": None,
+        "latest_box": None,
+        "latest_score": None,
+    }
+    lock = threading.Lock()
+    stop_event = threading.Event()
+
+    def inference_worker() -> None:
+        while not stop_event.is_set():
+            with lock:
+                pending = state["pending_frame"]
+                state["pending_frame"] = None
+            if pending is None:
+                time.sleep(0.005)
+                continue
+
+            try:
+                result, localized_box, localized_score = analyze_frame(
+                    pending,
+                    model,
+                    processor,
+                    device,
+                    positive_prompt=positive_prompt,
+                    negative_prompt=negative_prompt,
+                    threshold=threshold,
+                    downscale=downscale,
+                    localize=localize,
+                )
+            except Exception:
+                continue
+
+            with lock:
+                state["latest_result"] = result
+                state["latest_box"] = localized_box
+                state["latest_score"] = localized_score
+
+    worker = threading.Thread(target=inference_worker, daemon=True)
+    worker.start()
+
+    print("Showing live RGB preview at 30 FPS. Press 'q' or Esc to close.")
+    try:
+        while True:
+            loop_start = time.perf_counter()
+            try:
+                frame_bgr = capture_frame(robot, timeout=timeout)
+            except Exception:
+                frame_bgr = None
+
+            if frame_bgr is not None:
+                with lock:
+                    state["latest_frame"] = frame_bgr
+                    state["pending_frame"] = frame_bgr.copy()
+
+            with lock:
+                latest_frame = state["latest_frame"]
+                latest_result = state["latest_result"]
+                latest_box = state["latest_box"]
+                latest_score = state["latest_score"]
+
+            if latest_frame is None:
+                key = cv2.waitKey(1) & 0xFF
+                if key in (27, ord("q")):
+                    break
+                continue
+
+            if latest_result is None:
+                display = latest_frame.copy()
+                cv2.putText(
+                    display,
+                    f"Searching: {positive_prompt}",
+                    (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.8,
+                    (255, 255, 255),
+                    2,
+                )
+            else:
+                display = annotate_frame(
+                    latest_frame,
+                    latest_result,
+                    positive_prompt=positive_prompt,
+                    localized_box=latest_box,
+                    localized_score=latest_score,
+                )
+
+            cv2.imshow("Day 4 Perception", display)
+            key = cv2.waitKey(1) & 0xFF
+            if key in (27, ord("q")):
+                break
+
+            sleep_s = frame_interval_s - (time.perf_counter() - loop_start)
+            if sleep_s > 0.0:
+                time.sleep(sleep_s)
+    finally:
+        stop_event.set()
+        worker.join(timeout=1.0)
+        cv2.destroyAllWindows()
+
+
 def main() -> int:
     args = parse_args()
     if not (0.0 <= args.threshold <= 1.0):
@@ -293,49 +450,53 @@ def main() -> int:
         return 1
 
     try:
+        model, processor, device = load_clip(args.model_name)
+    except Exception as exc:
+        print(f"Failed to load CLIP model: {exc}")
+        return 1
+
+    if args.show:
+        try:
+            show_live_preview(
+                robot,
+                timeout=args.timeout,
+                model=model,
+                processor=processor,
+                device=device,
+                positive_prompt=args.target,
+                negative_prompt=args.negative,
+                threshold=args.threshold,
+                downscale=args.downscale,
+                localize=True,
+            )
+        except Exception as exc:
+            print(f"Live preview failed: {exc}")
+            return 1
+        return 0
+
+    try:
         frame_bgr = capture_frame(robot, timeout=args.timeout)
     except Exception as exc:
         print(f"Camera capture failed: {exc}")
         return 1
 
     print(f"Captured frame: {frame_bgr.shape[1]}x{frame_bgr.shape[0]} pixels")
-    inference_frame, scale = resize_for_inference(frame_bgr, args.downscale)
 
     try:
-        model, processor, device = load_clip(args.model_name)
-    except Exception as exc:
-        print(f"Failed to load CLIP model: {exc}")
-        return 1
-
-    try:
-        result = classify_frame(
-            inference_frame,
+        result, localized_box, localized_score = analyze_frame(
+            frame_bgr,
             model,
             processor,
             device,
             positive_prompt=args.target,
             negative_prompt=args.negative,
             threshold=args.threshold,
+            downscale=args.downscale,
+            localize=args.localize,
         )
     except Exception as exc:
-        print(f"CLIP classification failed: {exc}")
+        print(f"CLIP analysis failed: {exc}")
         return 1
-
-    localized_box = None
-    localized_score = None
-    if args.localize:
-        try:
-            localized_score, box_small = find_best_box(
-                inference_frame,
-                model,
-                processor,
-                device,
-                positive_prompt=args.target,
-                negative_prompt=args.negative,
-            )
-            localized_box = upscale_box(box_small, inverse_scale=(1.0 / scale))
-        except Exception as exc:
-            print(f"Localization step failed: {exc}")
 
     print("\nPerception result:")
     print(f"  Detected  : {result['detected']}")
@@ -357,12 +518,6 @@ def main() -> int:
     if args.save:
         cv2.imwrite(args.save, annotated)
         print(f"\nAnnotated image saved to: {args.save}")
-
-    if args.show:
-        cv2.imshow("Day 4 Perception", annotated)
-        print("Press any key to close the window ...")
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
 
     if not args.save and not args.show:
         print("\nTip: use --save result.jpg or --show to inspect the annotated result.")

@@ -38,7 +38,6 @@ try:
     from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
     from unitree_sdk2py.idl.unitree_hg.msg.dds_ import HandState_, LowCmd_
     from unitree_sdk2py.utils.crc import CRC
-    from unitree_sdk2py.comm.motion_switcher.motion_switcher_client import MotionSwitcherClient
 except ImportError as exc:
     raise SystemExit(
         "unitree_sdk2py is not installed. Install it with:\n"
@@ -133,11 +132,6 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
     parser.add_argument("--hand-kp", type=float, default=0.8, help="Dex3 finger proportional gain.")
     parser.add_argument("--hand-kd", type=float, default=0.05, help="Dex3 finger derivative gain.")
     parser.add_argument("--hand-tau", type=float, default=0.0, help="Dex3 finger feed-forward torque.")
-    parser.add_argument(
-        "--skip-release",
-        action="store_true",
-        help="Do not release the active motion mode before publishing rt/lowcmd.",
-    )
     args, remaining = parser.parse_known_args()
     return args, [sys.argv[0], *remaining]
 
@@ -252,21 +246,9 @@ class HandStateSubscriber:
 
 
 class RobotPoseController:
-    def __init__(self, joints: list[int], *, iface: str, domain_id: int, release_motion: bool) -> None:
+    def __init__(self, joints: list[int], *, iface: str, domain_id: int) -> None:
         self.joints = [int(j) for j in joints]
         self._crc = CRC()
-        self._release_error: str | None = None
-        if release_motion:
-            try:
-                switcher = MotionSwitcherClient()
-                switcher.SetTimeout(5.0)
-                switcher.Init()
-                code, name = switcher.CheckMode()
-                if code == 0 and name:
-                    switcher.ReleaseMode()
-            except Exception as exc:
-                self._release_error = str(exc)
-
         ChannelFactoryInitialize(int(domain_id), str(iface))
         self._pub = ChannelPublisher(BODY_COMMAND_TOPIC, LowCmd_)
         self._pub.Init()
@@ -276,10 +258,6 @@ class RobotPoseController:
         self._cmd.motor_cmd[NOT_USED_IDX].q = 1.0
         for joint in self.joints:
             self._cmd.motor_cmd[joint].mode = 1
-
-    @property
-    def release_error(self) -> str | None:
-        return self._release_error
 
     def write_targets_once(
         self,
@@ -357,7 +335,6 @@ class RobotJointSliderApp(QWidget):
             self.all_joints,
             iface=self.iface,
             domain_id=self.domain_id,
-            release_motion=not bool(args.skip_release),
         )
         self.hand_subs = {hand: HandStateSubscriber(hand) for hand in self.hand_sides}
         self.hand_controllers: dict[str, Dex3HandController | None] = {}
@@ -370,10 +347,7 @@ class RobotJointSliderApp(QWidget):
         self._build_ui()
         self._seed_from_state_if_available()
 
-        if self.controller.release_error:
-            self.status_text = f"Motion release failed: {self.controller.release_error}"
-        else:
-            self.status_text = f"Publishing body on {BODY_COMMAND_TOPIC}; hands on Dex3 topics via {self.iface}"
+        self.status_text = f"Publishing body on {BODY_COMMAND_TOPIC}; hands on Dex3 topics via {self.iface}"
         self._refresh_status_label()
 
         self.timer = QTimer(self)

@@ -65493,3 +65493,6 @@ python3: /home/ag/Livox-SDK2/sdk_core/../3rdparty/rapidjson/filereadstream.h:57:
 [Livox2] frame 19200 pts  (Δt=94.3 ms)
 [Livox2] frame 19200 pts  (Δt=150.4 ms)
 [Livox2] frame 19200 pts  (Δt=108.2 ms)
+
+[2026-04-24 08:43:36] start viz=True cmd=['/home/ag/.guv/envs/unitree/bin/python3', '/home/ag/ef_ws/g1/scripts/dev/other/slam_viz_nav_overlay_runner.py', '--save-dir', '/home/ag/ef_ws/g1/scripts/navigation/obstacle_avoidance/maps', '--save-every', '1', '--save-prefix', 'live_slam_latest', '--save-latest', '--iface', 'enp1s0', '--domain-id', '0', '--overlay-plan-file', '/tmp/g1_nav_overlay_plan.json']
+/home/ag/.guv/envs/unitree/bin/python3: can't open file '/home/ag/ef_ws/g1/scripts/dev/other/slam_viz_nav_overlay_runner.py': [Errno 2] No such file or directory

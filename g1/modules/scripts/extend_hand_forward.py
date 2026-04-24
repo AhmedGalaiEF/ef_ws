@@ -32,9 +32,12 @@ from sdk_boot import hanger_boot_sequence
 
 LEFT_ARM_IDX = [15, 16, 17, 18, 19, 20, 21]
 RIGHT_ARM_IDX = [22, 23, 24, 25, 26, 27, 28]
+WAIST_IDX = [12, 13, 14]
 NOT_USED_IDX = 29
-FORWARD_ELBOW_TARGET_RAD = 0.07
-STARTUP_ZERO_TORQUE_SECONDS = 10.0
+FORWARD_ELBOW_TARGET_RAD = 0.03
+STARTUP_HOLD_SECONDS = 10.0
+DEFAULT_RAMP_DURATION_SECONDS = 12.0
+DEFAULT_COMMAND_RATE_HZ = 50.0
 
 
 def parse_args() -> argparse.Namespace:
@@ -52,14 +55,17 @@ def parse_args() -> argparse.Namespace:
     hand_group.add_argument("--right", "--right-hand", action="store_const", const="right", dest="hand", help="Extend the right hand.")
     parser.add_argument("--iface", default="eth0", help="Network interface for DDS traffic.")
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id.")
-<<<<<<< HEAD
     parser.add_argument(
         "--run-hanged-boot",
         action="store_true",
         help="Run the hanger boot sequence before arm control. Disabled by default.",
     )
-=======
->>>>>>> d6e708edb1286ff948b8d69f6fb0fb3d4c4bea72
+    parser.add_argument(
+        "--ramp-duration",
+        type=float,
+        default=DEFAULT_RAMP_DURATION_SECONDS,
+        help="Seconds used to gradually move from the current arm pose to the target pose.",
+    )
     args = parser.parse_args()
     if args.hand is None:
         args.hand = "right"
@@ -126,47 +132,70 @@ class ArmPoseController:
         joints: list[int],
         kp: float = 30.0,
         kd: float = 1.5,
-        zero_torque_joints: list[int] | None = None,
+        hold_joints: list[int] | None = None,
     ) -> None:
         self.joints = [int(j) for j in joints]
-        self.zero_torque_joints = [int(j) for j in (zero_torque_joints or self.joints)]
+        self.hold_joints = [int(j) for j in (hold_joints or [])]
         self.kp = float(kp)
         self.kd = float(kd)
         self._crc = CRC()
         self._pub = ChannelPublisher("rt/arm_sdk", LowCmd_)
         self._pub.Init()
         self._cmd = unitree_hg_msg_dds__LowCmd_()
+        self._cmd.mode_pr = 0
+        self._cmd.mode_machine = 0
         self._cmd.motor_cmd[NOT_USED_IDX].q = 1.0
-        self._last_pose = {joint: 0.0 for joint in set(self.joints + self.zero_torque_joints)}
+        managed_joints = set(self.joints + self.hold_joints)
+        self._last_pose = {joint: 0.0 for joint in managed_joints}
+        for joint in managed_joints:
+            self._cmd.motor_cmd[joint].mode = 1
 
     def seed_pose(self, joint_positions: np.ndarray) -> None:
-        for joint, q_val in zip(self.joints, joint_positions):
+        for joint, q_val in zip(self.joints + self.hold_joints, joint_positions):
             self._last_pose[joint] = float(q_val)
 
     def write_pose(self, joint_positions: np.ndarray) -> None:
         for joint, q_val in zip(self.joints, joint_positions):
             mc = self._cmd.motor_cmd[joint]
+            mc.mode = 1
             mc.q = float(q_val)
             mc.dq = 0.0
             mc.kp = self.kp
             mc.kd = self.kd
             mc.tau = 0.0
             self._last_pose[joint] = float(q_val)
-        self._cmd.crc = self._crc.Crc(self._cmd)
-        self._pub.Write(self._cmd)
-
-    def write_zero_torque(self) -> None:
-        for joint in self.zero_torque_joints:
+        for joint in self.hold_joints:
             mc = self._cmd.motor_cmd[joint]
-            mc.q = self._last_pose.get(joint, 0.0)
+            mc.mode = 1
+            mc.q = self._last_pose[joint]
             mc.dq = 0.0
-            mc.kp = 0.0
-            mc.kd = 0.0
+            mc.kp = self.kp
+            mc.kd = self.kd
             mc.tau = 0.0
         self._cmd.crc = self._crc.Crc(self._cmd)
         self._pub.Write(self._cmd)
 
-    def zero_torque_countdown(
+    def write_hold_pose(self) -> None:
+        for joint in self.joints:
+            mc = self._cmd.motor_cmd[joint]
+            mc.mode = 1
+            mc.q = self._last_pose[joint]
+            mc.dq = 0.0
+            mc.kp = self.kp
+            mc.kd = self.kd
+            mc.tau = 0.0
+        for joint in self.hold_joints:
+            mc = self._cmd.motor_cmd[joint]
+            mc.mode = 1
+            mc.q = self._last_pose[joint]
+            mc.dq = 0.0
+            mc.kp = self.kp
+            mc.kd = self.kd
+            mc.tau = 0.0
+        self._cmd.crc = self._crc.Crc(self._cmd)
+        self._pub.Write(self._cmd)
+
+    def hold_countdown(
         self,
         duration_s: float,
         stop_event: threading.Event,
@@ -182,10 +211,10 @@ class ArmPoseController:
 
             remaining_int = int(np.ceil(remaining_s))
             if remaining_int != last_remaining:
-                print(f"Zero torque countdown: {remaining_int}")
+                print(f"Hold countdown: {remaining_int}")
                 last_remaining = remaining_int
 
-            self.write_zero_torque()
+            self.write_hold_pose()
             time.sleep(dt)
 
     def ramp_to_pose(self, target_positions: np.ndarray, duration_s: float = 1.2, rate_hz: float = 50.0) -> None:
@@ -209,7 +238,8 @@ class ArmPoseController:
 def main() -> int:
     args = parse_args()
     arm_joints = selected_joint_indices(args.hand)
-    zero_torque_joints = list(LEFT_ARM_IDX) + list(RIGHT_ARM_IDX)
+    hold_joints = list(WAIST_IDX)
+    state_joints = arm_joints + hold_joints
     elbow_offset = 3  # shoulder_pitch, shoulder_roll, shoulder_yaw, elbow, wrist_pitch, wrist_roll, wrist_yaw
 
     if args.run_hanged_boot:
@@ -219,8 +249,11 @@ def main() -> int:
         print("Skipping hanger boot sequence.")
     ChannelFactoryInitialize(int(args.domain_id), args.iface)
 
-    state_sub = ArmStateSubscriber(arm_joints)
-    arm_ctrl = ArmPoseController(arm_joints, zero_torque_joints=zero_torque_joints)
+    state_sub = ArmStateSubscriber(state_joints)
+    arm_ctrl = ArmPoseController(
+        arm_joints,
+        hold_joints=hold_joints,
+    )
     current_pose = state_sub.wait_for_snapshot()
     arm_ctrl.seed_pose(current_pose)
 
@@ -235,24 +268,33 @@ def main() -> int:
         if sig is not None:
             signal.signal(sig, _handle_signal)
 
-    print(f"Putting both arms in zero torque for {STARTUP_ZERO_TORQUE_SECONDS:.0f} seconds.")
-    arm_ctrl.zero_torque_countdown(STARTUP_ZERO_TORQUE_SECONDS, stop_event=stop_event, rate_hz=50.0)
+    print(f"Holding the current arm and waist pose for {STARTUP_HOLD_SECONDS:.0f} seconds.")
+    arm_ctrl.hold_countdown(
+        STARTUP_HOLD_SECONDS,
+        stop_event=stop_event,
+        rate_hz=DEFAULT_COMMAND_RATE_HZ,
+    )
     if stop_event.is_set():
         return 1
 
     current_pose = state_sub.wait_for_snapshot()
     arm_ctrl.seed_pose(current_pose)
-    target_pose = current_pose.copy()
+    target_pose = current_pose[: len(arm_joints)].copy()
     target_pose[elbow_offset] = np.float32(FORWARD_ELBOW_TARGET_RAD)
 
     print(
         f"Extending {args.hand} hand forward by moving elbow joint {arm_joints[elbow_offset]} "
         f"from {float(current_pose[elbow_offset]):.3f} rad to {float(target_pose[elbow_offset]):.3f} rad."
     )
+    print(f"Ramping to the target pose over {float(args.ramp_duration):.1f} seconds.")
     print("Holding the arm in that pose. Press Ctrl-C to stop publishing the hold command.")
 
-    arm_ctrl.ramp_to_pose(target_pose, duration_s=1.2, rate_hz=50.0)
-    arm_ctrl.hold_pose(target_pose, stop_event=stop_event, rate_hz=50.0)
+    arm_ctrl.ramp_to_pose(
+        target_pose,
+        duration_s=max(1.0, float(args.ramp_duration)),
+        rate_hz=DEFAULT_COMMAND_RATE_HZ,
+    )
+    arm_ctrl.hold_pose(target_pose, stop_event=stop_event, rate_hz=DEFAULT_COMMAND_RATE_HZ)
     return 0
 
 

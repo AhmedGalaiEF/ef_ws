@@ -4,6 +4,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from pathlib import Path
+import shlex
+import shutil
+import subprocess
 import sys
 import time
 
@@ -12,6 +16,8 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PARENT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 if PARENT_DIR not in sys.path:
     sys.path.insert(0, PARENT_DIR)
+
+SLAM_VIEWER_SCRIPT = Path(SCRIPT_DIR).resolve() / "slam_points_viewer.py"
 
 from sdk_client import Robot
 
@@ -49,6 +55,61 @@ def print_section(title: str, payload: object) -> None:
         print(payload)
 
 
+def print_current_pose(robot: Robot, title: str = "Current SLAM Pose") -> None:
+    status = robot.get_slam_pose_status(timeout_s=0.4)
+    print_section(
+        title,
+        {
+            "pose": status.get("pose"),
+            "usable": status.get("usable"),
+            "reason": status.get("reason"),
+            "sport_pose": status.get("sport_pose"),
+            "sport_vs_slam_xy_gap_m": status.get("sport_vs_slam_xy_gap_m"),
+        },
+    )
+
+
+def _viewer_terminal_command(iface: str, domain_id: int) -> list[str] | None:
+    script_dir = str(SLAM_VIEWER_SCRIPT.parent)
+    python_exe = shlex.quote(sys.executable)
+    script_path = shlex.quote(str(SLAM_VIEWER_SCRIPT))
+    shell_cmd = (
+        f"cd {shlex.quote(script_dir)} && exec {python_exe} {script_path} "
+        f"--iface {shlex.quote(str(iface))} "
+        f"--domain-id {int(domain_id)}"
+    )
+
+    terminal_candidates: list[list[str]] = [
+        ["x-terminal-emulator", "-e", "bash", "-lc", shell_cmd],
+        ["gnome-terminal", "--", "bash", "-lc", shell_cmd],
+        ["konsole", "-e", "bash", "-lc", shell_cmd],
+    ]
+    for cmd in terminal_candidates:
+        if shutil.which(cmd[0]):
+            return cmd
+    return None
+
+
+def launch_live_slam_viewer(*, iface: str, domain_id: int) -> None:
+    if not SLAM_VIEWER_SCRIPT.is_file():
+        print(f"SLAM viewer script not found: {SLAM_VIEWER_SCRIPT}")
+        return
+    cmd = _viewer_terminal_command(iface=iface, domain_id=domain_id)
+    if cmd is None:
+        print("No supported terminal emulator found for launching the live SLAM viewer.")
+        return
+    print(f"Launching SLAM DDS viewer in a new terminal: {SLAM_VIEWER_SCRIPT}")
+    try:
+        subprocess.Popen(
+            cmd,
+            cwd=str(SLAM_VIEWER_SCRIPT.parent),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception as exc:
+        print(f"Failed to launch live SLAM viewer: {exc}")
+
+
 def prompt_text(prompt: str, default: str | None = None) -> str:
     suffix = f" [{default}]" if default is not None else ""
     value = input(f"{prompt}{suffix}: ").strip()
@@ -75,12 +136,17 @@ def prompt_yes_no(prompt: str, default: bool = False) -> bool:
 
 
 def show_status(robot: Robot, slam_type: str, named_points: dict[str, tuple[float, float, float]]) -> None:
+    slam_status = robot.get_slam_pose_status(timeout_s=0.6)
     print_section(
         "Status",
         {
             "slam_type": slam_type,
             "slam_is_running": robot.slam_is_running,
-            "slam_pose": robot.get_slam_pose(timeout_s=0.6),
+            "slam_pose": slam_status.get("pose"),
+            "slam_pose_usable": slam_status.get("usable"),
+            "slam_pose_reason": slam_status.get("reason"),
+            "sport_pose": slam_status.get("sport_pose"),
+            "sport_vs_slam_xy_gap_m": slam_status.get("sport_vs_slam_xy_gap_m"),
             "queued_path_points": robot.get_path_points(),
             "named_map_points": named_points,
         },
@@ -113,6 +179,7 @@ def run_timed_move(
 
 def manual_motion_menu(robot: Robot, default_move_seconds: float) -> None:
     while True:
+        print_current_pose(robot)
         print(
             "\nManual motion options:\n"
             "  1. Forward\n"
@@ -158,9 +225,13 @@ def capture_named_point(
     robot: Robot,
     named_points: dict[str, tuple[float, float, float]],
 ) -> None:
-    pose = robot.get_slam_pose(timeout_s=1.0)
-    if pose is None:
-        print("No SLAM pose available. Start SLAM and wait for localization first.")
+    slam_status = robot.get_slam_pose_status(timeout_s=1.0)
+    pose = slam_status.get("pose")
+    if not bool(slam_status.get("usable")) or pose is None:
+        print(
+            "No usable SLAM pose available. "
+            f"reason={slam_status.get('reason')} pose={pose} sport_pose={slam_status.get('sport_pose')}"
+        )
         return
 
     name = prompt_text("Point name")
@@ -248,7 +319,8 @@ def print_menu() -> None:
         " 12. Navigate queued path\n"
         " 13. Navigate directly to a named map point\n"
         " 14. Stop robot motion\n"
-        " 15. Exit"
+        " 15. Launch live SLAM viewer\n"
+        " 16. Exit"
     )
 
 
@@ -276,6 +348,7 @@ def main() -> int:
 
     try:
         while True:
+            print_current_pose(robot)
             print_menu()
             choice = input("Select option: ").strip()
 
@@ -315,6 +388,8 @@ def main() -> int:
                 robot.stop()
                 print("Stop command sent.")
             elif choice == "15":
+                launch_live_slam_viewer(iface=args.iface, domain_id=args.domain_id)
+            elif choice == "16":
                 if robot.slam_is_running and prompt_yes_no("SLAM is still running. Stop it before exit?", default=True):
                     save_path = prompt_text("Optional map save path", "")
                     code = robot.stop_slam(save_path=save_path or None)

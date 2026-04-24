@@ -416,16 +416,24 @@ class Robot:
     # Locomotion + FSM
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _normalize_sdk_status(result: Any) -> int:
+        # Some SDK bindings return None for successful non-blocking motion calls.
+        if result is None:
+            return 0
+        return int(result)
+
     def loco_move(self, vx: float, vy: float, vyaw: float) -> int:
-        return int(self._client.Move(float(vx), float(vy), float(vyaw), continous_move=True))
+        result = self._client.Move(float(vx), float(vy), float(vyaw), continous_move=True)
+        return self._normalize_sdk_status(result)
 
     def walk(self, vx: float = 0.0, vy: float = 0.0, vyaw: float = 0.0) -> int:
         self.set_gait_type(0)
-        return int(self.loco_move(vx, vy, vyaw))
+        return self.loco_move(vx, vy, vyaw)
 
     def run(self, vx: float = 0.0, vy: float = 0.0, vyaw: float = 0.0) -> int:
         self.set_gait_type(1)
-        return int(self.loco_move(vx, vy, vyaw))
+        return self.loco_move(vx, vy, vyaw)
 
     def stop_moving(self) -> None:
         if hasattr(self._client, "StopMove"):
@@ -962,14 +970,109 @@ class Robot:
         response = client.pose_nav(float(x), float(y), 0.0, 0.0, 0.0, qz, qw, mode=1)
         return int(response.code)
 
+    @staticmethod
+    def _format_pose_debug(pose: tuple[float, float, float] | None) -> str:
+        if pose is None:
+            return "None"
+        return f"({float(pose[0]):.3f}, {float(pose[1]):.3f}, {float(pose[2]):.3f})"
+
+    def _trace_nav_result(
+        self,
+        *,
+        step_idx: int,
+        target: tuple[float, float, float],
+        before_slam: tuple[float, float, float] | None,
+        trace_duration_s: float = 2.0,
+        sample_period_s: float = 0.5,
+    ) -> None:
+        target_x, target_y, target_yaw = target
+        t0 = time.time()
+        deadline = t0 + max(0.0, float(trace_duration_s))
+        sample_idx = 0
+        while True:
+            now = time.time()
+            slam_pose = self.get_slam_pose(timeout_s=0.15)
+            odom_pose = self.get_odom_pose()
+            dist = None
+            if slam_pose is not None:
+                dist = math.hypot(float(target_x) - float(slam_pose[0]), float(target_y) - float(slam_pose[1]))
+            moved = None
+            if before_slam is not None and slam_pose is not None:
+                moved = math.hypot(float(slam_pose[0]) - float(before_slam[0]), float(slam_pose[1]) - float(before_slam[1]))
+            extra = []
+            if dist is not None:
+                extra.append(f"dist_to_target={dist:.3f}m")
+            if moved is not None:
+                extra.append(f"slam_delta={moved:.3f}m")
+            print(
+                f"[navigate_path] trace step={step_idx} sample={sample_idx} "
+                f"target={self._format_pose_debug((target_x, target_y, target_yaw))} "
+                f"slam_pose={self._format_pose_debug(slam_pose)} "
+                f"odom_pose={self._format_pose_debug(odom_pose)}"
+                + (f" {' '.join(extra)}" if extra else "")
+            )
+            if now >= deadline:
+                break
+            sample_idx += 1
+            time.sleep(max(0.05, float(sample_period_s)))
+
     def navigate_path(self, clear_on_finish: bool = True) -> bool:
         if not self._path_points:
             raise RuntimeError("No path points queued. Call set_path_point(...) first.")
 
+        if not self.slam_is_running:
+            print("[navigate_path] SLAM is not running; pose_nav requests are expected to fail.")
+            return False
+
+        slam_status = self.get_slam_pose_status(timeout_s=0.40)
+        if not bool(slam_status.get("usable")):
+            print(
+                "[navigate_path] SLAM pose is not usable for navigation: "
+                f"reason={slam_status.get('reason')} "
+                f"slam_pose={slam_status.get('pose')} "
+                f"sport_pose={slam_status.get('sport_pose')} "
+                f"sport_vs_slam_xy_gap_m={slam_status.get('sport_vs_slam_xy_gap_m')}"
+            )
+            return False
+
+        try:
+            self.set_gait_type(0)
+        except Exception as exc:
+            print(f"[navigate_path] warning: failed to set gait_type=0 ({exc})")
+
         ok = True
         try:
             for idx, (x, y, yaw) in enumerate(self._path_points, start=1):
+                pos = self.get_position()
+                slam_pos = self.get_slam_pose(timeout_s=0.20)
+                odom_pose = self.get_odom_pose()
+                target_pose = (float(x), float(y), float(yaw))
+                frame_gap = None
+                if pos is not None and slam_pos is not None:
+                    frame_gap = math.hypot(float(pos[0]) - float(slam_pos[0]), float(pos[1]) - float(slam_pos[1]))
+                print(
+                    f"[navigate_path] step={idx} target={self._format_pose_debug(target_pose)} "
+                    f"sport_pose={self._format_pose_debug(pos)} "
+                    f"slam_pose={self._format_pose_debug(slam_pos)} "
+                    f"odom_pose={self._format_pose_debug(odom_pose)}"
+                    + (f" sport_vs_slam_xy_gap={frame_gap:.3f}m" if frame_gap is not None else "")
+                )
+                if pos is not None:
+                    dxy = math.hypot(float(x) - float(pos[0]), float(y) - float(pos[1]))
+                    # pose_nav commonly rejects goals that are already effectively reached.
+                    if dxy <= 0.20:
+                        print(f"[navigate_path] step={idx} skipped: sport_pose already within {dxy:.3f}m of target.")
+                        continue
                 rc = self._run_pose_nav(x, y, yaw)
+                print(f"[navigate_path] step={idx} pose_nav rc={rc}")
+                ref = slam_pos if slam_pos is not None else pos
+                if rc == 4 and ref is not None:
+                    dxy = math.hypot(float(x) - float(ref[0]), float(y) - float(ref[1]))
+                    print(
+                        "[navigate_path] pose_nav rc=4 likely frame/relocalization mismatch or planner rejection; "
+                        f"reference_dist={dxy:.3f}m slam_pose={slam_pos} odom_pose={pos} goal=({x:.3f},{y:.3f})"
+                    )
+                self._trace_nav_result(step_idx=idx, target=target_pose, before_slam=slam_pos)
                 if rc != 0:
                     print(f"[navigate_path] failed at point {idx}: ({x:.3f},{y:.3f},{yaw:.3f}) rc={rc}")
                     ok = False
@@ -994,6 +1097,38 @@ class Robot:
                 return pose
             time.sleep(0.03)
         return None
+
+    @staticmethod
+    def _is_origin_like_pose(
+        pose: tuple[float, float, float] | None,
+        *,
+        xy_eps: float = 0.05,
+        yaw_eps: float = 0.15,
+    ) -> bool:
+        if pose is None:
+            return False
+        return math.hypot(float(pose[0]), float(pose[1])) <= float(xy_eps) and abs(float(pose[2])) <= float(yaw_eps)
+
+    def get_slam_pose_status(self, timeout_s: float = 0.4) -> dict[str, Any]:
+        pose = self.get_slam_pose(timeout_s=timeout_s)
+        sport_pose = self.get_position()
+        status: dict[str, Any] = {
+            "pose": pose,
+            "sport_pose": sport_pose,
+            "slam_running": bool(self.slam_is_running),
+            "usable": pose is not None,
+            "reason": "ok" if pose is not None else "no_pose",
+            "sport_vs_slam_xy_gap_m": None,
+        }
+
+        if pose is not None and sport_pose is not None:
+            gap = math.hypot(float(sport_pose[0]) - float(pose[0]), float(sport_pose[1]) - float(pose[1]))
+            status["sport_vs_slam_xy_gap_m"] = float(gap)
+            sport_radius = math.hypot(float(sport_pose[0]), float(sport_pose[1]))
+            if self._is_origin_like_pose(pose) and sport_radius > 0.50 and gap > 0.50:
+                status["usable"] = False
+                status["reason"] = "origin_like_pose_but_robot_not_near_origin"
+        return status
 
     def get_slam_odom_pose(self) -> tuple[float, float, float] | None:
         return self._ensure_slam_odom_subscriber().get_pose()
