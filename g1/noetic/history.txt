@@ -1,0 +1,732 @@
+unitree@ubuntu:~$ echo $SHELL
+/bin/bash
+unitree@ubuntu:~$   printenv | grep -E 'ROS|CATKIN|CMAKE_PREFIX_PATH|PYTHONPATH'
+ROS_VERSION=1
+ROS_PYTHON_VERSION=3
+ROS_PACKAGE_PATH=/opt/ros/noetic/share
+ROSLISP_PACKAGE_DIRECTORIES=
+ROS_ETC_DIR=/opt/ros/noetic/etc/ros
+CMAKE_PREFIX_PATH=/opt/ros/noetic
+PYTHONPATH=/opt/ros/noetic/lib/python3/dist-packages
+ROS_MASTER_URI=http://localhost:11311
+ROS_ROOT=/opt/ros/noetic/share/ros
+ROS_DISTRO=noetic
+unitree@ubuntu:~$   which roscore
+/opt/ros/noetic/bin/roscore
+unitree@ubuntu:~$   which roslaunch
+/opt/ros/noetic/bin/roslaunch
+unitree@ubuntu:~$   rosversion -d
+noetic
+unitree@ubuntu:~$   echo $ROS_MASTER_URI
+http://localhost:11311
+unitree@ubuntu:~$   echo $ROS_IP
+
+unitree@ubuntu:~$   echo $ROS_HOSTNAME
+
+unitree@ubuntu:~$ 
+
+
+unitree@ubuntu:~$   hostname
+ubuntu
+unitree@ubuntu:~$   uname -a
+Linux ubuntu 5.10.104-tegra #1 SMP PREEMPT Sun Mar 19 07:55:28 PDT 2023 aarch64 aarch64 aarch64 GNU/Linux
+unitree@ubuntu:~$   lsb_release -a
+No LSB modules are available.
+Distributor ID:	Ubuntu
+Description:	Ubuntu 20.04.6 LTS
+Release:	20.04
+Codename:	focal
+unitree@ubuntu:~$   df -h
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/nvme0n1p1  1.9T   21G  1.8T   2% /
+none            7.4G     0  7.4G   0% /dev
+tmpfs           7.6G     0  7.6G   0% /dev/shm
+tmpfs           1.6G   27M  1.5G   2% /run
+tmpfs           5.0M  4.0K  5.0M   1% /run/lock
+tmpfs           7.6G     0  7.6G   0% /sys/fs/cgroup
+tmpfs           1.6G   16K  1.6G   1% /run/user/124
+tmpfs           1.6G  4.0K  1.6G   1% /run/user/1000
+unitree@ubuntu:~$   free -h
+              total        used        free      shared  buff/cache   available
+Mem:           15Gi       2.2Gi        11Gi        28Mi       881Mi        12Gi
+Swap:         7.5Gi          0B       7.5Gi
+unitree@ubuntu:~$   uptime
+ 23:28:41 up 3 min,  1 user,  load average: 0.14, 0.20, 0.09
+unitree@ubuntu:~$   systemctl --type=service --state=running
+  UNIT                         LOAD   ACTIVE SUB     DE>
+  accounts-daemon.service      loaded active running Ac>
+  anacron.service              loaded active running Ru>
+  avahi-daemon.service         loaded active running Av>
+  bluetooth.service            loaded active running Bl>
+  chrony.service               loaded active running ch>
+  colord.service               loaded active running Ma>
+  containerd.service           loaded active running co>
+  cron.service                 loaded active running Re>
+  dbus.service                 loaded active running D->
+  docker.service               loaded active running Do>
+  fwupd.service                loaded active running Fi>
+  gdm.service                  loaded active running GN>
+  haveged.service              loaded active running En>
+  iio-sensor-proxy.service     loaded active running II>
+  kerneloops.service           loaded active running To>
+  master_service.service       loaded active running LS>
+  ModemManager.service         loaded active running Mo>
+  networkd-dispatcher.service  loaded active running Di>
+  NetworkManager.service       loaded active running Ne>
+  nv-tee-supplicant.service    loaded active running OP>
+  nvargus-daemon.service       loaded active running Ar>
+  nvfancontrol.service         loaded active running nv>
+  nvphs.service                loaded active running PH>
+  nvs-service.service          loaded active running NV>
+  nxserver.service             loaded active running No>
+unitree@ubuntu:~$ 
+
+
+unitree@ubuntu:~$ ps -ef | grep -i ros
+unitree     3047    2840  0 23:29 pts/0    00:00:00 grep --color=auto -i ros
+unitree@ubuntu:~$   ps -ef | grep -i unitree
+root        1230       1  0 23:25 ?        00:00:00 /unitree/module/master_service/master_service
+root        1232       1  0 23:25 ?        00:00:00 /unitree/ota/pipe/ota_pipe_service
+root        2262       1 15 23:25 ?        00:00:35 /unitree/module/video_hub_pc4/videohub_pc4 /dev/video4
+root        2301       1  0 23:25 ?        00:00:00 /unitree/module/video_hub_pc4/videohub_pc4_chest /dev/video10
+root        2755    1218  0 23:27 ?        00:00:00 sshd: unitree [priv]
+unitree     2764       1  0 23:27 ?        00:00:00 /lib/systemd/systemd --user
+unitree     2765    2764  0 23:27 ?        00:00:00 (sd-pam)
+unitree     2770    2764  0 23:27 ?        00:00:00 /usr/bin/pulseaudio --daemonize=no --log-target=journal
+unitree     2838    2755  0 23:27 ?        00:00:00 sshd: unitree@pts/0
+unitree     2839    2764  0 23:27 ?        00:00:00 /usr/bin/dbus-daemon --session --address=systemd: --nofork --nopidfile --systemd-activation --syslog-only
+unitree     2840    2838  0 23:27 pts/0    00:00:00 -bash
+unitree     3048    2840  0 23:29 pts/0    00:00:00 ps -ef
+unitree     3049    2840  0 23:29 pts/0    00:00:00 grep --color=auto -i unitree
+unitree@ubuntu:~$   ss -tulpn
+Netid  State   Recv-Q  Send-Q      Local Address:Port              Peer Address:Port          Process           
+udp    UNCONN  0       0              127.0.0.53:53                     0.0.0.0:*                               
+udp    UNCONN  0       0                 0.0.0.0:32828                  0.0.0.0:*                               
+udp    UNCONN  0       0                 0.0.0.0:111                    0.0.0.0:*                               
+udp    UNCONN  0       0               127.0.0.1:323                    0.0.0.0:*                               
+udp    UNCONN  0       0         192.168.123.164:58323                  0.0.0.0:*                               
+udp    UNCONN  0       0                 0.0.0.0:52704                  0.0.0.0:*                               
+udp    UNCONN  0       0                 0.0.0.0:4000                   0.0.0.0:*                               
+udp    UNCONN  8448    0              172.17.0.1:5353                   0.0.0.0:*                               
+udp    UNCONN  8448    0         192.168.123.164:5353                   0.0.0.0:*                               
+udp    UNCONN  0       0                 0.0.0.0:5353                   0.0.0.0:*                               
+udp    UNCONN  0       0                 0.0.0.0:5353                   0.0.0.0:*                               
+udp    UNCONN  0       0                 0.0.0.0:7400                   0.0.0.0:*                               
+udp    UNCONN  0       0                 0.0.0.0:7401                   0.0.0.0:*                               
+udp    UNCONN  0       0                 0.0.0.0:48595                  0.0.0.0:*                               
+udp    UNCONN  0       0                       *:111                          *:*                               
+udp    UNCONN  0       0                   [::1]:323                          *:*                               
+udp    UNCONN  0       0                       *:35597                        *:*                               
+udp    UNCONN  0       0                       *:36359                        *:*                               
+udp    UNCONN  0       0                       *:4000                         *:*                               
+udp    UNCONN  0       0                       *:5353                         *:*                               
+tcp    LISTEN  0       100             127.0.0.1:23127                  0.0.0.0:*                               
+tcp    LISTEN  0       128             127.0.0.1:7001                   0.0.0.0:*                               
+tcp    LISTEN  0       100               0.0.0.0:4000                   0.0.0.0:*                               
+tcp    LISTEN  0       100             127.0.0.1:12001                  0.0.0.0:*                               
+tcp    LISTEN  0       10        192.168.123.164:1026                   0.0.0.0:*                               
+tcp    LISTEN  0       4096            127.0.0.1:44367                  0.0.0.0:*                               
+tcp    LISTEN  0       4096              0.0.0.0:111                    0.0.0.0:*                               
+tcp    LISTEN  0       128               0.0.0.0:80                     0.0.0.0:*                               
+tcp    LISTEN  0       4096        127.0.0.53%lo:53                     0.0.0.0:*                               
+tcp    LISTEN  0       100             127.0.0.1:23126                  0.0.0.0:*                               
+tcp    LISTEN  0       128               0.0.0.0:22                     0.0.0.0:*                               
+tcp    LISTEN  0       128                 [::1]:7001                      [::]:*                               
+tcp    LISTEN  0       100                  [::]:4000                      [::]:*                               
+tcp    LISTEN  0       4096                 [::]:111                       [::]:*                               
+tcp    LISTEN  0       128                  [::]:80                        [::]:*                               
+tcp    LISTEN  0       128                  [::]:22                        [::]:*         
+
+
+unitree@ubuntu:~$ tegrastats
+
+04-24-2026 23:29:39 RAM 2359/15389MB (lfb 3047x4MB) SWAP 0/7694MB (cached 0MB) CPU [13%@1984,3%@1984,1%@1984,2%@1984,3%@729,2%@729,5%@729,2%@729] EMC_FREQ 0% GR3D_FREQ 0% GR3D2_FREQ 0%@0 CV0@38.156C CPU@40.25C SOC2@39.343C SOC0@40.156C CV1@38.406C GPU@38.781C tj@41C SOC1@41C CV2@38.343C
+04-24-2026 23:29:40 RAM 2359/15389MB (lfb 3047x4MB) SWAP 0/7694MB (cached 0MB) CPU [14%@729,3%@729,2%@729,2%@729,1%@729,5%@729,3%@729,4%@729] EMC_FREQ 0% GR3D_FREQ 0% GR3D2_FREQ 0%@0 CV0@38.25C CPU@40.062C SOC2@39.312C SOC0@40.187C CV1@38.468C GPU@38.75C tj@41.156C SOC1@41.156C CV2@38.343C
+04-24-2026 23:29:41 RAM 2359/15389MB (lfb 3047x4MB) SWAP 0/7694MB (cached 0MB) CPU [12%@729,3%@729,3%@729,2%@729,2%@729,1%@729,2%@729,5%@729] EMC_FREQ 0% GR3D_FREQ 0% GR3D2_FREQ 0%@0 CV0@38.218C CPU@40.312C SOC2@39.312C SOC0@40.312C CV1@38.406C GPU@38.812C tj@41.156C SOC1@40.906C CV2@38.375C
+04-24-2026 23:29:42 RAM 2359/15389MB (lfb 3047x4MB) SWAP 0/7694MB (cached 0MB) CPU [16%@1984,3%@729,2%@729,2%@729,1%@729,1%@729,2%@729,2%@729] EMC_FREQ 0% GR3D_FREQ 0% GR3D2_FREQ 0%@0 CV0@38.218C CPU@40.125C SOC2@39.375C SOC0@40.281C CV1@38.468C GPU@38.781C tj@40.968C SOC1@40.968C CV2@38.343C
+04-24-2026 23:29:43 RAM 2359/15389MB (lfb 3047x4MB) SWAP 0/7694MB (cached 0MB) CPU [16%@1984,4%@1984,1%@1984,0%@1984,2%@729,0%@729,0%@729,2%@729] EMC_FREQ 0% GR3D_FREQ 0% GR3D2_FREQ 0%@0 CV0@38.187C CPU@40.437C SOC2@39.375C SOC0@40.156C CV1@38.406C GPU@38.718C tj@41C SOC1@41C CV2@38.218C
+04-24-2026 23:29:44 RAM 2359/15389MB (lfb 3047x4MB) SWAP 0/7694MB (cached 0MB) CPU [15%@1984,3%@1984,0%@1984,2%@1984,2%@729,2%@729,2%@729,5%@729] EMC_FREQ 0% GR3D_FREQ 0% GR3D2_FREQ 0%@0 CV0@38.187C CPU@40.156C SOC2@39.375C SOC0@40.343C CV1@38.531C GPU@38.562C tj@41C SOC1@41C CV2@38.437C
+^C
+
+
+unitree@ubuntu:~$   echo $ROS_MASTER_URI
+http://localhost:11311
+unitree@ubuntu:~$   ping -c 1 $(echo $ROS_MASTER_URI | sed -E 's|http://([^:/]+).*|
+>   \1|')
+sed: -e expression #1, char 20: unterminated `s' command
+ping: usage error: Destination address required
+unitree@ubuntu:~$   rosnode list
+ERROR: Unable to communicate with master!
+unitree@ubuntu:~$ 
+unitree@ubuntu:~$   rospack list | sort
+actionlib_msgs /opt/ros/noetic/share/actionlib_msgs
+actionlib /opt/ros/noetic/share/actionlib
+actionlib_tutorials /opt/ros/noetic/share/actionlib_tutorials
+angles /opt/ros/noetic/share/angles
+bondcpp /opt/ros/noetic/share/bondcpp
+bond /opt/ros/noetic/share/bond
+bondpy /opt/ros/noetic/share/bondpy
+camera_calibration /opt/ros/noetic/share/camera_calibration
+camera_calibration_parsers /opt/ros/noetic/share/camera_calibration_parsers
+camera_info_manager /opt/ros/noetic/share/camera_info_manager
+catkin /opt/ros/noetic/share/catkin
+class_loader /opt/ros/noetic/share/class_loader
+cmake_modules /opt/ros/noetic/share/cmake_modules
+compressed_depth_image_transport /opt/ros/noetic/share/compressed_depth_image_transport
+compressed_image_transport /opt/ros/noetic/share/compressed_image_transport
+controller_interface /opt/ros/noetic/share/controller_interface
+controller_manager_msgs /opt/ros/noetic/share/controller_manager_msgs
+controller_manager /opt/ros/noetic/share/controller_manager
+control_msgs /opt/ros/noetic/share/control_msgs
+control_toolbox /opt/ros/noetic/share/control_toolbox
+cpp_common /opt/ros/noetic/share/cpp_common
+cv_bridge /opt/ros/noetic/share/cv_bridge
+ddynamic_reconfigure /opt/ros/noetic/share/ddynamic_reconfigure
+depth_image_proc /opt/ros/noetic/share/depth_image_proc
+diagnostic_aggregator /opt/ros/noetic/share/diagnostic_aggregator
+diagnostic_analysis /opt/ros/noetic/share/diagnostic_analysis
+diagnostic_common_diagnostics /opt/ros/noetic/share/diagnostic_common_diagnostics
+diagnostic_msgs /opt/ros/noetic/share/diagnostic_msgs
+diagnostic_updater /opt/ros/noetic/share/diagnostic_updater
+diff_drive_controller /opt/ros/noetic/share/diff_drive_controller
+dynamic_reconfigure /opt/ros/noetic/share/dynamic_reconfigure
+eigen_conversions /opt/ros/noetic/share/eigen_conversions
+filters /opt/ros/noetic/share/filters
+forward_command_controller /opt/ros/noetic/share/forward_command_controller
+gazebo_dev /opt/ros/noetic/share/gazebo_dev
+gazebo_msgs /opt/ros/noetic/share/gazebo_msgs
+gazebo_plugins /opt/ros/noetic/share/gazebo_plugins
+gazebo_ros_control /opt/ros/noetic/share/gazebo_ros_control
+gazebo_ros /opt/ros/noetic/share/gazebo_ros
+gencpp /opt/ros/noetic/share/gencpp
+geneus /opt/ros/noetic/share/geneus
+genlisp /opt/ros/noetic/share/genlisp
+genmsg /opt/ros/noetic/share/genmsg
+gennodejs /opt/ros/noetic/share/gennodejs
+genpy /opt/ros/noetic/share/genpy
+geometry_msgs /opt/ros/noetic/share/geometry_msgs
+gl_dependency /opt/ros/noetic/share/gl_dependency
+hardware_interface /opt/ros/noetic/share/hardware_interface
+image_geometry /opt/ros/noetic/share/image_geometry
+image_proc /opt/ros/noetic/share/image_proc
+image_publisher /opt/ros/noetic/share/image_publisher
+image_rotate /opt/ros/noetic/share/image_rotate
+image_transport /opt/ros/noetic/share/image_transport
+image_view /opt/ros/noetic/share/image_view
+interactive_markers /opt/ros/noetic/share/interactive_markers
+interactive_marker_tutorials /opt/ros/noetic/share/interactive_marker_tutorials
+joint_limits_interface /opt/ros/noetic/share/joint_limits_interface
+joint_state_controller /opt/ros/noetic/share/joint_state_controller
+joint_state_publisher_gui /opt/ros/noetic/share/joint_state_publisher_gui
+joint_state_publisher /opt/ros/noetic/share/joint_state_publisher
+kdl_conversions /opt/ros/noetic/share/kdl_conversions
+kdl_parser /opt/ros/noetic/share/kdl_parser
+laser_assembler /opt/ros/noetic/share/laser_assembler
+laser_filters /opt/ros/noetic/share/laser_filters
+laser_geometry /opt/ros/noetic/share/laser_geometry
+librviz_tutorial /opt/ros/noetic/share/librviz_tutorial
+map_msgs /opt/ros/noetic/share/map_msgs
+media_export /opt/ros/noetic/share/media_export
+message_filters /opt/ros/noetic/share/message_filters
+message_generation /opt/ros/noetic/share/message_generation
+message_runtime /opt/ros/noetic/share/message_runtime
+mk /opt/ros/noetic/share/mk
+nav_msgs /opt/ros/noetic/share/nav_msgs
+nodelet /opt/ros/noetic/share/nodelet
+nodelet_topic_tools /opt/ros/noetic/share/nodelet_topic_tools
+nodelet_tutorial_math /opt/ros/noetic/share/nodelet_tutorial_math
+pcl_conversions /opt/ros/noetic/share/pcl_conversions
+pcl_msgs /opt/ros/noetic/share/pcl_msgs
+pcl_ros /opt/ros/noetic/share/pcl_ros
+pluginlib /opt/ros/noetic/share/pluginlib
+pluginlib_tutorials /opt/ros/noetic/share/pluginlib_tutorials
+polled_camera /opt/ros/noetic/share/polled_camera
+position_controllers /opt/ros/noetic/share/position_controllers
+python_qt_binding /opt/ros/noetic/share/python_qt_binding
+qt_dotgraph /opt/ros/noetic/share/qt_dotgraph
+qt_gui_cpp /opt/ros/noetic/share/qt_gui_cpp
+qt_gui /opt/ros/noetic/share/qt_gui
+qt_gui_py_common /opt/ros/noetic/share/qt_gui_py_common
+qwt_dependency /opt/ros/noetic/share/qwt_dependency
+realsense2_camera /opt/ros/noetic/share/realsense2_camera
+realsense2_description /opt/ros/noetic/share/realsense2_description
+realtime_tools /opt/ros/noetic/share/realtime_tools
+resource_retriever /opt/ros/noetic/share/resource_retriever
+robot_state_publisher /opt/ros/noetic/share/robot_state_publisher
+rosbag_migration_rule /opt/ros/noetic/share/rosbag_migration_rule
+rosbag /opt/ros/noetic/share/rosbag
+rosbag_storage /opt/ros/noetic/share/rosbag_storage
+rosbash /opt/ros/noetic/share/rosbash
+rosboost_cfg /opt/ros/noetic/share/rosboost_cfg
+rosbuild /opt/ros/noetic/share/rosbuild
+rosclean /opt/ros/noetic/share/rosclean
+rosconsole_bridge /opt/ros/noetic/share/rosconsole_bridge
+rosconsole /opt/ros/noetic/share/rosconsole
+roscpp /opt/ros/noetic/share/roscpp
+roscpp_serialization /opt/ros/noetic/share/roscpp_serialization
+roscpp_traits /opt/ros/noetic/share/roscpp_traits
+roscpp_tutorials /opt/ros/noetic/share/roscpp_tutorials
+roscreate /opt/ros/noetic/share/roscreate
+ros_environment /opt/ros/noetic/share/ros_environment
+rosgraph_msgs /opt/ros/noetic/share/rosgraph_msgs
+rosgraph /opt/ros/noetic/share/rosgraph
+roslang /opt/ros/noetic/share/roslang
+roslaunch /opt/ros/noetic/share/roslaunch
+roslib /opt/ros/noetic/share/roslib
+roslint /opt/ros/noetic/share/roslint
+roslisp /opt/ros/noetic/share/roslisp
+roslz4 /opt/ros/noetic/share/roslz4
+rosmake /opt/ros/noetic/share/rosmake
+rosmaster /opt/ros/noetic/share/rosmaster
+rosmsg /opt/ros/noetic/share/rosmsg
+rosnode /opt/ros/noetic/share/rosnode
+rosout /opt/ros/noetic/share/rosout
+rospack /opt/ros/noetic/share/rospack
+rosparam /opt/ros/noetic/share/rosparam
+rospy /opt/ros/noetic/share/rospy
+rospy_tutorials /opt/ros/noetic/share/rospy_tutorials
+rosservice /opt/ros/noetic/share/rosservice
+rostest /opt/ros/noetic/share/rostest
+rostime /opt/ros/noetic/share/rostime
+rostopic /opt/ros/noetic/share/rostopic
+rosunit /opt/ros/noetic/share/rosunit
+roswtf /opt/ros/noetic/share/roswtf
+rqt_action /opt/ros/noetic/share/rqt_action
+rqt_bag /opt/ros/noetic/share/rqt_bag
+rqt_bag_plugins /opt/ros/noetic/share/rqt_bag_plugins
+rqt_console /opt/ros/noetic/share/rqt_console
+rqt_dep /opt/ros/noetic/share/rqt_dep
+rqt_graph /opt/ros/noetic/share/rqt_graph
+rqt_gui_cpp /opt/ros/noetic/share/rqt_gui_cpp
+rqt_gui /opt/ros/noetic/share/rqt_gui
+rqt_gui_py /opt/ros/noetic/share/rqt_gui_py
+rqt_image_view /opt/ros/noetic/share/rqt_image_view
+rqt_launch /opt/ros/noetic/share/rqt_launch
+rqt_logger_level /opt/ros/noetic/share/rqt_logger_level
+rqt_moveit /opt/ros/noetic/share/rqt_moveit
+rqt_msg /opt/ros/noetic/share/rqt_msg
+rqt_nav_view /opt/ros/noetic/share/rqt_nav_view
+rqt_plot /opt/ros/noetic/share/rqt_plot
+rqt_pose_view /opt/ros/noetic/share/rqt_pose_view
+rqt_publisher /opt/ros/noetic/share/rqt_publisher
+rqt_py_common /opt/ros/noetic/share/rqt_py_common
+rqt_py_console /opt/ros/noetic/share/rqt_py_console
+rqt_reconfigure /opt/ros/noetic/share/rqt_reconfigure
+rqt_robot_dashboard /opt/ros/noetic/share/rqt_robot_dashboard
+rqt_robot_monitor /opt/ros/noetic/share/rqt_robot_monitor
+rqt_robot_steering /opt/ros/noetic/share/rqt_robot_steering
+rqt_runtime_monitor /opt/ros/noetic/share/rqt_runtime_monitor
+rqt_rviz /opt/ros/noetic/share/rqt_rviz
+rqt_service_caller /opt/ros/noetic/share/rqt_service_caller
+rqt_shell /opt/ros/noetic/share/rqt_shell
+rqt_srv /opt/ros/noetic/share/rqt_srv
+rqt_tf_tree /opt/ros/noetic/share/rqt_tf_tree
+rqt_topic /opt/ros/noetic/share/rqt_topic
+rqt_top /opt/ros/noetic/share/rqt_top
+rqt_web /opt/ros/noetic/share/rqt_web
+rviz /opt/ros/noetic/share/rviz
+rviz_plugin_tutorials /opt/ros/noetic/share/rviz_plugin_tutorials
+rviz_python_tutorial /opt/ros/noetic/share/rviz_python_tutorial
+self_test /opt/ros/noetic/share/self_test
+sensor_msgs /opt/ros/noetic/share/sensor_msgs
+shape_msgs /opt/ros/noetic/share/shape_msgs
+smach_msgs /opt/ros/noetic/share/smach_msgs
+smach /opt/ros/noetic/share/smach
+smach_ros /opt/ros/noetic/share/smach_ros
+smclib /opt/ros/noetic/share/smclib
+stage /opt/ros/noetic/share/stage
+stage_ros /opt/ros/noetic/share/stage_ros
+std_msgs /opt/ros/noetic/share/std_msgs
+std_srvs /opt/ros/noetic/share/std_srvs
+stereo_image_proc /opt/ros/noetic/share/stereo_image_proc
+stereo_msgs /opt/ros/noetic/share/stereo_msgs
+tf2_eigen /opt/ros/noetic/share/tf2_eigen
+tf2_geometry_msgs /opt/ros/noetic/share/tf2_geometry_msgs
+tf2_kdl /opt/ros/noetic/share/tf2_kdl
+tf2_msgs /opt/ros/noetic/share/tf2_msgs
+tf2 /opt/ros/noetic/share/tf2
+tf2_py /opt/ros/noetic/share/tf2_py
+tf2_ros /opt/ros/noetic/share/tf2_ros
+tf_conversions /opt/ros/noetic/share/tf_conversions
+tf /opt/ros/noetic/share/tf
+theora_image_transport /opt/ros/noetic/share/theora_image_transport
+topic_tools /opt/ros/noetic/share/topic_tools
+trajectory_msgs /opt/ros/noetic/share/trajectory_msgs
+transmission_interface /opt/ros/noetic/share/transmission_interface
+turtle_actionlib /opt/ros/noetic/share/turtle_actionlib
+turtlesim /opt/ros/noetic/share/turtlesim
+turtle_tf2 /opt/ros/noetic/share/turtle_tf2
+turtle_tf /opt/ros/noetic/share/turtle_tf
+urdf /opt/ros/noetic/share/urdf
+urdf_parser_plugin /opt/ros/noetic/share/urdf_parser_plugin
+urdf_sim_tutorial /opt/ros/noetic/share/urdf_sim_tutorial
+urdf_tutorial /opt/ros/noetic/share/urdf_tutorial
+visualization_marker_tutorials /opt/ros/noetic/share/visualization_marker_tutorials
+visualization_msgs /opt/ros/noetic/share/visualization_msgs
+webkit_dependency /opt/ros/noetic/share/webkit_dependency
+xacro /opt/ros/noetic/share/xacro
+xmlrpcpp /opt/ros/noetic/share/xmlrpcpp
+unitree@ubuntu:~$   rospack list | grep -i unitree
+unitree@ubuntu:~$   roscd
+unitree@ubuntu:/opt/ros/noetic$   echo $ROS_PACKAGE_PATH
+/opt/ros/noetic/share
+unitree@ubuntu:/opt/ros/noetic$ 
+
+/home/unitree/.nx/M-ubuntu-13001-C380289EB924E4B06597D691BD587625
+/home/unitree/.nx/F-M-ubuntu-13001-74D2AE9BF571ADA1CE581CB72A7B922F
+/home/unitree/.nx/F-M-ubuntu-13001-A58ABFD058E10363BB98721340C7090D
+/home/unitree/.nx/F-M-ubuntu-13001-85B9E7675D0E1CD8D6050803088A88AD
+/home/unitree/.nx/node
+/home/unitree/.nx/node/F-C-ubuntu-1001-EF58A885A2CD9FFAC3E15741CAC15E72
+/home/unitree/.nx/node/F-C-ubuntu-1001-4F2D5A617C778CC8C8E7510896CE23A6
+/home/unitree/.nx/node/F-C-ubuntu-1001-B5A679705C4331521C070B7F1752DCB5
+/home/unitree/.nx/node/F-C-ubuntu-1001-7AA3D6EBDF200101573E81B4367C858A
+/home/unitree/.nx/node/C-ubuntu-1001-892D9EA3F75E0946E3560B41B3F593E4
+/home/unitree/.nx/node/F-C-ubuntu-1001-4DEE00BDFFFDD3DC0D0DC85CF7A99EDD
+/home/unitree/.nx/node/F-C-ubuntu-1001-091AE41B321B3C008E9062D35B3D6C4A
+/home/unitree/.nx/node/F-C-ubuntu-1001-5E5D50C09265243C039694E8083DC1AE
+/home/unitree/.nx/node/C-ubuntu-1001-5268D23E69D89D7BB87EDF57E680C794
+/home/unitree/.nx/node/C-ubuntu-1001-E260A8D8F70B7C95D20EF12AC8B1D9AB
+/home/unitree/.nx/node/F-C-ubuntu-1001-1F322C92D0DF4CE1C43FAC6A2F7BB127
+/home/unitree/.nx/node/F-C-ubuntu-1002-D2E56F673B73BD4B499E2A3ED7D8708B
+/home/unitree/.nx/node/F-C-ubuntu-1001-C7CB99CE86E6C1E6FEAD8F65E71A4563
+/home/unitree/.nx/node/C-ubuntu-1001-CCF9294A097D5110D061DAD99597A47A
+/home/unitree/.nx/node/F-C-ubuntu-1001-B260AF8B1DFB4E6ECE7CA0FDC1CB8BFA
+/home/unitree/.nx/node/C-ubuntu-1001-2788F51EDD1FC5195D1B733921727FB3
+/home/unitree/.nx/node/C-ubuntu-1001-9886A53C35E9749BE060EDD63C9C07C8
+/home/unitree/.nx/node/F-C-ubuntu-1001-05689B09530D76488CB122B30E64EBB8
+/home/unitree/.nx/node/F-C-ubuntu-1001-00C15D96CA53F9592BEA29D2E7B4367E
+/home/unitree/.nx/node/F-C-ubuntu-1001-574616506CBD4920C4387EFCC5082750
+/home/unitree/.nx/node/C-ubuntu-1001-AE2ECC1319B65DF20C9561707D58D413
+/home/unitree/.nx/node/C-ubuntu-1001-01CA0E881DE2F42AF26706B4C78ABC58
+/home/unitree/.nx/node/C-ubuntu-1001-D38F7ADFA816A471CB720DEB1FFC0E87
+/home/unitree/.nx/node/F-C-ubuntu-1001-0256AD6274633658B72A1DBA3D388873
+/home/unitree/.nx/node/C-ubuntu-1001-C9F49C577E40F77C8E4412ECF5DB0484
+/home/unitree/.nx/node/C-ubuntu-1001-8B082D94342381422CA1C2004E397DA7
+/home/unitree/.nx/node/F-C-ubuntu-1001-22368069B5A55B1F4793DD5DA00D4EC3
+/home/unitree/.nx/node/F-C-ubuntu-1001-100071CDE3F9C5B511122EB738230B86
+/home/unitree/.nx/node/C-ubuntu-1001-CACA236036C0435EC09F284F18F8F404
+/home/unitree/.nx/node/F-C-ubuntu-1002-6747E8FA463A159E92D65AFECCEE1386
+/home/unitree/.nx/node/C-ubuntu-1001-06289F0D9310B99E8770DE14643E46D4
+/home/unitree/.nx/node/F-C-ubuntu-1001-C84FBCFDB12C44D062C80D39C298FADB
+/home/unitree/.nx/node/C-ubuntu-1001-F0E3A8FFB024FEFDDA4AE682F0C29C8B
+/home/unitree/.nx/node/C-ubuntu-1001-E3163423E7808700812347ED26C9A658
+/home/unitree/.nx/node/F-C-ubuntu-1001-B2B1ED8E4008F9BA6D072885ABF3D571
+/home/unitree/.nx/node/C-ubuntu-1001-91CB2022A409D57814C4D7FA28D3D9DF
+/home/unitree/.nx/node/C-ubuntu-1001-B5BAC9B410F0EBF8E5BB1EC95C0EB547
+/home/unitree/.nx/node/C-ubuntu-1001-C981B434832F561470B6B1812C4CDD96
+/home/unitree/.nx/node/C-ubuntu-1001-4028A09E6BF8A8B5A6D3776E8D1F9A0F
+/home/unitree/.nx/node/F-C-ubuntu-1001-1287FA2B39D0E9125DBCB01A3D3B6533
+/home/unitree/.nx/node/C-ubuntu-1001-0FFAB9361E816881A5ADA098B9F67774
+/home/unitree/.nx/node/C-ubuntu-1001-B253F34082002F1C5ABA33B9EB5B91F8
+/home/unitree/.nx/node/F-C-ubuntu-1002-CE55A851CBEBF63B800C05BCF918B0D8
+/home/unitree/.nx/F-M-ubuntu-13001-762F109D5D1A0ADBF221A4B76D203E96
+/home/unitree/.nx/M-localhost-3139-62B7CF1CE0A1AF60A8C804C60D23EE05
+/home/unitree/.nx/F-M-ubuntu-13001-26D819CD8BB160D08FED4D2987B5E125
+/home/unitree/.nx/F-M-ubuntu-13001-DBFCAF347224A08B09C4626477A37889
+/home/unitree/.nx/F-M-ubuntu-13001-254F97BB0A36D987C8FAA21D6482CCE8
+/home/unitree/.nx/M-ubuntu-13001-002D200F41506E2C59D23DCF187D3827
+/home/unitree/.nx/F-M-ubuntu-13001-E17A4191DFFED1AEEB592ED9844CEAE4
+/home/unitree/.nx/M-localhost-3132-1D45960B1959431BDCE39A655055FFFD
+/home/unitree/.nx/F-M-ubuntu-13001-2E0A0EB9872733E97EDF9AC4E4649B8D
+/home/unitree/.nx/F-M-ubuntu-13001-DB2D9F03BD4BDA664FF172E630791588
+/home/unitree/.nx/F-M-ubuntu-13001-C10F6A4147FD3AA1F83E1718300F870D
+/home/unitree/.nx/M-ubuntu-13001-04F49C4BF8FEE323BC720A1234FDB43E
+/home/unitree/.nx/M-ubuntu-13001-0BB841C54A16251E512A7C49246B3AD8
+/home/unitree/.nx/M-localhost-3907-C733113D8F90552811A7BAAECFC77694
+/home/unitree/.nx/fonts
+/home/unitree/.nx/F-M-ubuntu-13001-3C97349308B96E1D811EAF9C005FCBC4
+/home/unitree/.nx/M-ubuntu-13001-AB62186F38C7FA2361E4C06E8FFCA44C
+/home/unitree/.nx/F-M-ubuntu-13001-D671D43DDCE64CDDFDF8D93B24D5A12F
+/home/unitree/.nx/config
+/home/unitree/.nx/M-localhost-3045-E00A681F117C54228613298FA0D1C324
+/home/unitree/.nx/F-M-ubuntu-13001-6B36F5DAC43DD97D067B193EAECADEDE
+/home/unitree/.nx/F-M-ubuntu-13001-4204CF7E42C1C0A5AF5326393703CC55
+/home/unitree/.dbus
+/home/unitree/.dbus/session-bus
+/home/unitree/Templates
+/home/unitree/unitree_sdk2-main
+/home/unitree/unitree_sdk2-main/thirdparty
+/home/unitree/unitree_sdk2-main/thirdparty/lib
+/home/unitree/unitree_sdk2-main/thirdparty/include
+/home/unitree/unitree_sdk2-main/licenses
+/home/unitree/unitree_sdk2-main/licenses/eclipse-iceoryx
+/home/unitree/unitree_sdk2-main/licenses/Tencent
+/home/unitree/unitree_sdk2-main/licenses/eclipse-cyclonedds
+/home/unitree/unitree_sdk2-main/lib
+/home/unitree/unitree_sdk2-main/lib/aarch64
+/home/unitree/unitree_sdk2-main/lib/x86_64
+/home/unitree/unitree_sdk2-main/example
+/home/unitree/unitree_sdk2-main/example/high_level
+/home/unitree/unitree_sdk2-main/example/state_machine
+/home/unitree/unitree_sdk2-main/example/advanced_gamepad
+/home/unitree/unitree_sdk2-main/example/helloworld
+/home/unitree/unitree_sdk2-main/example/client
+/home/unitree/unitree_sdk2-main/example/humanoid
+/home/unitree/unitree_sdk2-main/example/low_level
+/home/unitree/unitree_sdk2-main/example/jsonize
+/home/unitree/unitree_sdk2-main/example/wireless
+/home/unitree/unitree_sdk2-main/include
+/home/unitree/unitree_sdk2-main/include/unitree
+/home/unitree/Pictures
+/home/unitree/g1plus_pc4_unitree_install
+/home/unitree/g1plus_pc4_unitree_install/etc
+/home/unitree/g1plus_pc4_unitree_install/etc/init.d
+/home/unitree/g1plus_pc4_unitree_install/unitree
+/home/unitree/g1plus_pc4_unitree_install/unitree/etc
+/home/unitree/g1plus_pc4_unitree_install/unitree/sbin
+/home/unitree/g1plus_pc4_unitree_install/unitree/module
+/home/unitree/g1plus_pc4_unitree_install/unitree/var
+/home/unitree/g1plus_pc4_unitree_install/unitree/bin
+/home/unitree/g1plus_pc4_unitree_install/unitree/robot
+/home/unitree/g1plus_pc4_unitree_install/unitree/ota
+/home/unitree/.ssh
+/home/unitree/Videos
+/home/unitree/.ros
+/home/unitree/.ros/log
+/home/unitree/.ros/log/e186f940-4aff-11ee-8a27-48b02dd8d5ee
+/home/unitree/.ros/log/2023-11-07-17-13-28-214656-ubuntu-13321
+/home/unitree/.ros/log/2023-11-07-17-09-55-115451-ubuntu-10755
+/home/unitree/.ros/log/2023-11-07-17-07-38-062019-ubuntu-10507
+/home/unitree/.ros/log/2023-11-07-17-13-49-861526-ubuntu-16658
+/home/unitree/.ros/log/2023-11-07-11-49-03-539306-ubuntu-19710
+/home/unitree/.ros/log/2023-11-07-17-06-07-648530-ubuntu-10101
+/home/unitree/.ros/log/91094a66-4aed-11ee-acda-48b02dd8d5ee
+/home/unitree/.ros/log/2023-11-07-17-11-31-370124-ubuntu-12954
+/home/unitree/.ros/log/88f0d95c-4aed-11ee-a54d-48b02dd8d5ee
+/home/unitree/.ros/log/0e7c1156-4aec-11ee-863b-48b02dd8d5ee
+/home/unitree/.ros/log/2023-11-07-17-01-16-517513-ubuntu-4357
+/home/unitree/.ros/log/6e1244be-7c92-11ee-8f1b-48b02dd8d5ee
+/home/unitree/.ros/log/8a5ca074-48b2-11ee-8237-48b02dd8d5ee
+/home/unitree/.ros/log/2023-11-07-17-06-12-951845-ubuntu-10314
+/home/unitree/.ros/log/2023-11-07-11-50-01-925670-ubuntu-19762
+/home/unitree/.ros/log/2023-11-07-17-15-23-633901-ubuntu-21773
+/home/unitree/.ros/log/8413e278-48b1-11ee-b67d-48b02dd8d5ee
+/home/unitree/.ros/log/e2c48dae-4af0-11ee-955a-48b02dd8d5ee
+/home/unitree/.ros/log/2023-11-07-17-06-13-555293-ubuntu-10330
+/home/unitree/.ros/log/e1a5d99e-48b3-11ee-85f6-48b02dd8d5ee
+/home/unitree/.ros/log/2023-11-07-17-06-07-073284-ubuntu-10087
+/home/unitree/.ros/log/2023-11-07-17-11-31-999435-ubuntu-12969
+/home/unitree/.ros/log/2023-11-07-17-13-50-411623-ubuntu-16674
+/home/unitree/.ros/log/2023-11-07-17-13-27-260225-ubuntu-13263
+/home/unitree/.ros/log/a78b8642-4aec-11ee-bb12-48b02dd8d5ee
+/home/unitree/.ros/log/ed00f274-48b3-11ee-96c9-48b02dd8d5ee
+/home/unitree/.ros/log/2023-11-07-17-01-17-015854-ubuntu-4372
+/home/unitree/.ros/log/1de3a186-48b2-11ee-afaf-48b02dd8d5ee
+/home/unitree/.ros/log/2023-11-07-17-15-23-075645-ubuntu-21757
+/home/unitree/.ros/log/9923467c-4bb8-11ee-8b2d-48b02dd8d5ee
+/home/unitree/.ros/log/2023-11-07-17-14-15-378579-ubuntu-13505
+/home/unitree/.ros/log/68f71248-78b4-11ee-9c03-ffe03f242dd8
+/home/unitree/.ros/log/1e4fc008-1df8-11b2-9f44-48b02dd8d5ee
+/home/unitree/.ros/log/2023-11-07-17-09-55-692841-ubuntu-10771
+/home/unitree/.ros/log/41745d28-4aee-11ee-abb6-48b02dd8d5ee
+/home/unitree/.ros/log/7405528e-7d4c-11ee-9b4d-48b02dd8d5ee
+/home/unitree/.ros/log/2023-11-07-17-14-16-537535-ubuntu-13513
+/home/unitree/.ros/log/3aa3f870-4bbe-11ee-95d8-48b02dd8d5ee
+/home/unitree/.ros/log/7c81bf9e-1dff-11b2-ae1d-48b02dd8d5ee
+/home/unitree/.ros/log/0752508c-48b4-11ee-b229-48b02dd8d5ee
+/home/unitree/.ros/rosdep
+/home/unitree/.ros/rosdep/meta.cache
+/home/unitree/.ros/rosdep/sources.cache
+/home/unitree/Downloads
+/home/unitree/Downloads/fast_neon-test-aarch64-compilation
+/home/unitree/Downloads/fast_neon-test-aarch64-compilation/test
+/home/unitree/Downloads/fast_neon-test-aarch64-compilation/src
+/home/unitree/Downloads/fast_neon-test-aarch64-compilation/include
+/home/unitree/.local
+/home/unitree/.local/lib
+/home/unitree/.local/lib/python3.8
+/home/unitree/.local/share
+/home/unitree/.local/share/gnome-settings-daemon
+/home/unitree/.local/share/sounds
+/home/unitree/.local/share/gvfs-metadata
+/home/unitree/.local/share/nautilus
+/home/unitree/.local/share/Trash
+/home/unitree/.local/share/ibus-table
+/home/unitree/.local/share/backgrounds
+/home/unitree/.local/share/flatpak
+/home/unitree/.local/share/keyrings
+/home/unitree/.local/share/tracker
+/home/unitree/.local/share/icc
+/home/unitree/.local/share/evolution
+/home/unitree/.local/share/gnome-shell
+/home/unitree/.local/share/applications
+/home/unitree/wifi-bt-deb
+/home/unitree/wifi-bt-deb/firmware
+/home/unitree/cyclonedds_ws
+/home/unitree/cyclonedds_ws/log
+/home/unitree/cyclonedds_ws/log/build_2023-11-06_20-40-01
+/home/unitree/cyclonedds_ws/log/build_2023-11-06_20-35-47
+/home/unitree/cyclonedds_ws/build
+/home/unitree/cyclonedds_ws/build/cyclonedds
+/home/unitree/cyclonedds_ws/build/rmw_cyclonedds_cpp
+/home/unitree/cyclonedds_ws/src
+/home/unitree/cyclonedds_ws/src/cyclonedds-0.10.2
+/home/unitree/cyclonedds_ws/src/ros2
+/home/unitree/cyclonedds_ws/install
+/home/unitree/cyclonedds_ws/install/cyclonedds
+/home/unitree/cyclonedds_ws/install/rmw_cyclonedds_cpp
+unitree@ubuntu:/opt/ros/noetic$   find ~/ -name package.xml
+/home/unitree/unitree/Odometer_service/build/ceres_catkin/ceres_src-prefix/src/ceres_src/package.xml
+/home/unitree/unitree/Odometer_service/build/catkin_tools_prebuild/package.xml
+/home/unitree/unitree/Odometer_service/build/dbow2_catkin/dbow2_src-prefix/src/dbow2_src/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/gflags_catkin/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/svo/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/vikit_ros/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/svo_pgo/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/cmake_external_project_catkin/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/glog_catkin/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/eigen_checks/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/ceres_catkin/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/svo_vio_common/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/vikit_py/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/opengv/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/svo_benchmarking/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/vikit_common/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/svo_common/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/rpg_common/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/vikit_solver/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/minkindr/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/svo_online_loopclosing/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/catkin_tools_prebuild/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/svo_ros/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/catkin_simple/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/rqt_svo/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/svo_msgs/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/svo_test_utils/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/vikit_cameras/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/minkindr_conversions/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/dbow2_catkin/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/svo_direct/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/svo_tracker/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/fast/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/eigen_catkin/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/rpg_trajectory_evaluation/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/svo_cmake/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/svo_ceres_backend/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/svo_img_align/package.xml
+/home/unitree/unitree/Odometer_service/src/gflags_catkin/package.xml
+/home/unitree/unitree/Odometer_service/src/cmake_external_project_catkin/package.xml
+/home/unitree/unitree/Odometer_service/src/glog_catkin/package.xml
+/home/unitree/unitree/Odometer_service/src/eigen_checks/package.xml
+/home/unitree/unitree/Odometer_service/src/ceres_catkin/package.xml
+/home/unitree/unitree/Odometer_service/src/opengv/package.xml
+/home/unitree/unitree/Odometer_service/src/minkindr/minkindr/package.xml
+/home/unitree/unitree/Odometer_service/src/minkindr/minkindr_python/package.xml
+/home/unitree/unitree/Odometer_service/src/catkin_simple/test/scenarios/hello_world/bar/package.xml
+/home/unitree/unitree/Odometer_service/src/catkin_simple/test/scenarios/hello_world/foo/package.xml
+/home/unitree/unitree/Odometer_service/src/catkin_simple/test/scenarios/hello_world/baz/package.xml
+/home/unitree/unitree/Odometer_service/src/catkin_simple/package.xml
+/home/unitree/unitree/Odometer_service/src/dbow2_catkin/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo_pgo/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo_global_map/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo_vio_common/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo_benchmarking/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo_common/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/rpg_common/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/vikit/vikit_ros/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/vikit/vikit_py/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/vikit/vikit_common/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/vikit/vikit_solver/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/vikit/vikit_cameras/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo_online_loopclosing/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo_ros/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/rqt_svo/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo_msgs/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo_test_utils/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo_direct/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo_tracker/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo_cmake/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo_ceres_backend/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo_img_align/package.xml
+/home/unitree/unitree/Odometer_service/src/minkindr_ros/minkindr_conversions/package.xml
+/home/unitree/unitree/Odometer_service/src/fast_neon/package.xml
+/home/unitree/unitree/Odometer_service/src/eigen_catkin/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_trajectory_evaluation/package.xml
+/home/unitree/Downloads/fast_neon-test-aarch64-compilation/package.xml
+/home/unitree/cyclonedds_ws/src/cyclonedds-0.10.2/package.xml
+/home/unitree/cyclonedds_ws/src/ros2/rmw_cyclonedds/rmw_cyclonedds_cpp/package.xml
+/home/unitree/cyclonedds_ws/install/rmw_cyclonedds_cpp/share/rmw_cyclonedds_cpp/package.xml
+unitree@ubuntu:/opt/ros/noetic$   find ~/ -name "*.launch"
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo_ros/launch/live_nodelet.launch
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo_ros/launch/euroc_vio_stereo.launch
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo_ros/launch/euroc_global_map_mono.launch
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo_ros/launch/rs_camera.launch
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo_ros/launch/euroc_vio_mono.launch
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo_ros/launch/frontend/fla_stereo_imu.launch
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo_ros/launch/frontend/euroc_mono_frontend_imu.launch
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo_ros/launch/frontend/run_from_bag.launch
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo_ros/launch/frontend/euroc_stereo_frontend_imu.launch
+unitree@ubuntu:/opt/ros/noetic$   find ~/ -name "*.bag"
+unitree@ubuntu:/opt/ros/noetic$ 
+
+
+itree@ubuntu:/opt/ros/noetic$ 
+unitree@ubuntu:/opt/ros/noetic$   rosnode list
+ERROR: Unable to communicate with master!
+unitree@ubuntu:/opt/ros/noetic$   rostopic list
+ERROR: Unable to communicate with master!
+unitree@ubuntu:/opt/ros/noetic$   rosservice list
+ERROR: Unable to communicate with master!
+unitree@ubuntu:/opt/ros/noetic$   rosparam list
+ERROR: Unable to communicate with master!
+unitree@ubuntu:/opt/ros/noetic$ 
+
+
+itree@ubuntu:/opt/ros/noetic$   find ~/ -name "*.bag"
+unitree@ubuntu:/opt/ros/noetic$ 
+unitree@ubuntu:/opt/ros/noetic$ 
+unitree@ubuntu:/opt/ros/noetic$ 
+unitree@ubuntu:/opt/ros/noetic$   rosnode list
+ERROR: Unable to communicate with master!
+unitree@ubuntu:/opt/ros/noetic$   rostopic list
+ERROR: Unable to communicate with master!
+unitree@ubuntu:/opt/ros/noetic$   rosservice list
+ERROR: Unable to communicate with master!
+unitree@ubuntu:/opt/ros/noetic$   rosparam list
+ERROR: Unable to communicate with master!
+unitree@ubuntu:/opt/ros/noetic$   rostopic list | grep -i -E 'imu|odom|joint|tf|camera|image|depth|
+>   lidar|cloud|scan|slam|map'
+ERROR: Unable to communicate with master!
+unitree@ubuntu:/opt/ros/noetic$   rosnode list | grep -i -E 'slam|camera|imu|joint|state|unitree'
+ERROR: Unable to communicate with master!
+unitree@ubuntu:/opt/ros/noetic$   rosservice list | grep -i -E 'slam|map|reset|start|stop'
+ERROR: Unable to communicate with master!
+unitree@ubuntu:/opt/ros/noetic$ 
+unitree@ubuntu:/opt/ros/noetic$   TF inspection:
+-bash: TF: command not found
+unitree@ubuntu:/opt/ros/noetic$ 
+unitree@ubuntu:/opt/ros/noetic$   rostopic echo /tf
+ERROR: Unable to communicate with master!
+unitree@ubuntu:/opt/ros/noetic$   rostopic echo /tf_static
+ERROR: Unable to communicate with master!
+unitree@ubuntu:/opt/ros/noetic$   rosrun tf view_frames
+Unable to register with master node [http://localhost:11311]: master may not be running yet. Will keep trying.
+
+
+^C^C^CTraceback (most recent call last):
+  File "/opt/ros/noetic/lib/tf/view_frames", line 114, in <module>
+    dot_graph = listen(5.0)
+  File "/opt/ros/noetic/lib/tf/view_frames", line 52, in listen
+    rospy.init_node("view_frames", anonymous=True)
+  File "/opt/ros/noetic/lib/python3/dist-packages/rospy/client.py", line 336, in init_node
+    raise rospy.exceptions.ROSInitException("Failed to initialize time. Please check logs for additional details")
+rospy.exceptions.ROSInitException: Failed to initialize time. Please check logs for additional details
+unitree@ubuntu:/opt/ros/noetic$   rosparam list
+ERROR: Unable to communicate with master!
+unitree@ubuntu:/opt/ros/noetic$   rosparam get /robot_description
+ERROR: Unable to communicate with master!
+unitree@ubuntu:/opt/ros/noetic$   rosparam get /use_sim_time
+ERROR: Unable to communicate with master!
+unitree@ubuntu:/opt/ros/noetic$   grep -R "source /opt/ros/noetic" ~/.bashrc ~/.profile /etc/
+grep: /etc/pulse/client.conf.d/01-enable-autospawn.conf: No such file or directory
+grep: /etc/ssl/private: Permission denied
+grep: /etc/shadow-: Permission denied
+grep: /etc/brlapi.key: Permission denied
+grep: /etc/cni/net.d: Permission denied
+grep: /etc/gshadow: Permission denied
+grep: /etc/sudoers: Permission denied
+^C
+unitree@ubuntu:/opt/ros/noetic$ 
+

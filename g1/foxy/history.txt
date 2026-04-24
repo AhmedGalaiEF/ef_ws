@@ -1,0 +1,1441 @@
+unitree@ubuntu:~$   echo $SHELL
+/bin/bash
+unitree@ubuntu:~$   printenv | grep -E 'ROS|AMENT|COLCON|RMW'
+ROS_VERSION=2
+ROS_PYTHON_VERSION=3
+AMENT_PREFIX_PATH=/home/unitree/cyclonedds_ws/install/rmw_cyclonedds_cpp:/opt/ros/foxy
+COLCON_PREFIX_PATH=/home/unitree/cyclonedds_ws/install
+ROS_LOCALHOST_ONLY=0
+ROS_DISTRO=foxy
+RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+unitree@ubuntu:~$   which ros2
+/opt/ros/foxy/bin/ros2
+unitree@ubuntu:~$   ros2 --version
+usage: ros2 [-h]
+            Call `ros2 <command> -h` for more detailed
+            usage. ...
+ros2: error: unrecognized arguments: --version
+unitree@ubuntu:~$   echo $ROS_DISTRO
+foxy
+unitree@ubuntu:~$   echo $ROS_VERSION
+2
+unitree@ubuntu:~$   echo $ROS_DOMAIN_ID
+
+unitree@ubuntu:~$   echo $RMW_IMPLEMENTATION
+rmw_cyclonedds_cpp
+
+
+
+unitree@ubuntu:~$   hostname
+ubuntu
+unitree@ubuntu:~$   uname -a
+Linux ubuntu 5.10.104-tegra #1 SMP PREEMPT Sun Mar 19 07:55:28 PDT 2023 aarch64 aarch64 aarch64 GNU/Linux
+unitree@ubuntu:~$   lsb_release -a
+No LSB modules are available.
+Distributor ID:	Ubuntu
+Description:	Ubuntu 20.04.6 LTS
+Release:	20.04
+Codename:	focal
+unitree@ubuntu:~$   df -h
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/nvme0n1p1  1.9T   21G  1.8T   2% /
+none            7.4G     0  7.4G   0% /dev
+tmpfs           7.6G     0  7.6G   0% /dev/shm
+tmpfs           1.6G   35M  1.5G   3% /run
+tmpfs           5.0M  4.0K  5.0M   1% /run/lock
+tmpfs           7.6G     0  7.6G   0% /sys/fs/cgroup
+tmpfs           1.6G   16K  1.6G   1% /run/user/124
+tmpfs           1.6G  4.0K  1.6G   1% /run/user/1000
+unitree@ubuntu:~$   free -h
+              total        used        free      shared  buff/cache   available
+Mem:           15Gi       2.2Gi        11Gi        36Mi       935Mi        12Gi
+Swap:         7.5Gi          0B       7.5Gi
+unitree@ubuntu:~$   uptime
+ 23:05:04 up 6 min,  1 user,  load average: 0.10, 0.27, 0.16
+unitree@ubuntu:~$   systemctl --type=service --state=running
+  UNIT                         LOAD   ACTIVE SUB     DE>
+  accounts-daemon.service      loaded active running Ac>
+  avahi-daemon.service         loaded active running Av>
+  bluetooth.service            loaded active running Bl>
+  chrony.service               loaded active running ch>
+  colord.service               loaded active running Ma>
+  containerd.service           loaded active running co>
+  cron.service                 loaded active running Re>
+  dbus.service                 loaded active running D->
+  docker.service               loaded active running Do>
+  fwupd.service                loaded active running Fi>
+  gdm.service                  loaded active running GN>
+  haveged.service              loaded active running En>
+  iio-sensor-proxy.service     loaded active running II>
+  kerneloops.service           loaded active running To>
+  master_service.service       loaded active running LS>
+  ModemManager.service         loaded active running Mo>
+  networkd-dispatcher.service  loaded active running Di>
+  NetworkManager.service       loaded active running Ne>
+  nv-tee-supplicant.service    loaded active running OP>
+  nvargus-daemon.service       loaded active running Ar>
+  nvfancontrol.service         loaded active running nv>
+  nvphs.service                loaded active running PH>
+  nvs-service.service          loaded active running NV>
+  nxserver.service             loaded active running No>
+  ota_pipe.service             loaded active running LS>
+  UNIT                         LOAD   ACTIVE SUB     DE>
+  accounts-daemon.service      loaded active running Ac>
+  avahi-daemon.service         loaded active running Av>
+  bluetooth.service            loaded active running Bl>
+  chrony.service               loaded active running ch>
+  colord.service               loaded active running Ma>
+  containerd.service           loaded active running co>
+  cron.service                 loaded active running Re>
+  dbus.service                 loaded active running D->
+  docker.service               loaded active running Do>
+  fwupd.service                loaded active running Fi>
+  gdm.service                  loaded active running GN>
+  haveged.service              loaded active running En>
+  iio-sensor-proxy.service     loaded active running II>
+  kerneloops.service           loaded active running To>
+  master_service.service       loaded active running LS>
+  ModemManager.service         loaded active running Mo>
+  networkd-dispatcher.service  loaded active running Di>
+  NetworkManager.service       loaded active running Ne>
+  nv-tee-supplicant.service    loaded active running OP>
+  nvargus-daemon.service       loaded active running Ar>
+  nvfancontrol.service         loaded active running nv>
+  nvphs.service                loaded active running PH>
+  nvs-service.service          loaded active running NV>
+  nxserver.service             loaded active running No>
+  ota_pipe.service             loaded active running LS>
+  UNIT                         LOAD   ACTIVE SUB     DE>
+  accounts-daemon.service      loaded active running Ac>
+  avahi-daemon.service         loaded active running Av>
+  bluetooth.service            loaded active running Bl>
+  chrony.service               loaded active running ch>
+  colord.service               loaded active running Ma>
+  containerd.service           loaded active running co>
+  cron.service                 loaded active running Re>
+  dbus.service                 loaded active running D->
+  docker.service               loaded active running Do>
+  fwupd.service                loaded active running Fi>
+  gdm.service                  loaded active running GN>
+  haveged.service              loaded active running En>
+  iio-sensor-proxy.service     loaded active running II>
+  kerneloops.service           loaded active running To>
+  master_service.service       loaded active running LS>
+  ModemManager.service         loaded active running Mo>
+  networkd-dispatcher.service  loaded active running Di>
+  NetworkManager.service       loaded active running Ne>
+  nv-tee-supplicant.service    loaded active running OP>
+  nvargus-daemon.service       loaded active running Ar>
+  nvfancontrol.service         loaded active running nv>
+  nvphs.service                loaded active running PH>
+  nvs-service.service          loaded active running NV>
+  nxserver.service             loaded active running No>
+  ota_pipe.service             loaded active running LS>
+  UNIT                         LOAD   ACTIVE SUB     DE>
+  accounts-daemon.service      loaded active running Ac>
+  avahi-daemon.service         loaded active running Av>
+  bluetooth.service            loaded active running Bl>
+  chrony.service               loaded active running ch>
+  colord.service               loaded active running Ma>
+  containerd.service           loaded active running co>
+  cron.service                 loaded active running Re>
+  dbus.service                 loaded active running D->
+  docker.service               loaded active running Do>
+  fwupd.service                loaded active running Fi>
+  gdm.service                  loaded active running GN>
+  haveged.service              loaded active running En>
+  iio-sensor-proxy.service     loaded active running II>
+  kerneloops.service           loaded active running To>
+  master_service.service       loaded active running LS>
+  ModemManager.service         loaded active running Mo>
+  networkd-dispatcher.service  loaded active running Di>
+  NetworkManager.service       loaded active running Ne>
+  nv-tee-supplicant.service    loaded active running OP>
+  nvargus-daemon.service       loaded active running Ar>
+  nvfancontrol.service         loaded active running nv>
+  nvphs.service                loaded active running PH>
+  nvs-service.service          loaded active running NV>
+  nxserver.service             loaded active running No>
+  ota_pipe.service             loaded active running LS>
+  polkit.service               loaded active running Au>
+  rpcbind.service              loaded active running RP>
+  rsyslog.service              loaded active running Sy>
+  rtkit-daemon.service         loaded active running Re>
+  serial-getty@ttyAMA0.service loaded active running Se>
+  serial-getty@ttyGS0.service  loaded active running Se>
+  serial-getty@ttyTCU0.service loaded active running Se>
+  ssh.service                  loaded active running Op>
+  switcheroo-control.service   loaded active running Sw>
+  systemd-journald.service     loaded active running Jo>
+  systemd-logind.service       loaded active running Lo>
+  systemd-resolved.service     loaded active running Ne>
+  systemd-udevd.service        loaded active running ud>
+  udisks2.service              loaded active running Di>
+  unitree-upgrade.service      loaded active running Un>
+  upower.service               loaded active running Da>
+  user@1000.service            loaded active running Us>
+  user@124.service             loaded active running Us>
+  whoopsie.service             loaded active running cr>
+  wpa_supplicant.service       loaded active running WP>
+
+LOAD   = Reflects whether the unit definition was prope>
+ACTIVE = The high-level unit activation state, i.e. gen>
+SUB    = The low-level unit activation state, values de>
+
+45 loaded units listed.
+set mark: ...skipping...
+  UNIT                         LOAD   ACTIVE SUB     DE>
+  accounts-daemon.service      loaded active running Ac>
+  avahi-daemon.service         loaded active running Av>
+  bluetooth.service            loaded active running Bl>
+  chrony.service               loaded active running ch>
+  colord.service               loaded active running Ma>
+  containerd.service           loaded active running co>
+  cron.service                 loaded active running Re>
+  dbus.service                 loaded active running D->
+  docker.service               loaded active running Do>
+  fwupd.service                loaded active running Fi>
+  gdm.service                  loaded active running GN>
+  haveged.service              loaded active running En>
+  iio-sensor-proxy.service     loaded active running II>
+  kerneloops.service           loaded active running To>
+  master_service.service       loaded active running LS>
+  ModemManager.service         loaded active running Mo>
+  networkd-dispatcher.service  loaded active running Di>
+  NetworkManager.service       loaded active running Ne>
+  nv-tee-supplicant.service    loaded active running OP>
+  nvargus-daemon.service       loaded active running Ar>
+  nvfancontrol.service         loaded active running nv>
+  nvphs.service                loaded active running PH>
+  nvs-service.service          loaded active running NV>
+  nxserver.service             loaded active running No>
+  ota_pipe.service             loaded active running LS>
+...skipping...
+  UNIT                         LOAD   ACTIVE SUB     DE>
+  accounts-daemon.service      loaded active running Ac>
+  avahi-daemon.service         loaded active running Av>
+  bluetooth.service            loaded active running Bl>
+  chrony.service               loaded active running ch>
+  colord.service               loaded active running Ma>
+  containerd.service           loaded active running co>
+  cron.service                 loaded active running Re>
+  dbus.service                 loaded active running D->
+  docker.service               loaded active running Do>
+  fwupd.service                loaded active running Fi>
+  gdm.service                  loaded active running GN>
+  haveged.service              loaded active running En>
+  iio-sensor-proxy.service     loaded active running II>
+  kerneloops.service           loaded active running To>
+  master_service.service       loaded active running LS>
+  ModemManager.service         loaded active running Mo>
+  networkd-dispatcher.service  loaded active running Di>
+  NetworkManager.service       loaded active running Ne>
+  nv-tee-supplicant.service    loaded active running OP>
+  nvargus-daemon.service       loaded active running Ar>
+  nvfancontrol.service         loaded active running nv>
+  nvphs.service                loaded active running PH>
+  nvs-service.service          loaded active running NV>
+  nxserver.service             loaded active running No>
+  ota_pipe.service             loaded active running LS>
+  polkit.service               loaded active running Au>
+  rpcbind.service              loaded active running RP>
+  rsyslog.service              loaded active running Sy>
+  rtkit-daemon.service         loaded active running Re>
+  serial-getty@ttyAMA0.service loaded active running Se>
+  serial-getty@ttyGS0.service  loaded active running Se>
+unitree@ubuntu:~$ 
+
+
+
+unitree@ubuntu:~$ tegrastats
+04-24-2026 23:05:45 RAM 2380/15389MB (lfb 3015x4MB) SWAP 0/7694MB (cached 0MB) CPU [16%@729,3%@1984,4%@1984,1%@1984,1%@729,1%@729,3%@729,2%@729] EMC_FREQ 0% GR3D_FREQ 0% GR3D2_FREQ 0%@0 CV0@39C CPU@40.968C SOC2@40.031C SOC0@41.062C CV1@39.375C GPU@39.437C tj@42.031C SOC1@42.031C CV2@39.156C
+04-24-2026 23:05:46 RAM 2379/15389MB (lfb 3015x4MB) SWAP 0/7694MB (cached 0MB) CPU [15%@1984,3%@1984,3%@1984,2%@729,3%@729,1%@729,4%@729,1%@729] EMC_FREQ 0% GR3D_FREQ 0% GR3D2_FREQ 0%@0 CV0@39C CPU@41.25C SOC2@40.062C SOC0@41C CV1@39.343C GPU@39.656C tj@42.031C SOC1@42.031C CV2@39.156C
+04-24-2026 23:05:47 RAM 2379/15389MB (lfb 3015x4MB) SWAP 0/7694MB (cached 0MB) CPU [15%@1984,3%@1984,4%@1984,3%@1984,2%@729,0%@729,3%@729,2%@729] EMC_FREQ 0% GR3D_FREQ 0% GR3D2_FREQ 0%@0 CV0@38.968C CPU@41.031C SOC2@40.062C SOC0@40.968C CV1@39.312C GPU@39.718C tj@41.75C SOC1@41.75C CV2@39.25C
+04-24-2026 23:05:48 RAM 2379/15389MB (lfb 3015x4MB) SWAP 0/7694MB (cached 0MB) CPU [12%@1984,2%@1984,1%@1984,1%@1984,5%@729,2%@729,4%@729,2%@729] EMC_FREQ 0% GR3D_FREQ 0% GR3D2_FREQ 0%@0 CV0@38.968C CPU@40.937C SOC2@40.125C SOC0@41C CV1@39.343C GPU@39.75C tj@41.875C SOC1@41.875C CV2@39.187C
+04-24-2026 23:05:49 RAM 2380/15389MB (lfb 3015x4MB) SWAP 0/7694MB (cached 0MB) CPU [14%@1984,1%@1984,3%@1984,0%@1984,3%@729,2%@729,5%@729,3%@729] EMC_FREQ 0% GR3D_FREQ 0% GR3D2_FREQ 0%@0 CV0@38.968C CPU@41.031C SOC2@40.156C SOC0@41.031C CV1@39.437C GPU@39.531C tj@41.781C SOC1@41.781C CV2@39.281C
+^C
+unitree@ubuntu:~$ ps -ef | less
+unitree@ubuntu:~$ ps -ef | grep -i ros
+unitree     3443    2925  0 23:06 pts/0    00:00:00 grep --color=auto -i ros
+unitree@ubuntu:~$ 
+unitree@ubuntu:~$ ps -ef | grep -i unitree
+root        1234       1  0 22:59 ?        00:00:00 /unitree/module/master_service/master_service
+root        1240       1  0 22:59 ?        00:00:00 /unitree/ota/pipe/ota_pipe_service
+root        2443       1 15 22:59 ?        00:01:09 /unitree/module/video_hub_pc4/videohub_pc4 /dev/video4
+root        2461       1  0 22:59 ?        00:00:00 /unitree/module/video_hub_pc4/videohub_pc4_chest /dev/video10
+root        2846    1220  0 23:01 ?        00:00:00 sshd: unitree [priv]
+unitree     2849       1  0 23:02 ?        00:00:00 /lib/systemd/systemd --user
+unitree     2850    2849  0 23:02 ?        00:00:00 (sd-pam)
+unitree     2855    2849  0 23:02 ?        00:00:00 /usr/bin/pulseaudio --daemonize=no --log-target=journal
+unitree     2923    2846  0 23:02 ?        00:00:00 sshd: unitree@pts/0
+unitree     2924    2849  0 23:02 ?        00:00:00 /usr/bin/dbus-daemon --session --address=systemd: --nofork --nopidfile --systemd-activation --syslog-only
+unitree     2925    2923  0 23:02 pts/0    00:00:00 -bash
+unitree     3450    2925  0 23:06 pts/0    00:00:00 ps -ef
+unitree     3451    2925  0 23:06 pts/0    00:00:00 grep --color=auto -i unitree
+unitree@ubuntu:~$ ss -tulpn
+Netid  State   Recv-Q  Send-Q      Local Address:Port              Peer Address:Port          Process           
+udp    UNCONN  0       0                 0.0.0.0:52702                  0.0.0.0:*                               
+udp    UNCONN  0       0                 0.0.0.0:4000                   0.0.0.0:*                               
+udp    UNCONN  8448    0              172.17.0.1:5353                   0.0.0.0:*                               
+udp    UNCONN  8448    0         192.168.123.164:5353                   0.0.0.0:*                               
+udp    UNCONN  0       0                 0.0.0.0:5353                   0.0.0.0:*                               
+udp    UNCONN  0       0                 0.0.0.0:5353                   0.0.0.0:*                               
+udp    UNCONN  0       0                 0.0.0.0:7400                   0.0.0.0:*                               
+udp    UNCONN  0       0                 0.0.0.0:7401                   0.0.0.0:*                               
+udp    UNCONN  0       0              127.0.0.53:53                     0.0.0.0:*                               
+udp    UNCONN  0       0                 0.0.0.0:111                    0.0.0.0:*                               
+udp    UNCONN  0       0               127.0.0.1:323                    0.0.0.0:*                               
+udp    UNCONN  0       0                 0.0.0.0:58166                  0.0.0.0:*                               
+udp    UNCONN  0       0                 0.0.0.0:58180                  0.0.0.0:*                               
+udp    UNCONN  0       0         192.168.123.164:51746                  0.0.0.0:*                               
+udp    UNCONN  0       0                       *:4000                         *:*                               
+udp    UNCONN  0       0                       *:5353                         *:*                               
+udp    UNCONN  0       0                       *:55549                        *:*                               
+udp    UNCONN  0       0                       *:111                          *:*                               
+udp    UNCONN  0       0                   [::1]:323                          *:*                               
+udp    UNCONN  0       0                       *:50742                        *:*                               
+tcp    LISTEN  0       4096            127.0.0.1:39783                  0.0.0.0:*                               
+tcp    LISTEN  0       4096              0.0.0.0:111                    0.0.0.0:*                               
+tcp    LISTEN  0       128               0.0.0.0:80                     0.0.0.0:*                               
+tcp    LISTEN  0       100             127.0.0.1:21553                  0.0.0.0:*                               
+tcp    LISTEN  0       100             127.0.0.1:21554                  0.0.0.0:*                               
+tcp    LISTEN  0       4096        127.0.0.53%lo:53                     0.0.0.0:*                               
+tcp    LISTEN  0       128               0.0.0.0:22                     0.0.0.0:*                               
+tcp    LISTEN  0       128             127.0.0.1:7001                   0.0.0.0:*                               
+tcp    LISTEN  0       100               0.0.0.0:4000                   0.0.0.0:*                               
+tcp    LISTEN  0       100             127.0.0.1:12001                  0.0.0.0:*                               
+tcp    LISTEN  0       10        192.168.123.164:1026                   0.0.0.0:*                               
+tcp    LISTEN  0       4096                 [::]:111                       [::]:*                               
+tcp    LISTEN  0       128                  [::]:80                        [::]:*                               
+tcp    LISTEN  0       128                  [::]:22                        [::]:*                               
+tcp    LISTEN  0       128                 [::1]:7001                      [::]:*                               
+tcp    LISTEN  0       100                  [::]:4000                      [::]:*                               
+unitree@ubuntu:~$ nvidia-smi
+-bash: nvidia-smi: command not found
+unitree@ubuntu:~$ 
+
+
+unitree@ubuntu:~$ ros2 pkg list | sort
+actionlib_msgs
+action_msgs
+action_tutorials_cpp
+action_tutorials_interfaces
+action_tutorials_py
+ament_cmake
+ament_cmake_auto
+ament_cmake_copyright
+ament_cmake_core
+ament_cmake_cppcheck
+ament_cmake_cpplint
+ament_cmake_export_definitions
+ament_cmake_export_dependencies
+ament_cmake_export_include_directories
+ament_cmake_export_interfaces
+ament_cmake_export_libraries
+ament_cmake_export_link_flags
+ament_cmake_export_targets
+ament_cmake_flake8
+ament_cmake_gmock
+ament_cmake_gtest
+ament_cmake_include_directories
+ament_cmake_libraries
+ament_cmake_lint_cmake
+ament_cmake_pep257
+ament_cmake_pytest
+ament_cmake_python
+ament_cmake_ros
+ament_cmake_target_dependencies
+ament_cmake_test
+ament_cmake_uncrustify
+ament_cmake_version
+ament_cmake_xmllint
+ament_copyright
+ament_cppcheck
+ament_cpplint
+ament_flake8
+ament_index_cpp
+ament_index_python
+ament_lint
+ament_lint_auto
+ament_lint_cmake
+ament_lint_common
+ament_package
+ament_pep257
+ament_uncrustify
+ament_xmllint
+angles
+behaviortree_cpp_v3
+builtin_interfaces
+class_loader
+common_interfaces
+composition
+composition_interfaces
+console_bridge_vendor
+costmap_queue
+cv_bridge
+demo_nodes_cpp
+demo_nodes_cpp_native
+demo_nodes_py
+depthimage_to_laserscan
+desktop
+diagnostic_msgs
+diagnostic_updater
+domain_coordinator
+dummy_map_server
+dummy_robot_bringup
+dummy_sensors
+dwb_core
+dwb_critics
+dwb_msgs
+dwb_plugins
+eigen3_cmake_module
+example_interfaces
+examples_rclcpp_minimal_action_client
+examples_rclcpp_minimal_action_server
+examples_rclcpp_minimal_client
+examples_rclcpp_minimal_composition
+examples_rclcpp_minimal_publisher
+examples_rclcpp_minimal_service
+examples_rclcpp_minimal_subscriber
+examples_rclcpp_minimal_timer
+examples_rclcpp_multithreaded_executor
+examples_rclpy_executors
+examples_rclpy_minimal_action_client
+examples_rclpy_minimal_action_server
+examples_rclpy_minimal_client
+examples_rclpy_minimal_publisher
+examples_rclpy_minimal_service
+examples_rclpy_minimal_subscriber
+fastrtps_cmake_module
+geographic_msgs
+geometry2
+geometry_msgs
+image_geometry
+image_tools
+image_transport
+interactive_markers
+intra_process_demo
+joy
+kdl_parser
+laser_geometry
+launch
+launch_ros
+launch_testing
+launch_testing_ament_cmake
+launch_testing_ros
+launch_xml
+launch_yaml
+libcurl_vendor
+libstatistics_collector
+libyaml_vendor
+lifecycle
+lifecycle_msgs
+logging_demo
+map_msgs
+message_filters
+nav2_amcl
+nav2_behavior_tree
+nav2_bt_navigator
+nav2_common
+nav2_controller
+nav2_core
+nav2_costmap_2d
+nav_2d_msgs
+nav_2d_utils
+nav2_dwb_controller
+nav2_lifecycle_manager
+nav2_map_server
+nav2_msgs
+nav2_navfn_planner
+nav2_planner
+nav2_recoveries
+nav2_regulated_pure_pursuit_controller
+nav2_rviz_plugins
+nav2_util
+nav2_voxel_grid
+nav2_waypoint_follower
+navigation2
+nav_msgs
+osrf_pycommon
+pcl_conversions
+pcl_msgs
+pendulum_control
+pendulum_msgs
+pluginlib
+python_cmake_module
+python_qt_binding
+qt_dotgraph
+qt_gui
+qt_gui_cpp
+qt_gui_py_common
+quality_of_service_demo_cpp
+quality_of_service_demo_py
+rcl
+rcl_action
+rclcpp
+rclcpp_action
+rclcpp_components
+rclcpp_lifecycle
+rcl_interfaces
+rcl_lifecycle
+rcl_logging_spdlog
+rclpy
+rcl_yaml_param_parser
+rcpputils
+rcutils
+resource_retriever
+rmw
+rmw_cyclonedds_cpp
+rmw_dds_common
+rmw_fastrtps_cpp
+rmw_fastrtps_shared_cpp
+rmw_implementation
+rmw_implementation_cmake
+robot_localization
+robot_state_publisher
+ros2action
+ros2bag
+ros2cli
+ros2component
+ros2doctor
+ros2interface
+ros2launch
+ros2lifecycle
+ros2multicast
+ros2node
+ros2param
+ros2pkg
+ros2run
+ros2service
+ros2topic
+rosbag2
+rosbag2_compression
+rosbag2_converter_default_plugins
+rosbag2_cpp
+rosbag2_storage
+rosbag2_storage_default_plugins
+rosbag2_transport
+ros_base
+ros_core
+ros_environment
+rosgraph_msgs
+rosidl_adapter
+rosidl_cmake
+rosidl_default_generators
+rosidl_default_runtime
+rosidl_generator_c
+rosidl_generator_cpp
+rosidl_generator_dds_idl
+rosidl_generator_py
+rosidl_parser
+rosidl_runtime_c
+rosidl_runtime_cpp
+rosidl_runtime_py
+rosidl_typesupport_c
+rosidl_typesupport_cpp
+rosidl_typesupport_fastrtps_c
+rosidl_typesupport_fastrtps_cpp
+rosidl_typesupport_interface
+rosidl_typesupport_introspection_c
+rosidl_typesupport_introspection_cpp
+ros_workspace
+rpyutils
+rqt_action
+rqt_common_plugins
+rqt_console
+rqt_graph
+rqt_gui
+rqt_gui_cpp
+rqt_gui_py
+rqt_image_view
+rqt_msg
+rqt_plot
+rqt_publisher
+rqt_py_common
+rqt_py_console
+rqt_reconfigure
+rqt_service_caller
+rqt_shell
+rqt_srv
+rqt_top
+rqt_topic
+rttest
+rviz2
+rviz_assimp_vendor
+rviz_common
+rviz_default_plugins
+rviz_ogre_vendor
+rviz_rendering
+sdl2_vendor
+sensor_msgs
+shape_msgs
+shared_queues_vendor
+smac_planner
+spdlog_vendor
+sqlite3_vendor
+sros2
+sros2_cmake
+statistics_msgs
+std_msgs
+std_srvs
+stereo_msgs
+tango_icons_vendor
+teleop_twist_joy
+teleop_twist_keyboard
+test_msgs
+tf2
+tf2_bullet
+tf2_eigen
+tf2_geometry_msgs
+tf2_kdl
+tf2_msgs
+tf2_py
+tf2_ros
+tf2_sensor_msgs
+tf2_tools
+tinyxml2_vendor
+tinyxml_vendor
+tlsf
+tlsf_cpp
+topic_monitor
+tracetools
+trajectory_msgs
+turtlesim
+uncrustify_vendor
+unique_identifier_msgs
+urdf
+visualization_msgs
+yaml_cpp_vendor
+zstd_vendor
+
+unitree@ubuntu:~$ ros2 pkg executables | sort
+
+action_tutorials_cpp fibonacci_action_client
+action_tutorials_cpp fibonacci_action_server
+action_tutorials_py fibonacci_action_client
+action_tutorials_py fibonacci_action_server
+composition dlopen_composition
+composition linktime_composition
+composition manual_composition
+demo_nodes_cpp add_two_ints_client
+demo_nodes_cpp add_two_ints_client_async
+demo_nodes_cpp add_two_ints_server
+demo_nodes_cpp allocator_tutorial
+demo_nodes_cpp even_parameters_node
+demo_nodes_cpp listener
+demo_nodes_cpp listener_best_effort
+demo_nodes_cpp listener_serialized_message
+demo_nodes_cpp list_parameters
+demo_nodes_cpp list_parameters_async
+demo_nodes_cpp_native talker
+demo_nodes_cpp one_off_timer
+demo_nodes_cpp parameter_blackboard
+demo_nodes_cpp parameter_events
+demo_nodes_cpp parameter_events_async
+demo_nodes_cpp reuse_timer
+demo_nodes_cpp set_and_get_parameters
+demo_nodes_cpp set_and_get_parameters_async
+demo_nodes_cpp talker
+demo_nodes_cpp talker_loaned_message
+demo_nodes_cpp talker_serialized_message
+demo_nodes_py add_two_ints_client
+demo_nodes_py add_two_ints_client_async
+demo_nodes_py add_two_ints_server
+demo_nodes_py listener
+demo_nodes_py listener_qos
+demo_nodes_py listener_serialized
+demo_nodes_py talker
+demo_nodes_py talker_qos
+depthimage_to_laserscan depthimage_to_laserscan_node
+diagnostic_updater example
+dummy_map_server dummy_map_server
+dummy_sensors dummy_joint_states
+dummy_sensors dummy_laser
+examples_rclcpp_minimal_action_client action_client_member_functions
+examples_rclcpp_minimal_action_client action_client_not_composable
+examples_rclcpp_minimal_action_client action_client_not_composable_with_cancel
+examples_rclcpp_minimal_action_client action_client_not_composable_with_feedback
+examples_rclcpp_minimal_action_server action_server_member_functions
+examples_rclcpp_minimal_action_server action_server_not_composable
+examples_rclcpp_minimal_client client_main
+examples_rclcpp_minimal_composition composition_composed
+examples_rclcpp_minimal_composition composition_publisher
+examples_rclcpp_minimal_composition composition_subscriber
+examples_rclcpp_minimal_publisher publisher_lambda
+examples_rclcpp_minimal_publisher publisher_member_function
+examples_rclcpp_minimal_publisher publisher_not_composable
+examples_rclcpp_minimal_service service_main
+examples_rclcpp_minimal_subscriber subscriber_lambda
+examples_rclcpp_minimal_subscriber subscriber_member_function
+examples_rclcpp_minimal_subscriber subscriber_not_composable
+examples_rclcpp_minimal_timer timer_lambda
+examples_rclcpp_minimal_timer timer_member_function
+examples_rclcpp_multithreaded_executor multithreaded_executor
+examples_rclpy_executors callback_group
+examples_rclpy_executors composed
+examples_rclpy_executors custom_callback_group
+examples_rclpy_executors custom_executor
+examples_rclpy_executors listener
+examples_rclpy_executors talker
+examples_rclpy_minimal_action_client client
+examples_rclpy_minimal_action_client client_cancel
+examples_rclpy_minimal_action_client client_not_composable
+examples_rclpy_minimal_action_server server
+examples_rclpy_minimal_action_server server_defer
+examples_rclpy_minimal_action_server server_not_composable
+examples_rclpy_minimal_action_server server_queue_goals
+examples_rclpy_minimal_action_server server_single_goal
+examples_rclpy_minimal_client client
+examples_rclpy_minimal_client client_async
+examples_rclpy_minimal_client client_async_callback
+examples_rclpy_minimal_client client_async_member_function
+examples_rclpy_minimal_publisher publisher_local_function
+examples_rclpy_minimal_publisher publisher_member_function
+examples_rclpy_minimal_publisher publisher_old_school
+examples_rclpy_minimal_service service
+examples_rclpy_minimal_service service_member_function
+examples_rclpy_minimal_subscriber subscriber_lambda
+examples_rclpy_minimal_subscriber subscriber_member_function
+examples_rclpy_minimal_subscriber subscriber_old_school
+image_tools cam2image
+image_tools showimage
+image_transport list_transports
+image_transport republish
+intra_process_demo camera_node
+intra_process_demo cyclic_pipeline
+intra_process_demo image_pipeline_all_in_one
+intra_process_demo image_pipeline_with_two_image_view
+intra_process_demo image_view_node
+intra_process_demo two_node_pipeline
+intra_process_demo watermark_node
+joy joy_enumerate_devices
+joy joy_node
+launch_testing exit_code_proc
+launch_testing good_proc
+launch_testing terminating_proc
+lifecycle lifecycle_listener
+lifecycle lifecycle_service_client
+lifecycle lifecycle_talker
+logging_demo logging_demo_main
+nav2_amcl amcl
+nav2_bt_navigator bt_navigator
+nav2_controller controller_server
+nav2_costmap_2d nav2_costmap_2d
+nav2_costmap_2d nav2_costmap_2d_cloud
+nav2_costmap_2d nav2_costmap_2d_markers
+nav2_lifecycle_manager lifecycle_manager
+nav2_map_server map_saver_cli
+nav2_map_server map_saver_server
+nav2_map_server map_server
+nav2_planner planner_server
+nav2_recoveries recoveries_server
+nav2_util dump_params
+nav2_util lifecycle_bringup
+nav2_waypoint_follower waypoint_follower
+quality_of_service_demo_cpp deadline
+quality_of_service_demo_cpp incompatible_qos
+quality_of_service_demo_cpp interactive_publisher
+quality_of_service_demo_cpp interactive_subscriber
+quality_of_service_demo_cpp lifespan
+quality_of_service_demo_cpp liveliness
+quality_of_service_demo_py deadline
+quality_of_service_demo_py incompatible_qos
+quality_of_service_demo_py lifespan
+quality_of_service_demo_py liveliness
+rclcpp_components component_container
+rclcpp_components component_container_mt
+robot_localization ekf_node
+robot_localization filter_base-test
+robot_localization navsat_transform_node
+robot_localization robot_localization_listener_node
+robot_localization test_ekf
+robot_localization test_ekf_localization_node_interfaces
+robot_localization test_filter_base_diagnostics_timestamps
+robot_localization test_navsat_conversions
+robot_localization test_navsat_transform
+robot_localization test_robot_localization_estimator
+robot_localization test_ros_robot_localization_listener
+robot_localization test_ros_robot_localization_listener_publisher
+robot_localization test_ukf
+robot_localization test_ukf_localization_node_interfaces
+robot_localization ukf_node
+robot_state_publisher robot_state_publisher
+rosidl_adapter msg2idl.py
+rosidl_adapter srv2idl.py
+rosidl_generator_cpp rosidl_generator_cpp
+rosidl_generator_c rosidl_generator_c
+rosidl_generator_dds_idl rosidl_generator_dds_idl
+rosidl_generator_py rosidl_generator_py
+rosidl_parser idl2png
+rosidl_typesupport_cpp rosidl_typesupport_cpp
+rosidl_typesupport_c rosidl_typesupport_c
+rosidl_typesupport_fastrtps_cpp rosidl_typesupport_fastrtps_cpp
+rosidl_typesupport_fastrtps_c rosidl_typesupport_fastrtps_c
+rosidl_typesupport_introspection_cpp rosidl_typesupport_introspection_cpp
+rosidl_typesupport_introspection_c rosidl_typesupport_introspection_c
+rqt_console rqt_console
+rqt_graph rqt_graph
+rqt_gui rqt_gui
+rqt_image_view image_publisher
+rqt_image_view rqt_image_view
+rqt_msg rqt_msg
+rqt_plot rqt_plot
+rqt_publisher rqt_publisher
+rqt_py_console rqt_py_console
+rqt_reconfigure rqt_reconfigure
+rqt_service_caller rqt_service_caller
+rqt_shell rqt_shell
+rqt_srv rqt_srv
+rqt_topic rqt_topic
+rqt_top rqt_top
+rviz2 rviz2
+teleop_twist_joy teleop_node
+teleop_twist_keyboard teleop_twist_keyboard
+tf2_ros buffer_server
+tf2_ros static_transform_publisher
+tf2_ros tf2_echo
+tf2_ros tf2_monitor
+tf2_tools view_frames.py
+topic_monitor data_publisher
+topic_monitor topic_monitor
+tracetools status
+turtlesim draw_square
+turtlesim mimic
+turtlesim turtlesim_node
+turtlesim turtle_teleop_key
+
+
+unitree@ubuntu:~$   pwd
+/home/unitree
+unitree@ubuntu:~$   ls
+ cyclonedds_ws
+ Desktop
+ Documents
+ Downloads
+ -ef
+'-ef | grep -i ros'
+ g1plus_pc4_unitree_install
+ gpio_test.sh
+ Music
+ nomachine.sh
+ Pictures
+ Public
+ stream_realsense.py
+ Templates
+ test
+ tmp_NV_L4T_OPENCV_RUNTIME_TARGET_POST_INSTALL_COMP.cai_kun.sh
+ unitree
+ unitree_sdk2-main
+ Videos
+ wifi-bt-deb
+ wifi-bt-deb.tar.gz
+unitree@ubuntu:~$   find ~/ -maxdepth 3 -type d | grep -E 'src|install|build|log'
+/home/unitree/unitree/Odometer_service/logs
+/home/unitree/unitree/Odometer_service/build
+/home/unitree/unitree/Odometer_service/src
+/home/unitree/g1plus_pc4_unitree_install
+/home/unitree/g1plus_pc4_unitree_install/etc
+/home/unitree/g1plus_pc4_unitree_install/etc/init.d
+/home/unitree/g1plus_pc4_unitree_install/unitree
+/home/unitree/g1plus_pc4_unitree_install/unitree/etc
+/home/unitree/g1plus_pc4_unitree_install/unitree/sbin
+/home/unitree/g1plus_pc4_unitree_install/unitree/module
+/home/unitree/g1plus_pc4_unitree_install/unitree/var
+/home/unitree/g1plus_pc4_unitree_install/unitree/bin
+/home/unitree/g1plus_pc4_unitree_install/unitree/robot
+/home/unitree/g1plus_pc4_unitree_install/unitree/ota
+/home/unitree/.ros/log
+/home/unitree/.ros/log/e186f940-4aff-11ee-8a27-48b02dd8d5ee
+/home/unitree/.ros/log/2023-11-07-17-13-28-214656-ubuntu-13321
+/home/unitree/.ros/log/2023-11-07-17-09-55-115451-ubuntu-10755
+/home/unitree/.ros/log/2023-11-07-17-07-38-062019-ubuntu-10507
+/home/unitree/.ros/log/2023-11-07-17-13-49-861526-ubuntu-16658
+/home/unitree/.ros/log/2023-11-07-11-49-03-539306-ubuntu-19710
+/home/unitree/.ros/log/2023-11-07-17-06-07-648530-ubuntu-10101
+/home/unitree/.ros/log/91094a66-4aed-11ee-acda-48b02dd8d5ee
+/home/unitree/.ros/log/2023-11-07-17-11-31-370124-ubuntu-12954
+/home/unitree/.ros/log/88f0d95c-4aed-11ee-a54d-48b02dd8d5ee
+/home/unitree/.ros/log/0e7c1156-4aec-11ee-863b-48b02dd8d5ee
+/home/unitree/.ros/log/2023-11-07-17-01-16-517513-ubuntu-4357
+/home/unitree/.ros/log/6e1244be-7c92-11ee-8f1b-48b02dd8d5ee
+/home/unitree/.ros/log/8a5ca074-48b2-11ee-8237-48b02dd8d5ee
+/home/unitree/.ros/log/2023-11-07-17-06-12-951845-ubuntu-10314
+/home/unitree/.ros/log/2023-11-07-11-50-01-925670-ubuntu-19762
+/home/unitree/.ros/log/2023-11-07-17-15-23-633901-ubuntu-21773
+/home/unitree/.ros/log/8413e278-48b1-11ee-b67d-48b02dd8d5ee
+/home/unitree/.ros/log/e2c48dae-4af0-11ee-955a-48b02dd8d5ee
+/home/unitree/.ros/log/2023-11-07-17-06-13-555293-ubuntu-10330
+/home/unitree/.ros/log/e1a5d99e-48b3-11ee-85f6-48b02dd8d5ee
+/home/unitree/.ros/log/2023-11-07-17-06-07-073284-ubuntu-10087
+/home/unitree/.ros/log/2023-11-07-17-11-31-999435-ubuntu-12969
+/home/unitree/.ros/log/2023-11-07-17-13-50-411623-ubuntu-16674
+/home/unitree/.ros/log/2023-11-07-17-13-27-260225-ubuntu-13263
+/home/unitree/.ros/log/a78b8642-4aec-11ee-bb12-48b02dd8d5ee
+/home/unitree/.ros/log/ed00f274-48b3-11ee-96c9-48b02dd8d5ee
+/home/unitree/.ros/log/2023-11-07-17-01-17-015854-ubuntu-4372
+/home/unitree/.ros/log/1de3a186-48b2-11ee-afaf-48b02dd8d5ee
+/home/unitree/.ros/log/2023-11-07-17-15-23-075645-ubuntu-21757
+/home/unitree/.ros/log/9923467c-4bb8-11ee-8b2d-48b02dd8d5ee
+/home/unitree/.ros/log/2023-11-07-17-14-15-378579-ubuntu-13505
+/home/unitree/.ros/log/68f71248-78b4-11ee-9c03-ffe03f242dd8
+/home/unitree/.ros/log/1e4fc008-1df8-11b2-9f44-48b02dd8d5ee
+/home/unitree/.ros/log/2023-11-07-17-09-55-692841-ubuntu-10771
+/home/unitree/.ros/log/41745d28-4aee-11ee-abb6-48b02dd8d5ee
+/home/unitree/.ros/log/7405528e-7d4c-11ee-9b4d-48b02dd8d5ee
+/home/unitree/.ros/log/2023-11-07-17-14-16-537535-ubuntu-13513
+/home/unitree/.ros/log/3aa3f870-4bbe-11ee-95d8-48b02dd8d5ee
+/home/unitree/.ros/log/7c81bf9e-1dff-11b2-ae1d-48b02dd8d5ee
+/home/unitree/.ros/log/0752508c-48b4-11ee-b229-48b02dd8d5ee
+/home/unitree/Downloads/fast_neon-test-aarch64-compilation/src
+/home/unitree/cyclonedds_ws/log
+/home/unitree/cyclonedds_ws/log/build_2023-11-06_20-40-01
+/home/unitree/cyclonedds_ws/log/build_2023-11-06_20-35-47
+/home/unitree/cyclonedds_ws/build
+/home/unitree/cyclonedds_ws/build/cyclonedds
+/home/unitree/cyclonedds_ws/build/rmw_cyclonedds_cpp
+/home/unitree/cyclonedds_ws/src
+/home/unitree/cyclonedds_ws/src/cyclonedds-0.10.2
+/home/unitree/cyclonedds_ws/src/ros2
+/home/unitree/cyclonedds_ws/install
+/home/unitree/cyclonedds_ws/install/cyclonedds
+/home/unitree/cyclonedds_ws/install/rmw_cyclonedds_cpp
+unitree@ubuntu:~$   find ~/ -name package.xml
+/home/unitree/unitree/Odometer_service/build/ceres_catkin/ceres_src-prefix/src/ceres_src/package.xml
+/home/unitree/unitree/Odometer_service/build/catkin_tools_prebuild/package.xml
+
+/home/unitree/unitree/Odometer_service/build/dbow2_catkin/dbow2_src-prefix/src/dbow2_src/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/gflags_catkin/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/svo/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/vikit_ros/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/svo_pgo/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/cmake_external_project_catkin/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/glog_catkin/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/eigen_checks/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/ceres_catkin/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/svo_vio_common/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/vikit_py/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/opengv/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/svo_benchmarking/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/vikit_common/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/svo_common/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/rpg_common/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/vikit_solver/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/minkindr/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/svo_online_loopclosing/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/catkin_tools_prebuild/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/svo_ros/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/catkin_simple/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/rqt_svo/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/svo_msgs/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/svo_test_utils/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/vikit_cameras/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/minkindr_conversions/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/dbow2_catkin/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/svo_direct/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/svo_tracker/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/fast/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/eigen_catkin/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/rpg_trajectory_evaluation/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/svo_cmake/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/svo_ceres_backend/package.xml
+/home/unitree/unitree/Odometer_service/.catkin_tools/profiles/default/packages/svo_img_align/package.xml
+/home/unitree/unitree/Odometer_service/src/gflags_catkin/package.xml
+/home/unitree/unitree/Odometer_service/src/cmake_external_project_catkin/package.xml
+/home/unitree/unitree/Odometer_service/src/glog_catkin/package.xml
+/home/unitree/unitree/Odometer_service/src/eigen_checks/package.xml
+/home/unitree/unitree/Odometer_service/src/ceres_catkin/package.xml
+/home/unitree/unitree/Odometer_service/src/opengv/package.xml
+/home/unitree/unitree/Odometer_service/src/minkindr/minkindr/package.xml
+/home/unitree/unitree/Odometer_service/src/minkindr/minkindr_python/package.xml
+/home/unitree/unitree/Odometer_service/src/catkin_simple/test/scenarios/hello_world/bar/package.xml
+/home/unitree/unitree/Odometer_service/src/catkin_simple/test/scenarios/hello_world/foo/package.xml
+/home/unitree/unitree/Odometer_service/src/catkin_simple/test/scenarios/hello_world/baz/package.xml
+/home/unitree/unitree/Odometer_service/src/catkin_simple/package.xml
+/home/unitree/unitree/Odometer_service/src/dbow2_catkin/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo_pgo/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo_global_map/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo_vio_common/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo_benchmarking/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo_common/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/rpg_common/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/vikit/vikit_ros/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/vikit/vikit_py/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/vikit/vikit_common/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/vikit/vikit_solver/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/vikit/vikit_cameras/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo_online_loopclosing/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo_ros/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/rqt_svo/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo_msgs/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo_test_utils/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo_direct/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo_tracker/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo_cmake/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo_ceres_backend/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_svo_pro_open/svo_img_align/package.xml
+/home/unitree/unitree/Odometer_service/src/minkindr_ros/minkindr_conversions/package.xml
+/home/unitree/unitree/Odometer_service/src/fast_neon/package.xml
+/home/unitree/unitree/Odometer_service/src/eigen_catkin/package.xml
+/home/unitree/unitree/Odometer_service/src/rpg_trajectory_evaluation/package.xml
+/home/unitree/Downloads/fast_neon-test-aarch64-compilation/package.xml
+/home/unitree/cyclonedds_ws/src/cyclonedds-0.10.2/package.xml
+/home/unitree/cyclonedds_ws/src/ros2/rmw_cyclonedds/rmw_cyclonedds_cpp/package.xml
+/home/unitree/cyclonedds_ws/install/rmw_cyclonedds_cpp/share/rmw_cyclonedds_cpp/package.xml
+unitree@ubuntu:~$   find ~/ -name "*.launch.py"
+unitree@ubuntu:~$   find ~/ -name "*.launch.xml"
+unitree@ubuntu:~$ 
+unitree@ubuntu:~$ 
+
+unitree@ubuntu:~$ ros2 node list
+unitree@ubuntu:~$ ros2 topic list
+/SymState
+/api/action_store/request
+/api/action_store/response
+/api/arm/request
+/api/arm/response
+/api/audiohub/request
+/api/audiohub/response
+/api/bashrunner/request
+/api/bashrunner/response
+/api/basic_clearoip/request
+/api/basic_clearoip/response
+/api/basic_clearoip_lease/request
+/api/basic_clearoip_lease/response
+/api/basic_demarcate/request
+/api/basic_demarcate/response
+/api/basic_demarcate_lease/request
+/api/basic_demarcate_lease/response
+/api/basic_softlimit/request
+/api/basic_softlimit/response
+/api/basic_softlimit_lease/request
+/api/basic_softlimit_lease/response
+/api/basic_taumax/request
+/api/basic_taumax/response
+/api/basic_taumax_lease/request
+/api/basic_taumax_lease/response
+/api/config/request
+/api/config/response
+/api/dex3_msg_controller/request
+/api/dex3_msg_controller/response
+/api/gesture/request
+/api/gpt/request
+/api/gpt/response
+/api/motion_switcher/request
+/api/motion_switcher/response
+/api/rm_con/request
+/api/robot_state/request
+/api/robot_state/response
+/api/robot_type_service/request
+/api/robot_type_service/response
+/api/slam_operate/request
+/api/slam_operate/response
+/api/sport/request
+/api/sport/response
+/api/videohub/request
+/api/videohub/response
+/api/voice/request
+/api/voice/response
+/api/vui/request
+/api/vui/response
+/arm/action/state
+/arm_sdk
+/armsdk
+/audio_msg
+/audio_msg/filter
+/audiosender
+/collision_clouds
+/config_change_status
+/dex3/left/cmd
+/dex3/left/state
+/dex3/right/cmd
+/dex3/right/state
+/dog_imu_raw
+/dog_odom
+/ele_clouds
+/event/action_store
+/frontvideostream
+/gesture/result
+/global_map
+/gpt_cmd
+/gpt_state
+/gptflowfeedback
+/grid_clouds
+/gridmap
+/lf/agvalarmstate
+/lf/agvbmsstate
+/lf/battery_alarm
+/lf/bmsstate
+/lf/dex3/left/state
+/lf/dex3/right/state
+/lf/emergency_stop
+/lf/lowstate
+/lf/mainboardstate
+/lf/odommodestate
+/lf/secondary_imu
+/lf/sportmodestate
+/loco_sdk
+/log_system_inbound
+/log_system_outbound
+/lowcmd
+/lowstate
+/lowstate_doubleimu
+/multiplestate
+/no_warning_clouds
+/odommodestate
+/parameter_events
+/planner_map
+/pre_collision_clouds
+/pre_safe_clouds
+/public_network_status
+/rosout
+/rtc/state
+/rtc_status
+/safe_clouds
+/secondary_imu
+/selftest
+/servicestate
+/servicestateactivate
+/slam_info
+/slam_key_info
+/sportmodestate
+/unitree/slam_mapping/odom
+/unitree/slam_mapping/points
+/unitree/slam_relocation/global_map
+/unitree/slam_relocation/odom
+/unitree/slam_relocation/points
+/unitree/slam_relocation/web_points
+/unitree_slam/waypoints
+/user_lowcmd
+/utlidar/cloud_livox_mid360
+/utlidar/imu_livox_mid360
+/utlidar/map_state
+/utlidar/range_info
+/videohub/inner
+/warning_clouds
+/webrtcreq
+/webrtcres
+/wirelesscontroller
+/xfk_webrtcreq
+/xfk_webrtcres
+unitree@ubuntu:~$ ros2 service list
+unitree@ubuntu:~$ ros2 action list
+unitree@ubuntu:~$ ros2 interface list
+Messages:
+    action_msgs/msg/GoalInfo
+    action_msgs/msg/GoalStatus
+    action_msgs/msg/GoalStatusArray
+    actionlib_msgs/msg/GoalID
+    actionlib_msgs/msg/GoalStatus
+    actionlib_msgs/msg/GoalStatusArray
+    builtin_interfaces/msg/Duration
+    builtin_interfaces/msg/Time
+    diagnostic_msgs/msg/DiagnosticArray
+    diagnostic_msgs/msg/DiagnosticStatus
+    diagnostic_msgs/msg/KeyValue
+    dwb_msgs/msg/CriticScore
+    dwb_msgs/msg/LocalPlanEvaluation
+    dwb_msgs/msg/Trajectory2D
+    dwb_msgs/msg/TrajectoryScore
+    example_interfaces/msg/Bool
+    example_interfaces/msg/Byte
+    example_interfaces/msg/ByteMultiArray
+    example_interfaces/msg/Char
+    example_interfaces/msg/Empty
+    example_interfaces/msg/Float32
+    example_interfaces/msg/Float32MultiArray
+    example_interfaces/msg/Float64
+    example_interfaces/msg/Float64MultiArray
+    example_interfaces/msg/Int16
+    example_interfaces/msg/Int16MultiArray
+    example_interfaces/msg/Int32
+    example_interfaces/msg/Int32MultiArray
+    example_interfaces/msg/Int64
+    example_interfaces/msg/Int64MultiArray
+    example_interfaces/msg/Int8
+    example_interfaces/msg/Int8MultiArray
+    example_interfaces/msg/MultiArrayDimension
+    example_interfaces/msg/MultiArrayLayout
+    example_interfaces/msg/String
+    example_interfaces/msg/UInt16
+    example_interfaces/msg/UInt16MultiArray
+    example_interfaces/msg/UInt32
+    example_interfaces/msg/UInt32MultiArray
+    example_interfaces/msg/UInt64
+    example_interfaces/msg/UInt64MultiArray
+    example_interfaces/msg/UInt8
+    example_interfaces/msg/UInt8MultiArray
+    example_interfaces/msg/WString
+    geographic_msgs/msg/BoundingBox
+    geographic_msgs/msg/GeoPath
+    geographic_msgs/msg/GeoPoint
+    geographic_msgs/msg/GeoPointStamped
+    geographic_msgs/msg/GeoPose
+    geographic_msgs/msg/GeoPoseStamped
+    geographic_msgs/msg/GeographicMap
+    geographic_msgs/msg/GeographicMapChanges
+    geographic_msgs/msg/KeyValue
+    geographic_msgs/msg/MapFeature
+    geographic_msgs/msg/RouteNetwork
+    geographic_msgs/msg/RoutePath
+    geographic_msgs/msg/RouteSegment
+    geographic_msgs/msg/WayPoint
+    geometry_msgs/msg/Accel
+    geometry_msgs/msg/AccelStamped
+    geometry_msgs/msg/AccelWithCovariance
+    geometry_msgs/msg/AccelWithCovarianceStamped
+    geometry_msgs/msg/Inertia
+    geometry_msgs/msg/InertiaStamped
+    geometry_msgs/msg/Point
+    geometry_msgs/msg/Point32
+    geometry_msgs/msg/PointStamped
+    geometry_msgs/msg/Polygon
+    geometry_msgs/msg/PolygonStamped
+    geometry_msgs/msg/Pose
+    geometry_msgs/msg/Pose2D
+    geometry_msgs/msg/PoseArray
+    geometry_msgs/msg/PoseStamped
+    geometry_msgs/msg/PoseWithCovariance
+    geometry_msgs/msg/PoseWithCovarianceStamped
+    geometry_msgs/msg/Quaternion
+    geometry_msgs/msg/QuaternionStamped
+    geometry_msgs/msg/Transform
+    geometry_msgs/msg/TransformStamped
+    geometry_msgs/msg/Twist
+    geometry_msgs/msg/TwistStamped
+    geometry_msgs/msg/TwistWithCovariance
+    geometry_msgs/msg/TwistWithCovarianceStamped
+    geometry_msgs/msg/Vector3
+    geometry_msgs/msg/Vector3Stamped
+    geometry_msgs/msg/Wrench
+    geometry_msgs/msg/WrenchStamped
+    libstatistics_collector/msg/DummyMessage
+    lifecycle_msgs/msg/State
+    lifecycle_msgs/msg/Transition
+    lifecycle_msgs/msg/TransitionDescription
+    lifecycle_msgs/msg/TransitionEvent
+    map_msgs/msg/OccupancyGridUpdate
+    map_msgs/msg/PointCloud2Update
+    map_msgs/msg/ProjectedMap
+    map_msgs/msg/ProjectedMapInfo
+    nav2_msgs/msg/BehaviorTreeLog
+    nav2_msgs/msg/BehaviorTreeStatusChange
+    nav2_msgs/msg/Costmap
+    nav2_msgs/msg/CostmapMetaData
+    nav2_msgs/msg/Particle
+    nav2_msgs/msg/ParticleCloud
+    nav2_msgs/msg/VoxelGrid
+    nav_2d_msgs/msg/Path2D
+    nav_2d_msgs/msg/Pose2D32
+    nav_2d_msgs/msg/Pose2DStamped
+    nav_2d_msgs/msg/Twist2D
+    nav_2d_msgs/msg/Twist2D32
+    nav_2d_msgs/msg/Twist2DStamped
+    nav_msgs/msg/GridCells
+    nav_msgs/msg/MapMetaData
+    nav_msgs/msg/OccupancyGrid
+    nav_msgs/msg/Odometry
+    nav_msgs/msg/Path
+    pcl_msgs/msg/ModelCoefficients
+    pcl_msgs/msg/PointIndices
+    pcl_msgs/msg/PolygonMesh
+    pcl_msgs/msg/Vertices
+    pendulum_msgs/msg/JointCommand
+    pendulum_msgs/msg/JointState
+    pendulum_msgs/msg/RttestResults
+    rcl_interfaces/msg/FloatingPointRange
+    rcl_interfaces/msg/IntegerRange
+    rcl_interfaces/msg/ListParametersResult
+    rcl_interfaces/msg/Log
+    rcl_interfaces/msg/Parameter
+    rcl_interfaces/msg/ParameterDescriptor
+    rcl_interfaces/msg/ParameterEvent
+    rcl_interfaces/msg/ParameterEventDescriptors
+    rcl_interfaces/msg/ParameterType
+    rcl_interfaces/msg/ParameterValue
+    rcl_interfaces/msg/SetParametersResult
+    rmw_dds_common/msg/Gid
+    rmw_dds_common/msg/NodeEntitiesInfo
+    rmw_dds_common/msg/ParticipantEntitiesInfo
+    rosgraph_msgs/msg/Clock
+    sensor_msgs/msg/BatteryState
+    sensor_msgs/msg/CameraInfo
+    sensor_msgs/msg/ChannelFloat32
+    sensor_msgs/msg/CompressedImage
+    sensor_msgs/msg/FluidPressure
+    sensor_msgs/msg/Illuminance
+    sensor_msgs/msg/Image
+    sensor_msgs/msg/Imu
+    sensor_msgs/msg/JointState
+    sensor_msgs/msg/Joy
+    sensor_msgs/msg/JoyFeedback
+    sensor_msgs/msg/JoyFeedbackArray
+    sensor_msgs/msg/LaserEcho
+    sensor_msgs/msg/LaserScan
+    sensor_msgs/msg/MagneticField
+    sensor_msgs/msg/MultiDOFJointState
+    sensor_msgs/msg/MultiEchoLaserScan
+    sensor_msgs/msg/NavSatFix
+    sensor_msgs/msg/NavSatStatus
+    sensor_msgs/msg/PointCloud
+    sensor_msgs/msg/PointCloud2
+    sensor_msgs/msg/PointField
+    sensor_msgs/msg/Range
+    sensor_msgs/msg/RegionOfInterest
+    sensor_msgs/msg/RelativeHumidity
+    sensor_msgs/msg/Temperature
+    sensor_msgs/msg/TimeReference
+    shape_msgs/msg/Mesh
+    shape_msgs/msg/MeshTriangle
+    shape_msgs/msg/Plane
+    shape_msgs/msg/SolidPrimitive
+    statistics_msgs/msg/MetricsMessage
+    statistics_msgs/msg/StatisticDataPoint
+    statistics_msgs/msg/StatisticDataType
+    std_msgs/msg/Bool
+    std_msgs/msg/Byte
+    std_msgs/msg/ByteMultiArray
+    std_msgs/msg/Char
+    std_msgs/msg/ColorRGBA
+    std_msgs/msg/Empty
+    std_msgs/msg/Float32
+    std_msgs/msg/Float32MultiArray
+    std_msgs/msg/Float64
+    std_msgs/msg/Float64MultiArray
+    std_msgs/msg/Header
+    std_msgs/msg/Int16
+    std_msgs/msg/Int16MultiArray
+    std_msgs/msg/Int32
+    std_msgs/msg/Int32MultiArray
+    std_msgs/msg/Int64
+    std_msgs/msg/Int64MultiArray
+    std_msgs/msg/Int8
+    std_msgs/msg/Int8MultiArray
+    std_msgs/msg/MultiArrayDimension
+    std_msgs/msg/MultiArrayLayout
+    std_msgs/msg/String
+    std_msgs/msg/UInt16
+    std_msgs/msg/UInt16MultiArray
+    std_msgs/msg/UInt32
+    std_msgs/msg/UInt32MultiArray
+    std_msgs/msg/UInt64
+    std_msgs/msg/UInt64MultiArray
+    std_msgs/msg/UInt8
+    std_msgs/msg/UInt8MultiArray
+    stereo_msgs/msg/DisparityImage
+    test_msgs/msg/Arrays
+    test_msgs/msg/BasicTypes
+    test_msgs/msg/BoundedSequences
+    test_msgs/msg/Builtins
+    test_msgs/msg/Constants
+    test_msgs/msg/Defaults
+    test_msgs/msg/Empty
+    test_msgs/msg/MultiNested
+    test_msgs/msg/Nested
+    test_msgs/msg/Strings
+    test_msgs/msg/UnboundedSequences
+    test_msgs/msg/WStrings
+    tf2_msgs/msg/TF2Error
+    tf2_msgs/msg/TFMessage
+    trajectory_msgs/msg/JointTrajectory
+    trajectory_msgs/msg/JointTrajectoryPoint
+    trajectory_msgs/msg/MultiDOFJointTrajectory
+    trajectory_msgs/msg/MultiDOFJointTrajectoryPoint
+    turtlesim/msg/Color
+    turtlesim/msg/Pose
+    unique_identifier_msgs/msg/UUID
+    visualization_msgs/msg/ImageMarker
+    visualization_msgs/msg/InteractiveMarker
+    visualization_msgs/msg/InteractiveMarkerControl
+    visualization_msgs/msg/InteractiveMarkerFeedback
+    visualization_msgs/msg/InteractiveMarkerInit
+    visualization_msgs/msg/InteractiveMarkerPose
+    visualization_msgs/msg/InteractiveMarkerUpdate
+    visualization_msgs/msg/Marker
+    visualization_msgs/msg/MarkerArray
+    visualization_msgs/msg/MenuEntry
+Services:
+    action_msgs/srv/CancelGoal
+    composition_interfaces/srv/ListNodes
+    composition_interfaces/srv/LoadNode
+    composition_interfaces/srv/UnloadNode
+    diagnostic_msgs/srv/AddDiagnostics
+    diagnostic_msgs/srv/SelfTest
+    dwb_msgs/srv/DebugLocalPlan
+    dwb_msgs/srv/GenerateTrajectory
+    dwb_msgs/srv/GenerateTwists
+    dwb_msgs/srv/GetCriticScore
+    dwb_msgs/srv/ScoreTrajectory
+    example_interfaces/srv/AddTwoInts
+    example_interfaces/srv/SetBool
+    example_interfaces/srv/Trigger
+    geographic_msgs/srv/GetGeoPath
+    geographic_msgs/srv/GetGeographicMap
+    geographic_msgs/srv/GetRoutePlan
+    geographic_msgs/srv/UpdateGeographicMap
+    lifecycle_msgs/srv/ChangeState
+    lifecycle_msgs/srv/GetAvailableStates
+    lifecycle_msgs/srv/GetAvailableTransitions
+    lifecycle_msgs/srv/GetState
+    logging_demo/srv/ConfigLogger
+    map_msgs/srv/GetMapROI
+    map_msgs/srv/GetPointMap
+    map_msgs/srv/GetPointMapROI
+    map_msgs/srv/ProjectedMapsInfo
+    map_msgs/srv/SaveMap
+    map_msgs/srv/SetMapProjections
+    nav2_msgs/srv/ClearCostmapAroundRobot
+    nav2_msgs/srv/ClearCostmapExceptRegion
+    nav2_msgs/srv/ClearEntireCostmap
+    nav2_msgs/srv/GetCostmap
+    nav2_msgs/srv/LoadMap
+    nav2_msgs/srv/ManageLifecycleNodes
+    nav2_msgs/srv/SaveMap
+    nav_msgs/srv/GetMap
+    nav_msgs/srv/GetPlan
+    nav_msgs/srv/SetMap
+    pcl_msgs/srv/UpdateFilename
+    rcl_interfaces/srv/DescribeParameters
+    rcl_interfaces/srv/GetParameterTypes
+    rcl_interfaces/srv/GetParameters
+    rcl_interfaces/srv/ListParameters
+    rcl_interfaces/srv/SetParameters
+    rcl_interfaces/srv/SetParametersAtomically
+    robot_localization/srv/FromLL
+    robot_localization/srv/GetState
+    robot_localization/srv/SetDatum
+    robot_localization/srv/SetPose
+    robot_localization/srv/ToLL
+    robot_localization/srv/ToggleFilterProcessing
+    sensor_msgs/srv/SetCameraInfo
+    std_srvs/srv/Empty
+    std_srvs/srv/SetBool
+    std_srvs/srv/Trigger
+    test_msgs/srv/Arrays
+    test_msgs/srv/BasicTypes
+    test_msgs/srv/Empty
+    tf2_msgs/srv/FrameGraph
+    turtlesim/srv/Kill
+    turtlesim/srv/SetPen
+    turtlesim/srv/Spawn
+    turtlesim/srv/TeleportAbsolute
+    turtlesim/srv/TeleportRelative
+    visualization_msgs/srv/GetInteractiveMarkers
+Actions:
+    action_tutorials_interfaces/action/Fibonacci
+    example_interfaces/action/Fibonacci
+    nav2_msgs/action/BackUp
+    nav2_msgs/action/ComputePathToPose
+    nav2_msgs/action/DummyRecovery
+    nav2_msgs/action/FollowPath
+    nav2_msgs/action/FollowWaypoints
+    nav2_msgs/action/NavigateToPose
+    nav2_msgs/action/Spin
+    nav2_msgs/action/Wait
+    test_msgs/action/Fibonacci
+    test_msgs/action/NestedMessage
+    tf2_msgs/action/LookupTransform
+    turtlesim/action/RotateAbsolute
+
+
+
