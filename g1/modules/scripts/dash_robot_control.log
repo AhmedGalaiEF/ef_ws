@@ -1,0 +1,19 @@
+2026-04-25 20:44:34,186 INFO MainThread Dash robot control log path: /home/unitree/ef_ws/repo/ef_ws/g1/modules/scripts/dash_robot_control.log
+2026-04-25 20:44:59,845 INFO Thread-332 Boot callback triggered=btn-hanged-boot hanged_clicks=1 confirm_clicks=None iface=eth0
+2026-04-25 20:44:59,851 INFO Thread-332 Boot start requested iface=eth0 domain_id=0
+2026-04-25 20:44:59,861 INFO Thread-334 Boot worker importing SDK helpers
+2026-04-25 20:44:59,863 INFO Thread-332 Boot thread started name=Thread-334
+2026-04-25 20:44:59,863 INFO Thread-334 Boot worker creating loco client iface=eth0 domain_id=0
+2026-04-25 20:44:59,866 INFO Thread-332 Boot callback snapshot state=running running=True err=None message=Starting secure boot sequence.
+2026-04-25 20:45:25,523 INFO Thread-512 Boot callback triggered=btn-hanged-boot hanged_clicks=1 confirm_clicks=None iface=eth0
+2026-04-25 20:45:25,527 INFO Thread-512 Boot start requested iface=eth0 domain_id=0
+2026-04-25 20:45:25,531 INFO Thread-512 Boot start ignored because thread is already alive: Starting secure boot sequence.
+2026-04-25 20:45:25,536 INFO Thread-512 Boot callback snapshot state=running running=True err=None message=Starting secure boot sequence.
+2026-04-25 20:45:43,774 INFO Thread-560 Boot callback triggered=btn-boot-enter hanged_clicks=1 confirm_clicks=1 iface=eth0
+2026-04-25 20:45:43,782 INFO Thread-560 Boot confirm requested
+2026-04-25 20:45:43,790 INFO Thread-560 Boot confirm ignored state=running message=Starting secure boot sequence.
+2026-04-25 20:45:43,794 INFO Thread-560 Boot callback snapshot state=running running=True err=None message=Starting secure boot sequence.
+2026-04-25 20:45:49,988 INFO Thread-835 Boot callback triggered=btn-hanged-boot hanged_clicks=2 confirm_clicks=1 iface=eth0
+2026-04-25 20:45:49,990 INFO Thread-835 Boot start requested iface=eth0 domain_id=0
+2026-04-25 20:45:49,993 INFO Thread-835 Boot start ignored because thread is already alive: Starting secure boot sequence.
+2026-04-25 20:45:49,996 INFO Thread-835 Boot callback snapshot state=running running=True err=None message=Starting secure boot sequence.

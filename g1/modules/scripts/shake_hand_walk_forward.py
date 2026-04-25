@@ -12,7 +12,11 @@ MODULES_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 if MODULES_DIR not in sys.path:
     sys.path.insert(0, MODULES_DIR)
 
-from sdk_client import Robot
+from sdk_boot import BALANCED_STAND_FSM_IDS, create_loco_client, fsm_mode, read_fsm_state
+from secure_boot import force_normal_gait
+
+
+BALANCED_STAND_FSM_LABEL = "/".join(str(fsm_id) for fsm_id in sorted(BALANCED_STAND_FSM_IDS))
 
 
 def parse_args() -> argparse.Namespace:
@@ -42,9 +46,105 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--yes",
         action="store_true",
-        help="Skip the safety confirmation prompt.",
+        help="Skip operator confirmation prompts.",
     )
     return parser.parse_args()
+
+
+def show_fsm(loco: object, tag: str) -> tuple[int | None, int | None]:
+    cur_id, cur_mode = read_fsm_state(loco, retries=2, retry_delay=0.05)
+    print(f"{tag:<12s} -> FSM {cur_id}   mode {cur_mode}")
+    return cur_id, cur_mode
+
+
+def is_balanced_stand(loco: object) -> bool:
+    cur_id, cur_mode = read_fsm_state(loco)
+    return cur_id in BALANCED_STAND_FSM_IDS and cur_mode == 0
+
+
+def wait_for_balanced_stand(
+    loco: object,
+    timeout_s: float = 8.0,
+    poll_s: float = 0.2,
+) -> bool:
+    deadline = time.time() + max(0.0, float(timeout_s))
+    while time.time() < deadline:
+        if is_balanced_stand(loco):
+            return True
+        time.sleep(max(0.01, float(poll_s)))
+    return is_balanced_stand(loco)
+
+
+def stop_loco(loco: object | None) -> None:
+    if loco is None:
+        return
+    if hasattr(loco, "StopMove"):
+        loco.StopMove()
+        return
+    if hasattr(loco, "Move"):
+        loco.Move(0.0, 0.0, 0.0, continous_move=False)
+
+
+def run_secure_boot(args: argparse.Namespace) -> object:
+    loco = create_loco_client(domain_id=args.domain_id, iface=args.iface)
+
+    cur_id, cur_mode = show_fsm(loco, "initial")
+    if cur_id in BALANCED_STAND_FSM_IDS and cur_mode == 0:
+        print("Robot is already in balanced stand; skipping hanger boot.")
+        force_normal_gait(loco)
+        return loco
+
+    loco.Damp()
+    show_fsm(loco, "damp")
+
+    loco.SetFsmId(4)
+    show_fsm(loco, "stand_up")
+
+    height = 0.0
+    while True:
+        height = 0.0
+        while height < 0.5:
+            height += 0.02
+            loco.SetStandHeight(height)
+            show_fsm(loco, f"height {height:.2f} m")
+            if fsm_mode(loco) == 0 and height > 0.2:
+                break
+
+        if fsm_mode(loco) == 0:
+            break
+
+        print(
+            f"Feet still unloaded (mode {fsm_mode(loco)}) after reaching {height:.2f} m. "
+            "Adjust the hanger height, then press Enter to retry."
+        )
+        try:
+            loco.SetStandHeight(0.0)
+            show_fsm(loco, "reset")
+        except Exception:
+            pass
+        input()
+
+    if not args.yes:
+        input("Robot appears loaded. Press Enter to command balanced stand...")
+
+    loco.BalanceStand(0)
+    show_fsm(loco, "balance")
+    loco.SetStandHeight(height)
+    show_fsm(loco, "height_ok")
+    loco.Start()
+    show_fsm(loco, "start")
+    force_normal_gait(loco)
+    show_fsm(loco, "normal_gait")
+
+    if not wait_for_balanced_stand(loco):
+        cur_id, cur_mode = read_fsm_state(loco)
+        raise RuntimeError(
+            "Secure boot did not reach balanced stand "
+            f"(expected FSM {BALANCED_STAND_FSM_LABEL}, mode 0; got FSM {cur_id}, mode {cur_mode})."
+        )
+
+    show_fsm(loco, "balanced")
+    return loco
 
 
 def main() -> int:
@@ -54,23 +154,24 @@ def main() -> int:
     if not args.yes:
         input("Press Enter to run hanger boot, shake hands, then walk forward...")
 
+    loco = None
     try:
-        robot = Robot(
-            iface=args.iface,
-            domain_id=args.domain_id,
-            safety_boot=True,
-            auto_start_sensors=False,
-        )
+        loco = run_secure_boot(args)
     except Exception as exc:
         print(f"Failed to boot/connect to robot: {exc}")
         return 1
 
     try:
-        loco = robot._client
         if not hasattr(loco, "ShakeHand"):
             raise AttributeError("Current locomotion client does not support ShakeHand().")
         if not hasattr(loco, "Move"):
             raise AttributeError("Current locomotion client does not support Move().")
+        if not is_balanced_stand(loco):
+            cur_id, cur_mode = read_fsm_state(loco)
+            raise RuntimeError(
+                "Refusing to run handshake/walk because robot is not in balanced stand "
+                f"(FSM {cur_id}, mode {cur_mode})."
+            )
 
         print("Running loco client id 11: extend hand.")
         loco.ShakeHand()
@@ -82,7 +183,7 @@ def main() -> int:
         )
         loco.Move(float(args.forward_speed), 0.0, 0.0, continous_move=True)
         time.sleep(max(0.0, float(args.forward_seconds)))
-        robot.stop()
+        stop_loco(loco)
         time.sleep(0.25)
 
         print("Retracting hand with second loco client id 11 call.")
@@ -90,15 +191,15 @@ def main() -> int:
         time.sleep(1.0)
     except KeyboardInterrupt:
         print("\nInterrupted. Sending stop command.")
-        robot.stop()
+        stop_loco(loco)
         return 1
     except Exception as exc:
         print(f"Sequence failed: {exc}")
-        robot.stop()
+        stop_loco(loco)
         return 1
     finally:
         try:
-            robot.stop()
+            stop_loco(loco)
         except Exception:
             pass
 

@@ -4,6 +4,8 @@ from __future__ import annotations
 import argparse
 from collections import deque
 import base64
+from dataclasses import dataclass
+import logging
 import os
 from pathlib import Path
 import struct
@@ -22,6 +24,23 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PARENT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 if PARENT_DIR not in sys.path:
     sys.path.insert(0, PARENT_DIR)
+
+LOG_PATH = os.path.join(SCRIPT_DIR, "dash_robot_control.log")
+LOGGER = logging.getLogger("dash_robot_control")
+LOGGER.setLevel(logging.INFO)
+if not LOGGER.handlers:
+    _formatter = logging.Formatter("%(asctime)s %(levelname)s %(threadName)s %(message)s")
+    _stream_handler = logging.StreamHandler()
+    _stream_handler.setFormatter(_formatter)
+    LOGGER.addHandler(_stream_handler)
+    try:
+        _file_handler = logging.FileHandler(LOG_PATH)
+    except OSError:
+        LOG_PATH = os.path.join("/tmp", f"dash_robot_control_{os.getpid()}.log")
+        _file_handler = logging.FileHandler(LOG_PATH)
+    _file_handler.setFormatter(_formatter)
+    LOGGER.addHandler(_file_handler)
+    LOGGER.info("Dash robot control log path: %s", LOG_PATH)
 
 from sdk_client import Robot
 
@@ -68,6 +87,373 @@ RGBD_LOCK = threading.Lock()
 RGBD_PREVIEW: "_ZmqRgbdPreviewReceiver | None" = None
 LIVOX_LOCK = threading.Lock()
 LIVOX_PREVIEW: "_LivoxPointsReceiver | None" = None
+
+LOWLEVEL_NOT_USED_IDX = 29
+LOWLEVEL_COMMAND_TOPIC = "rt/lowcmd"
+LOWLEVEL_JOINT_LAYOUT: list[tuple[str, int, str, float, float]] = [
+    ("left_leg", 0, "hip_pitch", -2.5307, 2.8798),
+    ("left_leg", 1, "hip_roll", -0.5236, 2.9671),
+    ("left_leg", 2, "hip_yaw", -2.7576, 2.7576),
+    ("left_leg", 3, "knee", -0.087267, 2.8798),
+    ("left_leg", 4, "ankle_pitch", -0.87267, 0.5236),
+    ("left_leg", 5, "ankle_roll", -0.2618, 0.2618),
+    ("right_leg", 6, "hip_pitch", -2.5307, 2.8798),
+    ("right_leg", 7, "hip_roll", -2.9671, 0.5236),
+    ("right_leg", 8, "hip_yaw", -2.7576, 2.7576),
+    ("right_leg", 9, "knee", -0.087267, 2.8798),
+    ("right_leg", 10, "ankle_pitch", -0.87267, 0.5236),
+    ("right_leg", 11, "ankle_roll", -0.2618, 0.2618),
+    ("waist", 12, "yaw", -2.618, 2.618),
+    ("waist", 13, "roll", -0.52, 0.52),
+    ("waist", 14, "pitch", -0.52, 0.52),
+    ("left_arm", 15, "shoulder_pitch", -3.0892, 2.6704),
+    ("left_arm", 16, "shoulder_roll", -1.5882, 2.2515),
+    ("left_arm", 17, "shoulder_yaw", -2.618, 2.618),
+    ("left_arm", 18, "elbow", -1.0472, 2.0944),
+    ("left_arm", 19, "wrist_roll", -1.9722, 1.9722),
+    ("left_arm", 20, "wrist_pitch", -1.6144, 1.6144),
+    ("left_arm", 21, "wrist_yaw", -1.6144, 1.6144),
+    ("right_arm", 22, "shoulder_pitch", -3.0892, 2.6704),
+    ("right_arm", 23, "shoulder_roll", -2.2515, 1.5882),
+    ("right_arm", 24, "shoulder_yaw", -2.618, 2.618),
+    ("right_arm", 25, "elbow", -1.0472, 2.0944),
+    ("right_arm", 26, "wrist_roll", -1.9722, 1.9722),
+    ("right_arm", 27, "wrist_pitch", -1.6144, 1.6144),
+    ("right_arm", 28, "wrist_yaw", -1.6144, 1.6144),
+]
+
+
+@dataclass(frozen=True)
+class LowLevelJointSpec:
+    group: str
+    motor_index: int
+    name: str
+    limit_min: float
+    limit_max: float
+
+    @property
+    def label(self) -> str:
+        return f"{self.motor_index}: {self.group} {self.name}"
+
+
+LOWLEVEL_JOINT_SPECS = [LowLevelJointSpec(*item) for item in LOWLEVEL_JOINT_LAYOUT]
+LOWLEVEL_JOINT_BY_INDEX = {spec.motor_index: spec for spec in LOWLEVEL_JOINT_SPECS}
+LOWLEVEL_JOINT_OPTIONS = [
+    {"label": spec.label, "value": spec.motor_index} for spec in LOWLEVEL_JOINT_SPECS
+]
+
+
+def _resolve_lowstate_type() -> type | None:
+    for module_path in (
+        "unitree_sdk2py.idl.unitree_hg.msg.dds_",
+        "unitree_sdk2py.idl.unitree_go.msg.dds_",
+    ):
+        try:
+            module = __import__(module_path, fromlist=["LowState_"])
+        except Exception:
+            continue
+        if hasattr(module, "LowState_"):
+            return getattr(module, "LowState_")
+    return None
+
+
+class _LowLevelJointController:
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._ready = threading.Event()
+        self._initialized = False
+        self._iface = ""
+        self._domain_id = 0
+        self._pub: Any = None
+        self._cmd: Any = None
+        self._crc: Any = None
+        self._positions = [0.0] * 29
+        self._mode_machine = 0
+        self._state_ts = 0.0
+        self._thread: threading.Thread | None = None
+        self._active_joint: int | None = None
+        self._target = 0.0
+        self._params = (0.0, 0.0, 30.0, 1.5)
+        self._status = "Low-level controller idle."
+        self._error: str | None = None
+
+    def _ensure(self, iface: str, domain_id: int = 0) -> None:
+        if self._initialized and self._iface == str(iface) and self._domain_id == int(domain_id):
+            return
+        from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelPublisher, ChannelSubscriber
+        from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
+        from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_
+        from unitree_sdk2py.utils.crc import CRC
+
+        lowstate_type = _resolve_lowstate_type()
+        if lowstate_type is None:
+            raise RuntimeError("LowState_ type not found in unitree_sdk2py.")
+
+        ChannelFactoryInitialize(int(domain_id), str(iface))
+        pub = ChannelPublisher(LOWLEVEL_COMMAND_TOPIC, LowCmd_)
+        pub.Init()
+        cmd = unitree_hg_msg_dds__LowCmd_()
+        cmd.mode_pr = 0
+        cmd.mode_machine = 0
+        cmd.motor_cmd[LOWLEVEL_NOT_USED_IDX].q = 1.0
+        for idx in range(29):
+            cmd.motor_cmd[idx].mode = 1
+
+        def _lowstate_cb(msg: Any) -> None:
+            try:
+                positions = [float(msg.motor_state[idx].q) for idx in range(29)]
+                mode_machine = int(getattr(msg, "mode_machine", 0))
+            except Exception:
+                return
+            with self._lock:
+                self._positions = positions
+                self._mode_machine = mode_machine
+                self._state_ts = time.time()
+            self._ready.set()
+
+        sub = ChannelSubscriber("rt/lowstate", lowstate_type)
+        sub.Init(_lowstate_cb, 200)
+        with self._lock:
+            self._pub = pub
+            self._sub = sub
+            self._cmd = cmd
+            self._crc = CRC()
+            self._iface = str(iface)
+            self._domain_id = int(domain_id)
+            self._initialized = True
+            self._status = f"Low-level controller ready on {LOWLEVEL_COMMAND_TOPIC}."
+            self._error = None
+
+    def start_move(
+        self,
+        *,
+        joint_index: int,
+        target: float,
+        max_increment: float,
+        dq: float,
+        tau: float,
+        pk: float,
+        pd: float,
+        iface: str,
+        domain_id: int = 0,
+    ) -> str:
+        spec = LOWLEVEL_JOINT_BY_INDEX.get(int(joint_index))
+        if spec is None:
+            return f"Invalid low-level joint index: {joint_index}"
+        target = max(spec.limit_min, min(spec.limit_max, float(target)))
+        max_increment = max(0.0005, abs(float(max_increment or 0.01)))
+        try:
+            self._ensure(iface, domain_id)
+        except Exception as exc:
+            with self._lock:
+                self._error = str(exc)
+                self._status = f"Low-level init failed: {exc}"
+            return self._status
+
+        if not self._ready.wait(timeout=1.0):
+            with self._lock:
+                self._status = "Waiting for rt/lowstate before sending low-level command."
+            return self._status
+
+        with self._lock:
+            if self._thread is not None and self._thread.is_alive():
+                if self._active_joint == spec.motor_index:
+                    self._target = target
+                    self._params = (float(dq), float(tau), float(pk), float(pd))
+                    self._status = f"Updated {spec.label} target to {target:.3f} rad."
+                    return self._status
+                self._status = "Low-level move already running on another joint; wait for it to finish."
+                return self._status
+            self._status = f"Moving {spec.label} to {target:.3f} rad."
+            self._error = None
+            self._active_joint = spec.motor_index
+            self._target = target
+            self._params = (float(dq), float(tau), float(pk), float(pd))
+            self._thread = threading.Thread(
+                target=self._run_move,
+                args=(spec, max_increment),
+                daemon=True,
+            )
+            self._thread.start()
+            return self._status
+
+    def _run_move(
+        self,
+        spec: LowLevelJointSpec,
+        max_increment: float,
+    ) -> None:
+        try:
+            joint = spec.motor_index
+            with self._lock:
+                commanded = float(self._positions[joint])
+            while True:
+                with self._lock:
+                    target = float(self._target)
+                    dq, tau, pk, pd = self._params
+                error = float(target) - commanded
+                if abs(error) <= 1e-6:
+                    break
+                if abs(error) <= max_increment:
+                    commanded = float(target)
+                else:
+                    commanded += max_increment * (1.0 if error > 0.0 else -1.0)
+                self._publish_joint(joint, commanded, dq=dq, tau=tau, pk=pk, pd=pd)
+                with self._lock:
+                    self._status = f"Moving {spec.label}: command {commanded:.3f} / target {target:.3f} rad."
+                time.sleep(0.02)
+            with self._lock:
+                self._status = f"Low-level move complete for {spec.label}: {target:.3f} rad."
+                self._error = None
+                self._active_joint = None
+        except Exception as exc:
+            with self._lock:
+                self._error = str(exc)
+                self._status = f"Low-level move failed: {exc}"
+                self._active_joint = None
+
+    def _publish_joint(self, joint: int, q: float, *, dq: float, tau: float, pk: float, pd: float) -> None:
+        with self._lock:
+            positions = list(self._positions)
+            mode_machine = int(self._mode_machine)
+            cmd = self._cmd
+            pub = self._pub
+            crc = self._crc
+        if cmd is None or pub is None or crc is None:
+            raise RuntimeError("Low-level publisher is not initialized.")
+        cmd.mode_machine = mode_machine
+        for idx in range(29):
+            mc = cmd.motor_cmd[idx]
+            mc.mode = 1
+            mc.q = float(positions[idx])
+            mc.dq = 0.0
+            mc.kp = 0.0
+            mc.kd = 0.0
+            mc.tau = 0.0
+        tgt = cmd.motor_cmd[int(joint)]
+        tgt.q = float(q)
+        tgt.dq = float(dq)
+        tgt.kp = float(pk)
+        tgt.kd = float(pd)
+        tgt.tau = float(tau)
+        cmd.motor_cmd[LOWLEVEL_NOT_USED_IDX].q = 1.0
+        cmd.crc = crc.Crc(cmd)
+        pub.Write(cmd)
+
+    def snapshot(self) -> tuple[str, str | None, float, bool]:
+        with self._lock:
+            running = self._thread is not None and self._thread.is_alive()
+            return self._status, self._error, self._state_ts, running
+
+    def current_position(self, joint_index: int) -> float | None:
+        with self._lock:
+            if self._state_ts <= 0.0:
+                return None
+            return float(self._positions[int(joint_index)])
+
+
+LOWLEVEL_CONTROLLER = _LowLevelJointController()
+
+
+def _load_hand_sdk() -> tuple[type, list[float], list[float]]:
+    try:
+        from sdk_hand import Dex3HandController, HAND_CLOSED, HAND_OPEN
+
+        return Dex3HandController, list(HAND_OPEN), list(HAND_CLOSED)
+    except Exception:
+        modules_dir = Path(__file__).resolve().parents[1]
+        if str(modules_dir) not in sys.path:
+            sys.path.insert(0, str(modules_dir))
+        from sdk_hand import Dex3HandController, HAND_CLOSED, HAND_OPEN
+
+        return Dex3HandController, list(HAND_OPEN), list(HAND_CLOSED)
+
+
+class _GripController:
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._controllers: dict[str, Any] = {}
+        self._thread: threading.Thread | None = None
+        self._active_hand = "right"
+        self._current = 100.0
+        self._target = 100.0
+        self._max_increment = 2.0
+        self._status = "Grip controller idle."
+        self._error: str | None = None
+
+    def start_move(self, *, hand: str, percent: float, max_increment: float, iface: str, domain_id: int = 0) -> str:
+        side = str(hand or "right").strip().lower()
+        if side not in {"left", "right"}:
+            side = "right"
+        target = max(0.0, min(100.0, float(percent)))
+        step = max(0.1, abs(float(max_increment or 2.0)))
+        with self._lock:
+            self._active_hand = side
+            self._target = target
+            self._max_increment = step
+            if self._thread is not None and self._thread.is_alive():
+                self._status = f"Updated {side} grip target to {target:.1f}%."
+                return self._status
+            self._status = f"Moving {side} grip to {target:.1f}%."
+            self._error = None
+            self._thread = threading.Thread(target=self._run, args=(side, str(iface), int(domain_id)), daemon=True)
+            self._thread.start()
+            return self._status
+
+    def _controller_for(self, hand: str, iface: str, domain_id: int) -> Any:
+        key = f"{hand}:{iface}:{domain_id}"
+        if key not in self._controllers:
+            cls, _open, _closed = _load_hand_sdk()
+            self._controllers[key] = cls(hand=hand, iface=iface, domain_id=domain_id)
+        return self._controllers[key]
+
+    def _run(self, hand: str, iface: str, domain_id: int) -> None:
+        try:
+            controller = self._controller_for(hand, iface, domain_id)
+            _cls, hand_open, hand_closed = _load_hand_sdk()
+            published = False
+            while True:
+                with self._lock:
+                    target = float(self._target)
+                    step = float(self._max_increment)
+                    if self._active_hand != hand:
+                        hand = self._active_hand
+                        controller = self._controller_for(hand, iface, domain_id)
+                    current = float(self._current)
+                error = target - current
+                if abs(error) <= 1e-6:
+                    if not published:
+                        alpha = target / 100.0
+                        targets = [start + (stop - start) * alpha for start, stop in zip(hand_open, hand_closed)]
+                        controller.write_targets_once(targets, kp=1.2, kd=0.05, tau=0.05, timeout=0)
+                        published = True
+                    break
+                if abs(error) <= step:
+                    current = target
+                else:
+                    current += step * (1.0 if error > 0.0 else -1.0)
+                alpha = current / 100.0
+                targets = [start + (stop - start) * alpha for start, stop in zip(hand_open, hand_closed)]
+                controller.write_targets_once(targets, kp=1.2, kd=0.05, tau=0.05, timeout=0)
+                published = True
+                with self._lock:
+                    self._current = current
+                    self._status = f"{hand.title()} grip command {current:.1f}% / target {target:.1f}%."
+                time.sleep(0.02)
+            with self._lock:
+                self._status = f"{hand.title()} grip reached {target:.1f}%."
+                self._error = None
+        except Exception as exc:
+            with self._lock:
+                self._error = str(exc)
+                self._status = f"Grip command failed: {exc}"
+
+    def snapshot(self) -> tuple[str, str | None, bool]:
+        with self._lock:
+            running = self._thread is not None and self._thread.is_alive()
+            return self._status, self._error, running
+
+
+GRIP_CONTROLLER = _GripController()
 
 class _RgbPreviewReceiver:
     def __init__(self, rgb_port: int, width: int, height: int, fps: int) -> None:
@@ -607,6 +993,7 @@ def get_robot() -> Robot | None:
             ROBOT_INSTANCE = Robot(
                 iface=ROBOT_IFACE,
                 lidar_cloud_topic=ROBOT_LIDAR_CLOUD_TOPIC,
+                safety_boot=False,
             )
             return ROBOT_INSTANCE
         except Exception as exc:
@@ -625,24 +1012,34 @@ class _BootSequenceController:
         self._error: str | None = None
 
     def start(self, iface: str, domain_id: int = 0) -> str:
+        global ROBOT_INIT_ERR, ROBOT_INSTANCE
+        LOGGER.info("Boot start requested iface=%s domain_id=%s", iface, domain_id)
         with self._lock:
             if self._thread is not None and self._thread.is_alive():
+                LOGGER.info("Boot start ignored because thread is already alive: %s", self._message)
                 return self._message
+            with ROBOT_LOCK:
+                ROBOT_INSTANCE = None
+                ROBOT_INIT_ERR = None
             self._confirm.clear()
             self._state = "running"
-            self._message = "Starting hanger boot sequence."
+            self._message = "Starting secure boot sequence."
             self._error = None
             self._thread = threading.Thread(target=self._run, args=(iface, int(domain_id)), daemon=True)
             self._thread.start()
+            LOGGER.info("Boot thread started name=%s", self._thread.name)
             return self._message
 
     def confirm(self) -> str:
+        LOGGER.info("Boot confirm requested")
         with self._lock:
             if self._state != "waiting":
+                LOGGER.info("Boot confirm ignored state=%s message=%s", self._state, self._message)
                 return self._message
             self._message = "Dashboard confirmation received; continuing boot sequence."
             self._state = "running"
             self._confirm.set()
+            LOGGER.info("Boot confirmation accepted")
             return self._message
 
     def snapshot(self) -> tuple[str, str, str | None, bool]:
@@ -651,31 +1048,49 @@ class _BootSequenceController:
             return self._state, self._message, self._error, running
 
     def _set(self, state: str, message: str, error: str | None = None) -> None:
+        if error:
+            LOGGER.error("Boot state=%s message=%s error=%s", state, message, error)
+        else:
+            LOGGER.info("Boot state=%s message=%s", state, message)
         with self._lock:
             self._state = state
             self._message = message
             self._error = error
 
     def _wait_for_confirm(self, message: str) -> None:
+        LOGGER.info("Boot waiting for dashboard confirmation: %s", message)
         self._set("waiting", message)
         self._confirm.clear()
         while not self._confirm.wait(timeout=0.2):
             pass
+        LOGGER.info("Boot dashboard confirmation received")
 
     def _run(self, iface: str, domain_id: int) -> None:
+        global ROBOT_INIT_ERR, ROBOT_INSTANCE
         try:
-            from sdk_boot import create_loco_client, fsm_mode, read_fsm_state
+            LOGGER.info("Boot worker importing SDK helpers")
+            from sdk_boot import create_loco_client, fsm_mode, is_balanced_stand, read_fsm_state
+            from secure_boot import force_normal_gait
 
+            LOGGER.info("Boot worker creating loco client iface=%s domain_id=%s", iface, domain_id)
             bot = create_loco_client(domain_id=domain_id, iface=iface)
             cur_id, cur_mode = read_fsm_state(bot)
-            if cur_id == 200 and cur_mode == 0:
-                self._set("done", "Robot is already in balanced stand (FSM 200, mode 0).")
+            LOGGER.info("Boot initial FSM id=%s mode=%s", cur_id, cur_mode)
+            if is_balanced_stand(bot):
+                LOGGER.info("Boot already balanced; forcing normal gait")
+                force_normal_gait(bot)
+                with ROBOT_LOCK:
+                    ROBOT_INSTANCE = None
+                    ROBOT_INIT_ERR = None
+                self._set("done", f"Robot is already in balanced stand (FSM {cur_id}, mode {cur_mode}).")
                 return
 
             self._set("running", "Damping robot before stand-up.")
+            LOGGER.info("Boot calling Damp()")
             bot.Damp()
             time.sleep(0.1)
             self._set("running", "Switching to stand-up FSM.")
+            LOGGER.info("Boot calling SetFsmId(4)")
             bot.SetFsmId(4)
             time.sleep(0.1)
 
@@ -687,27 +1102,41 @@ class _BootSequenceController:
                     bot.SetStandHeight(height)
                     self._set("running", f"Raising stand height to {height:.2f} m.")
                     time.sleep(0.05)
-                    if fsm_mode(bot) == 0 and height > 0.2:
+                    mode = fsm_mode(bot)
+                    LOGGER.info("Boot height=%.2f mode=%s", height, mode)
+                    if mode == 0 and height > 0.2:
                         break
 
-                if fsm_mode(bot) == 0:
+                mode = fsm_mode(bot)
+                LOGGER.info("Boot sweep complete height=%.2f mode=%s", height, mode)
+                if mode == 0:
                     break
 
                 self._set("running", "Feet still unloaded; resetting stand height.")
                 try:
+                    LOGGER.info("Boot calling SetStandHeight(0.0)")
                     bot.SetStandHeight(0.0)
                 except Exception:
-                    pass
+                    LOGGER.exception("Boot failed to reset stand height")
                 self._wait_for_confirm(
                     "Adjust the hanger height, then press Confirm balanced stand in the dashboard."
                 )
 
             self._wait_for_confirm("Robot appears loaded. Press Confirm balanced stand to command BalanceStand.")
+            LOGGER.info("Boot calling BalanceStand(0)")
             bot.BalanceStand(0)
+            LOGGER.info("Boot calling SetStandHeight(%.2f)", height)
             bot.SetStandHeight(height)
+            LOGGER.info("Boot calling Start()")
             bot.Start()
-            self._set("done", "Hanger boot sequence complete; robot is in balanced stand/start mode.")
+            LOGGER.info("Boot calling force_normal_gait()")
+            force_normal_gait(bot)
+            with ROBOT_LOCK:
+                ROBOT_INSTANCE = None
+                ROBOT_INIT_ERR = None
+            self._set("done", "Secure boot complete; robot is in balanced stand/start mode.")
         except Exception as exc:
+            LOGGER.exception("Boot worker failed")
             self._set("error", f"Hanger boot sequence failed: {exc}", str(exc))
 
 
@@ -738,8 +1167,125 @@ def empty_imu_figure(title: str = "IMU orientation (RPY)") -> go.Figure:
     return fig
 
 
+def empty_slam_cloud_figure(title: str = "SLAM 3D LiDAR cloud") -> go.Figure:
+    fig = go.Figure()
+    fig.update_layout(
+        template="plotly_dark",
+        title=title,
+        scene={
+            "xaxis_title": "X (m)",
+            "yaxis_title": "Y (m)",
+            "zaxis_title": "Z (m)",
+            "aspectmode": "data",
+        },
+        margin={"l": 0, "r": 0, "t": 45, "b": 0},
+        height=560,
+    )
+    return fig
+
+
+def empty_slam_map_figure(title: str = "SLAM map") -> go.Figure:
+    fig = go.Figure()
+    fig.update_layout(
+        template="plotly_dark",
+        title=title,
+        xaxis_title="X (m)",
+        yaxis_title="Y (m)",
+        margin={"l": 35, "r": 20, "t": 45, "b": 35},
+        height=560,
+        clickmode="event+select",
+    )
+    return fig
+
+
+def _heightmap_to_arrays(height_map: Any) -> tuple[Any, float, float, float] | None:
+    try:
+        import numpy as np
+
+        width = int(height_map.width)
+        height = int(height_map.height)
+        resolution = float(height_map.resolution)
+        data = np.asarray(list(height_map.data), dtype=float)
+        if width <= 0 or height <= 0 or resolution <= 0 or data.size != width * height:
+            return None
+        grid = data.reshape((height, width))
+        origin_x = -width * resolution / 2.0
+        origin_y = -height * resolution / 2.0
+        return grid, resolution, origin_x, origin_y
+    except Exception:
+        return None
+
+
+def _make_slam_map_figure(height_map: Any, target: tuple[float, float] | None, pose: tuple[float, float, float] | None) -> go.Figure:
+    converted = _heightmap_to_arrays(height_map)
+    if converted is None:
+        return empty_slam_map_figure("SLAM map unavailable")
+    grid, resolution, origin_x, origin_y = converted
+    height, width = grid.shape
+    xs = [origin_x + col * resolution for col in range(width)]
+    ys = [origin_y + row * resolution for row in range(height)]
+    fig = go.Figure(
+        data=[
+            go.Heatmap(
+                x=xs,
+                y=ys,
+                z=grid,
+                colorscale="Viridis",
+                colorbar={"title": "height"},
+                name="map",
+            )
+        ]
+    )
+    if pose is not None:
+        fig.add_trace(
+            go.Scatter(
+                x=[float(pose[0])],
+                y=[float(pose[1])],
+                mode="markers",
+                marker={"size": 12, "color": "#00d084", "symbol": "triangle-up"},
+                name="robot",
+            )
+        )
+    if target is not None:
+        fig.add_trace(
+            go.Scatter(
+                x=[float(target[0])],
+                y=[float(target[1])],
+                mode="markers",
+                marker={"size": 13, "color": "#ff4136", "symbol": "x"},
+                name="target",
+            )
+        )
+    fig.update_layout(
+        template="plotly_dark",
+        title="SLAM map",
+        xaxis_title="X (m)",
+        yaxis_title="Y (m)",
+        margin={"l": 35, "r": 20, "t": 45, "b": 35},
+        height=560,
+        clickmode="event+select",
+        yaxis={"scaleanchor": "x", "scaleratio": 1},
+    )
+    return fig
+
+
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 app.title = "Robot Control"
+TAB_STYLE = {
+    "color": "#1f2933",
+    "backgroundColor": "#eef2f6",
+    "border": "1px solid #b8c2cc",
+    "fontWeight": 600,
+}
+ACTIVE_TAB_STYLE = {
+    "color": "#0b2545",
+    "backgroundColor": "#ffffff",
+    "border": "1px solid #b8c2cc",
+    "borderBottomColor": "#ffffff",
+    "fontWeight": 700,
+}
+TAB_LABEL_STYLE = {"color": "#1f2933"}
+ACTIVE_TAB_LABEL_STYLE = {"color": "#0b2545"}
 app.index_string = """
 <!DOCTYPE html>
 <html>
@@ -762,6 +1308,53 @@ app.index_string = """
                 background: #ffffff !important;
                 border-bottom-color: #ffffff !important;
             }
+            .joystick-pad {
+                width: min(320px, 80vw);
+                aspect-ratio: 1;
+                border: 1px solid #9aa6b2;
+                background: #eef2f6;
+                position: relative;
+                touch-action: none;
+                user-select: none;
+                margin-top: 8px;
+            }
+            .joystick-pad::before,
+            .joystick-pad::after {
+                content: "";
+                position: absolute;
+                background: #b8c2cc;
+            }
+            .joystick-pad::before { left: 50%; top: 8%; width: 1px; height: 84%; }
+            .joystick-pad::after { left: 8%; top: 50%; width: 84%; height: 1px; }
+            .joystick-knob {
+                width: 54px;
+                height: 54px;
+                border-radius: 50%;
+                background: #0d6efd;
+                position: absolute;
+                left: 50%;
+                top: 50%;
+                transform: translate(-50%, -50%);
+                z-index: 1;
+            }
+            #logs-content {
+                white-space: pre-wrap;
+                font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+                font-size: 12px;
+                max-height: 70vh;
+                overflow: auto;
+                background: #0f172a;
+                color: #e5e7eb;
+                padding: 12px;
+            }
+            .nav-tabs .nav-item:nth-child(1) .nav-link:empty::before { content: "Control"; }
+            .nav-tabs .nav-item:nth-child(2) .nav-link:empty::before { content: "LowLevel"; }
+            .nav-tabs .nav-item:nth-child(3) .nav-link:empty::before { content: "Locomotion"; }
+            .nav-tabs .nav-item:nth-child(4) .nav-link:empty::before { content: "SLAM"; }
+            .nav-tabs .nav-item:nth-child(5) .nav-link:empty::before { content: "Logs"; }
+            .nav-tabs .nav-item:nth-child(6) .nav-link:empty::before { content: "Sensors"; }
+            .nav-tabs .nav-item:nth-child(7) .nav-link:empty::before { content: "Speech"; }
+            .nav-tabs .nav-item:nth-child(8) .nav-link:empty::before { content: "Settings"; }
         </style>
     </head>
     <body>
@@ -770,6 +1363,80 @@ app.index_string = """
             {%config%}
             {%scripts%}
             {%renderer%}
+            <script>
+            (function () {
+                function setDashValue(id, value) {
+                    var el = document.getElementById(id);
+                    if (!el) return;
+                    var text = Number(value).toFixed(3);
+                    var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+                    setter.call(el, text);
+                    el.dispatchEvent(new Event("input", {bubbles: true}));
+                    el.dispatchEvent(new Event("change", {bubbles: true}));
+                }
+                function setReadout(id, text) {
+                    var el = document.getElementById(id);
+                    if (el) el.textContent = text;
+                }
+                function attachJoystick(id) {
+                    var pad = document.getElementById(id);
+                    if (!pad || pad.dataset.joystickReady === "1") return;
+                    pad.dataset.joystickReady = "1";
+                    var knob = pad.querySelector(".joystick-knob");
+                    var active = false;
+                    function apply(clientX, clientY) {
+                        var rect = pad.getBoundingClientRect();
+                        var x = Math.max(-1, Math.min(1, ((clientX - rect.left) / rect.width - 0.5) * 2));
+                        var y = Math.max(-1, Math.min(1, ((clientY - rect.top) / rect.height - 0.5) * 2));
+                        if (knob) {
+                            knob.style.left = ((x + 1) * 50) + "%";
+                            knob.style.top = ((y + 1) * 50) + "%";
+                        }
+                        if (id === "linear-joystick") {
+                            var vx = -y * 0.6;
+                            var vy = x * 0.4;
+                            setDashValue("nav-vx", vx);
+                            setDashValue("nav-vy", vy);
+                            setReadout("linear-joystick-readout", "vx " + vx.toFixed(2) + " m/s | vy " + vy.toFixed(2) + " m/s");
+                        } else {
+                            var vyaw = x * 1.0;
+                            setDashValue("nav-vyaw", vyaw);
+                            setReadout("angular-joystick-readout", "vyaw " + vyaw.toFixed(2) + " rad/s");
+                        }
+                    }
+                    function reset() {
+                        active = false;
+                        if (knob) {
+                            knob.style.left = "50%";
+                            knob.style.top = "50%";
+                        }
+                        if (id === "linear-joystick") {
+                            setDashValue("nav-vx", 0);
+                            setDashValue("nav-vy", 0);
+                            setReadout("linear-joystick-readout", "vx 0.00 m/s | vy 0.00 m/s");
+                        } else {
+                            setDashValue("nav-vyaw", 0);
+                            setReadout("angular-joystick-readout", "vyaw 0.00 rad/s");
+                        }
+                    }
+                    pad.addEventListener("pointerdown", function (ev) {
+                        active = true;
+                        pad.setPointerCapture(ev.pointerId);
+                        apply(ev.clientX, ev.clientY);
+                    });
+                    pad.addEventListener("pointermove", function (ev) {
+                        if (active) apply(ev.clientX, ev.clientY);
+                    });
+                    pad.addEventListener("pointerup", reset);
+                    pad.addEventListener("pointercancel", reset);
+                    pad.addEventListener("lostpointercapture", reset);
+                }
+                setInterval(function () {
+                    attachJoystick("linear-joystick");
+                    attachJoystick("angular-joystick");
+                }, 500);
+            })();
+            </script>
         </footer>
     </body>
 </html>
@@ -783,6 +1450,11 @@ app.layout = dbc.Container(
             [
                 dbc.Tab(
                     label="Control",
+                    tab_id="control",
+                    tab_style=TAB_STYLE,
+                    active_tab_style=ACTIVE_TAB_STYLE,
+                    label_style=TAB_LABEL_STYLE,
+                    active_label_style=ACTIVE_TAB_LABEL_STYLE,
                     children=[
                         dbc.Row(
                             [
@@ -796,7 +1468,7 @@ app.layout = dbc.Container(
                             [
                                 dbc.Col(
                                     dbc.Button(
-                                        "Start hanger boot sequence",
+                                        "Start secure boot sequence",
                                         id="btn-hanged-boot",
                                         color="primary",
                                         className="w-100 mt-2",
@@ -833,29 +1505,6 @@ app.layout = dbc.Container(
                                     ],
                                     md=6,
                                 ),
-                                dbc.Col(
-                                    dbc.Button(
-                                        "Start SLAM Service (viz=True)",
-                                        id="btn-slam-service",
-                                        color="primary",
-                                        className="mt-4 w-100",
-                                    ),
-                                    md=6,
-                                ),
-                            ],
-                            className="g-2",
-                        ),
-                        dbc.Row(
-                            [
-                                dbc.Col(
-                                    dbc.Button(
-                                        "Start RGB Video Client",
-                                        id="btn-rgb",
-                                        color="info",
-                                        className="mt-3 w-100",
-                                    ),
-                                    md=6,
-                                )
                             ],
                             className="g-2",
                         ),
@@ -863,38 +1512,143 @@ app.layout = dbc.Container(
                     ],
                 ),
                 dbc.Tab(
-                    label="Navigation",
+                    label="LowLevel",
+                    tab_id="lowlevel",
+                    tab_style=TAB_STYLE,
+                    active_tab_style=ACTIVE_TAB_STYLE,
+                    label_style=TAB_LABEL_STYLE,
+                    active_label_style=ACTIVE_TAB_LABEL_STYLE,
                     children=[
                         dbc.Row(
                             [
                                 dbc.Col(
                                     [
-                                        html.Div("vx (m/s)", className="mt-3 mb-1"),
-                                        dbc.Input(id="nav-vx", type="number", value=0.0, step=0.05),
+                                        html.Div("Joint", className="mt-3 mb-1"),
+                                        dcc.Dropdown(
+                                            id="lowlevel-joint",
+                                            options=LOWLEVEL_JOINT_OPTIONS,
+                                            value=LOWLEVEL_JOINT_SPECS[0].motor_index,
+                                            clearable=False,
+                                        ),
                                     ],
-                                    md=4,
+                                    md=6,
                                 ),
                                 dbc.Col(
                                     [
-                                        html.Div("vy (m/s)", className="mt-3 mb-1"),
-                                        dbc.Input(id="nav-vy", type="number", value=0.0, step=0.05),
+                                        html.Div("Max increment (rad)", className="mt-3 mb-1"),
+                                        dbc.Input(id="lowlevel-max-inc", type="number", value=0.01, step=0.001, min=0.0005),
                                     ],
-                                    md=4,
-                                ),
-                                dbc.Col(
-                                    [
-                                        html.Div("vyaw (rad/s)", className="mt-3 mb-1"),
-                                        dbc.Input(id="nav-vyaw", type="number", value=0.0, step=0.05),
-                                    ],
-                                    md=4,
+                                    md=3,
                                 ),
                             ],
                             className="g-2",
                         ),
+                        html.Div(id="lowlevel-selected", className="mt-2"),
+                        html.Div("Target pose (rad)", className="mt-3 mb-1"),
+                        dcc.Slider(
+                            id="lowlevel-target",
+                            min=LOWLEVEL_JOINT_SPECS[0].limit_min,
+                            max=LOWLEVEL_JOINT_SPECS[0].limit_max,
+                            step=0.001,
+                            value=0.0,
+                            tooltip={"placement": "bottom", "always_visible": True},
+                            marks=None,
+                        ),
+                        dbc.Row(
+                            [
+                                dbc.Col([html.Div("dq", className="mt-3 mb-1"), dbc.Input(id="lowlevel-dq", type="number", value=0.0, step=0.01)], md=3),
+                                dbc.Col([html.Div("tau", className="mt-3 mb-1"), dbc.Input(id="lowlevel-tau", type="number", value=0.0, step=0.01)], md=3),
+                                dbc.Col([html.Div("pk", className="mt-3 mb-1"), dbc.Input(id="lowlevel-pk", type="number", value=30.0, step=0.5)], md=3),
+                                dbc.Col([html.Div("pd", className="mt-3 mb-1"), dbc.Input(id="lowlevel-pd", type="number", value=1.5, step=0.1)], md=3),
+                            ],
+                            className="g-2",
+                        ),
+                        html.Div(id="lowlevel-status", className="mt-3"),
+                        html.Hr(),
                         dbc.Row(
                             [
                                 dbc.Col(
-                                    dbc.Button("move(vx, vy, vyaw)", id="btn-nav-move", color="primary", className="w-100 mt-3"),
+                                    [
+                                        html.Div("Hand", className="mt-3 mb-1"),
+                                        dcc.Dropdown(
+                                            id="grip-hand",
+                                            options=[
+                                                {"label": "Right", "value": "right"},
+                                                {"label": "Left", "value": "left"},
+                                            ],
+                                            value="right",
+                                            clearable=False,
+                                        ),
+                                    ],
+                                    md=4,
+                                ),
+                                dbc.Col(
+                                    [
+                                        html.Div("Grip max increment (%)", className="mt-3 mb-1"),
+                                        dbc.Input(id="grip-max-inc", type="number", value=2.0, step=0.5, min=0.1),
+                                    ],
+                                    md=3,
+                                ),
+                            ],
+                            className="g-2",
+                        ),
+                        html.Div("Grip open to close (%)", className="mt-3 mb-1"),
+                        dcc.Slider(
+                            id="grip-target",
+                            min=0,
+                            max=100,
+                            step=1,
+                            value=100,
+                            marks={0: "Open", 100: "Closed"},
+                            tooltip={"placement": "bottom", "always_visible": True},
+                        ),
+                        html.Div(id="grip-status", className="mt-3"),
+                    ],
+                ),
+                dbc.Tab(
+                    label="Locomotion",
+                    tab_id="locomotion",
+                    tab_style=TAB_STYLE,
+                    active_tab_style=ACTIVE_TAB_STYLE,
+                    label_style=TAB_LABEL_STYLE,
+                    active_label_style=ACTIVE_TAB_LABEL_STYLE,
+                    children=[
+                        dbc.Row(
+                            [
+                                dbc.Col(
+                                    [
+                                        html.Div("Left joystick linear velocity", className="mt-3 mb-2"),
+                                        html.Div(
+                                            [html.Div(className="joystick-knob")],
+                                            id="linear-joystick",
+                                            className="joystick-pad",
+                                        ),
+                                        html.Div("vx 0.00 m/s | vy 0.00 m/s", id="linear-joystick-readout", className="mt-2"),
+                                    ],
+                                    md=6,
+                                ),
+                                dbc.Col(
+                                    [
+                                        html.Div("Right joystick angular velocity", className="mt-3 mb-2"),
+                                        html.Div(
+                                            [html.Div(className="joystick-knob")],
+                                            id="angular-joystick",
+                                            className="joystick-pad",
+                                        ),
+                                        html.Div("vyaw 0.00 rad/s", id="angular-joystick-readout", className="mt-2"),
+                                    ],
+                                    md=6,
+                                ),
+                            ],
+                            className="g-3",
+                        ),
+                        dcc.Input(id="nav-vx", type="hidden", value=0.0),
+                        dcc.Input(id="nav-vy", type="hidden", value=0.0),
+                        dcc.Input(id="nav-vyaw", type="hidden", value=0.0),
+                        dbc.Row(
+                            [
+                                dbc.Col(
+                                    dbc.Button("Handshake", id="btn-handshake", color="primary", className="w-100 mt-3"),
                                     md=6,
                                 ),
                                 dbc.Col(
@@ -908,7 +1662,59 @@ app.layout = dbc.Container(
                     ],
                 ),
                 dbc.Tab(
+                    label="SLAM",
+                    tab_id="slam",
+                    tab_style=TAB_STYLE,
+                    active_tab_style=ACTIVE_TAB_STYLE,
+                    label_style=TAB_LABEL_STYLE,
+                    active_label_style=ACTIVE_TAB_LABEL_STYLE,
+                    children=[
+                        dbc.Row(
+                            [
+                                dbc.Col(dbc.Button("Start Mapping", id="btn-slam-start", color="primary", className="w-100 mt-3"), md=3),
+                                dbc.Col(dbc.Button("Finish Mapping", id="btn-slam-stop", color="secondary", className="w-100 mt-3"), md=3),
+                                dbc.Col(dbc.Button("Navigate Target", id="btn-slam-nav", color="success", className="w-100 mt-3"), md=3),
+                                dbc.Col(dbc.Button("Clear Target", id="btn-slam-clear-target", color="warning", className="w-100 mt-3"), md=3),
+                            ],
+                            className="g-2",
+                        ),
+                        dbc.Row(
+                            [
+                                dbc.Col([html.Div("Target X (m)", className="mt-3 mb-1"), dbc.Input(id="slam-target-x", type="number", value=0.0, step=0.05)], md=4),
+                                dbc.Col([html.Div("Target Y (m)", className="mt-3 mb-1"), dbc.Input(id="slam-target-y", type="number", value=0.0, step=0.05)], md=4),
+                                dbc.Col([html.Div("Target yaw (rad)", className="mt-3 mb-1"), dbc.Input(id="slam-target-yaw", type="number", value=0.0, step=0.05)], md=4),
+                            ],
+                            className="g-2",
+                        ),
+                        html.Div(id="slam-status", className="mt-3"),
+                        dbc.Row(
+                            [
+                                dbc.Col([dcc.Graph(id="slam-cloud-graph", figure=empty_slam_cloud_figure())], md=6),
+                                dbc.Col([dcc.Graph(id="slam-map-graph", figure=empty_slam_map_figure())], md=6),
+                            ],
+                            className="g-2",
+                        ),
+                    ],
+                ),
+                dbc.Tab(
+                    label="Logs",
+                    tab_id="logs",
+                    tab_style=TAB_STYLE,
+                    active_tab_style=ACTIVE_TAB_STYLE,
+                    label_style=TAB_LABEL_STYLE,
+                    active_label_style=ACTIVE_TAB_LABEL_STYLE,
+                    children=[
+                        html.Div(f"Log file: {LOG_PATH}", className="mt-3 mb-2"),
+                        html.Pre(id="logs-content", children=""),
+                    ],
+                ),
+                dbc.Tab(
                     label="Sensors",
+                    tab_id="sensors",
+                    tab_style=TAB_STYLE,
+                    active_tab_style=ACTIVE_TAB_STYLE,
+                    label_style=TAB_LABEL_STYLE,
+                    active_label_style=ACTIVE_TAB_LABEL_STYLE,
                     children=[
                         dbc.Row(
                             [
@@ -957,6 +1763,11 @@ app.layout = dbc.Container(
                 ),
                 dbc.Tab(
                     label="Speech",
+                    tab_id="speech",
+                    tab_style=TAB_STYLE,
+                    active_tab_style=ACTIVE_TAB_STYLE,
+                    label_style=TAB_LABEL_STYLE,
+                    active_label_style=ACTIVE_TAB_LABEL_STYLE,
                     children=[
                         dbc.InputGroup(
                             [
@@ -970,6 +1781,11 @@ app.layout = dbc.Container(
                 ),
                 dbc.Tab(
                     label="Settings",
+                    tab_id="settings",
+                    tab_style=TAB_STYLE,
+                    active_tab_style=ACTIVE_TAB_STYLE,
+                    label_style=TAB_LABEL_STYLE,
+                    active_label_style=ACTIVE_TAB_LABEL_STYLE,
                     children=[
                         html.Div("Current iface", className="mt-3 mb-1"),
                         dbc.Badge(ROBOT_IFACE, id="iface-current", color="secondary"),
@@ -984,12 +1800,18 @@ app.layout = dbc.Container(
                     ],
                 ),
             ],
+            active_tab="control",
             className="mb-3",
         ),
         dcc.Interval(id="lidar-interval", interval=1000, n_intervals=0),
         dcc.Interval(id="rgb-interval", interval=500, n_intervals=0),
         dcc.Interval(id="depth-interval", interval=500, n_intervals=0),
         dcc.Interval(id="boot-interval", interval=500, n_intervals=0),
+        dcc.Interval(id="lowlevel-interval", interval=500, n_intervals=0),
+        dcc.Interval(id="grip-interval", interval=500, n_intervals=0),
+        dcc.Interval(id="logs-interval", interval=1000, n_intervals=0),
+        dcc.Interval(id="slam-interval", interval=1000, n_intervals=0),
+        dcc.Store(id="slam-target-store", data=None),
     ],
     fluid=True,
 )
@@ -998,13 +1820,35 @@ app.layout = dbc.Container(
 @app.callback(
     Output("boot-status", "children"),
     Input("boot-interval", "n_intervals"),
+    Input("btn-hanged-boot", "n_clicks"),
+    Input("btn-boot-enter", "n_clicks"),
 )
-def update_boot_status(_tick: int) -> str:
+def update_boot_status(
+    _tick: int,
+    _hanged_boot: int | None,
+    _boot_enter_btn: int | None,
+) -> str:
+    trigger = dash.ctx.triggered_id
+    if trigger in {"btn-hanged-boot", "btn-boot-enter"}:
+        LOGGER.info(
+            "Boot callback triggered=%s hanged_clicks=%s confirm_clicks=%s iface=%s",
+            trigger,
+            _hanged_boot,
+            _boot_enter_btn,
+            ROBOT_IFACE,
+        )
+    if trigger == "btn-hanged-boot":
+        BOOT_SEQUENCE.start(ROBOT_IFACE)
+    elif trigger == "btn-boot-enter":
+        BOOT_SEQUENCE.confirm()
+
     state, message, err, running = BOOT_SEQUENCE.snapshot()
+    if trigger in {"btn-hanged-boot", "btn-boot-enter"}:
+        LOGGER.info("Boot callback snapshot state=%s running=%s err=%s message=%s", state, running, err, message)
     if err:
-        return f"Boot: error | {message}"
+        return f"Boot: error | {message} | log={LOG_PATH}"
     if running or state != "idle":
-        return f"Boot: {state} | {message}"
+        return f"Boot: {state} | {message} | log={LOG_PATH}"
     return ""
 
 
@@ -1015,10 +1859,6 @@ def update_boot_status(_tick: int) -> str:
     Input("btn-damp", "n_clicks"),
     Input("btn-zero", "n_clicks"),
     Input("btn-stop", "n_clicks"),
-    Input("btn-hanged-boot", "n_clicks"),
-    Input("btn-boot-enter", "n_clicks"),
-    Input("btn-rgb", "n_clicks"),
-    Input("btn-slam-service", "n_clicks"),
     Input("gait-toggle", "value"),
     prevent_initial_call=True,
 )
@@ -1026,25 +1866,9 @@ def on_control(
     _damp: int | None,
     _zero: int | None,
     _stop: int | None,
-    _hanged_boot: int | None,
-    _boot_enter_btn: int | None,
-    _rgb: int | None,
-    _slam: int | None,
     gait_value: str,
 ) -> tuple[str, str, str]:
     trigger = dash.ctx.triggered_id
-    if trigger == "btn-hanged-boot":
-        message = BOOT_SEQUENCE.start(ROBOT_IFACE)
-        return "Hanger boot sequence started.", "primary", message
-    if trigger == "btn-boot-enter":
-        message = BOOT_SEQUENCE.confirm()
-        state, _, err, running = BOOT_SEQUENCE.snapshot()
-        color = "danger" if err else ("success" if state == "done" else "primary")
-        return (
-            "Balanced-stand confirmation sent.",
-            color,
-            message if running or state == "done" else "No boot sequence is waiting.",
-        )
 
     robot = get_robot()
     if robot is None:
@@ -1060,18 +1884,6 @@ def on_control(
         if trigger == "btn-stop":
             robot.stop()
             return "Stop command sent.", "secondary", "Robot motion stopped."
-        if trigger == "btn-rgb":
-            robot.get_rgbd_gst(detect="none")
-            return "RGB video client started.", "info", "Started local RGB video client process."
-        if trigger == "btn-slam-service":
-            def _run_slam_service() -> None:
-                try:
-                    robot.slam_service(viz=True)
-                except Exception as exc:
-                    print(f"slam_service failed: {exc}")
-
-            threading.Thread(target=_run_slam_service, daemon=True).start()
-            return "SLAM service launched.", "primary", "Started Robot.slam_service(viz=True) in background thread."
         if trigger == "gait-toggle":
             if gait_value == "run":
                 robot.set_gait_type(1)
@@ -1079,6 +1891,7 @@ def on_control(
             robot.set_gait_type(0)
             return "Gait switched to walk.", "primary", "Set gait type to walk (0)."
     except Exception as exc:
+        LOGGER.exception("Control command failed trigger=%s", trigger)
         return f"Command failed: {exc}", "danger", str(exc)
 
     return "Ready", "secondary", "No action taken."
@@ -1086,30 +1899,39 @@ def on_control(
 
 @app.callback(
     Output("nav-result", "children"),
-    Input("btn-nav-move", "n_clicks"),
+    Output("nav-vx", "value"),
+    Output("nav-vy", "value"),
+    Output("nav-vyaw", "value"),
+    Input("btn-handshake", "n_clicks"),
     Input("btn-nav-stop", "n_clicks"),
-    State("nav-vx", "value"),
-    State("nav-vy", "value"),
-    State("nav-vyaw", "value"),
+    Input("nav-vx", "value"),
+    Input("nav-vy", "value"),
+    Input("nav-vyaw", "value"),
     prevent_initial_call=True,
 )
 def on_navigation(
-    _move_clicks: int | None,
+    _handshake_clicks: int | None,
     _stop_clicks: int | None,
     vx: float | None,
     vy: float | None,
     vyaw: float | None,
-) -> str:
+) -> tuple[str, Any, Any, Any]:
     robot = get_robot()
     if robot is None:
-        return f"Robot init failed: {ROBOT_INIT_ERR}"
+        return f"Robot init failed: {ROBOT_INIT_ERR}", dash.no_update, dash.no_update, dash.no_update
 
     trigger = dash.ctx.triggered_id
     try:
+        if trigger == "btn-handshake":
+            loco = getattr(robot, "_client", None)
+            if loco is None or not hasattr(loco, "ShakeHand"):
+                raise AttributeError("Current locomotion client does not support ShakeHand().")
+            rc = getattr(loco, "ShakeHand")()
+            return f"Handshake command sent, rc={rc}.", dash.no_update, dash.no_update, dash.no_update
         if trigger == "btn-nav-stop":
             robot.stop()
-            return "stop() sent."
-        if trigger == "btn-nav-move":
+            return "stop() sent.", 0.0, 0.0, 0.0
+        if trigger in {"nav-vx", "nav-vy", "nav-vyaw"}:
             cmd_vx = float(vx or 0.0)
             cmd_vy = float(vy or 0.0)
             cmd_vyaw = float(vyaw or 0.0)
@@ -1119,11 +1941,296 @@ def on_navigation(
                 rc = int(robot.loco_move(cmd_vx, cmd_vy, cmd_vyaw))
             else:
                 rc = int(robot.walk(cmd_vx, cmd_vy, cmd_vyaw))
-            return f"move(vx={cmd_vx:.3f}, vy={cmd_vy:.3f}, vyaw={cmd_vyaw:.3f}) sent, rc={rc}."
+            return (
+                f"move(vx={cmd_vx:.3f}, vy={cmd_vy:.3f}, vyaw={cmd_vyaw:.3f}) sent, rc={rc}.",
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+            )
     except Exception as exc:
-        return f"Navigation command failed: {exc}"
+        LOGGER.exception("Locomotion command failed trigger=%s vx=%s vy=%s vyaw=%s", trigger, vx, vy, vyaw)
+        return f"Locomotion command failed: {exc}", dash.no_update, dash.no_update, dash.no_update
 
-    return "No navigation action taken."
+    return "No locomotion action taken.", dash.no_update, dash.no_update, dash.no_update
+
+
+def read_warning_error_logs(max_lines: int = 200) -> str:
+    try:
+        with open(LOG_PATH, "r", encoding="utf-8", errors="replace") as fh:
+            lines = fh.readlines()
+    except Exception as exc:
+        return f"Unable to read log file {LOG_PATH}: {exc}"
+    selected = [
+        line.rstrip()
+        for line in lines
+        if " WARNING " in line or " ERROR " in line or " CRITICAL " in line or "Traceback " in line
+    ]
+    if not selected:
+        return f"No warnings or errors in {LOG_PATH}."
+    return "\n".join(selected[-max_lines:])
+
+
+@app.callback(
+    Output("logs-content", "children"),
+    Input("logs-interval", "n_intervals"),
+)
+def update_logs(_tick: int) -> str:
+    return read_warning_error_logs()
+
+
+def _make_slam_cloud_from_points(points: list[tuple[float, float, float]], title: str) -> go.Figure:
+    if not points:
+        return empty_slam_cloud_figure(title)
+    xs = [float(p[0]) for p in points]
+    ys = [float(p[1]) for p in points]
+    zs = [float(p[2]) for p in points]
+    fig = go.Figure(
+        data=[
+            go.Scatter3d(
+                x=xs,
+                y=ys,
+                z=zs,
+                mode="markers",
+                marker={"size": 2, "color": zs, "colorscale": "Turbo", "opacity": 0.85},
+                name="LiDAR",
+            )
+        ]
+    )
+    fig.update_layout(
+        template="plotly_dark",
+        title=title,
+        scene={
+            "xaxis_title": "X (m)",
+            "yaxis_title": "Y (m)",
+            "zaxis_title": "Z (m)",
+            "aspectmode": "data",
+        },
+        margin={"l": 0, "r": 0, "t": 45, "b": 0},
+        height=560,
+    )
+    return fig
+
+
+@app.callback(
+    Output("slam-cloud-graph", "figure"),
+    Output("slam-map-graph", "figure"),
+    Output("slam-status", "children"),
+    Output("slam-target-x", "value"),
+    Output("slam-target-y", "value"),
+    Output("slam-target-store", "data"),
+    Input("slam-interval", "n_intervals"),
+    Input("btn-slam-start", "n_clicks"),
+    Input("btn-slam-stop", "n_clicks"),
+    Input("btn-slam-nav", "n_clicks"),
+    Input("btn-slam-clear-target", "n_clicks"),
+    Input("slam-map-graph", "clickData"),
+    State("slam-target-x", "value"),
+    State("slam-target-y", "value"),
+    State("slam-target-yaw", "value"),
+    State("slam-target-store", "data"),
+)
+def update_slam_tab(
+    _tick: int,
+    _start: int | None,
+    _stop: int | None,
+    _nav: int | None,
+    _clear: int | None,
+    click_data: dict[str, Any] | None,
+    target_x: float | None,
+    target_y: float | None,
+    target_yaw: float | None,
+    target_store: dict[str, Any] | None,
+) -> tuple[go.Figure, go.Figure, str, Any, Any, Any]:
+    robot = get_robot()
+    if robot is None:
+        msg = f"Robot init failed: {ROBOT_INIT_ERR}"
+        return empty_slam_cloud_figure("SLAM unavailable"), empty_slam_map_figure("SLAM map unavailable"), msg, dash.no_update, dash.no_update, dash.no_update
+
+    trigger = dash.ctx.triggered_id
+    status_parts: list[str] = []
+    out_x: Any = dash.no_update
+    out_y: Any = dash.no_update
+    out_store: Any = dash.no_update
+    selected_target: tuple[float, float] | None = None
+
+    if target_store and "x" in target_store and "y" in target_store:
+        selected_target = (float(target_store["x"]), float(target_store["y"]))
+
+    try:
+        if trigger == "slam-map-graph" and click_data and click_data.get("points"):
+            pt = click_data["points"][0]
+            selected_target = (float(pt["x"]), float(pt["y"]))
+            out_x, out_y = selected_target
+            out_store = {"x": selected_target[0], "y": selected_target[1]}
+            status_parts.append(f"Target selected: x={out_x:.3f}, y={out_y:.3f}")
+        elif trigger == "btn-slam-clear-target":
+            selected_target = None
+            out_x, out_y = 0.0, 0.0
+            out_store = None
+            status_parts.append("Target cleared.")
+        elif trigger == "btn-slam-start":
+            rc = robot.start_slam()
+            status_parts.append(f"start_slam rc={rc}")
+        elif trigger == "btn-slam-stop":
+            rc = robot.stop_slam()
+            status_parts.append(f"stop_slam rc={rc}")
+        elif trigger == "btn-slam-nav":
+            if selected_target is None and target_x is not None and target_y is not None:
+                selected_target = (float(target_x), float(target_y))
+                out_store = {"x": selected_target[0], "y": selected_target[1]}
+            if selected_target is None:
+                status_parts.append("No target selected.")
+            elif hasattr(robot, "slam_nav_pose"):
+                rc = int(robot.slam_nav_pose(float(selected_target[0]), float(selected_target[1]), float(target_yaw or 0.0), obs_avoid=False))
+                status_parts.append(f"slam_nav_pose rc={rc}")
+            elif hasattr(robot, "_run_pose_nav"):
+                rc = int(getattr(robot, "_run_pose_nav")(float(selected_target[0]), float(selected_target[1]), float(target_yaw or 0.0)))
+                status_parts.append(f"pose_nav rc={rc}")
+            else:
+                status_parts.append("Robot wrapper has no SLAM navigation method.")
+    except Exception as exc:
+        LOGGER.exception("SLAM tab command failed trigger=%s", trigger)
+        status_parts.append(f"SLAM command failed: {exc}")
+
+    points: list[tuple[float, float, float]] = []
+    try:
+        points = robot.get_lidar_points(max_points=12000)
+    except Exception as exc:
+        LOGGER.exception("SLAM LiDAR read failed")
+        status_parts.append(f"LiDAR read failed: {exc}")
+    if not points:
+        try:
+            live = get_livox_preview()
+            live.start()
+            xyz, _ts, live_err = live.snapshot()
+            if xyz is not None:
+                import numpy as np
+
+                arr = np.asarray(xyz, dtype=float)
+                if arr.ndim == 2 and arr.shape[1] >= 3:
+                    if arr.shape[0] > 12000:
+                        arr = arr[:: int(arr.shape[0] / 12000) + 1]
+                    points = [(float(row[0]), float(row[1]), float(row[2])) for row in arr[:, :3]]
+            elif live_err:
+                status_parts.append(f"Live LiDAR error: {live_err}")
+        except Exception as exc:
+            LOGGER.exception("SLAM live LiDAR fallback failed")
+            status_parts.append(f"Live LiDAR fallback failed: {exc}")
+
+    cloud_fig = _make_slam_cloud_from_points(points, f"SLAM 3D LiDAR cloud ({len(points)} pts)")
+
+    pose = None
+    try:
+        pose = robot.get_slam_pose(timeout_s=0.05)
+    except Exception:
+        pose = None
+    if pose is None:
+        try:
+            pos = robot.get_position()
+            if pos is not None:
+                pose = (float(pos[0]), float(pos[1]), 0.0)
+        except Exception:
+            pose = None
+
+    try:
+        height_map = robot.get_lidar_map()
+        map_fig = _make_slam_map_figure(height_map, selected_target, pose) if height_map is not None else empty_slam_map_figure("SLAM map unavailable")
+    except Exception as exc:
+        LOGGER.exception("SLAM map render failed")
+        map_fig = empty_slam_map_figure("SLAM map error")
+        status_parts.append(f"Map render failed: {exc}")
+
+    ts = {}
+    try:
+        ts = robot.get_sensor_timestamps()
+    except Exception:
+        ts = {}
+    map_age = max(0.0, time.time() - ts.get("lidar_map", 0.0)) if ts.get("lidar_map", 0.0) else -1.0
+    cloud_age = max(0.0, time.time() - ts.get("lidar_cloud", 0.0)) if ts.get("lidar_cloud", 0.0) else -1.0
+    pose_txt = "pose unavailable" if pose is None else f"pose=({pose[0]:.2f}, {pose[1]:.2f}, {pose[2]:.2f})"
+    target_txt = "target unset" if selected_target is None else f"target=({selected_target[0]:.2f}, {selected_target[1]:.2f}, yaw={float(target_yaw or 0.0):.2f})"
+    status = " | ".join([*status_parts, pose_txt, target_txt, f"map_age={map_age:.2f}s", f"cloud_age={cloud_age:.2f}s"])
+    return cloud_fig, map_fig, status, out_x, out_y, out_store
+
+
+@app.callback(
+    Output("lowlevel-target", "min"),
+    Output("lowlevel-target", "max"),
+    Output("lowlevel-selected", "children"),
+    Input("lowlevel-joint", "value"),
+)
+def on_lowlevel_joint_selected(joint_index: int | None) -> tuple[float, float, str]:
+    spec = LOWLEVEL_JOINT_BY_INDEX.get(int(joint_index or 0), LOWLEVEL_JOINT_SPECS[0])
+    current = LOWLEVEL_CONTROLLER.current_position(spec.motor_index)
+    current_text = "current unavailable" if current is None else f"current {current:.3f} rad"
+    return (
+        float(spec.limit_min),
+        float(spec.limit_max),
+        f"{spec.label} | limits [{spec.limit_min:.3f}, {spec.limit_max:.3f}] rad | {current_text}",
+    )
+
+
+@app.callback(
+    Output("lowlevel-status", "children"),
+    Input("lowlevel-interval", "n_intervals"),
+    Input("lowlevel-target", "value"),
+    State("lowlevel-joint", "value"),
+    State("lowlevel-max-inc", "value"),
+    State("lowlevel-dq", "value"),
+    State("lowlevel-tau", "value"),
+    State("lowlevel-pk", "value"),
+    State("lowlevel-pd", "value"),
+)
+def on_lowlevel_target(
+    _tick: int,
+    target: float | None,
+    joint_index: int | None,
+    max_increment: float | None,
+    dq: float | None,
+    tau: float | None,
+    pk: float | None,
+    pd: float | None,
+) -> str:
+    if dash.ctx.triggered_id == "lowlevel-target":
+        LOWLEVEL_CONTROLLER.start_move(
+            joint_index=int(joint_index or 0),
+            target=float(target or 0.0),
+            max_increment=float(max_increment or 0.01),
+            dq=float(dq or 0.0),
+            tau=float(tau or 0.0),
+            pk=float(pk if pk is not None else 30.0),
+            pd=float(pd if pd is not None else 1.5),
+            iface=ROBOT_IFACE,
+        )
+    status, err, state_ts, running = LOWLEVEL_CONTROLLER.snapshot()
+    age = "state n/a" if state_ts <= 0.0 else f"state age {max(0.0, time.time() - state_ts):.2f}s"
+    prefix = "running" if running else ("error" if err else "idle")
+    return f"LowLevel: {prefix} | {status} | {age}"
+
+
+@app.callback(
+    Output("grip-status", "children"),
+    Input("grip-interval", "n_intervals"),
+    Input("grip-target", "value"),
+    Input("grip-hand", "value"),
+    State("grip-max-inc", "value"),
+)
+def on_grip_target(
+    _tick: int,
+    percent: float | None,
+    hand: str | None,
+    max_increment: float | None,
+) -> str:
+    if dash.ctx.triggered_id in {"grip-target", "grip-hand"}:
+        GRIP_CONTROLLER.start_move(
+            hand=str(hand or "right"),
+            percent=float(percent if percent is not None else 100.0),
+            max_increment=float(max_increment or 2.0),
+            iface=ROBOT_IFACE,
+        )
+    status, err, running = GRIP_CONTROLLER.snapshot()
+    prefix = "running" if running else ("error" if err else "idle")
+    return f"Grip: {prefix} | {status}"
 
 
 @app.callback(

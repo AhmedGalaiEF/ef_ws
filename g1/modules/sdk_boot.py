@@ -12,6 +12,8 @@ from unitree_sdk2py.g1.loco.g1_loco_api import (
 )
 from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
 
+BALANCED_STAND_FSM_IDS = frozenset((200, 501))
+
 
 def create_loco_client(domain_id: int, iface: str, timeout: float = 10.0) -> LocoClient:
     ChannelFactoryInitialize(int(domain_id), iface)
@@ -64,7 +66,7 @@ def read_fsm_state(
 
 def is_balanced_stand(client: LocoClient) -> bool:
     cur_id, cur_mode = read_fsm_state(client)
-    return cur_id == 200 and cur_mode == 0
+    return cur_id in BALANCED_STAND_FSM_IDS and cur_mode == 0
 
 
 def hanger_boot_sequence(
@@ -82,9 +84,10 @@ def hanger_boot_sequence(
 
     try:
         cur_id, cur_mode = read_fsm_state(bot)
-        if cur_id == 200 and cur_mode == 0:
+        if cur_id in BALANCED_STAND_FSM_IDS and cur_mode == 0:
             logger.info(
-                "Robot already in balanced stand (FSM 200, mode %s); skipping boot sequence.",
+                "Robot already in balanced stand (FSM %s, mode %s); skipping boot sequence.",
+                cur_id,
                 cur_mode,
             )
             return bot
@@ -136,6 +139,7 @@ def hanger_boot_sequence(
 
 
 __all__ = [
+    "BALANCED_STAND_FSM_IDS",
     "create_loco_client",
     "rpc_get_int",
     "read_fsm_state",
