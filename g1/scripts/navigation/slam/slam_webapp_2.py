@@ -26,7 +26,7 @@ TOPIC_SPORTSTATE = "rt/sportmodestate"
 
 HOST = "0.0.0.0"
 PORT = 8020
-INTERFACE = "enp2s0"
+INTERFACE = "eth0"
 
 state_lock = threading.Lock()
 last_lidar_state = None

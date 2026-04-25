@@ -318,7 +318,7 @@ class WakeUpController:
 
 def main():
     parser = argparse.ArgumentParser(description="Wake the robot up using joint-space IK waypoints.")
-    parser.add_argument("--iface", default=None, help="Network interface (robot: enp1s0, sim: lo)")
+    parser.add_argument("--iface", default="eth0", help="Network interface (robot: enp1s0, sim: lo)")
     parser.add_argument("--domain_id", type=int, default=None, help="DDS domain id (robot: 0, sim: 1)")
     args = parser.parse_args()
 

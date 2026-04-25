@@ -53,7 +53,7 @@ def _fsm_mode(client: LocoClient) -> Optional[int]:
 
 
 def hanger_boot_sequence(
-    iface: str = "enp68s0f1",
+    iface: str = "eth0",
     step: float = 0.02,
     max_height: float = 0.5,
     logger: Optional[logging.Logger] = None,

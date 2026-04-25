@@ -1304,7 +1304,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="SLAM visualisation with a separate Qt control window."
     )
-    parser.add_argument("--iface", default="enp68s0f1", help="NIC connected to the Unitree G-1")
+    parser.add_argument("--iface", default="eth0", help="NIC connected to the Unitree G-1")
     parser.add_argument(
         "--clear",
         type=float,

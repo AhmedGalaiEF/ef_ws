@@ -312,7 +312,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Create occupancy maps.")
     parser.add_argument("--source", choices=["empty", "slam_map", "slam_points", "lidar"], default="empty")
-    parser.add_argument("--iface", default="enp1s0", help="network interface for DDS")
+    parser.add_argument("--iface", default="eth0", help="network interface for DDS")
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id")
     parser.add_argument("--width-m", type=float, default=10.0, help="map width (m)")
     parser.add_argument("--height-m", type=float, default=10.0, help="map height (m)")

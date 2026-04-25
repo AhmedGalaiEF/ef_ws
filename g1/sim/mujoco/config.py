@@ -3,7 +3,7 @@ ROBOT_SCENE = "../unitree_robots/g1/g1_29dof_with_hand_rev_1_0.xml"
 
 #ROBOT_SCENE = "../unitree_robots/" + ROBOT + "/scene.xml" # Robot scene
 DOMAIN_ID = 1 # Domain id
-INTERFACE = "lo" # Interface 
+INTERFACE = "eth0" # Interface
 
 CYCLONEDDS_URI = "<CycloneDDS><Domain><Tracing><Category>none</Category></Tracing></Domain></CycloneDDS>"  # Disable tracing to avoid CycloneDDS fortify crash; set to None to keep env
 

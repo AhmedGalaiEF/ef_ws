@@ -128,7 +128,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Play greeting.wav.")
     parser.add_argument("--file", default="greeting.wav", help="path to wav file")
     parser.add_argument("--volume", type=_parse_level, default=None, help="set robot speaker volume (0-100)")
-    parser.add_argument("--iface", default=None, help="network interface for DDS (e.g. eth0)")
+    parser.add_argument("--iface", default="eth0", help="network interface for DDS (e.g. eth0)")
     parser.add_argument("--robot", action="store_true", help="play on robot via AudioClient")
     args = parser.parse_args()
 

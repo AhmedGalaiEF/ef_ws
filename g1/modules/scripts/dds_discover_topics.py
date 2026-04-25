@@ -24,7 +24,7 @@ channel_module.ChannelConfigHasInterface = """<?xml version="1.0" encoding="UTF-
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="List DDS topics discovered on an interface.")
-    parser.add_argument("--iface", default="enp1s0")
+    parser.add_argument("--iface", default="eth0")
     parser.add_argument("--domain-id", type=int, default=0)
     parser.add_argument("--seconds", type=float, default=5.0)
     parser.add_argument("--filter", default="dex|hand|lowstate|lowcmd|lf")

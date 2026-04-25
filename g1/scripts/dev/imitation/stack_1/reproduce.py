@@ -841,7 +841,7 @@ def main() -> None:
         description="Reproduce mapper.py motion on G1 via low-level DDS.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--iface",      default="enp1s0",
+    parser.add_argument("--iface",      default="eth0",
                         help="DDS network interface (e.g. enp1s0, eth0)")
     parser.add_argument("--file",       type=Path, default=Path("g1_motion.npz"),
                         help="Input NPZ from mapper.py")

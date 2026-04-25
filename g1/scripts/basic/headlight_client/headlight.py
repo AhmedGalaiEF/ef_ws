@@ -92,7 +92,7 @@ def _scale_color(rgb: tuple[int, int, int], intensity: int) -> tuple[int, int, i
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Set headlight color/intensity using AudioClient.")
-    parser.add_argument("--iface", default=None, help="network interface for DDS (e.g. eth0)")
+    parser.add_argument("--iface", default="eth0", help="network interface for DDS (e.g. eth0)")
     parser.add_argument("--intensity", type=_parse_intensity, default=100, help="brightness level 0-100")
     parser.add_argument("--color", type=_parse_color, default=_NAMED_COLORS["white"], help="headlight color")
     parser.add_argument(

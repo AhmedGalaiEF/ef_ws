@@ -126,7 +126,7 @@ class LidarViewer:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="G1 DDS Lidar PointCloud2 viewer.")
-    parser.add_argument("--iface", default="enp1s0", help="network interface for DDS")
+    parser.add_argument("--iface", default="eth0", help="network interface for DDS")
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id")
     parser.add_argument("--topic", default="rt/utlidar/cloud_livox_mid360", help="DDS pointcloud topic")
     parser.add_argument("--size", type=int, default=800, help="display size (pixels)")

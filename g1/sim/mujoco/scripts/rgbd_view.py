@@ -96,7 +96,7 @@ def run_robot():
 
 def main():
     parser = argparse.ArgumentParser(description="Show RGB and depth data.")
-    parser.add_argument("--iface", default="lo", help="Network interface (use 'lo' for sim)")
+    parser.add_argument("--iface", default="eth0", help="Network interface (use 'lo' for sim)")
     args = parser.parse_args()
 
     if args.iface == "lo":

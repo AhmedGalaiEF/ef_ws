@@ -179,7 +179,7 @@ class HipBowController:
 
 def main():
     parser = argparse.ArgumentParser(description="Bow forward using hip joints for pickup posture")
-    parser.add_argument("--iface", default="lo", help="DDS interface (sim usually lo)")
+    parser.add_argument("--iface", default="eth0", help="DDS interface (sim usually lo)")
     parser.add_argument("--domain_id", type=int, default=1, help="DDS domain id (sim usually 1)")
     parser.add_argument("--hip_pitch", type=float, default=0.30, help="Target hip pitch rad")
     parser.add_argument("--knee", type=float, default=-0.35, help="Target knee rad")

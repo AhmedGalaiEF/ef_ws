@@ -4,17 +4,13 @@ from __future__ import annotations
 import argparse
 from collections import deque
 import base64
-import getpass
-import json
 import os
 from pathlib import Path
-from pathlib import PurePosixPath
-import subprocess
+import struct
 import threading
 import time
 from typing import Any
 import sys
-from types import SimpleNamespace
 
 import dash
 import dash_bootstrap_components as dbc
@@ -32,257 +28,20 @@ from sdk_client import Robot
 ROBOT_LOCK = threading.Lock()
 ROBOT_INSTANCE: Any | None = None
 ROBOT_INIT_ERR: str | None = None
-ROBOT_IFACE = "enp1s0"
+ROBOT_IFACE = "eth0"
 ROBOT_LIDAR_CLOUD_TOPIC = "rt/utlidar/cloud_livox_mid360"
-ROBOT_TRANSPORT = os.environ.get("G1_DASH_TRANSPORT", "ssh")
-JETSON_IP = os.environ.get("JETSON_IP", "10.34.0.11")
-JETSON_USER = os.environ.get("JETSON_USER", getpass.getuser())
-JETSON_REMOTE_PYTHON = os.environ.get("JETSON_PYTHON") or str(
-    PurePosixPath("/home") / JETSON_USER / "ef_ws" / "ef_ws" / "bin" / "python"
-)
-JETSON_CYCLONEDDS_HOME = os.environ.get("JETSON_CYCLONEDDS_HOME") or str(
-    PurePosixPath("/home") / JETSON_USER / "cyclonedds_ws" / "install" / "cyclonedds"
-)
-SSH_CONTROL_PATH = os.environ.get("G1_DASH_SSH_CONTROL_PATH") or (
-    f"/tmp/g1_dash_ssh_{JETSON_USER}_{JETSON_IP.replace('.', '_')}"
-)
+RGBD_HOST = os.environ.get("G1_RGBD_HOST", "10.34.0.11")
+RGBD_PORT = int(os.environ.get("G1_RGBD_PORT", "5555"))
+RGBD_TOPIC = os.environ.get("G1_RGBD_TOPIC", "")
 IMU_HISTORY: deque[tuple[float, float, float, float]] = deque(maxlen=300)
 DEPTH_LOCK = threading.Lock()
 DEPTH_PREVIEW: "_DepthPreviewReceiver | None" = None
 RGB_LOCK = threading.Lock()
 RGB_PREVIEW: "_RgbPreviewReceiver | None" = None
+RGBD_LOCK = threading.Lock()
+RGBD_PREVIEW: "_ZmqRgbdPreviewReceiver | None" = None
 LIVOX_LOCK = threading.Lock()
 LIVOX_PREVIEW: "_LivoxPointsReceiver | None" = None
-
-REMOTE_DASH_HELPER = r"""
-import argparse
-import audioop
-import base64
-import json
-import shutil
-import subprocess
-import sys
-import tempfile
-import wave
-from pathlib import Path
-
-from unitree_sdk2py.core.channel import ChannelFactoryInitialize
-from unitree_sdk2py.g1.audio.g1_audio_client import AudioClient
-from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--iface", default="")
-    parser.add_argument("--domain-id", type=int, default=0)
-    parser.add_argument("--payload", required=True)
-    return parser.parse_args()
-
-
-def convert_wav_for_robot(src_path: Path, dst_path: Path) -> Path:
-    with wave.open(str(src_path), "rb") as wf:
-        channels = wf.getnchannels()
-        sample_width = wf.getsampwidth()
-        frame_rate = wf.getframerate()
-        pcm = wf.readframes(wf.getnframes())
-
-    if channels == 2:
-        pcm = audioop.tomono(pcm, sample_width, 0.5, 0.5)
-        channels = 1
-    elif channels != 1:
-        raise ValueError(f"WAV must be mono or stereo PCM, got {channels} channels")
-
-    if sample_width != 2:
-        pcm = audioop.lin2lin(pcm, sample_width, 2)
-        sample_width = 2
-
-    if frame_rate != 16000:
-        pcm, _state = audioop.ratecv(pcm, sample_width, channels, frame_rate, 16000, None)
-
-    with wave.open(str(dst_path), "wb") as wf:
-        wf.setnchannels(1)
-        wf.setsampwidth(2)
-        wf.setframerate(16000)
-        wf.writeframes(pcm)
-    return dst_path
-
-
-def create_loco_client(timeout: float = 5.0) -> LocoClient:
-    client = LocoClient()
-    client.SetTimeout(float(timeout))
-    client.Init()
-    return client
-
-
-def speak(text: str, volume: int | None) -> int:
-    if shutil.which("espeak") is None:
-        raise RuntimeError("espeak is required on the Jetson for speech playback.")
-    client = AudioClient()
-    client.SetTimeout(5.0)
-    client.Init()
-    if volume is not None:
-        code = int(client.SetVolume(int(volume)))
-        if code != 0:
-            return code
-    with tempfile.TemporaryDirectory(prefix="g1_dash_say_") as td:
-        wav_path = Path(td) / "speech.wav"
-        robot_wav_path = Path(td) / "speech_robot.wav"
-        subprocess.run(["espeak", "-w", str(wav_path), text], check=True)
-        convert_wav_for_robot(wav_path, robot_wav_path)
-        with wave.open(str(robot_wav_path), "rb") as wf:
-            pcm = wf.readframes(wf.getnframes())
-        code, _data = client.PlayStream("dash_robot_control", "dash-robot-control", pcm)
-        return int(code)
-
-
-def main() -> int:
-    args = parse_args()
-    payload = json.loads(args.payload)
-    ChannelFactoryInitialize(int(args.domain_id), args.iface or None)
-    op = str(payload.get("op", "")).strip()
-    result = {"ok": True}
-    try:
-        if op == "say":
-            result["code"] = int(speak(str(payload.get("text", "")), payload.get("volume")))
-        else:
-            loco = create_loco_client()
-            if op == "damp":
-                result["code"] = int(loco.Damp())
-            elif op == "zero":
-                result["code"] = int(loco.ZeroTorque())
-            elif op == "stop":
-                result["code"] = int(loco.StopMove())
-            elif op == "balanced_stand":
-                result["code"] = int(loco.BalanceStand(int(payload.get("mode", 0))))
-            elif op == "set_gait_type":
-                mode = int(payload.get("gait_type", 0))
-                if hasattr(loco, "SetGaitType"):
-                    result["code"] = int(loco.SetGaitType(mode))
-                else:
-                    result["code"] = int(loco.SetBalanceMode(mode))
-            elif op == "move":
-                vx = float(payload.get("vx", 0.0))
-                vy = float(payload.get("vy", 0.0))
-                vyaw = float(payload.get("vyaw", 0.0))
-                if hasattr(loco, "SetVelocity"):
-                    result["code"] = int(loco.SetVelocity(vx, vy, vyaw))
-                else:
-                    result["code"] = int(loco.Move(vx, vy, vyaw))
-            else:
-                raise ValueError(f"Unsupported remote op: {op}")
-    except Exception as exc:
-        result = {"ok": False, "error": str(exc)}
-    print(json.dumps(result))
-    return 0 if result.get("ok") else 1
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
-"""
-
-
-class RemoteRobotProxy:
-    def __init__(
-        self,
-        *,
-        iface: str,
-        jetson_ip: str,
-        jetson_user: str,
-        remote_python: str,
-        remote_cyclonedds_home: str,
-        domain_id: int = 0,
-    ) -> None:
-        self.iface = str(iface)
-        self.domain_id = int(domain_id)
-        self.jetson_ip = str(jetson_ip)
-        self.jetson_user = str(jetson_user)
-        self.remote_python = str(remote_python)
-        self.remote_cyclonedds_home = str(remote_cyclonedds_home)
-
-    def _call(self, op: str, **kwargs: Any) -> dict[str, Any]:
-        payload = json.dumps({"op": op, **kwargs})
-        cmd = [
-            "ssh",
-            "-o",
-            "BatchMode=yes",
-            "-o",
-            "ControlMaster=auto",
-            "-o",
-            "ControlPersist=600",
-            "-o",
-            f"ControlPath={SSH_CONTROL_PATH}",
-            f"{self.jetson_user}@{self.jetson_ip}",
-            "env",
-            f"CYCLONEDDS_HOME={self.remote_cyclonedds_home}",
-            self.remote_python,
-            "-",
-            "--domain-id",
-            str(self.domain_id),
-            "--payload",
-            payload,
-        ]
-        if self.iface:
-            cmd.extend(["--iface", self.iface])
-        result = subprocess.run(
-            cmd,
-            input=REMOTE_DASH_HELPER,
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-        stderr = (result.stderr or "").strip()
-        stdout = (result.stdout or "").strip()
-        if result.returncode != 0:
-            if "Permission denied" in stderr or "batch mode" in stderr.lower():
-                raise RuntimeError(
-                    "SSH auth is not available for dashboard callbacks. "
-                    "Use SSH keys, or start a master connection first with: "
-                    f"ssh -MNf -o ControlMaster=yes -o ControlPath={SSH_CONTROL_PATH} "
-                    f"-o ControlPersist=600 {self.jetson_user}@{self.jetson_ip}"
-                )
-            if "Control socket connect" in stderr or "No such file or directory" in stderr:
-                raise RuntimeError(
-                    "No reusable SSH session is available. Start one first with: "
-                    f"ssh -MNf -o ControlMaster=yes -o ControlPath={SSH_CONTROL_PATH} "
-                    f"-o ControlPersist=600 {self.jetson_user}@{self.jetson_ip}"
-                )
-        if not stdout:
-            raise RuntimeError(stderr or f"SSH command failed with exit code {result.returncode}.")
-        data = json.loads(stdout.splitlines()[-1])
-        if not data.get("ok"):
-            raise RuntimeError(str(data.get("error", "Unknown remote error")))
-        return data
-
-    def fsm_1_damp(self) -> int:
-        return int(self._call("damp").get("code", 0))
-
-    def fsm_0_zt(self) -> int:
-        return int(self._call("zero").get("code", 0))
-
-    def stop(self) -> int:
-        return int(self._call("stop").get("code", 0))
-
-    def balanced_stand(self, mode: int = 0) -> int:
-        return int(self._call("balanced_stand", mode=int(mode)).get("code", 0))
-
-    def set_gait_type(self, gait_type: int | str = 0) -> int:
-        return int(self._call("set_gait_type", gait_type=int(gait_type)).get("code", 0))
-
-    def move(self, vx: float = 0.0, vy: float = 0.0, vyaw: float = 0.0) -> int:
-        return int(self._call("move", vx=float(vx), vy=float(vy), vyaw=float(vyaw)).get("code", 0))
-
-    def loco_move(self, vx: float = 0.0, vy: float = 0.0, vyaw: float = 0.0) -> int:
-        return self.move(vx=vx, vy=vy, vyaw=vyaw)
-
-    def walk(self, vx: float = 0.0, vy: float = 0.0, vyaw: float = 0.0) -> int:
-        return self.move(vx=vx, vy=vy, vyaw=vyaw)
-
-    def say(self, text: str, volume: int | None = None) -> int:
-        return int(self._call("say", text=str(text), volume=volume).get("code", 0))
-
-    def is_remote(self) -> bool:
-        return True
-
 
 class _RgbPreviewReceiver:
     def __init__(self, rgb_port: int, width: int, height: int, fps: int) -> None:
@@ -501,6 +260,150 @@ class _DepthPreviewReceiver:
                 pass
 
 
+class _ZmqRgbdPreviewReceiver:
+    def __init__(self, host: str, port: int, topic: str = "", fps: int = 8) -> None:
+        self.host = str(host)
+        self.port = int(port)
+        self.topic = str(topic)
+        self.fps = max(1, int(fps))
+
+        self._thread: threading.Thread | None = None
+        self._running = False
+        self._lock = threading.Lock()
+        self._latest_rgb_jpeg: bytes | None = None
+        self._latest_depth_jpeg: bytes | None = None
+        self._latest_ts = 0.0
+        self._latest_center_depth_m: float | None = None
+        self._latest_near_coverage: float | None = None
+        self._error: str | None = None
+
+    def start(self) -> None:
+        if self._thread is not None and self._thread.is_alive():
+            return
+        self._running = True
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._running = False
+        if self._thread is not None:
+            self._thread.join(timeout=1.0)
+
+    def snapshot(self) -> tuple[bytes | None, bytes | None, float, float | None, float | None, str | None]:
+        with self._lock:
+            return (
+                self._latest_rgb_jpeg,
+                self._latest_depth_jpeg,
+                self._latest_ts,
+                self._latest_center_depth_m,
+                self._latest_near_coverage,
+                self._error,
+            )
+
+    def _run(self) -> None:
+        try:
+            import cv2
+            import numpy as np
+            import zmq
+        except Exception as exc:
+            with self._lock:
+                self._error = f"RGBD receiver unavailable: {exc}"
+            return
+
+        context = None
+        socket = None
+        try:
+            context = zmq.Context()
+            socket = context.socket(zmq.SUB)
+            socket.setsockopt(zmq.SUBSCRIBE, self.topic.encode("utf-8"))
+            socket.setsockopt(zmq.RCVTIMEO, 500)
+            socket.connect(f"tcp://{self.host}:{self.port}")
+            min_dt = 1.0 / float(self.fps)
+            last_update = 0.0
+
+            while self._running:
+                try:
+                    parts = socket.recv_multipart()
+                except zmq.Again:
+                    with self._lock:
+                        if self._latest_ts <= 0.0:
+                            self._error = f"Waiting for RGBD frames on tcp://{self.host}:{self.port}"
+                    continue
+                except Exception as exc:
+                    with self._lock:
+                        self._error = f"RGBD receive error: {exc}"
+                    time.sleep(0.25)
+                    continue
+
+                if len(parts) >= 4:
+                    parts = parts[-3:]
+                if len(parts) < 2:
+                    continue
+                now = time.time()
+                if now - last_update < min_dt:
+                    continue
+                last_update = now
+
+                rgb_jpeg = bytes(parts[0])
+                depth_png = bytes(parts[1])
+                depth_scale = 0.001
+                if len(parts) >= 3 and len(parts[2]) >= 4:
+                    try:
+                        depth_scale = float(struct.unpack("f", parts[2][:4])[0])
+                    except Exception:
+                        depth_scale = 0.001
+
+                depth_raw = cv2.imdecode(np.frombuffer(depth_png, dtype=np.uint8), cv2.IMREAD_UNCHANGED)
+                if depth_raw is None:
+                    continue
+                if depth_raw.ndim == 3:
+                    depth_raw = cv2.cvtColor(depth_raw, cv2.COLOR_BGR2GRAY)
+
+                valid = depth_raw > 0
+                max_depth_m = 4.0
+                depth_m = depth_raw.astype(np.float32) * float(depth_scale)
+                depth_norm = np.zeros(depth_raw.shape, dtype=np.uint8)
+                depth_norm[valid] = np.clip((depth_m[valid] / max_depth_m) * 255.0, 0, 255).astype(np.uint8)
+                depth_vis = cv2.applyColorMap(depth_norm, cv2.COLORMAP_PLASMA)
+                depth_vis[~valid] = (0, 0, 0)
+
+                h, w = depth_raw.shape[:2]
+                center_size = max(8, min(w, h) // 12)
+                cx = w // 2
+                cy = h // 2
+                center = depth_m[
+                    max(0, cy - center_size) : min(h, cy + center_size),
+                    max(0, cx - center_size) : min(w, cx + center_size),
+                ]
+                roi = depth_m[int(h * 0.25) : int(h * 0.70), int(w * 0.30) : int(w * 0.70)]
+                center_valid = center[center > 0]
+                center_depth_m = float(np.median(center_valid)) if center_valid.size else None
+                near_cov = float(np.mean((roi > 0) & (roi <= 1.0))) if roi.size else None
+
+                ok, depth_enc = cv2.imencode(".jpg", depth_vis, [int(cv2.IMWRITE_JPEG_QUALITY), 82])
+                if not ok:
+                    continue
+
+                with self._lock:
+                    self._latest_rgb_jpeg = rgb_jpeg
+                    self._latest_depth_jpeg = depth_enc.tobytes()
+                    self._latest_ts = now
+                    self._latest_center_depth_m = center_depth_m
+                    self._latest_near_coverage = near_cov
+                    self._error = None
+        except Exception as exc:
+            with self._lock:
+                self._error = f"RGBD stream error: {exc}"
+        finally:
+            try:
+                if socket is not None:
+                    socket.close(0)
+                if context is not None:
+                    context.term()
+            except Exception:
+                pass
+
+
 class _LivoxPointsReceiver:
     """
     Fallback point receiver using the same Livox SDK wrappers as
@@ -663,6 +566,21 @@ def get_rgb_preview(robot: Robot) -> _RgbPreviewReceiver:
         return RGB_PREVIEW
 
 
+def get_rgbd_preview() -> _ZmqRgbdPreviewReceiver:
+    global RGBD_PREVIEW
+    with RGBD_LOCK:
+        if (
+            RGBD_PREVIEW is None
+            or RGBD_PREVIEW.host != RGBD_HOST
+            or RGBD_PREVIEW.port != RGBD_PORT
+            or RGBD_PREVIEW.topic != RGBD_TOPIC
+        ):
+            if RGBD_PREVIEW is not None:
+                RGBD_PREVIEW.stop()
+            RGBD_PREVIEW = _ZmqRgbdPreviewReceiver(host=RGBD_HOST, port=RGBD_PORT, topic=RGBD_TOPIC)
+        return RGBD_PREVIEW
+
+
 def get_robot() -> Robot | None:
     global ROBOT_INSTANCE, ROBOT_INIT_ERR, ROBOT_IFACE, ROBOT_LIDAR_CLOUD_TOPIC
     with ROBOT_LOCK:
@@ -671,23 +589,113 @@ def get_robot() -> Robot | None:
         if ROBOT_INIT_ERR is not None:
             return None
         try:
-            if ROBOT_TRANSPORT == "ssh":
-                ROBOT_INSTANCE = RemoteRobotProxy(
-                    iface=ROBOT_IFACE,
-                    jetson_ip=JETSON_IP,
-                    jetson_user=JETSON_USER,
-                    remote_python=JETSON_REMOTE_PYTHON,
-                    remote_cyclonedds_home=JETSON_CYCLONEDDS_HOME,
-                )
-            else:
-                ROBOT_INSTANCE = Robot(
-                    iface=ROBOT_IFACE,
-                    lidar_cloud_topic=ROBOT_LIDAR_CLOUD_TOPIC,
-                )
+            ROBOT_INSTANCE = Robot(
+                iface=ROBOT_IFACE,
+                lidar_cloud_topic=ROBOT_LIDAR_CLOUD_TOPIC,
+            )
             return ROBOT_INSTANCE
         except Exception as exc:
             ROBOT_INIT_ERR = str(exc)
             return None
+
+
+class _BootSequenceController:
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._confirm = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._state = "idle"
+        self._message = "Boot sequence idle."
+        self._error: str | None = None
+
+    def start(self, iface: str, domain_id: int = 0) -> str:
+        with self._lock:
+            if self._thread is not None and self._thread.is_alive():
+                return self._message
+            self._confirm.clear()
+            self._state = "running"
+            self._message = "Starting hanger boot sequence."
+            self._error = None
+            self._thread = threading.Thread(target=self._run, args=(iface, int(domain_id)), daemon=True)
+            self._thread.start()
+            return self._message
+
+    def confirm(self) -> str:
+        with self._lock:
+            if self._state != "waiting":
+                return self._message
+            self._message = "Dashboard confirmation received; continuing boot sequence."
+            self._state = "running"
+            self._confirm.set()
+            return self._message
+
+    def snapshot(self) -> tuple[str, str, str | None, bool]:
+        with self._lock:
+            running = self._thread is not None and self._thread.is_alive()
+            return self._state, self._message, self._error, running
+
+    def _set(self, state: str, message: str, error: str | None = None) -> None:
+        with self._lock:
+            self._state = state
+            self._message = message
+            self._error = error
+
+    def _wait_for_confirm(self, message: str) -> None:
+        self._set("waiting", message)
+        self._confirm.clear()
+        while not self._confirm.wait(timeout=0.2):
+            pass
+
+    def _run(self, iface: str, domain_id: int) -> None:
+        try:
+            from sdk_boot import create_loco_client, fsm_mode, read_fsm_state
+
+            bot = create_loco_client(domain_id=domain_id, iface=iface)
+            cur_id, cur_mode = read_fsm_state(bot)
+            if cur_id == 200 and cur_mode == 0:
+                self._set("done", "Robot is already in balanced stand (FSM 200, mode 0).")
+                return
+
+            self._set("running", "Damping robot before stand-up.")
+            bot.Damp()
+            time.sleep(0.1)
+            self._set("running", "Switching to stand-up FSM.")
+            bot.SetFsmId(4)
+            time.sleep(0.1)
+
+            height = 0.0
+            while True:
+                height = 0.0
+                while height < 0.5:
+                    height += 0.02
+                    bot.SetStandHeight(height)
+                    self._set("running", f"Raising stand height to {height:.2f} m.")
+                    time.sleep(0.05)
+                    if fsm_mode(bot) == 0 and height > 0.2:
+                        break
+
+                if fsm_mode(bot) == 0:
+                    break
+
+                self._set("running", "Feet still unloaded; resetting stand height.")
+                try:
+                    bot.SetStandHeight(0.0)
+                except Exception:
+                    pass
+                self._wait_for_confirm(
+                    "Adjust the hanger height, then press Confirm balanced stand in the dashboard."
+                )
+
+            self._wait_for_confirm("Robot appears loaded. Press Confirm balanced stand to command BalanceStand.")
+            bot.BalanceStand(0)
+            bot.SetStandHeight(height)
+            bot.Start()
+            self._set("done", "Hanger boot sequence complete; robot is in balanced stand/start mode.")
+        except Exception as exc:
+            self._set("error", f"Hanger boot sequence failed: {exc}", str(exc))
+
+
+BOOT_SEQUENCE = _BootSequenceController()
 
 
 def empty_lidar_figure(title: str = "LiDAR stream") -> go.Figure:
@@ -716,6 +724,40 @@ def empty_imu_figure(title: str = "IMU orientation (RPY)") -> go.Figure:
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 app.title = "Robot Control"
+app.index_string = """
+<!DOCTYPE html>
+<html>
+    <head>
+        {%metas%}
+        <title>{%title%}</title>
+        {%favicon%}
+        {%css%}
+        <style>
+            .nav-tabs { border-bottom: 1px solid #b8c2cc; }
+            .nav-tabs .nav-link {
+                color: #1f2933 !important;
+                background: #eef2f6;
+                border: 1px solid #b8c2cc !important;
+                margin-right: 4px;
+                font-weight: 600;
+            }
+            .nav-tabs .nav-link.active {
+                color: #0b2545 !important;
+                background: #ffffff !important;
+                border-bottom-color: #ffffff !important;
+            }
+        </style>
+    </head>
+    <body>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+    </body>
+</html>
+"""
 
 app.layout = dbc.Container(
     [
@@ -738,7 +780,7 @@ app.layout = dbc.Container(
                             [
                                 dbc.Col(
                                     dbc.Button(
-                                        "Run hanged_boot_sequence",
+                                        "Start hanger boot sequence",
                                         id="btn-hanged-boot",
                                         color="primary",
                                         className="w-100 mt-2",
@@ -746,22 +788,18 @@ app.layout = dbc.Container(
                                     md=6,
                                 ),
                                 dbc.Col(
-                                    dbc.InputGroup(
-                                        [
-                                            dbc.Input(
-                                                id="boot-enter-input",
-                                                type="text",
-                                                placeholder="Focus here, then press Enter",
-                                                debounce=False,
-                                            ),
-                                            dbc.Button("Enter", id="btn-boot-enter", color="success"),
-                                        ]
+                                    dbc.Button(
+                                        "Confirm balanced stand",
+                                        id="btn-boot-enter",
+                                        color="success",
+                                        className="w-100 mt-2",
                                     ),
                                     md=6,
                                 ),
                             ],
                             className="g-2",
                         ),
+                        html.Div(id="boot-status", className="mt-2"),
                         dbc.Row(
                             [
                                 dbc.Col(
@@ -935,9 +973,23 @@ app.layout = dbc.Container(
         dcc.Interval(id="lidar-interval", interval=1000, n_intervals=0),
         dcc.Interval(id="rgb-interval", interval=500, n_intervals=0),
         dcc.Interval(id="depth-interval", interval=500, n_intervals=0),
+        dcc.Interval(id="boot-interval", interval=500, n_intervals=0),
     ],
     fluid=True,
 )
+
+
+@app.callback(
+    Output("boot-status", "children"),
+    Input("boot-interval", "n_intervals"),
+)
+def update_boot_status(_tick: int) -> str:
+    state, message, err, running = BOOT_SEQUENCE.snapshot()
+    if err:
+        return f"Boot: error | {message}"
+    if running or state != "idle":
+        return f"Boot: {state} | {message}"
+    return ""
 
 
 @app.callback(
@@ -949,7 +1001,6 @@ app.layout = dbc.Container(
     Input("btn-stop", "n_clicks"),
     Input("btn-hanged-boot", "n_clicks"),
     Input("btn-boot-enter", "n_clicks"),
-    Input("boot-enter-input", "n_submit"),
     Input("btn-rgb", "n_clicks"),
     Input("btn-slam-service", "n_clicks"),
     Input("gait-toggle", "value"),
@@ -961,16 +1012,28 @@ def on_control(
     _stop: int | None,
     _hanged_boot: int | None,
     _boot_enter_btn: int | None,
-    _boot_enter_submit: int | None,
     _rgb: int | None,
     _slam: int | None,
     gait_value: str,
 ) -> tuple[str, str, str]:
+    trigger = dash.ctx.triggered_id
+    if trigger == "btn-hanged-boot":
+        message = BOOT_SEQUENCE.start(ROBOT_IFACE)
+        return "Hanger boot sequence started.", "primary", message
+    if trigger == "btn-boot-enter":
+        message = BOOT_SEQUENCE.confirm()
+        state, _, err, running = BOOT_SEQUENCE.snapshot()
+        color = "danger" if err else ("success" if state == "done" else "primary")
+        return (
+            "Balanced-stand confirmation sent.",
+            color,
+            message if running or state == "done" else "No boot sequence is waiting.",
+        )
+
     robot = get_robot()
     if robot is None:
         return f"Robot init failed: {ROBOT_INIT_ERR}", "danger", "No robot instance available."
 
-    trigger = dash.ctx.triggered_id
     try:
         if trigger == "btn-damp":
             robot.fsm_1_damp()
@@ -981,42 +1044,10 @@ def on_control(
         if trigger == "btn-stop":
             robot.stop()
             return "Stop command sent.", "secondary", "Robot motion stopped."
-        if trigger in ("btn-hanged-boot", "btn-boot-enter", "boot-enter-input"):
-            if ROBOT_TRANSPORT == "ssh":
-                return (
-                    "Unsupported in SSH mode.",
-                    "warning",
-                    "Hanged boot sequence is not proxied over SSH in this dashboard.",
-                )
-            if hasattr(robot, "hanged_boot_sequence"):
-                getattr(robot, "hanged_boot_sequence")()
-            elif hasattr(robot, "hanged_boot"):
-                robot.hanged_boot()
-            elif hasattr(robot, "hanging_boot"):
-                robot.hanging_boot()
-            else:
-                robot.balanced_stand(0)
-            return (
-                "hanged_boot_sequence completion sent.",
-                "success",
-                "Sent balanced-stand completion command (Enter equivalent).",
-            )
         if trigger == "btn-rgb":
-            if ROBOT_TRANSPORT == "ssh":
-                return (
-                    "Unsupported in SSH mode.",
-                    "warning",
-                    "Jetson SSH mode uses snapshot fallback only; local RGB UDP client start is disabled.",
-                )
             robot.get_rgbd_gst(detect="none")
             return "RGB video client started.", "info", "Started local RGB video client process."
         if trigger == "btn-slam-service":
-            if ROBOT_TRANSPORT == "ssh":
-                return (
-                    "Unsupported in SSH mode.",
-                    "warning",
-                    "SLAM service launch is not proxied over SSH in this dashboard.",
-                )
             def _run_slam_service() -> None:
                 try:
                     robot.slam_service(viz=True)
@@ -1087,7 +1118,7 @@ def on_navigation(
     prevent_initial_call=True,
 )
 def on_apply_iface(_n: int | None, iface_input: str | None) -> tuple[str, str]:
-    global ROBOT_INSTANCE, ROBOT_INIT_ERR, ROBOT_IFACE, DEPTH_PREVIEW, RGB_PREVIEW, LIVOX_PREVIEW
+    global ROBOT_INSTANCE, ROBOT_INIT_ERR, ROBOT_IFACE, DEPTH_PREVIEW, RGB_PREVIEW, RGBD_PREVIEW, LIVOX_PREVIEW
     iface = (iface_input or "").strip()
     if not iface:
         return "Interface cannot be empty.", ROBOT_IFACE
@@ -1104,6 +1135,10 @@ def on_apply_iface(_n: int | None, iface_input: str | None) -> tuple[str, str]:
         if RGB_PREVIEW is not None:
             RGB_PREVIEW.stop()
         RGB_PREVIEW = None
+    with RGBD_LOCK:
+        if RGBD_PREVIEW is not None:
+            RGBD_PREVIEW.stop()
+        RGBD_PREVIEW = None
     with LIVOX_LOCK:
         if LIVOX_PREVIEW is not None:
             LIVOX_PREVIEW.stop()
@@ -1141,26 +1176,22 @@ def on_say(_n: int | None, text: str | None) -> str:
     State("rgb-feed", "src"),
 )
 def update_rgb_feed(_tick: int, prev_src: str | None) -> tuple[str | None, str]:
-    robot = get_robot()
-    if robot is None:
-        return prev_src, f"Robot init failed: {ROBOT_INIT_ERR}"
-
-    if ROBOT_TRANSPORT == "ssh":
-        return prev_src, "RGB preview is not available in SSH Wi-Fi mode."
-
     try:
-        preview = get_rgb_preview(robot)
+        preview = get_rgbd_preview()
         preview.start()
-        jpeg, ts, err = preview.snapshot()
+        jpeg, _depth_jpeg, ts, _center_depth_m, _near_cov, err = preview.snapshot()
         if err is not None:
             raise RuntimeError(err)
         if jpeg is None:
-            raise RuntimeError("Waiting for RGB frames on UDP stream.")
+            raise RuntimeError("Waiting for RGBD frames.")
         payload = base64.b64encode(jpeg).decode("ascii")
         src = f"data:image/jpeg;base64,{payload}"
         age_s = max(0.0, time.time() - ts) if ts > 0 else -1.0
-        return src, f"RGB OK (UDP) | bytes: {len(jpeg)} | age_s: {age_s:.2f}"
+        return src, f"RGB OK (RealSense ZMQ {RGBD_HOST}:{RGBD_PORT}) | bytes: {len(jpeg)} | age_s: {age_s:.2f}"
     except Exception as exc:
+        robot = get_robot()
+        if robot is None:
+            return prev_src, f"RGBD stream failed: {exc}"
         try:
             jpeg = robot.get_rgb_jpeg(timeout=2.0)
             payload = base64.b64encode(jpeg).decode("ascii")
@@ -1177,21 +1208,14 @@ def update_rgb_feed(_tick: int, prev_src: str | None) -> tuple[str | None, str]:
     State("depth-feed", "src"),
 )
 def update_depth_feed(_tick: int, prev_src: str | None) -> tuple[str | None, str]:
-    robot = get_robot()
-    if robot is None:
-        return prev_src, f"Robot init failed: {ROBOT_INIT_ERR}"
-
-    if ROBOT_TRANSPORT == "ssh":
-        return prev_src, "Depth preview is not available in SSH Wi-Fi mode."
-
     try:
-        preview = get_depth_preview(robot)
+        preview = get_rgbd_preview()
         preview.start()
-        jpeg, ts, center_depth_m, near_cov, err = preview.snapshot()
+        _rgb_jpeg, jpeg, ts, center_depth_m, near_cov, err = preview.snapshot()
         if err is not None:
             return prev_src, err
         if jpeg is None:
-            return prev_src, "Waiting for depth frames on UDP stream."
+            return prev_src, f"Waiting for depth frames on tcp://{RGBD_HOST}:{RGBD_PORT}."
 
         age_s = max(0.0, time.time() - ts) if ts > 0 else -1.0
         payload = base64.b64encode(jpeg).decode("ascii")
@@ -1218,14 +1242,6 @@ def update_lidar(_tick: int) -> tuple[go.Figure, str, go.Figure, str]:
             f"Robot init failed: {ROBOT_INIT_ERR}",
             empty_imu_figure("IMU unavailable"),
             f"Robot init failed: {ROBOT_INIT_ERR}",
-        )
-
-    if ROBOT_TRANSPORT == "ssh":
-        return (
-            empty_lidar_figure("LiDAR unavailable in SSH mode"),
-            "LiDAR preview is not available in SSH Wi-Fi mode.",
-            empty_imu_figure("IMU unavailable in SSH mode"),
-            "IMU preview is not available in SSH Wi-Fi mode.",
         )
 
     try:
@@ -1358,23 +1374,17 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Dash robot control dashboard.")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8000)
-    parser.add_argument("--transport", choices=("ssh", "direct"), default=ROBOT_TRANSPORT)
-    parser.add_argument("--iface", default=ROBOT_IFACE, help="Robot interface or remote Jetson interface.")
-    parser.add_argument("--jetson-ip", default=JETSON_IP)
-    parser.add_argument("--jetson-user", default=JETSON_USER)
-    parser.add_argument("--remote-python", default=JETSON_REMOTE_PYTHON)
-    parser.add_argument("--remote-cyclonedds-home", default=JETSON_CYCLONEDDS_HOME)
-    parser.add_argument("--ssh-control-path", default=SSH_CONTROL_PATH)
+    parser.add_argument("--iface", default=ROBOT_IFACE, help="Robot network interface.")
+    parser.add_argument("--rgbd-host", default=RGBD_HOST)
+    parser.add_argument("--rgbd-port", type=int, default=RGBD_PORT)
+    parser.add_argument("--rgbd-topic", default=RGBD_TOPIC)
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
-    ROBOT_TRANSPORT = str(args.transport)
     ROBOT_IFACE = str(args.iface)
-    JETSON_IP = str(args.jetson_ip)
-    JETSON_USER = str(args.jetson_user)
-    JETSON_REMOTE_PYTHON = str(args.remote_python)
-    JETSON_CYCLONEDDS_HOME = str(args.remote_cyclonedds_home)
-    SSH_CONTROL_PATH = str(args.ssh_control_path)
+    RGBD_HOST = str(args.rgbd_host)
+    RGBD_PORT = int(args.rgbd_port)
+    RGBD_TOPIC = str(args.rgbd_topic)
     app.run(host=str(args.host), port=int(args.port), debug=False)

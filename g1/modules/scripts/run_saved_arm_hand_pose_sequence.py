@@ -44,7 +44,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Execute saved arm and hand poses in sequence with a pause between poses."
     )
-    parser.add_argument("--iface", default="enp1s0", help="Network interface for DDS traffic.")
+    parser.add_argument("--iface", default="eth0", help="Network interface for DDS traffic.")
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id.")
     parser.add_argument("--file", default=DEFAULT_POSE_FILE, help="Saved arm and hand pose JSON file.")
     parser.add_argument("--rate-hz", type=float, default=50.0, help="Command publish rate.")

@@ -77,7 +77,7 @@ if __name__ == "__main__":
         "CYCLONEDDS_URI",
         "<CycloneDDS><Domain><Tracing><Category>none</Category></Tracing></Domain></CycloneDDS>",
     )
-    ChannelFactoryInitialize(1, "lo")
+    ChannelFactoryInitialize(1, "eth0")
     hight_state_suber = ChannelSubscriber("rt/sportmodestate", SportModeState_)
     low_state_suber = ChannelSubscriber("rt/lowstate", LowState_)
 

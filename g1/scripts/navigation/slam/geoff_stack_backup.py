@@ -377,7 +377,7 @@ def _compose_canvas() -> "Optional['np.ndarray']":  # type: ignore[name-defined]
 
 def main() -> None:  # noqa: D401
     parser = argparse.ArgumentParser()
-    parser.add_argument("--iface", default="enp68s0f1", help="network interface connected to Unitree G-1")
+    parser.add_argument("--iface", default="eth0", help="network interface connected to Unitree G-1")
     args = parser.parse_args()
 
     stop = threading.Event()

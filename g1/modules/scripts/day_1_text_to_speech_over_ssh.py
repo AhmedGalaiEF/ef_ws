@@ -37,7 +37,7 @@ from unitree_sdk2py.g1.audio.g1_audio_client import AudioClient
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--iface", default="")
+    parser.add_argument("--iface", default="eth0")
     parser.add_argument("--domain-id", type=int, default=0)
     parser.add_argument("--volume", type=int)
     parser.add_argument("--text", required=True)

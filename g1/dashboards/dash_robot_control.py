@@ -23,7 +23,7 @@ ROBOT_LOCK = threading.Lock()
 ROBOT_INSTANCE: Any = None   # Robot | None
 ROBOT_INIT_ERR: str | None = None
 ROBOT_CONNECT_REQUESTED = False        # must click Connect before any attempt
-ROBOT_IFACE = "enp1s0"
+ROBOT_IFACE = "eth0"
 ROBOT_LIDAR_CLOUD_TOPIC = "rt/utlidar/cloud_livox_mid360"
 IMU_HISTORY: deque[tuple[float, float, float, float]] = deque(maxlen=300)
 DEPTH_LOCK = threading.Lock()

@@ -114,7 +114,7 @@ def run_lidar(iface: str, domain_id: int):
 
 def main():
     parser = argparse.ArgumentParser(description="Show LiDAR point cloud data.")
-    parser.add_argument("--iface", default="lo", help="Network interface (use 'lo' for sim)")
+    parser.add_argument("--iface", default="eth0", help="Network interface (use 'lo' for sim)")
     parser.add_argument("--domain_id", type=int, default=1, help="DDS domain id")
     args = parser.parse_args()
 

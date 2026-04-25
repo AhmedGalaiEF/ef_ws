@@ -244,7 +244,7 @@ def drive_loop_curses(stdscr: "curses._CursesWindow", bot) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--iface", default="enp68s0f1", help="network interface connected to robot")
+    parser.add_argument("--iface", default="eth0", help="network interface connected to robot")
     parser.add_argument(
         "--input",
         choices=("pynput", "curses"),

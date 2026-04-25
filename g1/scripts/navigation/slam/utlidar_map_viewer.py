@@ -155,7 +155,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="Subscribe to utlidar map_state + deskewed point cloud, with optional visualization."
     )
-    parser.add_argument("iface", nargs="?", default="enp2s0", help="Robot network interface")
+    parser.add_argument("iface", nargs="?", default="eth0", help="Robot network interface")
     parser.add_argument("--map-state-topic", default=TOPIC_MAP_STATE)
     parser.add_argument("--deskew-topic", default=TOPIC_DESKEW)
     parser.add_argument(

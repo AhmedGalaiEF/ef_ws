@@ -65,7 +65,7 @@ ABS_RANGE_LIMIT_RAD = 3.14
 def parse_args() -> tuple[argparse.Namespace, list[str]]:
     parser = argparse.ArgumentParser(description="PyQt whole-arm joint pose slider.")
     parser.add_argument("--arm", choices=("left", "right", "both"), default="both")
-    parser.add_argument("--iface", default="enp1s0", help="Network interface for DDS traffic.")
+    parser.add_argument("--iface", default="eth0", help="Network interface for DDS traffic.")
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id.")
     parser.add_argument("--rate-hz", type=float, default=50.0, help="Low-level command publish rate.")
     parser.add_argument(

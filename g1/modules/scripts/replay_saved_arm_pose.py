@@ -50,7 +50,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--pose", default=None, help="Pose name to replay.")
     parser.add_argument("--index", type=int, default=None, help="Pose index to replay if no name is given.")
     parser.add_argument("--list", action="store_true", help="List poses in the file and exit.")
-    parser.add_argument("--iface", default="enp1s0", help="Network interface for DDS traffic.")
+    parser.add_argument("--iface", default="eth0", help="Network interface for DDS traffic.")
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id.")
     parser.add_argument("--rate-hz", type=float, default=50.0, help="Command publish rate.")
     parser.add_argument(

@@ -437,7 +437,7 @@ def _load_motion_file(path: str) -> Dict[str, np.ndarray]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Replay recorded arm motion.")
-    parser.add_argument("--iface", default="enp1s0", help="network interface for DDS")
+    parser.add_argument("--iface", default="eth0", help="network interface for DDS")
     parser.add_argument("--file", default="/tmp/pbd_motion.npz", help="input motion file (.npz or .pkl/.pickle)")
     parser.add_argument("--arm", choices=["left", "right", "both"], default="both", help="which arm(s) to replay")
     parser.add_argument("--mode", choices=["joint", "fk", "ik"], default="fk", help="trajectory replay space")

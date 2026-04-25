@@ -117,7 +117,7 @@ BODY_GROUP_TITLES = {
 
 def parse_args() -> tuple[argparse.Namespace, list[str]]:
     parser = argparse.ArgumentParser(description="PyQt whole-robot joint and Dex3 finger slider.")
-    parser.add_argument("--iface", default="enp1s0", help="Network interface for DDS traffic.")
+    parser.add_argument("--iface", default="eth0", help="Network interface for DDS traffic.")
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id.")
     parser.add_argument("--rate-hz", type=float, default=50.0, help="Command publish rate.")
     parser.add_argument(

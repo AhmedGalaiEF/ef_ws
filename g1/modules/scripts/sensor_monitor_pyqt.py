@@ -67,7 +67,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="PyQt sensor monitor for Unitree G1 Jetson-side RGB/depth/lidar/IMU/joint telemetry."
     )
-    parser.add_argument("--iface", default="enp1s0", help="Network interface for DDS traffic.")
+    parser.add_argument("--iface", default="eth0", help="Network interface for DDS traffic.")
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id.")
     parser.add_argument(
         "--rgb-source",

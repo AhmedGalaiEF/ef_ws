@@ -59,7 +59,7 @@ def _bgr_to_rgb(frame: np.ndarray) -> np.ndarray:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Test G1 VideoClient BGR frame access.")
-    parser.add_argument("--iface", default="enp1s0", help="Network interface connected to the robot.")
+    parser.add_argument("--iface", default="eth0", help="Network interface connected to the robot.")
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain ID (0 for real robot).")
     parser.add_argument("--timeout", type=float, default=2.0, help="RPC timeout in seconds.")
     parser.add_argument("--count", type=int, default=30, help="Number of frames to fetch.")

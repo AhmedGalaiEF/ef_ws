@@ -234,7 +234,7 @@ if __name__ == '__main__':
     )
 
     parser = argparse.ArgumentParser(description="G1 low level example")
-    parser.add_argument("--iface", default=None, help="Network interface (e.g. enp1s0 for robot, lo for sim)")
+    parser.add_argument("--iface", default="eth0", help="Network interface (e.g. enp1s0 for robot, lo for sim)")
     parser.add_argument("--domain_id", type=int, default=None, help="DDS domain id (robot: 0, sim: 1)")
     parser.add_argument("--skip_motion_switcher", action="store_true", help="Skip motion switcher RPC (useful for sim)")
     args = parser.parse_args()

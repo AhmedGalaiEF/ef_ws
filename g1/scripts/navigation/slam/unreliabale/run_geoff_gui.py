@@ -2612,7 +2612,7 @@ class GeoffWindow(QtCore.QObject):  # type: ignore[misc]  # pylint: disable=too-
 
 def main() -> None:  # noqa: D401
     parser = argparse.ArgumentParser()
-    parser.add_argument("--iface", default="enp68s0f1", help="NIC connected to the Unitree G-1")
+    parser.add_argument("--iface", default="eth0", help="NIC connected to the Unitree G-1")
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id")
     parser.add_argument("--slam-topic", default="rt/utlidar/cloud_livox_mid360", help="DDS pointcloud topic for SLAM view")
     parser.add_argument(

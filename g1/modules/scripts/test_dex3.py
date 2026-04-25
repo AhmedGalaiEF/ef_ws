@@ -28,7 +28,7 @@ def cb(topic):
         )
     return inner
 
-ChannelFactoryInitialize(0, "enp1s0")
+ChannelFactoryInitialize(0, "eth0")
 
 subs = []
 for topics in TOPICS.values():

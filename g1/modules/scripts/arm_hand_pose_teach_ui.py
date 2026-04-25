@@ -122,7 +122,7 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
     parser = argparse.ArgumentParser(
         description="PyQt arm and Dex3 hand pose teaching UI with sliders, pose save, zero torque, and replay."
     )
-    parser.add_argument("--iface", default="enp1s0", help="Network interface for DDS traffic.")
+    parser.add_argument("--iface", default="eth0", help="Network interface for DDS traffic.")
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id.")
     parser.add_argument("--file", default=DEFAULT_POSE_FILE, help="Saved arm+hand pose JSON file.")
     parser.add_argument("--rate-hz", type=float, default=50.0, help="Command publish rate.")

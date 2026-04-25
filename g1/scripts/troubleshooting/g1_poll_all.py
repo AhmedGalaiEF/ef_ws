@@ -536,7 +536,7 @@ def _print_topic_df(topic_name: str, stat: TopicStats, max_rows: int) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Poll Unitree G1 DDS topics and SDK clients.")
     parser.add_argument("--domain", type=int, default=0, help="DDS domain id (default: 0)")
-    parser.add_argument("--iface", type=str, default="", help="Network interface name (for unitree_sdk2py ChannelFactoryInitialize)")
+    parser.add_argument("--iface", type=str, default="eth0", help="Network interface name (for unitree_sdk2py ChannelFactoryInitialize)")
     parser.add_argument("--config", type=str, default="", help="Path to JSON/YAML config with topics list")
     parser.add_argument(
         "--profile",

@@ -157,7 +157,7 @@ def _wrap_angle(rad: float) -> float:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Measure steps + distance during G1 high-level gait.")
-    parser.add_argument("--iface", default="enp1s0", help="network interface for DDS")
+    parser.add_argument("--iface", default="eth0", help="network interface for DDS")
     parser.add_argument("--duration", type=float, default=10.0, help="seconds to measure")
     parser.add_argument("--vx", type=float, default=0.3, help="forward velocity (m/s)")
     parser.add_argument("--vy", type=float, default=0.0, help="lateral velocity (m/s)")

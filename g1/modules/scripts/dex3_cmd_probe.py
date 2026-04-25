@@ -16,7 +16,7 @@ from sdk_hand import Dex3HandController, build_hand_msg, hand_open_targets
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Probe whether Dex3 command DDS writers match.")
-    parser.add_argument("--iface", default="enp1s0")
+    parser.add_argument("--iface", default="eth0")
     parser.add_argument("--domain-id", type=int, default=0)
     parser.add_argument("--hand", choices=("right", "left", "both"), default="both")
     parser.add_argument("--timeout-s", type=float, default=3.0)

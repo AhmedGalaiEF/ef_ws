@@ -1,7 +1,7 @@
 ROBOT = "g1"
 ROBOT_SCENE = "scene.xml"
 DOMAIN_ID = 1
-INTERFACE = "lo"
+INTERFACE = "eth0"
 
 CYCLONEDDS_URI = "<CycloneDDS><Domain><Tracing><Category>none</Category></Tracing></Domain></CycloneDDS>"
 
