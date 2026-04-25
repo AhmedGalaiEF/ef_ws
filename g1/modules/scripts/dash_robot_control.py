@@ -5,9 +5,11 @@ import argparse
 from collections import deque
 import base64
 from dataclasses import dataclass
+import json
 import logging
 import os
 from pathlib import Path
+import platform
 import struct
 import threading
 import time
@@ -1034,7 +1036,9 @@ class _BootSequenceController:
         LOGGER.info("Boot confirm requested")
         with self._lock:
             if self._state != "waiting":
-                LOGGER.info("Boot confirm ignored state=%s message=%s", self._state, self._message)
+                self._confirm.set()
+                self._message = f"Dashboard confirmation queued while boot state is {self._state}."
+                LOGGER.info("Boot confirm queued state=%s", self._state)
                 return self._message
             self._message = "Dashboard confirmation received; continuing boot sequence."
             self._state = "running"
@@ -1060,23 +1064,37 @@ class _BootSequenceController:
     def _wait_for_confirm(self, message: str) -> None:
         LOGGER.info("Boot waiting for dashboard confirmation: %s", message)
         self._set("waiting", message)
-        self._confirm.clear()
         while not self._confirm.wait(timeout=0.2):
             pass
+        self._confirm.clear()
         LOGGER.info("Boot dashboard confirmation received")
+
+    @staticmethod
+    def _is_balanced_stand_state(fsm_id: Any, fsm_mode_value: Any) -> bool:
+        try:
+            fsm_i = int(fsm_id)
+        except Exception:
+            return False
+        if fsm_i == 501:
+            return True
+        try:
+            mode_i = int(fsm_mode_value)
+        except Exception:
+            mode_i = -1
+        return fsm_i == 200 and mode_i == 0
 
     def _run(self, iface: str, domain_id: int) -> None:
         global ROBOT_INIT_ERR, ROBOT_INSTANCE
         try:
             LOGGER.info("Boot worker importing SDK helpers")
-            from sdk_boot import create_loco_client, fsm_mode, is_balanced_stand, read_fsm_state
+            from sdk_boot import create_loco_client, read_fsm_state
             from secure_boot import force_normal_gait
 
             LOGGER.info("Boot worker creating loco client iface=%s domain_id=%s", iface, domain_id)
             bot = create_loco_client(domain_id=domain_id, iface=iface)
             cur_id, cur_mode = read_fsm_state(bot)
             LOGGER.info("Boot initial FSM id=%s mode=%s", cur_id, cur_mode)
-            if is_balanced_stand(bot):
+            if self._is_balanced_stand_state(cur_id, cur_mode):
                 LOGGER.info("Boot already balanced; forcing normal gait")
                 force_normal_gait(bot)
                 with ROBOT_LOCK:
@@ -1102,14 +1120,14 @@ class _BootSequenceController:
                     bot.SetStandHeight(height)
                     self._set("running", f"Raising stand height to {height:.2f} m.")
                     time.sleep(0.05)
-                    mode = fsm_mode(bot)
-                    LOGGER.info("Boot height=%.2f mode=%s", height, mode)
-                    if mode == 0 and height > 0.2:
+                    cur_id, mode = read_fsm_state(bot, retries=1, retry_delay=0.01)
+                    LOGGER.info("Boot height=%.2f fsm=%s mode=%s", height, cur_id, mode)
+                    if self._is_balanced_stand_state(cur_id, mode) and height > 0.2:
                         break
 
-                mode = fsm_mode(bot)
-                LOGGER.info("Boot sweep complete height=%.2f mode=%s", height, mode)
-                if mode == 0:
+                cur_id, mode = read_fsm_state(bot, retries=1, retry_delay=0.01)
+                LOGGER.info("Boot sweep complete height=%.2f fsm=%s mode=%s", height, cur_id, mode)
+                if self._is_balanced_stand_state(cur_id, mode):
                     break
 
                 self._set("running", "Feet still unloaded; resetting stand height.")
@@ -1269,6 +1287,191 @@ def _make_slam_map_figure(height_map: Any, target: tuple[float, float] | None, p
     return fig
 
 
+def _edge_runtime_dir() -> Path:
+    script_path = Path(SCRIPT_DIR).resolve()
+    candidates = [
+        script_path.parents[1] / "edge_runtime",
+        script_path.parent / "edge_runtime",
+        script_path.parent / "modules" / "edge_runtime",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
+
+
+def _load_json_file(path: Path) -> dict[str, Any]:
+    try:
+        if not path.exists():
+            return {}
+        with path.open("r", encoding="utf-8") as handle:
+            data = json.load(handle)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        LOGGER.exception("Failed to load JSON file %s", path)
+        return {}
+
+
+def _load_runtime_defaults(path: Path) -> dict[str, Any]:
+    try:
+        if not path.exists():
+            return {}
+        try:
+            import yaml  # type: ignore
+        except ImportError:
+            LOGGER.warning("PyYAML is unavailable; skipping runtime config %s", path)
+            return {}
+        with path.open("r", encoding="utf-8") as handle:
+            data = yaml.safe_load(handle) or {}
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        LOGGER.exception("Failed to load runtime config %s", path)
+        return {}
+
+
+def _json_safe(value: Any) -> Any:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    if hasattr(value, "tolist"):
+        try:
+            return _json_safe(value.tolist())
+        except Exception:
+            pass
+    if hasattr(value, "__dict__"):
+        try:
+            return _json_safe(vars(value))
+        except Exception:
+            pass
+    return repr(value)
+
+
+def build_altegro_info() -> dict[str, Any]:
+    edge_dir = _edge_runtime_dir()
+    fingerprint_path = edge_dir / "device_identity" / "hardware_fingerprint.json"
+    config_path = edge_dir / "config" / "runtime_config.yaml"
+    fingerprint = _load_json_file(fingerprint_path)
+    runtime_defaults = _load_runtime_defaults(config_path)
+
+    robot = get_robot()
+    robot_state: dict[str, Any] = {}
+    robot_error: str | None = None
+    if robot is None:
+        robot_error = ROBOT_INIT_ERR or "Robot is not initialized."
+    else:
+        try:
+            robot_state = robot.get_robot_state()
+        except Exception as exc:
+            LOGGER.exception("Failed to collect robot state for Info tab")
+            robot_error = str(exc)
+
+    system_info: dict[str, Any] = {"psutil_available": False}
+    try:
+        import psutil  # type: ignore
+
+        net_io = psutil.net_io_counters()
+        system_info = {
+            "psutil_available": True,
+            "cpu_usage": psutil.cpu_percent(interval=None),
+            "memory_usage": psutil.virtual_memory().percent,
+            "disk_usage": psutil.disk_usage(os.path.abspath(os.sep)).percent,
+            "network_bytes_sent": net_io.bytes_sent,
+            "network_bytes_recv": net_io.bytes_recv,
+        }
+    except Exception as exc:
+        system_info["error"] = str(exc)
+
+    device_id = str(fingerprint.get("device_id") or "G1_Robot_001")
+    battery_level = fingerprint.get("battery_level", fingerprint.get("battery_capacity"))
+    skill_settings = runtime_defaults.get("skills", {}) if isinstance(runtime_defaults.get("skills"), dict) else {}
+    updates = runtime_defaults.get("updates", {}) if isinstance(runtime_defaults.get("updates"), dict) else {}
+    network = runtime_defaults.get("network", {}) if isinstance(runtime_defaults.get("network"), dict) else {}
+    domain_id = getattr(robot, "domain_id", 0) if robot is not None else 0
+
+    hardware = dict(fingerprint)
+    hardware.setdefault("manufacturer", "Unitree")
+    hardware.setdefault("model", "G1")
+    hardware["network_interface"] = ROBOT_IFACE
+    hardware["domain_id"] = domain_id
+
+    software = {
+        "runtime": "altegro_client",
+        "runtime_version": "0.1.0",
+        "platform": platform.platform(),
+        "python_version": platform.python_version(),
+        "os_version": fingerprint.get("os_version"),
+        "firmware_version": fingerprint.get("firmware_version"),
+        "skills_repository_path": skill_settings.get("repository_path"),
+        "max_concurrent_skills": skill_settings.get("max_concurrent_skills"),
+        "default_skill_timeout": skill_settings.get("default_timeout"),
+        "fallback_version": updates.get("fallback_version"),
+        "network_timeout": network.get("timeout"),
+    }
+
+    registration = dict(fingerprint)
+    registration.setdefault("manufacturer", "Unitree")
+    registration.setdefault("model", "G1")
+    registration.setdefault("device_id", device_id)
+    registration["network_interface"] = ROBOT_IFACE
+    registration["domain_id"] = domain_id
+    registration["runtime"] = "altegro_client"
+
+    telemetry = {
+        "timestamp": int(time.time()),
+        "device_id": device_id,
+        "runtime": "altegro_client",
+        "system": system_info,
+        "robot": {
+            "fsm": robot_state.get("fsm"),
+            "mode": robot_state.get("mode"),
+            "gait": robot_state.get("gait"),
+            "body_height": robot_state.get("body_height"),
+            "position": robot_state.get("position"),
+            "velocity": robot_state.get("velocity"),
+            "yaw": robot_state.get("yaw"),
+            "imu": robot_state.get("imu"),
+            "odom_pose": robot_state.get("odom_pose"),
+            "slam_pose": robot_state.get("slam_pose"),
+            "is_moving": robot_state.get("is_moving"),
+            "sensor_stale": robot_state.get("sensor_stale"),
+            "sensor_timestamps": robot_state.get("sensor_timestamps"),
+            "slam_is_running": robot_state.get("slam_is_running"),
+            "queued_path_points": robot_state.get("queued_path_points"),
+            "joint_count": robot_state.get("joint_count"),
+            "battery": battery_level,
+        },
+    }
+
+    heartbeat = {
+        "status": "active" if robot_error is None else "unavailable",
+        "timestamp": int(time.time()),
+        "robot_connected": robot_error is None,
+        "fsm": robot_state.get("fsm"),
+        "mode": robot_state.get("mode"),
+        "is_moving": robot_state.get("is_moving"),
+    }
+
+    return _json_safe(
+        {
+            "source": "altegro_client compatible dashboard snapshot",
+            "paths": {
+                "edge_runtime": str(edge_dir),
+                "hardware_fingerprint": str(fingerprint_path),
+                "runtime_config": str(config_path),
+            },
+            "robot_error": robot_error,
+            "device_registration": registration,
+            "telemetry": telemetry,
+            "heartbeat": heartbeat,
+            "skill_inventory": {"hardware": hardware, "software": software},
+            "raw_robot_state": robot_state,
+        }
+    )
+
+
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 app.title = "Robot Control"
 TAB_STYLE = {
@@ -1337,7 +1540,8 @@ app.index_string = """
                 transform: translate(-50%, -50%);
                 z-index: 1;
             }
-            #logs-content {
+            #logs-content,
+            #info-content {
                 white-space: pre-wrap;
                 font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
                 font-size: 12px;
@@ -1351,10 +1555,11 @@ app.index_string = """
             .nav-tabs .nav-item:nth-child(2) .nav-link:empty::before { content: "LowLevel"; }
             .nav-tabs .nav-item:nth-child(3) .nav-link:empty::before { content: "Locomotion"; }
             .nav-tabs .nav-item:nth-child(4) .nav-link:empty::before { content: "SLAM"; }
-            .nav-tabs .nav-item:nth-child(5) .nav-link:empty::before { content: "Logs"; }
-            .nav-tabs .nav-item:nth-child(6) .nav-link:empty::before { content: "Sensors"; }
-            .nav-tabs .nav-item:nth-child(7) .nav-link:empty::before { content: "Speech"; }
-            .nav-tabs .nav-item:nth-child(8) .nav-link:empty::before { content: "Settings"; }
+            .nav-tabs .nav-item:nth-child(5) .nav-link:empty::before { content: "Info"; }
+            .nav-tabs .nav-item:nth-child(6) .nav-link:empty::before { content: "Skills"; }
+            .nav-tabs .nav-item:nth-child(7) .nav-link:empty::before { content: "Logs"; }
+            .nav-tabs .nav-item:nth-child(8) .nav-link:empty::before { content: "Sensors"; }
+            .nav-tabs .nav-item:nth-child(9) .nav-link:empty::before { content: "Settings"; }
         </style>
     </head>
     <body>
@@ -1365,6 +1570,11 @@ app.index_string = """
             {%renderer%}
             <script>
             (function () {
+                window.__dashJoystick = window.__dashJoystick || {vx: 0, vy: 0, vyaw: 0, seq: 0};
+                function updateJoystick(values) {
+                    window.__dashJoystick = Object.assign({}, window.__dashJoystick, values);
+                    window.__dashJoystick.seq = (window.__dashJoystick.seq || 0) + 1;
+                }
                 function setDashValue(id, value) {
                     var el = document.getElementById(id);
                     if (!el) return;
@@ -1395,11 +1605,13 @@ app.index_string = """
                         if (id === "linear-joystick") {
                             var vx = -y * 0.6;
                             var vy = x * 0.4;
+                            updateJoystick({vx: vx, vy: vy});
                             setDashValue("nav-vx", vx);
                             setDashValue("nav-vy", vy);
                             setReadout("linear-joystick-readout", "vx " + vx.toFixed(2) + " m/s | vy " + vy.toFixed(2) + " m/s");
                         } else {
                             var vyaw = x * 1.0;
+                            updateJoystick({vyaw: vyaw});
                             setDashValue("nav-vyaw", vyaw);
                             setReadout("angular-joystick-readout", "vyaw " + vyaw.toFixed(2) + " rad/s");
                         }
@@ -1411,10 +1623,12 @@ app.index_string = """
                             knob.style.top = "50%";
                         }
                         if (id === "linear-joystick") {
+                            updateJoystick({vx: 0, vy: 0});
                             setDashValue("nav-vx", 0);
                             setDashValue("nav-vy", 0);
                             setReadout("linear-joystick-readout", "vx 0.00 m/s | vy 0.00 m/s");
                         } else {
+                            updateJoystick({vyaw: 0});
                             setDashValue("nav-vyaw", 0);
                             setReadout("angular-joystick-readout", "vyaw 0.00 rad/s");
                         }
@@ -1508,6 +1722,24 @@ app.layout = dbc.Container(
                             ],
                             className="g-2",
                         ),
+                        dbc.InputGroup(
+                            [
+                                dbc.Input(id="say-text", placeholder="Type text to speak", type="text"),
+                                dbc.Button("Say", id="btn-say", color="success"),
+                            ],
+                            className="mt-3",
+                        ),
+                        html.Div(id="say-result", className="mt-2"),
+                        dbc.Row(
+                            [
+                                dbc.Col([html.Div("Headlight color", className="mt-3 mb-1"), dbc.Input(id="headlight-color", type="text", value="white")], md=3),
+                                dbc.Col([html.Div("Intensity", className="mt-3 mb-1"), dbc.Input(id="headlight-intensity", type="number", value=80, min=0, max=100, step=1)], md=3),
+                                dbc.Col([html.Div("Duration (s)", className="mt-3 mb-1"), dbc.Input(id="headlight-duration", type="number", value=2.0, min=0, step=0.1)], md=3),
+                                dbc.Col(dbc.Button("Apply Headlight", id="btn-headlight", color="primary", className="w-100 mt-4"), md=3),
+                            ],
+                            className="g-2",
+                        ),
+                        html.Div(id="headlight-result", className="mt-2"),
                         html.Div(id="control-result", className="mt-3"),
                     ],
                 ),
@@ -1538,6 +1770,10 @@ app.layout = dbc.Container(
                                         html.Div("Max increment (rad)", className="mt-3 mb-1"),
                                         dbc.Input(id="lowlevel-max-inc", type="number", value=0.01, step=0.001, min=0.0005),
                                     ],
+                                    md=3,
+                                ),
+                                dbc.Col(
+                                    dbc.Button("Enable LowLevel", id="btn-lowlevel-toggle", color="danger", className="w-100 mt-4"),
                                     md=3,
                                 ),
                             ],
@@ -1697,6 +1933,37 @@ app.layout = dbc.Container(
                     ],
                 ),
                 dbc.Tab(
+                    label="Info",
+                    tab_id="info",
+                    tab_style=TAB_STYLE,
+                    active_tab_style=ACTIVE_TAB_STYLE,
+                    label_style=TAB_LABEL_STYLE,
+                    active_label_style=ACTIVE_TAB_LABEL_STYLE,
+                    children=[
+                        dbc.Button("Refresh Info", id="btn-info-refresh", color="primary", className="mt-3 mb-2"),
+                        html.Pre(id="info-content", children=""),
+                    ],
+                ),
+                dbc.Tab(
+                    label="Skills",
+                    tab_id="skills",
+                    tab_style=TAB_STYLE,
+                    active_tab_style=ACTIVE_TAB_STYLE,
+                    label_style=TAB_LABEL_STYLE,
+                    active_label_style=ACTIVE_TAB_LABEL_STYLE,
+                    children=[
+                        dbc.Card(
+                            dbc.CardBody(
+                                [
+                                    html.H4("ALTEGRO store", className="card-title"),
+                                    html.Div("Skill marketplace placeholder.", className="text-muted"),
+                                ]
+                            ),
+                            className="mt-3",
+                        ),
+                    ],
+                ),
+                dbc.Tab(
                     label="Logs",
                     tab_id="logs",
                     tab_style=TAB_STYLE,
@@ -1762,24 +2029,6 @@ app.layout = dbc.Container(
                     ],
                 ),
                 dbc.Tab(
-                    label="Speech",
-                    tab_id="speech",
-                    tab_style=TAB_STYLE,
-                    active_tab_style=ACTIVE_TAB_STYLE,
-                    label_style=TAB_LABEL_STYLE,
-                    active_label_style=ACTIVE_TAB_LABEL_STYLE,
-                    children=[
-                        dbc.InputGroup(
-                            [
-                                dbc.Input(id="say-text", placeholder="Type text to speak", type="text"),
-                                dbc.Button("Say", id="btn-say", color="success"),
-                            ],
-                            className="mt-3",
-                        ),
-                        html.Div(id="say-result", className="mt-3"),
-                    ],
-                ),
-                dbc.Tab(
                     label="Settings",
                     tab_id="settings",
                     tab_style=TAB_STYLE,
@@ -1811,9 +2060,30 @@ app.layout = dbc.Container(
         dcc.Interval(id="grip-interval", interval=500, n_intervals=0),
         dcc.Interval(id="logs-interval", interval=1000, n_intervals=0),
         dcc.Interval(id="slam-interval", interval=1000, n_intervals=0),
+        dcc.Interval(id="info-interval", interval=2000, n_intervals=0),
         dcc.Store(id="slam-target-store", data=None),
+        dcc.Interval(id="locomotion-interval", interval=100, n_intervals=0),
+        dcc.Store(id="nav-command", data={"vx": 0.0, "vy": 0.0, "vyaw": 0.0, "seq": 0}),
+        dcc.Store(id="lowlevel-enabled", data=False),
     ],
     fluid=True,
+)
+
+
+app.clientside_callback(
+    """
+    function(n) {
+        const v = window.__dashJoystick || {vx: 0, vy: 0, vyaw: 0, seq: 0};
+        return {
+            vx: Number(v.vx || 0),
+            vy: Number(v.vy || 0),
+            vyaw: Number(v.vyaw || 0),
+            seq: Number(v.seq || 0)
+        };
+    }
+    """,
+    Output("nav-command", "data"),
+    Input("locomotion-interval", "n_intervals"),
 )
 
 
@@ -1899,26 +2169,19 @@ def on_control(
 
 @app.callback(
     Output("nav-result", "children"),
-    Output("nav-vx", "value"),
-    Output("nav-vy", "value"),
-    Output("nav-vyaw", "value"),
     Input("btn-handshake", "n_clicks"),
     Input("btn-nav-stop", "n_clicks"),
-    Input("nav-vx", "value"),
-    Input("nav-vy", "value"),
-    Input("nav-vyaw", "value"),
+    Input("nav-command", "data"),
     prevent_initial_call=True,
 )
 def on_navigation(
     _handshake_clicks: int | None,
     _stop_clicks: int | None,
-    vx: float | None,
-    vy: float | None,
-    vyaw: float | None,
-) -> tuple[str, Any, Any, Any]:
+    command: dict[str, Any] | None,
+) -> str:
     robot = get_robot()
     if robot is None:
-        return f"Robot init failed: {ROBOT_INIT_ERR}", dash.no_update, dash.no_update, dash.no_update
+        return f"Robot init failed: {ROBOT_INIT_ERR}"
 
     trigger = dash.ctx.triggered_id
     try:
@@ -1927,31 +2190,27 @@ def on_navigation(
             if loco is None or not hasattr(loco, "ShakeHand"):
                 raise AttributeError("Current locomotion client does not support ShakeHand().")
             rc = getattr(loco, "ShakeHand")()
-            return f"Handshake command sent, rc={rc}.", dash.no_update, dash.no_update, dash.no_update
+            return f"Handshake command sent, rc={rc}."
         if trigger == "btn-nav-stop":
             robot.stop()
-            return "stop() sent.", 0.0, 0.0, 0.0
-        if trigger in {"nav-vx", "nav-vy", "nav-vyaw"}:
-            cmd_vx = float(vx or 0.0)
-            cmd_vy = float(vy or 0.0)
-            cmd_vyaw = float(vyaw or 0.0)
+            return "stop() sent."
+        if trigger == "nav-command":
+            command = command or {}
+            cmd_vx = float(command.get("vx") or 0.0)
+            cmd_vy = float(command.get("vy") or 0.0)
+            cmd_vyaw = float(command.get("vyaw") or 0.0)
             if hasattr(robot, "move"):
                 rc = int(getattr(robot, "move")(cmd_vx, cmd_vy, cmd_vyaw))
             elif hasattr(robot, "loco_move"):
                 rc = int(robot.loco_move(cmd_vx, cmd_vy, cmd_vyaw))
             else:
                 rc = int(robot.walk(cmd_vx, cmd_vy, cmd_vyaw))
-            return (
-                f"move(vx={cmd_vx:.3f}, vy={cmd_vy:.3f}, vyaw={cmd_vyaw:.3f}) sent, rc={rc}.",
-                dash.no_update,
-                dash.no_update,
-                dash.no_update,
-            )
+            return f"move(vx={cmd_vx:.3f}, vy={cmd_vy:.3f}, vyaw={cmd_vyaw:.3f}) sent, rc={rc}."
     except Exception as exc:
-        LOGGER.exception("Locomotion command failed trigger=%s vx=%s vy=%s vyaw=%s", trigger, vx, vy, vyaw)
-        return f"Locomotion command failed: {exc}", dash.no_update, dash.no_update, dash.no_update
+        LOGGER.exception("Locomotion command failed trigger=%s command=%s", trigger, command)
+        return f"Locomotion command failed: {exc}"
 
-    return "No locomotion action taken.", dash.no_update, dash.no_update, dash.no_update
+    return "No locomotion action taken."
 
 
 def read_warning_error_logs(max_lines: int = 200) -> str:
@@ -1976,6 +2235,19 @@ def read_warning_error_logs(max_lines: int = 200) -> str:
 )
 def update_logs(_tick: int) -> str:
     return read_warning_error_logs()
+
+
+@app.callback(
+    Output("info-content", "children"),
+    Input("info-interval", "n_intervals"),
+    Input("btn-info-refresh", "n_clicks"),
+)
+def update_info(_tick: int, _refresh: int | None) -> str:
+    try:
+        return json.dumps(build_altegro_info(), indent=2, sort_keys=True)
+    except Exception as exc:
+        LOGGER.exception("Info tab update failed")
+        return f"Info update failed: {exc}"
 
 
 def _make_slam_cloud_from_points(points: list[tuple[float, float, float]], title: str) -> go.Figure:
@@ -2180,6 +2452,7 @@ def on_lowlevel_joint_selected(joint_index: int | None) -> tuple[float, float, s
     State("lowlevel-tau", "value"),
     State("lowlevel-pk", "value"),
     State("lowlevel-pd", "value"),
+    State("lowlevel-enabled", "data"),
 )
 def on_lowlevel_target(
     _tick: int,
@@ -2190,22 +2463,41 @@ def on_lowlevel_target(
     tau: float | None,
     pk: float | None,
     pd: float | None,
+    lowlevel_enabled: bool,
 ) -> str:
     if dash.ctx.triggered_id == "lowlevel-target":
-        LOWLEVEL_CONTROLLER.start_move(
-            joint_index=int(joint_index or 0),
-            target=float(target or 0.0),
-            max_increment=float(max_increment or 0.01),
-            dq=float(dq or 0.0),
-            tau=float(tau or 0.0),
-            pk=float(pk if pk is not None else 30.0),
-            pd=float(pd if pd is not None else 1.5),
-            iface=ROBOT_IFACE,
-        )
+        if not bool(lowlevel_enabled):
+            LOGGER.warning("LowLevel target ignored because LowLevel is disabled.")
+        else:
+            LOWLEVEL_CONTROLLER.start_move(
+                joint_index=int(joint_index or 0),
+                target=float(target or 0.0),
+                max_increment=float(max_increment or 0.01),
+                dq=float(dq or 0.0),
+                tau=float(tau or 0.0),
+                pk=float(pk if pk is not None else 30.0),
+                pd=float(pd if pd is not None else 1.5),
+                iface=ROBOT_IFACE,
+            )
     status, err, state_ts, running = LOWLEVEL_CONTROLLER.snapshot()
     age = "state n/a" if state_ts <= 0.0 else f"state age {max(0.0, time.time() - state_ts):.2f}s"
     prefix = "running" if running else ("error" if err else "idle")
-    return f"LowLevel: {prefix} | {status} | {age}"
+    enabled_text = "enabled" if bool(lowlevel_enabled) else "disabled"
+    return f"LowLevel: {enabled_text} | {prefix} | {status} | {age}"
+
+
+@app.callback(
+    Output("lowlevel-enabled", "data"),
+    Output("btn-lowlevel-toggle", "children"),
+    Output("btn-lowlevel-toggle", "color"),
+    Input("btn-lowlevel-toggle", "n_clicks"),
+    State("lowlevel-enabled", "data"),
+    prevent_initial_call=True,
+)
+def toggle_lowlevel(_clicks: int | None, enabled: bool) -> tuple[bool, str, str]:
+    new_enabled = not bool(enabled)
+    LOGGER.warning("LowLevel control toggled %s", "enabled" if new_enabled else "disabled")
+    return new_enabled, ("Disable LowLevel" if new_enabled else "Enable LowLevel"), ("success" if new_enabled else "danger")
 
 
 @app.callback(
@@ -2289,7 +2581,34 @@ def on_say(_n: int | None, text: str | None) -> str:
         code = int(robot.say(phrase))
         return f"Said: {phrase} (code={code})"
     except Exception as exc:
+        LOGGER.exception("Say command failed")
         return f"Say failed: {exc}"
+
+
+@app.callback(
+    Output("headlight-result", "children"),
+    Input("btn-headlight", "n_clicks"),
+    State("headlight-color", "value"),
+    State("headlight-intensity", "value"),
+    State("headlight-duration", "value"),
+    prevent_initial_call=True,
+)
+def on_headlight(_n: int | None, color: str | None, intensity: int | float | None, duration: float | None) -> str:
+    robot = get_robot()
+    if robot is None:
+        return f"Robot init failed: {ROBOT_INIT_ERR}"
+    color_value = str(color or "white").strip() or "white"
+    intensity_value = int(max(0, min(100, float(intensity if intensity is not None else 100))))
+    duration_value = None if duration is None or float(duration) <= 0 else float(duration)
+    try:
+        try:
+            rc = int(robot.headlight(color=color_value, intensity=intensity_value, duration=duration_value))
+        except TypeError:
+            rc = int(robot.headlight({"color": color_value, "intensity": intensity_value}, duration=duration_value))
+        return f"Headlight applied: color={color_value}, intensity={intensity_value}, duration={duration_value}, rc={rc}"
+    except Exception as exc:
+        LOGGER.exception("Headlight command failed")
+        return f"Headlight failed: {exc}"
 
 
 @app.callback(

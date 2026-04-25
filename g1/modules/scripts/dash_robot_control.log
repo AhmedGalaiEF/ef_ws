@@ -17,3 +17,125 @@
 2026-04-25 20:45:49,990 INFO Thread-835 Boot start requested iface=eth0 domain_id=0
 2026-04-25 20:45:49,993 INFO Thread-835 Boot start ignored because thread is already alive: Starting secure boot sequence.
 2026-04-25 20:45:49,996 INFO Thread-835 Boot callback snapshot state=running running=True err=None message=Starting secure boot sequence.
+2026-04-25 21:00:21,538 INFO MainThread Dash robot control log path: /home/unitree/ef_ws/repo/ef_ws/g1/modules/scripts/dash_robot_control.log
+2026-04-25 21:00:36,554 INFO Thread-160 Boot callback triggered=btn-hanged-boot hanged_clicks=1 confirm_clicks=None iface=eth0
+2026-04-25 21:00:36,574 INFO Thread-160 Boot start requested iface=eth0 domain_id=0
+2026-04-25 21:00:36,609 INFO Thread-161 Boot worker importing SDK helpers
+2026-04-25 21:00:36,626 INFO Thread-161 Boot worker creating loco client iface=eth0 domain_id=0
+2026-04-25 21:00:36,633 INFO Thread-160 Boot thread started name=Thread-161
+2026-04-25 21:00:36,692 INFO Thread-160 Boot callback snapshot state=running running=True err=None message=Starting secure boot sequence.
+2026-04-25 21:00:37,589 INFO Thread-161 Boot initial FSM id=1 mode=0
+2026-04-25 21:00:37,722 INFO Thread-161 Boot state=running message=Damping robot before stand-up.
+2026-04-25 21:00:37,724 INFO Thread-161 Boot calling Damp()
+2026-04-25 21:00:47,839 INFO Thread-161 Boot state=running message=Switching to stand-up FSM.
+2026-04-25 21:00:47,841 INFO Thread-161 Boot calling SetFsmId(4)
+2026-04-25 21:00:55,115 INFO Thread-418 Boot callback triggered=btn-boot-enter hanged_clicks=1 confirm_clicks=1 iface=eth0
+2026-04-25 21:00:55,120 INFO Thread-418 Boot confirm requested
+2026-04-25 21:00:55,129 INFO Thread-418 Boot confirm ignored state=running message=Switching to stand-up FSM.
+2026-04-25 21:00:55,139 INFO Thread-418 Boot callback snapshot state=running running=True err=None message=Switching to stand-up FSM.
+2026-04-25 21:00:58,026 INFO Thread-161 Boot state=running message=Raising stand height to 0.02 m.
+2026-04-25 21:01:08,082 INFO Thread-161 Boot height=0.02 mode=None
+2026-04-25 21:01:18,087 INFO Thread-161 Boot state=running message=Raising stand height to 0.04 m.
+2026-04-25 21:01:28,144 INFO Thread-161 Boot height=0.04 mode=None
+2026-04-25 21:01:38,147 INFO Thread-161 Boot state=running message=Raising stand height to 0.06 m.
+2026-04-25 21:01:48,204 INFO Thread-161 Boot height=0.06 mode=None
+2026-04-25 21:01:57,229 INFO Thread-1290 Boot callback triggered=btn-boot-enter hanged_clicks=1 confirm_clicks=2 iface=eth0
+2026-04-25 21:01:57,233 INFO Thread-1290 Boot confirm requested
+2026-04-25 21:01:57,234 INFO Thread-1290 Boot confirm ignored state=running message=Raising stand height to 0.06 m.
+2026-04-25 21:01:57,237 INFO Thread-1290 Boot callback snapshot state=running running=True err=None message=Raising stand height to 0.06 m.
+2026-04-25 21:01:57,423 INFO Thread-1292 Boot callback triggered=btn-boot-enter hanged_clicks=1 confirm_clicks=3 iface=eth0
+2026-04-25 21:01:57,425 INFO Thread-1292 Boot confirm requested
+2026-04-25 21:01:57,429 INFO Thread-1292 Boot confirm ignored state=running message=Raising stand height to 0.06 m.
+2026-04-25 21:01:57,435 INFO Thread-1292 Boot callback snapshot state=running running=True err=None message=Raising stand height to 0.06 m.
+2026-04-25 21:01:57,626 INFO Thread-1297 Boot callback triggered=btn-boot-enter hanged_clicks=1 confirm_clicks=4 iface=eth0
+2026-04-25 21:01:57,628 INFO Thread-1297 Boot confirm requested
+2026-04-25 21:01:57,631 INFO Thread-1297 Boot confirm ignored state=running message=Raising stand height to 0.06 m.
+2026-04-25 21:01:57,634 INFO Thread-1297 Boot callback snapshot state=running running=True err=None message=Raising stand height to 0.06 m.
+2026-04-25 21:01:57,831 INFO Thread-1300 Boot callback triggered=btn-boot-enter hanged_clicks=1 confirm_clicks=5 iface=eth0
+2026-04-25 21:01:57,834 INFO Thread-1300 Boot confirm requested
+2026-04-25 21:01:57,835 INFO Thread-1300 Boot confirm ignored state=running message=Raising stand height to 0.06 m.
+2026-04-25 21:01:57,838 INFO Thread-1300 Boot callback snapshot state=running running=True err=None message=Raising stand height to 0.06 m.
+2026-04-25 21:01:58,068 INFO Thread-1305 Boot callback triggered=btn-boot-enter hanged_clicks=1 confirm_clicks=6 iface=eth0
+2026-04-25 21:01:58,087 INFO Thread-1305 Boot confirm requested
+2026-04-25 21:01:58,100 INFO Thread-1305 Boot confirm ignored state=running message=Raising stand height to 0.06 m.
+2026-04-25 21:01:58,116 INFO Thread-1305 Boot callback snapshot state=running running=True err=None message=Raising stand height to 0.06 m.
+2026-04-25 21:01:58,207 INFO Thread-161 Boot state=running message=Raising stand height to 0.08 m.
+2026-04-25 21:01:58,247 INFO Thread-1309 Boot callback triggered=btn-boot-enter hanged_clicks=1 confirm_clicks=7 iface=eth0
+2026-04-25 21:01:58,250 INFO Thread-1309 Boot confirm requested
+2026-04-25 21:01:58,254 INFO Thread-1309 Boot confirm ignored state=running message=Raising stand height to 0.08 m.
+2026-04-25 21:01:58,257 INFO Thread-1309 Boot callback snapshot state=running running=True err=None message=Raising stand height to 0.08 m.
+2026-04-25 21:01:58,472 INFO Thread-1311 Boot callback triggered=btn-boot-enter hanged_clicks=1 confirm_clicks=8 iface=eth0
+2026-04-25 21:01:58,475 INFO Thread-1311 Boot confirm requested
+2026-04-25 21:01:58,477 INFO Thread-1311 Boot confirm ignored state=running message=Raising stand height to 0.08 m.
+2026-04-25 21:01:58,480 INFO Thread-1311 Boot callback snapshot state=running running=True err=None message=Raising stand height to 0.08 m.
+2026-04-25 21:02:08,264 INFO Thread-161 Boot height=0.08 mode=None
+2026-04-25 21:02:18,270 INFO Thread-161 Boot state=running message=Raising stand height to 0.10 m.
+2026-04-25 21:02:28,329 INFO Thread-161 Boot height=0.10 mode=None
+2026-04-25 21:02:38,334 INFO Thread-161 Boot state=running message=Raising stand height to 0.12 m.
+2026-04-25 21:02:48,392 INFO Thread-161 Boot height=0.12 mode=None
+2026-04-25 21:02:58,396 INFO Thread-161 Boot state=running message=Raising stand height to 0.14 m.
+2026-04-25 21:03:08,452 INFO Thread-161 Boot height=0.14 mode=None
+2026-04-25 21:03:18,459 INFO Thread-161 Boot state=running message=Raising stand height to 0.16 m.
+2026-04-25 21:03:18,525 INFO Thread-2443 Boot callback triggered=btn-boot-enter hanged_clicks=1 confirm_clicks=9 iface=eth0
+2026-04-25 21:03:18,529 INFO Thread-2443 Boot confirm requested
+2026-04-25 21:03:18,533 INFO Thread-2443 Boot confirm ignored state=running message=Raising stand height to 0.16 m.
+2026-04-25 21:03:18,536 INFO Thread-2443 Boot callback snapshot state=running running=True err=None message=Raising stand height to 0.16 m.
+2026-04-25 21:03:18,670 INFO Thread-161 Boot height=0.16 mode=0
+2026-04-25 21:03:18,829 INFO Thread-161 Boot state=running message=Raising stand height to 0.18 m.
+2026-04-25 21:03:19,019 INFO Thread-2450 Boot callback triggered=btn-boot-enter hanged_clicks=1 confirm_clicks=10 iface=eth0
+2026-04-25 21:03:19,021 INFO Thread-2450 Boot confirm requested
+2026-04-25 21:03:19,024 INFO Thread-2450 Boot confirm ignored state=running message=Raising stand height to 0.18 m.
+2026-04-25 21:03:19,028 INFO Thread-2450 Boot callback snapshot state=running running=True err=None message=Raising stand height to 0.18 m.
+2026-04-25 21:03:19,275 INFO Thread-2457 Boot callback triggered=btn-boot-enter hanged_clicks=1 confirm_clicks=11 iface=eth0
+2026-04-25 21:03:19,282 INFO Thread-2457 Boot confirm requested
+2026-04-25 21:03:19,285 INFO Thread-2457 Boot confirm ignored state=running message=Raising stand height to 0.18 m.
+2026-04-25 21:03:19,288 INFO Thread-2457 Boot callback snapshot state=running running=True err=None message=Raising stand height to 0.18 m.
+2026-04-25 21:03:28,885 INFO Thread-161 Boot height=0.18 mode=None
+2026-04-25 21:03:29,037 INFO Thread-161 Boot state=running message=Raising stand height to 0.20 m.
+2026-04-25 21:03:31,505 INFO Thread-2632 Boot callback triggered=btn-hanged-boot hanged_clicks=2 confirm_clicks=11 iface=eth0
+2026-04-25 21:03:31,508 INFO Thread-2632 Boot start requested iface=eth0 domain_id=0
+2026-04-25 21:03:31,513 INFO Thread-2632 Boot start ignored because thread is already alive: Raising stand height to 0.20 m.
+2026-04-25 21:03:31,516 INFO Thread-2632 Boot callback snapshot state=running running=True err=None message=Raising stand height to 0.20 m.
+2026-04-25 21:03:39,093 INFO Thread-161 Boot height=0.20 mode=None
+2026-04-25 21:03:49,096 INFO Thread-161 Boot state=running message=Raising stand height to 0.22 m.
+2026-04-25 21:03:59,153 INFO Thread-161 Boot height=0.22 mode=None
+2026-04-25 21:08:37,821 INFO MainThread Dash robot control log path: /home/unitree/ef_ws/repo/ef_ws/g1/modules/scripts/dash_robot_control.log
+2026-04-25 21:08:45,722 INFO Thread-102 Boot callback triggered=btn-hanged-boot hanged_clicks=1 confirm_clicks=None iface=eth0
+2026-04-25 21:08:45,762 INFO Thread-102 Boot start requested iface=eth0 domain_id=0
+2026-04-25 21:08:45,780 INFO Thread-103 Boot worker importing SDK helpers
+2026-04-25 21:08:45,787 INFO Thread-102 Boot thread started name=Thread-103
+2026-04-25 21:08:45,799 INFO Thread-103 Boot worker creating loco client iface=eth0 domain_id=0
+2026-04-25 21:08:45,847 INFO Thread-102 Boot callback snapshot state=running running=True err=None message=Starting secure boot sequence.
+2026-04-25 21:08:57,097 INFO Thread-103 Boot initial FSM id=4 mode=0
+2026-04-25 21:08:57,233 INFO Thread-103 Boot state=running message=Damping robot before stand-up.
+2026-04-25 21:08:57,236 INFO Thread-103 Boot calling Damp()
+2026-04-25 21:08:57,398 INFO Thread-103 Boot state=running message=Switching to stand-up FSM.
+2026-04-25 21:08:57,401 INFO Thread-103 Boot calling SetFsmId(4)
+2026-04-25 21:09:14,175 INFO Thread-422 Boot callback triggered=btn-boot-enter hanged_clicks=1 confirm_clicks=1 iface=eth0
+2026-04-25 21:09:14,180 INFO Thread-422 Boot confirm requested
+2026-04-25 21:09:14,183 INFO Thread-422 Boot confirm ignored state=running message=Switching to stand-up FSM.
+2026-04-25 21:09:14,186 INFO Thread-422 Boot callback snapshot state=running running=True err=None message=Switching to stand-up FSM.
+2026-04-25 21:09:17,518 INFO Thread-103 Boot state=running message=Raising stand height to 0.02 m.
+2026-04-25 21:09:27,574 INFO Thread-103 Boot height=0.02 mode=None
+2026-04-25 21:09:37,579 INFO Thread-103 Boot state=running message=Raising stand height to 0.04 m.
+2026-04-25 21:09:47,638 INFO Thread-103 Boot height=0.04 mode=None
+2026-04-25 21:09:53,534 INFO Thread-956 Boot callback triggered=btn-hanged-boot hanged_clicks=2 confirm_clicks=1 iface=eth0
+2026-04-25 21:09:53,539 INFO Thread-956 Boot start requested iface=eth0 domain_id=0
+2026-04-25 21:09:53,541 INFO Thread-956 Boot start ignored because thread is already alive: Raising stand height to 0.04 m.
+2026-04-25 21:09:53,558 INFO Thread-956 Boot callback snapshot state=running running=True err=None message=Raising stand height to 0.04 m.
+2026-04-25 21:09:57,643 INFO Thread-103 Boot state=running message=Raising stand height to 0.06 m.
+2026-04-25 21:09:59,201 INFO Thread-1133 Boot callback triggered=btn-hanged-boot hanged_clicks=3 confirm_clicks=1 iface=eth0
+2026-04-25 21:09:59,202 INFO Thread-1133 Boot start requested iface=eth0 domain_id=0
+2026-04-25 21:09:59,204 INFO Thread-1133 Boot start ignored because thread is already alive: Raising stand height to 0.06 m.
+2026-04-25 21:09:59,209 INFO Thread-1133 Boot callback snapshot state=running running=True err=None message=Raising stand height to 0.06 m.
+2026-04-25 21:10:07,699 INFO Thread-103 Boot height=0.06 mode=None
+2026-04-25 21:10:17,703 INFO Thread-103 Boot state=running message=Raising stand height to 0.08 m.
+2026-04-25 21:10:27,767 INFO Thread-103 Boot height=0.08 mode=None
+2026-04-25 21:10:37,772 INFO Thread-103 Boot state=running message=Raising stand height to 0.10 m.
+2026-04-25 21:10:47,827 INFO Thread-103 Boot height=0.10 mode=None
+2026-04-25 21:10:57,831 INFO Thread-103 Boot state=running message=Raising stand height to 0.12 m.
+2026-04-25 21:11:07,891 INFO Thread-103 Boot height=0.12 mode=None
+2026-04-25 21:11:17,897 INFO Thread-103 Boot state=running message=Raising stand height to 0.14 m.
+2026-04-25 21:11:27,957 INFO Thread-103 Boot height=0.14 mode=None
+2026-04-25 21:11:37,960 INFO Thread-103 Boot state=running message=Raising stand height to 0.16 m.
+2026-04-25 21:14:46,572 INFO MainThread Dash robot control log path: /home/unitree/ef_ws/repo/ef_ws/g1/modules/scripts/dash_robot_control.log
