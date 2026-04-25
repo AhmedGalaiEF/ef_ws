@@ -15,6 +15,7 @@ import importlib
 import json
 import logging
 import os
+from pathlib import Path
 import pkgutil
 import sys
 import time
@@ -44,6 +45,45 @@ def _configure_logging(level: int) -> None:
 
 LOG = logging.getLogger("g1_poll_all")
 RGBD_TOPIC_KEYWORDS = ("rgbd", "depth", "rgb", "color", "image", "camera")
+
+
+def _available_interfaces() -> List[str]:
+    try:
+        return sorted(
+            entry.name
+            for entry in Path("/sys/class/net").iterdir()
+            if entry.exists()
+        )
+    except Exception:
+        LOG.debug("Failed to enumerate /sys/class/net", exc_info=True)
+        return []
+
+
+def _log_dds_environment(iface: str) -> None:
+    interfaces = _available_interfaces()
+    LOG.info("Requested interface: %s", iface)
+    if interfaces:
+        LOG.info("Available interfaces: %s", ", ".join(interfaces))
+    else:
+        LOG.warning("Available interfaces: unavailable")
+
+    cyclonedds_uri = os.environ.get("CYCLONEDDS_URI", "")
+    if cyclonedds_uri:
+        LOG.info("CYCLONEDDS_URI=%s", cyclonedds_uri)
+    else:
+        LOG.info("CYCLONEDDS_URI is not set")
+
+
+def _validate_iface_or_log(iface: str) -> bool:
+    interfaces = _available_interfaces()
+    if interfaces and iface not in interfaces:
+        LOG.error(
+            "Requested interface %s is not present. Available interfaces: %s",
+            iface,
+            ", ".join(interfaces),
+        )
+        return False
+    return True
 
 
 class TopicStats:
@@ -517,6 +557,9 @@ def main() -> int:
 
     # Best-effort initialize unitree SDK2 channel factory if available
     if args.iface:
+        _log_dds_environment(args.iface)
+        if not _validate_iface_or_log(args.iface):
+            return 2
         try:
             chan = _try_import("unitree_sdk2py.core.channel")
             if chan and hasattr(chan, "ChannelFactoryInitialize"):
@@ -524,6 +567,8 @@ def main() -> int:
                 LOG.info("ChannelFactoryInitialize(domain=%s, iface=%s) OK", args.domain, args.iface)
         except Exception:
             LOG.exception("ChannelFactoryInitialize failed")
+            LOG.error("Aborting before raw DomainParticipant creation to avoid duplicate DDS errors")
+            return 2
 
     if args.rpc_scan:
         _scan_rpc_clients()
