@@ -14,6 +14,7 @@ import sys
 
 import dash
 import dash_bootstrap_components as dbc
+import numpy as np
 import plotly.graph_objects as go
 from dash import Input, Output, State, dcc, html
 
@@ -25,10 +26,35 @@ if PARENT_DIR not in sys.path:
 from sdk_client import Robot
 
 
+def _available_ifaces() -> list[str]:
+    net_dir = Path("/sys/class/net")
+    try:
+        names = sorted(
+            p.name for p in net_dir.iterdir() if p.is_dir() and p.name not in {"lo", "loopback0"}
+        )
+    except Exception:
+        return []
+    return names
+
+
+def _default_iface() -> str:
+    env_iface = os.environ.get("G1_IFACE") or os.environ.get("SDK_IFACE")
+    if env_iface:
+        return str(env_iface)
+    names = _available_ifaces()
+    if len(names) == 1:
+        return names[0]
+    if "eth0" in names:
+        return "eth0"
+    if "enp1s0" in names:
+        return "enp1s0"
+    return names[0] if names else "eth0"
+
+
 ROBOT_LOCK = threading.Lock()
 ROBOT_INSTANCE: Any | None = None
 ROBOT_INIT_ERR: str | None = None
-ROBOT_IFACE = "eth0"
+ROBOT_IFACE = _default_iface()
 ROBOT_LIDAR_CLOUD_TOPIC = "rt/utlidar/cloud_livox_mid360"
 RGBD_HOST = os.environ.get("G1_RGBD_HOST", "10.34.0.11")
 RGBD_PORT = int(os.environ.get("G1_RGBD_PORT", "5555"))
@@ -78,7 +104,6 @@ class _RgbPreviewReceiver:
         try:
             import cv2
             import gi
-            import numpy as np
 
             gi.require_version("Gst", "1.0")
             gi.require_version("GstApp", "1.0")
@@ -303,7 +328,6 @@ class _ZmqRgbdPreviewReceiver:
     def _run(self) -> None:
         try:
             import cv2
-            import numpy as np
             import zmq
         except Exception as exc:
             with self._lock:
@@ -438,8 +462,6 @@ class _LivoxPointsReceiver:
             if not self._frames_xyz:
                 return None, self._latest_ts, self._error
             try:
-                import numpy as np
-
                 merged = np.concatenate(list(self._frames_xyz), axis=0)
             except Exception as exc:
                 self._error = f"Livox frame merge failed: {exc}"
@@ -447,14 +469,7 @@ class _LivoxPointsReceiver:
             return merged, self._latest_ts, self._error
 
     def _run(self) -> None:
-        try:
-            import numpy as np
-        except Exception as exc:
-            with self._lock:
-                self._error = f"numpy unavailable: {exc}"
-            return
-
-        sensors_dir = Path("/home/ag/ef_ws/g1/scripts/sensors")
+        sensors_dir = Path(__file__).resolve().parents[2] / "scripts" / "sensors"
         if str(sensors_dir) not in sys.path:
             sys.path.insert(0, str(sensors_dir))
 
@@ -595,7 +610,8 @@ def get_robot() -> Robot | None:
             )
             return ROBOT_INSTANCE
         except Exception as exc:
-            ROBOT_INIT_ERR = str(exc)
+            ifaces = ", ".join(_available_ifaces()) or "none detected"
+            ROBOT_INIT_ERR = f"{exc} | iface={ROBOT_IFACE} | available_ifaces={ifaces}"
             return None
 
 
