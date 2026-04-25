@@ -139,3 +139,342 @@
 2026-04-25 21:11:27,957 INFO Thread-103 Boot height=0.14 mode=None
 2026-04-25 21:11:37,960 INFO Thread-103 Boot state=running message=Raising stand height to 0.16 m.
 2026-04-25 21:14:46,572 INFO MainThread Dash robot control log path: /home/unitree/ef_ws/repo/ef_ws/g1/modules/scripts/dash_robot_control.log
+2026-04-25 21:37:15,019 INFO MainThread Dash robot control log path: /home/unitree/ef_ws/repo/ef_ws/g1/modules/scripts/dash_robot_control.log
+2026-04-25 21:37:16,089 ERROR Thread-8 Exception on /_dash-update-component [POST]
+Traceback (most recent call last):
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 1473, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 882, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 880, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 865, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_get_app.py", line 17, in wrap
+    return ctx.run(func, self, *args, **kwargs)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1596, in dispatch
+    func = self._prepare_callback(g, body)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1520, in _prepare_callback
+    g.args_grouping, g.using_args_grouping = self._prepare_grouping(
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1538, in _prepare_grouping
+    grouping = map_grouping(lambda ind: flat_data[ind], indices)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_grouping.py", line 137, in map_grouping
+    return [map_grouping(fn, g) for g in grouping]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_grouping.py", line 137, in <listcomp>
+    return [map_grouping(fn, g) for g in grouping]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_grouping.py", line 142, in map_grouping
+    return fn(grouping)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1538, in <lambda>
+    grouping = map_grouping(lambda ind: flat_data[ind], indices)
+IndexError: list index out of range
+2026-04-25 21:37:16,463 ERROR Thread-14 Exception on /_dash-update-component [POST]
+Traceback (most recent call last):
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 1473, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 882, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 880, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 865, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_get_app.py", line 17, in wrap
+    return ctx.run(func, self, *args, **kwargs)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1596, in dispatch
+    func = self._prepare_callback(g, body)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1520, in _prepare_callback
+    g.args_grouping, g.using_args_grouping = self._prepare_grouping(
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1538, in _prepare_grouping
+    grouping = map_grouping(lambda ind: flat_data[ind], indices)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_grouping.py", line 137, in map_grouping
+    return [map_grouping(fn, g) for g in grouping]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_grouping.py", line 137, in <listcomp>
+    return [map_grouping(fn, g) for g in grouping]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_grouping.py", line 142, in map_grouping
+    return fn(grouping)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1538, in <lambda>
+    grouping = map_grouping(lambda ind: flat_data[ind], indices)
+IndexError: list index out of range
+2026-04-25 21:37:17,193 ERROR Thread-24 Exception on /_dash-update-component [POST]
+Traceback (most recent call last):
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 1473, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 882, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 880, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 865, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_get_app.py", line 17, in wrap
+    return ctx.run(func, self, *args, **kwargs)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1596, in dispatch
+    func = self._prepare_callback(g, body)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1520, in _prepare_callback
+    g.args_grouping, g.using_args_grouping = self._prepare_grouping(
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1538, in _prepare_grouping
+    grouping = map_grouping(lambda ind: flat_data[ind], indices)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_grouping.py", line 137, in map_grouping
+    return [map_grouping(fn, g) for g in grouping]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_grouping.py", line 137, in <listcomp>
+    return [map_grouping(fn, g) for g in grouping]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_grouping.py", line 142, in map_grouping
+    return fn(grouping)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1538, in <lambda>
+    grouping = map_grouping(lambda ind: flat_data[ind], indices)
+IndexError: list index out of range
+2026-04-25 21:37:17,624 ERROR Thread-30 Exception on /_dash-update-component [POST]
+Traceback (most recent call last):
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 1473, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 882, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 880, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 865, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_get_app.py", line 17, in wrap
+    return ctx.run(func, self, *args, **kwargs)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1596, in dispatch
+    func = self._prepare_callback(g, body)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1520, in _prepare_callback
+    g.args_grouping, g.using_args_grouping = self._prepare_grouping(
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1538, in _prepare_grouping
+    grouping = map_grouping(lambda ind: flat_data[ind], indices)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_grouping.py", line 137, in map_grouping
+    return [map_grouping(fn, g) for g in grouping]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_grouping.py", line 137, in <listcomp>
+    return [map_grouping(fn, g) for g in grouping]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_grouping.py", line 142, in map_grouping
+    return fn(grouping)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1538, in <lambda>
+    grouping = map_grouping(lambda ind: flat_data[ind], indices)
+IndexError: list index out of range
+2026-04-25 21:37:18,907 ERROR Thread-37 Exception on /_dash-update-component [POST]
+Traceback (most recent call last):
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 1473, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 882, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 880, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 865, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_get_app.py", line 17, in wrap
+    return ctx.run(func, self, *args, **kwargs)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1596, in dispatch
+    func = self._prepare_callback(g, body)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1520, in _prepare_callback
+    g.args_grouping, g.using_args_grouping = self._prepare_grouping(
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1538, in _prepare_grouping
+    grouping = map_grouping(lambda ind: flat_data[ind], indices)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_grouping.py", line 137, in map_grouping
+    return [map_grouping(fn, g) for g in grouping]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_grouping.py", line 137, in <listcomp>
+    return [map_grouping(fn, g) for g in grouping]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_grouping.py", line 142, in map_grouping
+    return fn(grouping)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1538, in <lambda>
+    grouping = map_grouping(lambda ind: flat_data[ind], indices)
+IndexError: list index out of range
+2026-04-25 21:37:19,101 ERROR Thread-44 Exception on /_dash-update-component [POST]
+Traceback (most recent call last):
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 1473, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 882, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 880, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 865, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_get_app.py", line 17, in wrap
+    return ctx.run(func, self, *args, **kwargs)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1596, in dispatch
+    func = self._prepare_callback(g, body)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1520, in _prepare_callback
+    g.args_grouping, g.using_args_grouping = self._prepare_grouping(
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1538, in _prepare_grouping
+    grouping = map_grouping(lambda ind: flat_data[ind], indices)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_grouping.py", line 137, in map_grouping
+    return [map_grouping(fn, g) for g in grouping]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_grouping.py", line 137, in <listcomp>
+    return [map_grouping(fn, g) for g in grouping]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_grouping.py", line 142, in map_grouping
+    return fn(grouping)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1538, in <lambda>
+    grouping = map_grouping(lambda ind: flat_data[ind], indices)
+IndexError: list index out of range
+2026-04-25 21:37:19,594 ERROR Thread-49 Exception on /_dash-update-component [POST]
+Traceback (most recent call last):
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 1473, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 882, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 880, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 865, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_get_app.py", line 17, in wrap
+    return ctx.run(func, self, *args, **kwargs)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1596, in dispatch
+    func = self._prepare_callback(g, body)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1520, in _prepare_callback
+    g.args_grouping, g.using_args_grouping = self._prepare_grouping(
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1538, in _prepare_grouping
+    grouping = map_grouping(lambda ind: flat_data[ind], indices)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_grouping.py", line 137, in map_grouping
+    return [map_grouping(fn, g) for g in grouping]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_grouping.py", line 137, in <listcomp>
+    return [map_grouping(fn, g) for g in grouping]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_grouping.py", line 142, in map_grouping
+    return fn(grouping)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1538, in <lambda>
+    grouping = map_grouping(lambda ind: flat_data[ind], indices)
+IndexError: list index out of range
+2026-04-25 21:37:20,240 ERROR Thread-51 Exception on /_dash-update-component [POST]
+Traceback (most recent call last):
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 1473, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 882, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 880, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 865, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_get_app.py", line 17, in wrap
+    return ctx.run(func, self, *args, **kwargs)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1596, in dispatch
+    func = self._prepare_callback(g, body)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1520, in _prepare_callback
+    g.args_grouping, g.using_args_grouping = self._prepare_grouping(
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1538, in _prepare_grouping
+    grouping = map_grouping(lambda ind: flat_data[ind], indices)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_grouping.py", line 137, in map_grouping
+    return [map_grouping(fn, g) for g in grouping]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_grouping.py", line 137, in <listcomp>
+    return [map_grouping(fn, g) for g in grouping]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_grouping.py", line 142, in map_grouping
+    return fn(grouping)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1538, in <lambda>
+    grouping = map_grouping(lambda ind: flat_data[ind], indices)
+IndexError: list index out of range
+2026-04-25 21:37:20,874 ERROR Thread-61 Exception on /_dash-update-component [POST]
+Traceback (most recent call last):
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 1473, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 882, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 880, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 865, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_get_app.py", line 17, in wrap
+    return ctx.run(func, self, *args, **kwargs)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1596, in dispatch
+    func = self._prepare_callback(g, body)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1520, in _prepare_callback
+    g.args_grouping, g.using_args_grouping = self._prepare_grouping(
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1538, in _prepare_grouping
+    grouping = map_grouping(lambda ind: flat_data[ind], indices)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_grouping.py", line 137, in map_grouping
+    return [map_grouping(fn, g) for g in grouping]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_grouping.py", line 137, in <listcomp>
+    return [map_grouping(fn, g) for g in grouping]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_grouping.py", line 142, in map_grouping
+    return fn(grouping)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1538, in <lambda>
+    grouping = map_grouping(lambda ind: flat_data[ind], indices)
+IndexError: list index out of range
+2026-04-25 21:37:21,559 ERROR Thread-64 Exception on /_dash-update-component [POST]
+Traceback (most recent call last):
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 1473, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 882, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 880, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 865, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_get_app.py", line 17, in wrap
+    return ctx.run(func, self, *args, **kwargs)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1596, in dispatch
+    func = self._prepare_callback(g, body)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1520, in _prepare_callback
+    g.args_grouping, g.using_args_grouping = self._prepare_grouping(
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1538, in _prepare_grouping
+    grouping = map_grouping(lambda ind: flat_data[ind], indices)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_grouping.py", line 137, in map_grouping
+    return [map_grouping(fn, g) for g in grouping]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_grouping.py", line 137, in <listcomp>
+    return [map_grouping(fn, g) for g in grouping]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_grouping.py", line 142, in map_grouping
+    return fn(grouping)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1538, in <lambda>
+    grouping = map_grouping(lambda ind: flat_data[ind], indices)
+IndexError: list index out of range
+2026-04-25 21:37:22,136 ERROR Thread-75 Exception on /_dash-update-component [POST]
+Traceback (most recent call last):
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 1473, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 882, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 880, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 865, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_get_app.py", line 17, in wrap
+    return ctx.run(func, self, *args, **kwargs)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1596, in dispatch
+    func = self._prepare_callback(g, body)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1520, in _prepare_callback
+    g.args_grouping, g.using_args_grouping = self._prepare_grouping(
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1538, in _prepare_grouping
+    grouping = map_grouping(lambda ind: flat_data[ind], indices)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_grouping.py", line 137, in map_grouping
+    return [map_grouping(fn, g) for g in grouping]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_grouping.py", line 137, in <listcomp>
+    return [map_grouping(fn, g) for g in grouping]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_grouping.py", line 142, in map_grouping
+    return fn(grouping)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1538, in <lambda>
+    grouping = map_grouping(lambda ind: flat_data[ind], indices)
+IndexError: list index out of range
+2026-04-25 21:37:22,942 ERROR Thread-82 Exception on /_dash-update-component [POST]
+Traceback (most recent call last):
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 1473, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 882, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 880, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 865, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_get_app.py", line 17, in wrap
+    return ctx.run(func, self, *args, **kwargs)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1596, in dispatch
+    func = self._prepare_callback(g, body)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1520, in _prepare_callback
+    g.args_grouping, g.using_args_grouping = self._prepare_grouping(
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1538, in _prepare_grouping
+    grouping = map_grouping(lambda ind: flat_data[ind], indices)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_grouping.py", line 137, in map_grouping
+    return [map_grouping(fn, g) for g in grouping]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_grouping.py", line 137, in <listcomp>
+    return [map_grouping(fn, g) for g in grouping]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_grouping.py", line 142, in map_grouping
+    return fn(grouping)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1538, in <lambda>
+    grouping = map_grouping(lambda ind: flat_data[ind], indices)
+IndexError: list index out of range
+2026-04-25 21:37:23,730 WARNING Thread-94 PyYAML is unavailable; skipping runtime config /home/unitree/ef_ws/repo/ef_ws/g1/edge_runtime/config/runtime_config.yaml
+2026-04-25 21:37:33,888 WARNING Thread-121 PyYAML is unavailable; skipping runtime config /home/unitree/ef_ws/repo/ef_ws/g1/edge_runtime/config/runtime_config.yaml
+2026-04-25 21:37:52,282 WARNING Thread-172 PyYAML is unavailable; skipping runtime config /home/unitree/ef_ws/repo/ef_ws/g1/edge_runtime/config/runtime_config.yaml
+2026-04-25 21:38:52,130 INFO MainThread Dash robot control log path: /home/unitree/ef_ws/repo/ef_ws/g1/modules/scripts/dash_robot_control.log
+2026-04-25 21:38:56,975 WARNING Thread-13 PyYAML is unavailable; skipping runtime config /home/unitree/ef_ws/repo/ef_ws/g1/edge_runtime/config/runtime_config.yaml
+2026-04-25 21:39:08,598 WARNING Thread-52 PyYAML is unavailable; skipping runtime config /home/unitree/ef_ws/repo/ef_ws/g1/edge_runtime/config/runtime_config.yaml
+2026-04-25 22:03:59,437 INFO MainThread Dash robot control log path: /home/unitree/ef_ws/repo/ef_ws/g1/modules/scripts/dash_robot_control.log
+2026-04-25 22:04:05,930 WARNING Thread-12 PyYAML is unavailable; skipping runtime config /home/unitree/ef_ws/repo/ef_ws/g1/edge_runtime/config/runtime_config.yaml
+2026-04-25 22:04:18,667 WARNING Thread-60 PyYAML is unavailable; skipping runtime config /home/unitree/ef_ws/repo/ef_ws/g1/edge_runtime/config/runtime_config.yaml
+2026-04-25 22:05:30,204 INFO MainThread Dash robot control log path: /home/unitree/ef_ws/repo/ef_ws/g1/modules/scripts/dash_robot_control.log
+2026-04-25 22:05:34,013 WARNING Thread-39 PyYAML is unavailable; skipping runtime config /home/unitree/ef_ws/repo/ef_ws/g1/edge_runtime/config/runtime_config.yaml
+2026-04-25 22:05:45,120 WARNING Thread-83 PyYAML is unavailable; skipping runtime config /home/unitree/ef_ws/repo/ef_ws/g1/edge_runtime/config/runtime_config.yaml
+2026-04-25 22:06:06,974 INFO MainThread Dash robot control log path: /home/unitree/ef_ws/repo/ef_ws/g1/modules/scripts/dash_robot_control.log
+2026-04-25 22:12:39,334 INFO MainThread Dash robot control log path: /home/unitree/ef_ws/repo/ef_ws/g1/modules/scripts/dash_robot_control.log

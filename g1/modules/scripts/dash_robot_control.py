@@ -2073,12 +2073,12 @@ app.layout = dbc.Container(
 app.clientside_callback(
     """
     function(n) {
-        const v = window.__dashJoystick || {vx: 0, vy: 0, vyaw: 0, seq: 0};
+        const v = window.__dashJoystick || {vx: 0, vy: 0, vyaw: 0};
         return {
             vx: Number(v.vx || 0),
             vy: Number(v.vy || 0),
             vyaw: Number(v.vyaw || 0),
-            seq: Number(v.seq || 0)
+            seq: n
         };
     }
     """,
@@ -2453,6 +2453,7 @@ def on_lowlevel_joint_selected(joint_index: int | None) -> tuple[float, float, s
     State("lowlevel-pk", "value"),
     State("lowlevel-pd", "value"),
     State("lowlevel-enabled", "data"),
+    prevent_initial_call=True,
 )
 def on_lowlevel_target(
     _tick: int,
@@ -2506,6 +2507,7 @@ def toggle_lowlevel(_clicks: int | None, enabled: bool) -> tuple[bool, str, str]
     Input("grip-target", "value"),
     Input("grip-hand", "value"),
     State("grip-max-inc", "value"),
+    prevent_initial_call=True,
 )
 def on_grip_target(
     _tick: int,
