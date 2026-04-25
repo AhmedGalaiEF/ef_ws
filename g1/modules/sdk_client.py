@@ -840,6 +840,12 @@ class Robot:
     def fsm_2_squat(self) -> None:
         self.fsm_2_airborne()
 
+    def fsm_dev_mode(self) -> None:
+        if hasattr(self._client, "Start"):
+            self._client.Start()
+        elif hasattr(self._client, "SetFsmId"):
+            self._client.SetFsmId(500)
+
     # ------------------------------------------------------------------
     # IMU + lidar getters
     # ------------------------------------------------------------------

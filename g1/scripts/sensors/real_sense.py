@@ -97,6 +97,87 @@ def encode_rgbd_payload(
     return color_jpg.tobytes(), depth_png.tobytes(), struct.pack("f", float(depth_scale))
 
 
+def build_stream_config(
+    width: int,
+    height: int,
+    fps: int,
+    serial: Optional[str],
+    enable_infra: bool,
+    enable_imu: bool,
+) -> rs.config:
+    """Create a RealSense stream config for one RGBD profile."""
+
+    config = rs.config()
+    if serial:
+        config.enable_device(serial)
+
+    config.enable_stream(rs.stream.depth, width, height, rs.format.z16, fps)
+    config.enable_stream(rs.stream.color, width, height, rs.format.bgr8, fps)
+
+    if enable_infra:
+        config.enable_stream(rs.stream.infrared, 1, width, height, rs.format.y8, fps)
+        config.enable_stream(rs.stream.infrared, 2, width, height, rs.format.y8, fps)
+
+    if enable_imu:
+        config.enable_stream(rs.stream.gyro, rs.format.motion_xyz32f, 400)
+        config.enable_stream(rs.stream.accel, rs.format.motion_xyz32f, 250)
+
+    return config
+
+
+def fallback_profiles(width: int, height: int, fps: int) -> list[tuple[int, int, int]]:
+    """Return requested profile plus conservative fallback RGBD profiles."""
+
+    profiles = [
+        (width, height, fps),
+        (640, 480, 15),
+        (424, 240, 30),
+        (424, 240, 15),
+        (320, 240, 30),
+        (320, 240, 15),
+    ]
+    unique_profiles: list[tuple[int, int, int]] = []
+    for profile in profiles:
+        if profile not in unique_profiles:
+            unique_profiles.append(profile)
+    return unique_profiles
+
+
+def start_pipeline_with_fallback(
+    pipeline: rs.pipeline,
+    rgb_width: int,
+    rgb_height: int,
+    fps: int,
+    serial: Optional[str],
+    enable_infra: bool,
+    enable_imu: bool,
+    auto_profile_fallback: bool,
+) -> tuple[rs.pipeline_profile, tuple[int, int, int]]:
+    """Start a pipeline, optionally trying lower profiles after a failure."""
+
+    profiles = (
+        fallback_profiles(rgb_width, rgb_height, fps)
+        if auto_profile_fallback
+        else [(rgb_width, rgb_height, fps)]
+    )
+    errors: list[str] = []
+
+    for width, height, profile_fps in profiles:
+        config = build_stream_config(width, height, profile_fps, serial, enable_infra, enable_imu)
+        try:
+            print(f"Trying RealSense streams: {width}x{height}@{profile_fps}")
+            return pipeline.start(config), (width, height, profile_fps)
+        except RuntimeError as err:
+            errors.append(f"{width}x{height}@{profile_fps}: {err}")
+            print(f"Profile failed: {width}x{height}@{profile_fps}: {err}")
+
+    raise RuntimeError(
+        "Could not start any requested RealSense stream profile. Tried: "
+        + "; ".join(errors)
+        + ". Check that no other process is using the camera, try --reset, or reconnect the camera."
+    )
+
+
 # ---------------------------------------------------------------------------
 # Main streaming routine
 # ---------------------------------------------------------------------------
@@ -115,6 +196,7 @@ def run(
     publish: bool = False,
     publish_host: str = "*",
     publish_port: int = 5555,
+    auto_profile_fallback: bool = True,
 ):
     """Open a pipeline, start streaming, and display frames."""
 
@@ -139,30 +221,7 @@ def run(
     if not show_windows:
         print("Display mode: off (no GUI display detected). Printing frame stats.")
 
-    # Configure pipeline streams
     pipeline = rs.pipeline(ctx)
-    config = rs.config()
-
-    # If you have multiple cameras, you may specify the serial number here:
-    # config.enable_device(<serial>)
-    if serial:
-        config.enable_device(serial)
-
-    # Depth and colour should have matching resolution + fps when we plan to
-    # perform alignment.
-    config.enable_stream(rs.stream.depth, rgb_width, rgb_height, rs.format.z16, fps)
-    config.enable_stream(rs.stream.color, rgb_width, rgb_height, rs.format.bgr8, fps)
-
-    if enable_infra:
-        # Left and right infrared
-        config.enable_stream(rs.stream.infrared, 1, rgb_width, rgb_height, rs.format.y8, fps)
-        config.enable_stream(rs.stream.infrared, 2, rgb_width, rgb_height, rs.format.y8, fps)
-
-    if enable_imu:
-        # D435i exposes gyro at 400 Hz and accel at 250 Hz (but we can ask for
-        # any value <= the max).
-        config.enable_stream(rs.stream.gyro, rs.format.motion_xyz32f, 400)
-        config.enable_stream(rs.stream.accel, rs.format.motion_xyz32f, 250)
 
     # Apply some recommended depth-postprocessing options to improve quality.
     spatial_filter = rs.spatial_filter()  # edge-preserving smoothing
@@ -173,14 +232,18 @@ def run(
 
     # Start streaming
     print("Starting pipeline …")
-    try:
-        profile = pipeline.start(config)
-    except RuntimeError as err:
-        raise RuntimeError(
-            f"Could not start the requested RealSense streams "
-            f"({rgb_width}x{rgb_height}@{fps}). Try --width 424 --height 240 --fps 15, "
-            "check that no other process is using the camera, or reconnect the camera."
-        ) from err
+    profile, active_profile = start_pipeline_with_fallback(
+        pipeline,
+        rgb_width,
+        rgb_height,
+        fps,
+        serial,
+        enable_infra,
+        enable_imu,
+        auto_profile_fallback,
+    )
+    rgb_width, rgb_height, fps = active_profile
+    print(f"Active streams : {rgb_width}x{rgb_height}@{fps}")
 
     depth_sensor = profile.get_device().first_depth_sensor()
     depth_scale = float(depth_sensor.get_depth_scale())
@@ -380,6 +443,11 @@ if __name__ == "__main__":
         default=5555,
         help="ZeroMQ bind TCP port for RGBD publishing",
     )
+    parser.add_argument(
+        "--no-profile-fallback",
+        action="store_true",
+        help="Fail immediately instead of trying lower stream profiles after startup errors",
+    )
 
     args = parser.parse_args()
 
@@ -397,6 +465,7 @@ if __name__ == "__main__":
             publish=args.publish,
             publish_host=args.publish_host,
             publish_port=args.publish_port,
+            auto_profile_fallback=not args.no_profile_fallback,
         )
     except RuntimeError as err:
         sys.exit(str(err))
