@@ -3916,3 +3916,628 @@ IndexError: list index out of range
 2026-04-26 10:02:11,713 INFO Thread-4144 Callback done name=update_depth_feed trigger=depth-interval elapsed_s=0.007
 2026-04-26 10:02:14,845 INFO Thread-4175 Callback start name=update_rgb_feed trigger=rgb-interval args=3 kwargs=[]
 2026-04-26 10:02:14,851 INFO Thread-4175 Callback done name=update_rgb_feed trigger=rgb-interval elapsed_s=0.006
+2026-04-26 10:24:44,969 INFO MainThread Dash robot control log path: /home/unitree/ef_ws/repo/ef_ws/g1/modules/scripts/dash_robot_control.log
+2026-04-26 10:24:45,798 INFO Thread-1 Callback start name=update_rgb_feed trigger=rgb-interval args=3 kwargs=[]
+2026-04-26 10:24:45,971 INFO Thread-3 Callback start name=on_grip_target trigger=grip-interval args=5 kwargs=[]
+2026-04-26 10:24:45,973 INFO Thread-3 Callback done name=on_grip_target trigger=grip-interval elapsed_s=0.002
+2026-04-26 10:24:46,051 INFO Thread-4 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:24:46,055 INFO Thread-5 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:24:46,055 INFO Thread-4 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.004
+2026-04-26 10:24:46,059 INFO Thread-5 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.004
+2026-04-26 10:24:46,143 INFO Thread-6 Callback start name=update_depth_feed trigger=depth-interval args=3 kwargs=[]
+2026-04-26 10:24:46,145 INFO Thread-6 Callback done name=update_depth_feed trigger=depth-interval elapsed_s=0.002
+2026-04-26 10:24:46,706 INFO Thread-1 Callback done name=update_rgb_feed trigger=rgb-interval elapsed_s=0.908
+2026-04-26 10:24:54,132 INFO MainThread Dash robot control log path: /home/unitree/ef_ws/repo/ef_ws/g1/modules/scripts/dash_robot_control.log
+2026-04-26 10:24:54,767 INFO Thread-1 Callback start name=update_rgb_feed trigger=rgb-interval args=3 kwargs=[]
+2026-04-26 10:24:54,994 INFO Thread-3 Callback start name=on_grip_target trigger=grip-interval args=5 kwargs=[]
+2026-04-26 10:24:54,996 INFO Thread-3 Callback done name=on_grip_target trigger=grip-interval elapsed_s=0.002
+2026-04-26 10:24:55,045 INFO Thread-4 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:24:55,049 INFO Thread-5 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:24:55,049 INFO Thread-4 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.005
+2026-04-26 10:24:55,053 INFO Thread-5 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.004
+2026-04-26 10:24:55,109 INFO Thread-6 Callback start name=update_depth_feed trigger=depth-interval args=3 kwargs=[]
+2026-04-26 10:24:55,111 INFO Thread-6 Callback done name=update_depth_feed trigger=depth-interval elapsed_s=0.002
+2026-04-26 10:24:55,686 INFO Thread-1 Callback done name=update_rgb_feed trigger=rgb-interval elapsed_s=0.918
+2026-04-26 10:25:00,046 INFO Thread-54 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:25:00,052 INFO Thread-54 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.006
+2026-04-26 10:25:00,057 INFO Thread-55 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:25:00,066 INFO Thread-55 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.008
+2026-04-26 10:25:00,121 INFO Thread-56 Callback start name=update_depth_feed trigger=depth-interval args=3 kwargs=[]
+2026-04-26 10:25:00,127 INFO Thread-56 Callback done name=update_depth_feed trigger=depth-interval elapsed_s=0.007
+2026-04-26 10:25:00,248 INFO Thread-57 Callback start name=update_rgb_feed trigger=rgb-interval args=3 kwargs=[]
+2026-04-26 10:25:00,255 INFO Thread-57 Callback done name=update_rgb_feed trigger=rgb-interval elapsed_s=0.008
+2026-04-26 10:25:00,466 INFO Thread-59 Callback start name=on_grip_target trigger=grip-interval args=5 kwargs=[]
+2026-04-26 10:25:00,474 INFO Thread-59 Callback done name=on_grip_target trigger=grip-interval elapsed_s=0.007
+2026-04-26 10:25:00,687 INFO Thread-67 Callback start name=update_boot_status trigger=initial args=3 kwargs=[]
+2026-04-26 10:25:00,697 INFO Thread-68 Callback start name=on_lowlevel_joint_selected trigger=initial args=1 kwargs=[]
+2026-04-26 10:25:00,707 INFO Thread-68 Callback done name=on_lowlevel_joint_selected trigger=initial elapsed_s=0.011
+2026-04-26 10:25:00,698 INFO Thread-67 Callback done name=update_boot_status trigger=initial elapsed_s=0.011
+2026-04-26 10:25:00,742 INFO Thread-69 Callback start name=update_info trigger=initial args=2 kwargs=[]
+2026-04-26 10:25:00,761 INFO Thread-69 Callback done name=update_info trigger=initial elapsed_s=0.018
+2026-04-26 10:25:00,758 INFO Thread-70 Callback start name=update_logs trigger=initial args=2 kwargs=[]
+2026-04-26 10:25:00,780 INFO Thread-71 Callback start name=update_minimal_intervals trigger=initial args=9 kwargs=[]
+2026-04-26 10:25:00,784 INFO Thread-70 Callback done name=update_logs trigger=initial elapsed_s=0.026
+2026-04-26 10:25:00,789 INFO Thread-71 Callback done name=update_minimal_intervals trigger=initial elapsed_s=0.009
+2026-04-26 10:25:03,917 INFO Thread-84 Callback start name=on_control trigger=btn-damp args=4 kwargs=[]
+2026-04-26 10:25:03,992 INFO Thread-84 Callback done name=on_control trigger=btn-damp elapsed_s=0.075
+2026-04-26 10:25:05,170 INFO Thread-89 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:25:05,176 INFO Thread-90 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:25:05,178 INFO Thread-89 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.008
+2026-04-26 10:25:05,184 INFO Thread-90 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.008
+2026-04-26 10:25:06,733 INFO Thread-97 Callback start name=update_boot_status trigger=btn-hanged-boot args=3 kwargs=[]
+2026-04-26 10:25:06,738 INFO Thread-97 Boot callback triggered=btn-hanged-boot hanged_clicks=1 confirm_clicks=None iface=eth0
+2026-04-26 10:25:06,742 INFO Thread-97 Boot start requested iface=eth0 domain_id=0
+2026-04-26 10:25:06,748 INFO Thread-98 Boot worker importing SDK helpers
+2026-04-26 10:25:06,752 INFO Thread-97 Boot thread started name=Thread-98
+2026-04-26 10:25:06,755 INFO Thread-98 Boot worker creating loco client iface=eth0 domain_id=0
+2026-04-26 10:25:06,765 INFO Thread-97 Boot callback snapshot state=running running=True err=None message=Starting secure boot sequence.
+2026-04-26 10:25:06,778 INFO Thread-97 Callback done name=update_boot_status trigger=btn-hanged-boot elapsed_s=0.045
+2026-04-26 10:25:07,630 INFO Thread-98 Boot initial FSM id=1 mode=0
+2026-04-26 10:25:07,641 INFO Thread-98 Boot state=running message=Damping robot before stand-up.
+2026-04-26 10:25:07,647 INFO Thread-98 Boot calling Damp()
+2026-04-26 10:25:10,254 INFO Thread-111 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:25:10,266 INFO Thread-111 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.011
+2026-04-26 10:25:10,268 INFO Thread-112 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:25:10,278 INFO Thread-112 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.010
+2026-04-26 10:25:15,664 INFO Thread-133 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:25:15,671 INFO Thread-134 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:25:15,671 INFO Thread-133 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.007
+2026-04-26 10:25:15,684 INFO Thread-134 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.013
+2026-04-26 10:25:17,766 INFO Thread-98 Boot state=running message=Switching to stand-up FSM.
+2026-04-26 10:25:17,773 INFO Thread-98 Boot calling SetFsmId(4)
+2026-04-26 10:25:21,170 INFO Thread-155 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:25:21,177 INFO Thread-155 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.007
+2026-04-26 10:25:21,179 INFO Thread-156 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:25:21,190 INFO Thread-156 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.012
+2026-04-26 10:25:26,230 INFO Thread-175 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:25:26,241 INFO Thread-175 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.011
+2026-04-26 10:25:26,244 INFO Thread-176 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:25:26,254 INFO Thread-176 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.010
+2026-04-26 10:25:31,347 INFO Thread-195 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:25:31,351 INFO Thread-195 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.005
+2026-04-26 10:25:31,356 INFO Thread-196 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:25:31,367 INFO Thread-196 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.011
+2026-04-26 10:25:36,711 INFO Thread-217 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:25:36,719 INFO Thread-218 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:25:36,722 INFO Thread-217 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.011
+2026-04-26 10:25:36,729 INFO Thread-218 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.011
+2026-04-26 10:25:37,882 INFO Thread-98 Boot state=running message=Raising stand height to 0.02 m.
+2026-04-26 10:25:38,058 INFO Thread-98 Boot height=0.02 fsm=4 mode=0
+2026-04-26 10:25:38,123 INFO Thread-98 Boot state=running message=Raising stand height to 0.04 m.
+2026-04-26 10:25:38,318 INFO Thread-98 Boot height=0.04 fsm=4 mode=0
+2026-04-26 10:25:42,204 INFO Thread-239 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:25:42,211 INFO Thread-240 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:25:42,213 INFO Thread-239 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.009
+2026-04-26 10:25:42,221 INFO Thread-240 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.010
+2026-04-26 10:25:47,670 INFO Thread-261 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:25:47,679 INFO Thread-262 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:25:47,680 INFO Thread-261 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.009
+2026-04-26 10:25:47,687 INFO Thread-262 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.008
+2026-04-26 10:25:48,330 INFO Thread-98 Boot state=running message=Raising stand height to 0.06 m.
+2026-04-26 10:25:53,264 INFO Thread-283 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:25:53,274 INFO Thread-283 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.010
+2026-04-26 10:25:53,277 INFO Thread-284 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:25:53,290 INFO Thread-284 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.013
+2026-04-26 10:25:58,452 INFO Thread-98 Boot height=0.06 fsm=None mode=0
+2026-04-26 10:25:58,544 INFO Thread-98 Boot state=running message=Raising stand height to 0.08 m.
+2026-04-26 10:25:58,663 INFO Thread-305 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:25:58,669 INFO Thread-305 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.006
+2026-04-26 10:25:58,676 INFO Thread-306 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:25:58,682 INFO Thread-306 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.006
+2026-04-26 10:26:03,663 INFO Thread-325 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.000
+2026-04-26 10:26:04,162 INFO Thread-327 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:26:04,168 INFO Thread-327 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.006
+2026-04-26 10:26:08,688 INFO Thread-98 Boot height=0.08 fsm=None mode=0
+2026-04-26 10:26:08,786 INFO Thread-98 Boot state=running message=Raising stand height to 0.10 m.
+2026-04-26 10:26:09,164 INFO Thread-347 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:26:09,168 INFO Thread-348 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:26:09,176 INFO Thread-347 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.013
+2026-04-26 10:26:09,182 INFO Thread-348 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.014
+2026-04-26 10:26:14,257 INFO Thread-367 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:26:14,264 INFO Thread-367 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.007
+2026-04-26 10:26:14,267 INFO Thread-368 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:26:14,279 INFO Thread-368 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.012
+2026-04-26 10:26:18,929 INFO Thread-98 Boot height=0.10 fsm=None mode=0
+2026-04-26 10:26:18,994 INFO Thread-98 Boot state=running message=Raising stand height to 0.12 m.
+2026-04-26 10:26:19,168 INFO Thread-98 Boot height=0.12 fsm=4 mode=0
+2026-04-26 10:26:19,237 INFO Thread-98 Boot state=running message=Raising stand height to 0.14 m.
+2026-04-26 10:26:19,662 INFO Thread-389 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:26:19,668 INFO Thread-390 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:26:19,670 INFO Thread-389 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.008
+2026-04-26 10:26:19,673 INFO Thread-390 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.005
+2026-04-26 10:26:24,669 INFO Thread-409 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:26:24,677 INFO Thread-410 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:26:24,681 INFO Thread-409 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.013
+2026-04-26 10:26:24,692 INFO Thread-410 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.015
+2026-04-26 10:26:29,386 INFO Thread-98 Boot height=0.14 fsm=4 mode=None
+2026-04-26 10:26:30,153 INFO Thread-431 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:26:30,160 INFO Thread-431 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.008
+2026-04-26 10:26:30,171 INFO Thread-432 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:26:30,180 INFO Thread-432 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.010
+2026-04-26 10:26:35,168 INFO Thread-452 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:26:35,174 INFO Thread-452 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.006
+2026-04-26 10:26:35,666 INFO Thread-454 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:26:35,674 INFO Thread-454 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.008
+2026-04-26 10:26:39,395 INFO Thread-98 Boot state=running message=Raising stand height to 0.16 m.
+2026-04-26 10:26:39,582 INFO Thread-98 Boot height=0.16 fsm=4 mode=0
+2026-04-26 10:26:39,650 INFO Thread-98 Boot state=running message=Raising stand height to 0.18 m.
+2026-04-26 10:26:39,838 INFO Thread-98 Boot height=0.18 fsm=4 mode=0
+2026-04-26 10:26:39,914 INFO Thread-98 Boot state=running message=Raising stand height to 0.20 m.
+2026-04-26 10:26:40,103 INFO Thread-98 Boot height=0.20 fsm=4 mode=0
+2026-04-26 10:26:40,661 INFO Thread-473 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:26:40,666 INFO Thread-474 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:26:40,668 INFO Thread-473 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.007
+2026-04-26 10:26:40,677 INFO Thread-474 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.011
+2026-04-26 10:26:45,663 INFO Thread-493 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:26:45,668 INFO Thread-493 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.005
+2026-04-26 10:26:45,673 INFO Thread-494 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:26:45,681 INFO Thread-494 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.008
+2026-04-26 10:26:50,116 INFO Thread-98 Boot state=running message=Raising stand height to 0.22 m.
+2026-04-26 10:26:50,276 INFO Thread-98 Boot height=0.22 fsm=4 mode=0
+2026-04-26 10:26:50,385 INFO Thread-98 Boot sweep complete height=0.22 fsm=4 mode=0
+2026-04-26 10:26:50,391 INFO Thread-98 Boot waiting for dashboard confirmation: Robot appears loaded. Press Confirm balanced stand to command BalanceStand.
+2026-04-26 10:26:50,396 INFO Thread-98 Boot state=waiting message=Robot appears loaded. Press Confirm balanced stand to command BalanceStand.
+2026-04-26 10:26:51,164 INFO Thread-515 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:26:51,177 INFO Thread-516 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:26:51,179 INFO Thread-515 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.015
+2026-04-26 10:26:51,185 INFO Thread-516 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.007
+2026-04-26 10:26:56,663 INFO Thread-537 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:26:56,670 INFO Thread-538 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:26:56,674 INFO Thread-537 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.011
+2026-04-26 10:26:56,676 INFO Thread-538 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.006
+2026-04-26 10:27:01,668 INFO Thread-558 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:27:01,675 INFO Thread-558 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.006
+2026-04-26 10:27:02,184 INFO Thread-560 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:27:02,193 INFO Thread-560 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.009
+2026-04-26 10:27:07,205 INFO Thread-579 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:27:07,213 INFO Thread-579 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.008
+2026-04-26 10:27:07,220 INFO Thread-580 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:27:07,226 INFO Thread-580 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.006
+2026-04-26 10:27:12,659 INFO Thread-601 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:27:12,664 INFO Thread-602 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:27:12,667 INFO Thread-601 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.009
+2026-04-26 10:27:12,676 INFO Thread-602 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.012
+2026-04-26 10:27:17,659 INFO Thread-621 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:27:17,669 INFO Thread-621 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.010
+2026-04-26 10:27:17,674 INFO Thread-622 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:27:17,685 INFO Thread-622 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.012
+2026-04-26 10:27:22,670 INFO Thread-641 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:27:22,677 INFO Thread-641 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.006
+2026-04-26 10:27:22,682 INFO Thread-642 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:27:22,688 INFO Thread-642 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.006
+2026-04-26 10:27:24,295 INFO Thread-647 Callback start name=update_boot_status trigger=btn-boot-enter args=3 kwargs=[]
+2026-04-26 10:27:24,309 INFO Thread-647 Boot callback triggered=btn-boot-enter hanged_clicks=1 confirm_clicks=1 iface=eth0
+2026-04-26 10:27:24,320 INFO Thread-647 Boot confirm requested
+2026-04-26 10:27:24,325 INFO Thread-647 Boot confirmation accepted
+2026-04-26 10:27:24,326 INFO Thread-98 Boot dashboard confirmation received
+2026-04-26 10:27:24,332 INFO Thread-647 Boot callback snapshot state=running running=True err=None message=Dashboard confirmation received; continuing boot sequence.
+2026-04-26 10:27:24,333 INFO Thread-98 Boot calling SetFsmId(501) after dashboard confirmation
+2026-04-26 10:27:24,343 INFO Thread-647 Callback done name=update_boot_status trigger=btn-boot-enter elapsed_s=0.049
+2026-04-26 10:27:28,149 INFO Thread-664 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:27:28,154 INFO Thread-665 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:27:28,162 INFO Thread-664 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.013
+2026-04-26 10:27:28,171 INFO Thread-665 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.017
+2026-04-26 10:27:31,150 INFO Thread-676 Callback start name=on_navigation trigger=btn-handshake args=4 kwargs=[]
+2026-04-26 10:27:31,156 INFO Thread-676 Callback done name=on_navigation trigger=btn-handshake elapsed_s=0.006
+2026-04-26 10:27:33,157 INFO Thread-685 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:27:33,170 INFO Thread-686 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:27:33,174 INFO Thread-685 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.017
+2026-04-26 10:27:33,177 INFO Thread-686 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.007
+2026-04-26 10:27:37,619 INFO Thread-703 Callback start name=on_navigation trigger=btn-handshake args=4 kwargs=[]
+2026-04-26 10:27:37,626 INFO Thread-703 Callback done name=on_navigation trigger=btn-handshake elapsed_s=0.007
+2026-04-26 10:27:38,173 INFO Thread-707 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:27:38,182 INFO Thread-707 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.009
+2026-04-26 10:27:38,663 INFO Thread-709 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:27:38,669 INFO Thread-709 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.006
+2026-04-26 10:27:43,657 INFO Thread-728 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:27:43,666 INFO Thread-729 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:27:43,668 INFO Thread-728 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.010
+2026-04-26 10:27:43,675 INFO Thread-729 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.009
+2026-04-26 10:27:49,155 INFO Thread-750 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:27:49,161 INFO Thread-750 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.006
+2026-04-26 10:27:49,170 INFO Thread-751 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:27:49,178 INFO Thread-751 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.008
+2026-04-26 10:27:54,557 INFO Thread-98 Boot after SetFsmId(501) fsm=501 mode=0
+2026-04-26 10:27:54,569 INFO Thread-98 Boot calling BalanceStand(0)
+2026-04-26 10:27:54,655 INFO Thread-772 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:27:54,661 INFO Thread-773 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:27:54,662 INFO Thread-772 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.008
+2026-04-26 10:27:54,671 INFO Thread-773 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.009
+2026-04-26 10:28:00,148 INFO Thread-794 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:28:00,157 INFO Thread-794 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.009
+2026-04-26 10:28:00,161 INFO Thread-795 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:28:00,171 INFO Thread-795 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.011
+2026-04-26 10:28:04,582 INFO Thread-98 Boot calling SetStandHeight(0.22)
+2026-04-26 10:28:04,670 INFO Thread-98 Boot calling Start()
+2026-04-26 10:28:04,747 INFO Thread-98 Boot calling SetFsmId(501) after Start()
+2026-04-26 10:28:05,156 INFO Thread-815 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:28:05,165 INFO Thread-815 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.008
+2026-04-26 10:28:05,659 INFO Thread-817 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:28:05,665 INFO Thread-817 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.007
+2026-04-26 10:28:10,693 INFO Thread-836 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:28:10,700 INFO Thread-837 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:28:10,702 INFO Thread-836 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.009
+2026-04-26 10:28:10,711 INFO Thread-837 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.011
+2026-04-26 10:28:15,028 INFO Thread-98 Boot final forced fsm=501 mode=0
+2026-04-26 10:28:15,037 INFO Thread-98 Boot calling force_normal_gait()
+2026-04-26 10:28:15,193 INFO Thread-98 Boot state=done message=Secure boot complete; robot is in balanced stand/start mode.
+2026-04-26 10:28:15,778 INFO Thread-858 Callback start name=on_navigation trigger=btn-handshake args=4 kwargs=[]
+2026-04-26 10:28:16,146 INFO Thread-859 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:28:16,153 INFO Thread-859 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.007
+2026-04-26 10:28:16,158 INFO Thread-860 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:28:16,178 INFO Thread-860 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.020
+2026-04-26 10:28:21,153 INFO Thread-880 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:28:21,160 INFO Thread-880 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.007
+2026-04-26 10:28:21,166 INFO Thread-879 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:28:21,179 INFO Thread-879 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.013
+2026-04-26 10:28:25,942 INFO Thread-899 Callback start name=update_info trigger=btn-info-refresh args=2 kwargs=[]
+2026-04-26 10:28:26,654 INFO Thread-902 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:28:26,663 INFO Thread-903 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:28:26,663 INFO Thread-902 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.009
+2026-04-26 10:28:26,681 INFO Thread-903 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.018
+2026-04-26 10:28:26,716 INFO Thread-858 Callback done name=on_navigation trigger=btn-handshake elapsed_s=10.938
+2026-04-26 10:28:31,678 INFO Thread-922 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:28:31,686 INFO Thread-923 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:28:31,689 INFO Thread-922 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.012
+2026-04-26 10:28:31,699 INFO Thread-923 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.014
+2026-04-26 10:28:37,148 INFO Thread-944 Callback start name=update_minimal_intervals trigger=boot-interval args=9 kwargs=[]
+2026-04-26 10:28:37,157 INFO Thread-945 Callback start name=update_boot_status trigger=boot-interval args=3 kwargs=[]
+2026-04-26 10:28:37,158 INFO Thread-944 Callback done name=update_minimal_intervals trigger=boot-interval elapsed_s=0.010
+2026-04-26 10:28:37,165 INFO Thread-945 Callback done name=update_boot_status trigger=boot-interval elapsed_s=0.009
+2026-04-26 10:32:18,039 INFO MainThread Dash robot control log path: /home/unitree/ef_ws/repo/ef_ws/g1/modules/scripts/dash_robot_control.log
+2026-04-26 10:32:26,189 INFO MainThread Dash robot control log path: /home/unitree/ef_ws/repo/ef_ws/g1/modules/scripts/dash_robot_control.log
+2026-04-26 10:33:24,668 INFO MainThread Dash robot control log path: /home/unitree/ef_ws/repo/ef_ws/g1/modules/scripts/dash_robot_control.log
+2026-04-26 10:33:31,664 INFO MainThread Dash robot control log path: /home/unitree/ef_ws/repo/ef_ws/g1/modules/scripts/dash_robot_control.log
+2026-04-26 10:33:54,586 INFO MainThread Dash robot control log path: /home/unitree/ef_ws/repo/ef_ws/g1/modules/scripts/dash_robot_control.log
+2026-04-26 10:33:55,682 ERROR Thread-2 Exception on /_dash-update-component [POST]
+Traceback (most recent call last):
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1493, in _prepare_callback
+    cb = self.callback_map[output]
+KeyError: 'boot-status.children'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 1473, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 882, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 880, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 865, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_get_app.py", line 17, in wrap
+    return ctx.run(func, self, *args, **kwargs)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1596, in dispatch
+    func = self._prepare_callback(g, body)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1527, in _prepare_callback
+    raise KeyError(f"Callback function not found for output '{output}'.") from e
+KeyError: "Callback function not found for output 'boot-status.children'."
+2026-04-26 10:33:55,685 ERROR Thread-1 Exception on /_dash-update-component [POST]
+Traceback (most recent call last):
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 1473, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 882, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 880, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 865, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_get_app.py", line 17, in wrap
+    return ctx.run(func, self, *args, **kwargs)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1601, in dispatch
+    response_data = ctx.run(partial_func)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_callback.py", line 685, in add_context
+    ) = _initialize_context(
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_callback.py", line 346, in _initialize_context
+    func_args, func_kwargs = _validate.validate_and_group_input_args(
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_validate.py", line 144, in validate_and_group_input_args
+    raise exceptions.CallbackException("Inputs do not match callback definition")
+dash.exceptions.CallbackException: Inputs do not match callback definition
+2026-04-26 10:33:56,195 ERROR Thread-3 Exception on /_dash-update-component [POST]
+Traceback (most recent call last):
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 1473, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 882, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 880, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 865, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_get_app.py", line 17, in wrap
+    return ctx.run(func, self, *args, **kwargs)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1601, in dispatch
+    response_data = ctx.run(partial_func)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_callback.py", line 685, in add_context
+    ) = _initialize_context(
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_callback.py", line 346, in _initialize_context
+    func_args, func_kwargs = _validate.validate_and_group_input_args(
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_validate.py", line 144, in validate_and_group_input_args
+    raise exceptions.CallbackException("Inputs do not match callback definition")
+dash.exceptions.CallbackException: Inputs do not match callback definition
+2026-04-26 10:33:56,215 ERROR Thread-4 Exception on /_dash-update-component [POST]
+Traceback (most recent call last):
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1493, in _prepare_callback
+    cb = self.callback_map[output]
+KeyError: 'boot-status.children'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 1473, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 882, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 880, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 865, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_get_app.py", line 17, in wrap
+    return ctx.run(func, self, *args, **kwargs)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1596, in dispatch
+    func = self._prepare_callback(g, body)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1527, in _prepare_callback
+    raise KeyError(f"Callback function not found for output '{output}'.") from e
+KeyError: "Callback function not found for output 'boot-status.children'."
+2026-04-26 10:33:56,652 ERROR Thread-5 Exception on /_dash-update-component [POST]
+Traceback (most recent call last):
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 1473, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 882, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 880, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 865, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_get_app.py", line 17, in wrap
+    return ctx.run(func, self, *args, **kwargs)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1601, in dispatch
+    response_data = ctx.run(partial_func)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_callback.py", line 685, in add_context
+    ) = _initialize_context(
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_callback.py", line 346, in _initialize_context
+    func_args, func_kwargs = _validate.validate_and_group_input_args(
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_validate.py", line 144, in validate_and_group_input_args
+    raise exceptions.CallbackException("Inputs do not match callback definition")
+dash.exceptions.CallbackException: Inputs do not match callback definition
+2026-04-26 10:33:56,669 ERROR Thread-6 Exception on /_dash-update-component [POST]
+Traceback (most recent call last):
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1493, in _prepare_callback
+    cb = self.callback_map[output]
+KeyError: 'boot-status.children'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 1473, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 882, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 880, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 865, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_get_app.py", line 17, in wrap
+    return ctx.run(func, self, *args, **kwargs)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1596, in dispatch
+    func = self._prepare_callback(g, body)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1527, in _prepare_callback
+    raise KeyError(f"Callback function not found for output '{output}'.") from e
+KeyError: "Callback function not found for output 'boot-status.children'."
+2026-04-26 10:33:57,134 ERROR Thread-7 Exception on /_dash-update-component [POST]
+Traceback (most recent call last):
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 1473, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 882, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 880, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 865, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_get_app.py", line 17, in wrap
+    return ctx.run(func, self, *args, **kwargs)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1601, in dispatch
+    response_data = ctx.run(partial_func)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_callback.py", line 685, in add_context
+    ) = _initialize_context(
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_callback.py", line 346, in _initialize_context
+    func_args, func_kwargs = _validate.validate_and_group_input_args(
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_validate.py", line 144, in validate_and_group_input_args
+    raise exceptions.CallbackException("Inputs do not match callback definition")
+dash.exceptions.CallbackException: Inputs do not match callback definition
+2026-04-26 10:33:57,165 ERROR Thread-8 Exception on /_dash-update-component [POST]
+Traceback (most recent call last):
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1493, in _prepare_callback
+    cb = self.callback_map[output]
+KeyError: 'boot-status.children'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 1473, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 882, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 880, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 865, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_get_app.py", line 17, in wrap
+    return ctx.run(func, self, *args, **kwargs)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1596, in dispatch
+    func = self._prepare_callback(g, body)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1527, in _prepare_callback
+    raise KeyError(f"Callback function not found for output '{output}'.") from e
+KeyError: "Callback function not found for output 'boot-status.children'."
+2026-04-26 10:33:57,848 ERROR Thread-9 Exception on /_dash-update-component [POST]
+Traceback (most recent call last):
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 1473, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 882, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 880, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 865, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_get_app.py", line 17, in wrap
+    return ctx.run(func, self, *args, **kwargs)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1601, in dispatch
+    response_data = ctx.run(partial_func)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_callback.py", line 685, in add_context
+    ) = _initialize_context(
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_callback.py", line 346, in _initialize_context
+    func_args, func_kwargs = _validate.validate_and_group_input_args(
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_validate.py", line 144, in validate_and_group_input_args
+    raise exceptions.CallbackException("Inputs do not match callback definition")
+dash.exceptions.CallbackException: Inputs do not match callback definition
+2026-04-26 10:33:58,466 ERROR Thread-10 Exception on /_dash-update-component [POST]
+Traceback (most recent call last):
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1493, in _prepare_callback
+    cb = self.callback_map[output]
+KeyError: 'boot-status.children'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 1473, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 882, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 880, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/flask/app.py", line 865, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/_get_app.py", line 17, in wrap
+    return ctx.run(func, self, *args, **kwargs)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1596, in dispatch
+    func = self._prepare_callback(g, body)
+  File "/home/unitree/ef_ws/ef_ws/lib/python3.8/site-packages/dash/dash.py", line 1527, in _prepare_callback
+    raise KeyError(f"Callback function not found for output '{output}'.") from e
+KeyError: "Callback function not found for output 'boot-status.children'."
+2026-04-26 10:34:00,193 INFO Thread-27 Callback start name=update_info trigger=initial args=2 kwargs=[]
+2026-04-26 10:34:00,214 INFO Thread-28 Callback start name=on_lowlevel_joint_selected trigger=initial args=1 kwargs=[]
+2026-04-26 10:34:00,241 INFO Thread-29 Callback start name=update_logs trigger=initial args=2 kwargs=[]
+2026-04-26 10:34:00,269 INFO Thread-30 Callback start name=update_minimal_intervals trigger=initial args=8 kwargs=[]
+2026-04-26 10:34:02,610 INFO Thread-27 Callback done name=update_info trigger=initial elapsed_s=2.417
+2026-04-26 10:34:02,614 INFO Thread-28 Callback done name=on_lowlevel_joint_selected trigger=initial elapsed_s=2.400
+2026-04-26 10:34:02,617 INFO Thread-29 Callback done name=update_logs trigger=initial elapsed_s=2.376
+2026-04-26 10:34:02,619 INFO Thread-30 Callback done name=update_minimal_intervals trigger=initial elapsed_s=2.350
+2026-04-26 10:34:04,697 INFO Thread-33 Callback start name=on_control trigger=btn-damp args=4 kwargs=[]
+2026-04-26 10:34:04,700 INFO Thread-33 Callback done name=on_control trigger=btn-damp elapsed_s=0.003
+2026-04-26 10:34:08,354 INFO Thread-34 Callback start name=update_boot_status trigger=btn-hanged-boot args=2 kwargs=[]
+2026-04-26 10:34:08,360 INFO Thread-34 Boot callback triggered=btn-hanged-boot hanged_clicks=1 confirm_clicks=None iface=eth0
+2026-04-26 10:34:08,366 INFO Thread-34 Boot start requested iface=eth0 domain_id=0
+2026-04-26 10:34:08,375 INFO Thread-35 Boot worker importing SDK helpers
+2026-04-26 10:34:08,377 INFO Thread-34 Boot thread started name=Thread-35
+2026-04-26 10:34:08,379 INFO Thread-35 Boot worker creating loco client iface=eth0 domain_id=0
+2026-04-26 10:34:08,385 INFO Thread-34 Boot callback snapshot state=running running=True err=None message=Starting secure boot sequence.
+2026-04-26 10:34:08,396 INFO Thread-34 Callback done name=update_boot_status trigger=btn-hanged-boot elapsed_s=0.043
+2026-04-26 10:34:09,207 INFO Thread-35 Boot initial FSM id=1 mode=0
+2026-04-26 10:34:09,213 INFO Thread-35 Boot state=running message=Damping robot before stand-up.
+2026-04-26 10:34:09,217 INFO Thread-35 Boot calling Damp()
+2026-04-26 10:34:09,376 INFO Thread-35 Boot state=running message=Switching to stand-up FSM.
+2026-04-26 10:34:09,385 INFO Thread-35 Boot calling SetFsmId(4)
+2026-04-26 10:34:19,538 INFO Thread-35 Boot state=running message=Raising stand height to 0.02 m.
+2026-04-26 10:34:19,711 INFO Thread-35 Boot height=0.02 fsm=4 mode=0
+2026-04-26 10:34:19,796 INFO Thread-35 Boot state=running message=Raising stand height to 0.04 m.
+2026-04-26 10:34:19,970 INFO Thread-35 Boot height=0.04 fsm=4 mode=0
+2026-04-26 10:34:20,035 INFO Thread-35 Boot state=running message=Raising stand height to 0.06 m.
+2026-04-26 10:34:20,197 INFO Thread-35 Boot height=0.06 fsm=4 mode=0
+2026-04-26 10:34:20,266 INFO Thread-35 Boot state=running message=Raising stand height to 0.08 m.
+2026-04-26 10:34:20,423 INFO Thread-35 Boot height=0.08 fsm=4 mode=0
+2026-04-26 10:34:20,484 INFO Thread-35 Boot state=running message=Raising stand height to 0.10 m.
+2026-04-26 10:34:20,620 INFO Thread-35 Boot height=0.10 fsm=4 mode=0
+2026-04-26 10:34:20,688 INFO Thread-35 Boot state=running message=Raising stand height to 0.12 m.
+2026-04-26 10:34:20,855 INFO Thread-35 Boot height=0.12 fsm=4 mode=0
+2026-04-26 10:34:20,932 INFO Thread-35 Boot state=running message=Raising stand height to 0.14 m.
+2026-04-26 10:34:21,121 INFO Thread-35 Boot height=0.14 fsm=4 mode=0
+2026-04-26 10:34:21,190 INFO Thread-35 Boot state=running message=Raising stand height to 0.16 m.
+2026-04-26 10:34:21,346 INFO Thread-35 Boot height=0.16 fsm=4 mode=0
+2026-04-26 10:34:21,414 INFO Thread-35 Boot state=running message=Raising stand height to 0.18 m.
+2026-04-26 10:34:21,581 INFO Thread-35 Boot height=0.18 fsm=4 mode=0
+2026-04-26 10:34:21,654 INFO Thread-35 Boot state=running message=Raising stand height to 0.20 m.
+2026-04-26 10:34:21,871 INFO Thread-35 Boot height=0.20 fsm=4 mode=0
+2026-04-26 10:34:21,975 INFO Thread-35 Boot state=running message=Raising stand height to 0.22 m.
+2026-04-26 10:34:27,261 INFO Thread-36 Callback start name=update_boot_status trigger=btn-boot-enter args=2 kwargs=[]
+2026-04-26 10:34:27,270 INFO Thread-36 Boot callback triggered=btn-boot-enter hanged_clicks=1 confirm_clicks=1 iface=eth0
+2026-04-26 10:34:27,274 INFO Thread-36 Boot confirm requested
+2026-04-26 10:34:27,281 INFO Thread-36 Boot confirm ignored state=running
+2026-04-26 10:34:27,287 INFO Thread-36 Boot callback snapshot state=running running=True err=None message=Confirmation ignored; boot is not waiting yet (state=running).
+2026-04-26 10:34:27,292 INFO Thread-36 Callback done name=update_boot_status trigger=btn-boot-enter elapsed_s=0.030
+2026-04-26 10:34:32,127 INFO Thread-35 Boot height=0.22 fsm=None mode=0
+2026-04-26 10:34:32,221 INFO Thread-35 Boot state=running message=Raising stand height to 0.24 m.
+2026-04-26 10:34:52,400 INFO Thread-35 Boot height=0.24 fsm=None mode=None
+2026-04-26 10:34:52,476 INFO Thread-35 Boot state=running message=Raising stand height to 0.26 m.
+2026-04-26 10:34:52,682 INFO Thread-35 Boot height=0.26 fsm=4 mode=0
+2026-04-26 10:35:02,746 INFO Thread-35 Boot sweep complete height=0.26 fsm=None mode=0
+2026-04-26 10:35:02,754 INFO Thread-35 Boot state=running message=Feet still unloaded; resetting stand height.
+2026-04-26 10:35:02,759 INFO Thread-35 Boot calling SetStandHeight(0.0)
+2026-04-26 10:35:12,771 INFO Thread-35 Boot waiting for dashboard confirmation: Adjust the hanger height, then press Confirm balanced stand in the dashboard.
+2026-04-26 10:35:12,778 INFO Thread-35 Boot state=waiting message=Adjust the hanger height, then press Confirm balanced stand in the dashboard.
+2026-04-26 10:35:17,270 INFO Thread-37 Callback start name=update_boot_status trigger=btn-boot-enter args=2 kwargs=[]
+2026-04-26 10:35:17,276 INFO Thread-37 Boot callback triggered=btn-boot-enter hanged_clicks=1 confirm_clicks=2 iface=eth0
+2026-04-26 10:35:17,281 INFO Thread-37 Boot confirm requested
+2026-04-26 10:35:17,285 INFO Thread-37 Boot confirmation accepted
+2026-04-26 10:35:17,287 INFO Thread-35 Boot dashboard confirmation received
+2026-04-26 10:35:17,292 INFO Thread-37 Boot callback snapshot state=running running=True err=None message=Dashboard confirmation received; continuing boot sequence.
+2026-04-26 10:35:17,311 INFO Thread-37 Callback done name=update_boot_status trigger=btn-boot-enter elapsed_s=0.041
+2026-04-26 10:35:27,310 INFO Thread-35 Boot state=running message=Raising stand height to 0.02 m.
+2026-04-26 10:35:27,466 INFO Thread-35 Boot height=0.02 fsm=4 mode=0
+2026-04-26 10:35:27,522 INFO Thread-35 Boot state=running message=Raising stand height to 0.04 m.
+2026-04-26 10:35:27,679 INFO Thread-35 Boot height=0.04 fsm=4 mode=0
+2026-04-26 10:35:27,741 INFO Thread-35 Boot state=running message=Raising stand height to 0.06 m.
+2026-04-26 10:35:27,915 INFO Thread-35 Boot height=0.06 fsm=4 mode=0
+2026-04-26 10:35:27,976 INFO Thread-35 Boot state=running message=Raising stand height to 0.08 m.
+2026-04-26 10:35:28,147 INFO Thread-35 Boot height=0.08 fsm=4 mode=0
+2026-04-26 10:35:28,213 INFO Thread-35 Boot state=running message=Raising stand height to 0.10 m.
+2026-04-26 10:35:28,389 INFO Thread-35 Boot height=0.10 fsm=4 mode=0
+2026-04-26 10:35:28,455 INFO Thread-35 Boot state=running message=Raising stand height to 0.12 m.
+2026-04-26 10:35:28,629 INFO Thread-35 Boot height=0.12 fsm=4 mode=0
+2026-04-26 10:35:28,708 INFO Thread-35 Boot state=running message=Raising stand height to 0.14 m.
+2026-04-26 10:35:28,935 INFO Thread-35 Boot height=0.14 fsm=4 mode=0
+2026-04-26 10:35:29,027 INFO Thread-35 Boot state=running message=Raising stand height to 0.16 m.
+2026-04-26 10:35:29,224 INFO Thread-35 Boot height=0.16 fsm=4 mode=0
+2026-04-26 10:35:29,292 INFO Thread-35 Boot state=running message=Raising stand height to 0.18 m.
+2026-04-26 10:35:29,467 INFO Thread-35 Boot height=0.18 fsm=4 mode=0
+2026-04-26 10:35:29,537 INFO Thread-35 Boot state=running message=Raising stand height to 0.20 m.
+2026-04-26 10:35:29,702 INFO Thread-35 Boot height=0.20 fsm=4 mode=0
+2026-04-26 10:35:29,762 INFO Thread-35 Boot state=running message=Raising stand height to 0.22 m.
+2026-04-26 10:35:29,925 INFO Thread-35 Boot height=0.22 fsm=4 mode=0
+2026-04-26 10:35:30,074 INFO Thread-35 Boot sweep complete height=0.22 fsm=4 mode=0
+2026-04-26 10:35:30,081 INFO Thread-35 Boot waiting for dashboard confirmation: Robot appears loaded. Press Confirm balanced stand to command BalanceStand.
+2026-04-26 10:35:30,086 INFO Thread-35 Boot state=waiting message=Robot appears loaded. Press Confirm balanced stand to command BalanceStand.
+2026-04-26 10:35:34,817 INFO Thread-38 Callback start name=update_boot_status trigger=btn-boot-enter args=2 kwargs=[]
+2026-04-26 10:35:34,826 INFO Thread-38 Boot callback triggered=btn-boot-enter hanged_clicks=1 confirm_clicks=3 iface=eth0
+2026-04-26 10:35:34,832 INFO Thread-38 Boot confirm requested
+2026-04-26 10:35:34,837 INFO Thread-38 Boot confirmation accepted
+2026-04-26 10:35:34,840 INFO Thread-35 Boot dashboard confirmation received
+2026-04-26 10:35:34,841 INFO Thread-38 Boot callback snapshot state=running running=True err=None message=Dashboard confirmation received; continuing boot sequence.
+2026-04-26 10:35:34,848 INFO Thread-35 Boot calling SetFsmId(501) after dashboard confirmation
+2026-04-26 10:35:34,858 INFO Thread-38 Callback done name=update_boot_status trigger=btn-boot-enter elapsed_s=0.041
+2026-04-26 10:35:35,048 INFO Thread-35 Boot after SetFsmId(501) fsm=501 mode=1
+2026-04-26 10:35:35,055 INFO Thread-35 Boot calling BalanceStand(0)
+2026-04-26 10:35:39,694 INFO Thread-39 Callback start name=toggle_joysticks trigger=btn-joystick-toggle args=2 kwargs=[]
+2026-04-26 10:35:39,703 INFO Thread-39 Callback done name=toggle_joysticks trigger=btn-joystick-toggle elapsed_s=0.009
+2026-04-26 10:35:39,747 INFO Thread-40 Callback start name=update_minimal_intervals trigger=joystick-enabled args=8 kwargs=[]
+2026-04-26 10:35:39,755 INFO Thread-40 Callback done name=update_minimal_intervals trigger=joystick-enabled elapsed_s=0.008
+2026-04-26 10:35:45,061 INFO Thread-35 Boot calling SetStandHeight(0.22)
+2026-04-26 10:35:55,071 INFO Thread-35 Boot calling Start()
+2026-04-26 10:35:55,426 INFO Thread-41 Callback start name=toggle_joysticks trigger=btn-joystick-toggle args=2 kwargs=[]
+2026-04-26 10:35:55,438 INFO Thread-41 Callback done name=toggle_joysticks trigger=btn-joystick-toggle elapsed_s=0.012
+2026-04-26 10:35:55,488 INFO Thread-42 Callback start name=update_minimal_intervals trigger=joystick-enabled args=8 kwargs=[]
+2026-04-26 10:35:55,493 INFO Thread-42 Callback done name=update_minimal_intervals trigger=joystick-enabled elapsed_s=0.005
+2026-04-26 10:35:56,016 INFO Thread-43 Callback start name=toggle_joysticks trigger=btn-joystick-toggle args=2 kwargs=[]
+2026-04-26 10:35:56,027 INFO Thread-43 Callback done name=toggle_joysticks trigger=btn-joystick-toggle elapsed_s=0.011
+2026-04-26 10:35:56,192 INFO Thread-44 Callback start name=update_minimal_intervals trigger=joystick-enabled args=8 kwargs=[]
+2026-04-26 10:35:56,205 INFO Thread-44 Callback done name=update_minimal_intervals trigger=joystick-enabled elapsed_s=0.013
+2026-04-26 10:35:56,709 INFO Thread-45 Callback start name=toggle_joysticks trigger=btn-joystick-toggle args=2 kwargs=[]
+2026-04-26 10:35:56,720 INFO Thread-45 Callback done name=toggle_joysticks trigger=btn-joystick-toggle elapsed_s=0.011
+2026-04-26 10:35:56,764 INFO Thread-46 Callback start name=update_minimal_intervals trigger=joystick-enabled args=8 kwargs=[]
+2026-04-26 10:35:56,769 INFO Thread-46 Callback done name=update_minimal_intervals trigger=joystick-enabled elapsed_s=0.006
+2026-04-26 10:36:05,080 INFO Thread-35 Boot calling SetFsmId(501) after Start()
+2026-04-26 10:36:16,778 INFO Thread-47 Callback start name=toggle_joysticks trigger=btn-joystick-toggle args=2 kwargs=[]
+2026-04-26 10:36:16,790 INFO Thread-47 Callback done name=toggle_joysticks trigger=btn-joystick-toggle elapsed_s=0.012
+2026-04-26 10:36:16,836 INFO Thread-48 Callback start name=update_minimal_intervals trigger=joystick-enabled args=8 kwargs=[]
+2026-04-26 10:36:16,841 INFO Thread-48 Callback done name=update_minimal_intervals trigger=joystick-enabled elapsed_s=0.006
+2026-04-26 10:36:35,406 INFO Thread-35 Boot final forced fsm=501 mode=None
+2026-04-26 10:36:35,414 INFO Thread-35 Boot calling force_normal_gait()

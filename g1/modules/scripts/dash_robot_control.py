@@ -1075,6 +1075,10 @@ def get_robot() -> Robot | None:
 
 
 def _robot_move(robot: Robot, vx: float, vy: float, vyaw: float) -> int:
+    client = getattr(robot, "_client", None)
+    if client is not None and hasattr(client, "Move"):
+        result = client.Move(float(vx), float(vy), float(vyaw), continous_move=False)
+        return 0 if result is None else int(result)
     if hasattr(robot, "loco_move"):
         return int(robot.loco_move(vx, vy, vyaw))
     if hasattr(robot, "move"):
@@ -2295,7 +2299,6 @@ app.layout = dbc.Container(
         dcc.Interval(id="lidar-interval", interval=1000, n_intervals=0, disabled=True),
         dcc.Interval(id="rgb-interval", interval=500, n_intervals=0, disabled=True),
         dcc.Interval(id="depth-interval", interval=500, n_intervals=0, disabled=True),
-        dcc.Interval(id="boot-interval", interval=500, n_intervals=0),
         dcc.Interval(id="lowlevel-interval", interval=500, n_intervals=0, disabled=True),
         dcc.Interval(id="grip-interval", interval=500, n_intervals=0, disabled=True),
         dcc.Interval(id="logs-interval", interval=1000, n_intervals=0, disabled=True),
@@ -2351,7 +2354,6 @@ def _toggle_state(enabled: bool, label: str) -> tuple[bool, str, str]:
     Output("lowlevel-interval", "disabled"),
     Output("grip-interval", "disabled"),
     Output("slam-interval", "disabled"),
-    Input("boot-interval", "n_intervals"),
     Input("joystick-enabled", "data"),
     Input("rgb-enabled", "data"),
     Input("depth-enabled", "data"),
@@ -2362,7 +2364,6 @@ def _toggle_state(enabled: bool, label: str) -> tuple[bool, str, str]:
     Input("slam-enabled", "data"),
 )
 def update_minimal_intervals(
-    _boot_tick: int,
     joystick_enabled: bool,
     rgb_enabled: bool,
     depth_enabled: bool,
@@ -2501,15 +2502,21 @@ def toggle_slam(_clicks: int | None, enabled: bool) -> tuple[bool, str, str]:
 
 @app.callback(
     Output("boot-status", "children"),
-    Input("boot-interval", "n_intervals"),
+    Output("locomotion-interval", "disabled", allow_duplicate=True),
+    Output("rgb-interval", "disabled", allow_duplicate=True),
+    Output("depth-interval", "disabled", allow_duplicate=True),
+    Output("lidar-interval", "disabled", allow_duplicate=True),
+    Output("lowlevel-interval", "disabled", allow_duplicate=True),
+    Output("grip-interval", "disabled", allow_duplicate=True),
+    Output("slam-interval", "disabled", allow_duplicate=True),
     Input("btn-hanged-boot", "n_clicks"),
     Input("btn-boot-enter", "n_clicks"),
+    prevent_initial_call=True,
 )
 def update_boot_status(
-    _tick: int,
     _hanged_boot: int | None,
     _boot_enter_btn: int | None,
-) -> str:
+) -> tuple[str, bool, bool, bool, bool, bool, bool, bool]:
     trigger = dash.ctx.triggered_id
     if trigger in {"btn-hanged-boot", "btn-boot-enter"}:
         LOGGER.info(
@@ -2528,10 +2535,12 @@ def update_boot_status(
     if trigger in {"btn-hanged-boot", "btn-boot-enter"}:
         LOGGER.info("Boot callback snapshot state=%s running=%s err=%s message=%s", state, running, err, message)
     if err:
-        return f"Boot: error | {message} | log={LOG_PATH}"
-    if running or state != "idle":
-        return f"Boot: {state} | {message} | log={LOG_PATH}"
-    return ""
+        status = f"Boot: error | {message} | log={LOG_PATH}"
+    elif running or state != "idle":
+        status = f"Boot: {state} | {message} | log={LOG_PATH}"
+    else:
+        status = ""
+    return status, True, True, True, True, True, True, True
 
 
 @app.callback(
@@ -2555,29 +2564,33 @@ def on_control(
     if boot_msg:
         return boot_msg, "warning", "Dashboard controls are paused while secure boot has priority."
 
-    robot = get_robot()
-    if robot is None:
-        return f"Robot init failed: {ROBOT_INIT_ERR}", "danger", "No robot instance available."
-
-    try:
+    def _action() -> None:
+        robot = get_robot()
+        if robot is None:
+            raise RuntimeError(f"Robot init failed: {ROBOT_INIT_ERR}")
         if trigger == "btn-damp":
             robot.fsm_1_damp()
-            return "Damp command sent.", "warning", "FSM set to damp mode."
-        if trigger == "btn-zero":
+        elif trigger == "btn-zero":
             robot.fsm_0_zt()
-            return "Zero torque command sent.", "danger", "FSM set to zero torque."
-        if trigger == "btn-stop":
+        elif trigger == "btn-stop":
             robot.stop()
-            return "Stop command sent.", "secondary", "Robot motion stopped."
-        if trigger == "gait-toggle":
-            if gait_value == "run":
-                robot.set_gait_type(1)
-                return "Gait switched to run.", "primary", "Set gait type to run (1)."
-            robot.set_gait_type(0)
-            return "Gait switched to walk.", "primary", "Set gait type to walk (0)."
-    except Exception as exc:
-        LOGGER.exception("Control command failed trigger=%s", trigger)
-        return f"Command failed: {exc}", "danger", str(exc)
+        elif trigger == "gait-toggle":
+            robot.set_gait_type(1 if gait_value == "run" else 0)
+
+    if trigger == "btn-damp":
+        _run_robot_background("control-damp", _action)
+        return "Damp command queued.", "warning", "FSM damp command queued."
+    if trigger == "btn-zero":
+        _run_robot_background("control-zero", _action)
+        return "Zero torque command queued.", "danger", "FSM zero torque command queued."
+    if trigger == "btn-stop":
+        _run_robot_background("control-stop", _action)
+        return "Stop command queued.", "secondary", "Robot stop command queued."
+    if trigger == "gait-toggle":
+        _run_robot_background("control-gait", _action)
+        if gait_value == "run":
+            return "Gait switch queued.", "primary", "Set gait type to run (1) queued."
+        return "Gait switch queued.", "primary", "Set gait type to walk (0) queued."
 
     return "Ready", "secondary", "No action taken."
 
@@ -2607,14 +2620,18 @@ def on_navigation(
 
     try:
         if trigger == "btn-handshake":
-            robot = get_robot()
-            if robot is None:
-                return f"Robot init failed: {ROBOT_INIT_ERR}"
-            loco = getattr(robot, "_client", None)
-            if loco is None or not hasattr(loco, "ShakeHand"):
-                raise AttributeError("Current locomotion client does not support ShakeHand().")
-            rc = getattr(loco, "ShakeHand")()
-            return f"Handshake command sent, rc={rc}."
+            def _handshake() -> None:
+                robot = get_robot()
+                if robot is None:
+                    raise RuntimeError(f"Robot init failed: {ROBOT_INIT_ERR}")
+                loco = getattr(robot, "_client", None)
+                if loco is None or not hasattr(loco, "ShakeHand"):
+                    raise AttributeError("Current locomotion client does not support ShakeHand().")
+                rc = getattr(loco, "ShakeHand")()
+                LOGGER.info("Handshake command completed rc=%s", rc)
+
+            _run_robot_background("nav-handshake", _handshake)
+            return "Handshake command queued."
         if trigger == "btn-nav-stop":
             NAV_WORKER.stop_async()
             return "stop() queued."
