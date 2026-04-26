@@ -76,6 +76,8 @@ WAIST_JOINTS = [12, 13, 14]
 RIGHT_ARM_JOINTS = [22, 23, 24, 25, 26, 27, 28]
 UPPER_BODY_JOINTS = WAIST_JOINTS + LEFT_ARM_JOINTS + RIGHT_ARM_JOINTS
 ARM_SDK_NOT_USED_IDX = 29
+WAIST_HOLD_KP = 240.0
+WAIST_HOLD_KD = 12.0
 BODY_JOINT_LAYOUT: list[tuple[str, int, str]] = [
     ("left_leg", 0, "hip_pitch"),
     ("left_leg", 1, "hip_roll"),
@@ -151,17 +153,20 @@ class _ArmSdkPublisher:
         *,
         kp: float = 30.0,
         kd: float = 1.5,
+        kp_by_joint: dict[int, float] | None = None,
+        kd_by_joint: dict[int, float] | None = None,
         dq: float = 0.0,
         tau: float = 0.0,
     ) -> None:
         for joint_index, target in joint_targets.items():
+            idx = int(joint_index)
             mc = self._cmd.motor_cmd[int(joint_index)]
             mc.mode = 1
             mc.q = float(target)
             mc.dq = float(dq)
             mc.tau = float(tau)
-            mc.kp = float(kp)
-            mc.kd = float(kd)
+            mc.kp = float(kp_by_joint.get(idx, kp) if kp_by_joint is not None else kp)
+            mc.kd = float(kd_by_joint.get(idx, kd) if kd_by_joint is not None else kd)
         self._cmd.crc = self._crc.Crc(self._cmd)
         self._pub.Write(self._cmd)
 
@@ -578,6 +583,192 @@ class Robot:
             values[int(joint_index)] = float(value)
         return values
 
+    @staticmethod
+    def _with_upper_body_hold(
+        joint_targets: dict[int, float],
+        upper_body_positions: dict[int, float],
+    ) -> dict[int, float]:
+        targets = {
+            int(joint_index): float(upper_body_positions[int(joint_index)])
+            for joint_index in UPPER_BODY_JOINTS
+        }
+        for joint_index, value in joint_targets.items():
+            targets[int(joint_index)] = float(value)
+        return targets
+
+    def _publish_with_upper_body_hold(
+        self,
+        joint_targets: dict[int, float],
+        upper_body_positions: dict[int, float],
+        *,
+        kp: float = 30.0,
+        kd: float = 1.5,
+        waist_kp: float = WAIST_HOLD_KP,
+        waist_kd: float = WAIST_HOLD_KD,
+    ) -> None:
+        targets = self._with_upper_body_hold(joint_targets, upper_body_positions)
+        waist_gains = {joint_index: float(waist_kp) for joint_index in WAIST_JOINTS}
+        waist_damping = {joint_index: float(waist_kd) for joint_index in WAIST_JOINTS}
+        self._get_arm_sdk().publish_targets(
+            targets,
+            kp=kp,
+            kd=kd,
+            kp_by_joint=waist_gains,
+            kd_by_joint=waist_damping,
+        )
+
+    def move_upper_body_joint(
+        self,
+        joint_index: int,
+        target: float,
+        *,
+        command_rate_hz: float = 50.0,
+        max_speed_rad_s: float = 0.45,
+        kp: float = 30.0,
+        kd: float = 1.5,
+        waist_kp: float = WAIST_HOLD_KP,
+        waist_kd: float = WAIST_HOLD_KD,
+        timeout: float = 3.0,
+    ) -> dict[str, Any]:
+        joint = int(joint_index)
+        if joint not in UPPER_BODY_JOINTS:
+            raise ValueError("joint_index must be a waist or arm joint.")
+        positions = self._read_joint_positions_or_raise(UPPER_BODY_JOINTS, timeout=timeout)
+        start = float(positions[joint])
+        stop = float(target)
+        steps = max(
+            1,
+            int(abs(stop - start) / max(0.01, float(max_speed_rad_s)) * max(1.0, float(command_rate_hz))),
+        )
+        dt = 1.0 / max(1.0, float(command_rate_hz))
+        for step_idx in range(1, steps + 1):
+            alpha = float(step_idx) / float(steps)
+            value = start + (stop - start) * alpha
+            self._publish_with_upper_body_hold(
+                {joint: value},
+                positions,
+                kp=kp,
+                kd=kd,
+                waist_kp=waist_kp,
+                waist_kd=waist_kd,
+            )
+            time.sleep(dt)
+        return {
+            "joint_index": joint,
+            "joint_name": BODY_JOINT_NAME_BY_INDEX[joint],
+            "start": start,
+            "target": stop,
+            "command_rate_hz": float(command_rate_hz),
+            "max_speed_rad_s": float(max_speed_rad_s),
+        }
+
+    def extend_arm_forward(
+        self,
+        *,
+        arm: str = "right",
+        duration_s: float = 4.0,
+        command_rate_hz: float = 50.0,
+        kp: float = 30.0,
+        kd: float = 1.5,
+        waist_kp: float = WAIST_HOLD_KP,
+        waist_kd: float = WAIST_HOLD_KD,
+        timeout: float = 3.0,
+        shoulder_roll_delta: float = 0.50,
+        shoulder_roll_restore_fraction: float = 0.45,
+        shoulder_pitch_delta: float = 0.35,
+        elbow_delta: float = 0.90,
+        wrist_roll_delta: float = 0.25,
+        wrist_pitch_delta: float = 0.75,
+    ) -> dict[str, Any]:
+        side = str(arm).strip().lower()
+        if side not in ("left", "right"):
+            raise ValueError("arm must be 'left' or 'right'.")
+        arm_joints = LEFT_ARM_JOINTS if side == "left" else RIGHT_ARM_JOINTS
+        roll_delta = abs(float(shoulder_roll_delta)) if side == "left" else -abs(float(shoulder_roll_delta))
+        pitch_delta = -abs(float(shoulder_pitch_delta))
+        elbow_delta_signed = -abs(float(elbow_delta))
+        wrist_roll_delta_signed = abs(float(wrist_roll_delta))
+        wrist_pitch_delta_signed = -abs(float(wrist_pitch_delta))
+        joint_limits = {
+            arm_joints[0]: (-3.0892, 2.6704),
+            arm_joints[1]: (-1.5882, 2.2515) if side == "left" else (-2.2515, 1.5882),
+            arm_joints[3]: (-1.0472, 2.0944),
+            arm_joints[4]: (-1.9722, 1.9722),
+            arm_joints[5]: (-1.6144, 1.6144),
+        }
+
+        def clamp_joint(joint_index: int, value: float) -> float:
+            lo, hi = joint_limits[int(joint_index)]
+            return max(lo, min(hi, float(value)))
+
+        initial_positions = self._read_joint_positions_or_raise(UPPER_BODY_JOINTS, timeout=timeout)
+        start_pose = [initial_positions[joint_index] for joint_index in arm_joints]
+
+        steps = max(1, int(max(0.02, float(duration_s)) * max(1.0, float(command_rate_hz))))
+        dt = 1.0 / max(1.0, float(command_rate_hz))
+        stage_1_steps = max(1, steps // 4)
+        stage_2_steps = max(1, steps // 4)
+        stage_3_steps = max(1, steps // 4)
+        stage_4_steps = max(1, steps - stage_1_steps - stage_2_steps - stage_3_steps)
+
+        roll_pose = list(start_pose)
+        roll_pose[1] = clamp_joint(arm_joints[1], float(start_pose[1]) + roll_delta)
+
+        pitch_pose = list(roll_pose)
+        pitch_pose[0] = clamp_joint(arm_joints[0], float(start_pose[0]) + pitch_delta)
+
+        restored_roll_pose = list(pitch_pose)
+        restore_fraction = max(0.0, min(1.0, float(shoulder_roll_restore_fraction)))
+        restored_roll_pose[1] = clamp_joint(
+            arm_joints[1],
+            float(roll_pose[1]) - (roll_delta * restore_fraction),
+        )
+
+        target_pose = list(restored_roll_pose)
+        target_pose[3] = clamp_joint(arm_joints[3], float(start_pose[3]) + elbow_delta_signed)
+        target_pose[4] = clamp_joint(arm_joints[4], float(start_pose[4]) + wrist_roll_delta_signed)
+        target_pose[5] = clamp_joint(arm_joints[5], float(start_pose[5]) + wrist_pitch_delta_signed)
+        stages = [
+            (start_pose, roll_pose, stage_1_steps, "shoulder_roll_clearance"),
+            (roll_pose, pitch_pose, stage_2_steps, "shoulder_pitch_forward"),
+            (pitch_pose, restored_roll_pose, stage_3_steps, "partial_shoulder_roll_restore"),
+            (restored_roll_pose, target_pose, stage_4_steps, "elbow_and_wrist_pitch"),
+        ]
+
+        for stage_start, stage_target, stage_steps, _stage_name in stages:
+            for step_idx in range(1, stage_steps + 1):
+                alpha = float(step_idx) / float(stage_steps)
+                arm_pose = [
+                    (1.0 - alpha) * float(start_q) + alpha * float(target_q)
+                    for start_q, target_q in zip(stage_start, stage_target)
+                ]
+                joint_targets = {
+                    joint_index: pose_value
+                    for joint_index, pose_value in zip(arm_joints, arm_pose)
+                }
+                self._publish_with_upper_body_hold(
+                    joint_targets,
+                    initial_positions,
+                    kp=kp,
+                    kd=kd,
+                    waist_kp=waist_kp,
+                    waist_kd=waist_kd,
+                )
+                time.sleep(dt)
+
+        return {
+            "arm": side,
+            "start_pose": start_pose,
+            "clearance_pose": roll_pose,
+            "forward_pose": pitch_pose,
+            "restored_roll_pose": restored_roll_pose,
+            "target_pose": target_pose,
+            "joint_names": [BODY_JOINT_NAME_BY_INDEX[joint_index] for joint_index in arm_joints],
+            "stages": [stage_name for _start, _target, _steps, stage_name in stages],
+            "command_rate_hz": float(command_rate_hz),
+            "duration_s": float(duration_s),
+        }
+
     def extend_right_arm_forward(
         self,
         *,
@@ -587,43 +778,14 @@ class Robot:
         kd: float = 1.5,
         timeout: float = 3.0,
     ) -> dict[str, Any]:
-        initial_positions = self._read_joint_positions_or_raise(UPPER_BODY_JOINTS, timeout=timeout)
-        start_pose = [initial_positions[joint_index] for joint_index in RIGHT_ARM_JOINTS]
-        target_pose = list(start_pose)
-        # Open the elbow while keeping the waist under balanced-stand control.
-        target_pose[3] = 0.03
-        target_pose[1] = min(float(target_pose[1]) + 0.25, 0.25)
-        target_pose[2] = 0.0
-        target_pose[4] = 0.0
-        target_pose[5] = 0.0
-        target_pose[6] = 0.0
-
-        steps = max(1, int(max(0.02, float(duration_s)) * max(1.0, float(command_rate_hz))))
-        dt = 1.0 / max(1.0, float(command_rate_hz))
-        arm_sdk = self._get_arm_sdk()
-        for step_idx in range(1, steps + 1):
-            alpha = float(step_idx) / float(steps)
-            right_arm_pose = [
-                (1.0 - alpha) * float(start_q) + alpha * float(target_q)
-                for start_q, target_q in zip(start_pose, target_pose)
-            ]
-            joint_targets = dict(initial_positions)
-            for joint_index, pose_value in zip(RIGHT_ARM_JOINTS, right_arm_pose):
-                joint_targets[joint_index] = pose_value
-            arm_sdk.publish_targets(
-                joint_targets,
-                kp=kp,
-                kd=kd,
-            )
-            time.sleep(dt)
-
-        return {
-            "start_pose": start_pose,
-            "target_pose": target_pose,
-            "joint_names": [BODY_JOINT_NAME_BY_INDEX[joint_index] for joint_index in RIGHT_ARM_JOINTS],
-            "command_rate_hz": float(command_rate_hz),
-            "duration_s": float(duration_s),
-        }
+        return self.extend_arm_forward(
+            arm="right",
+            duration_s=duration_s,
+            command_rate_hz=command_rate_hz,
+            kp=kp,
+            kd=kd,
+            timeout=timeout,
+        )
 
     def get_odom(self) -> Any | None:
         if self._odom_sub is None:
@@ -1601,6 +1763,32 @@ class Robot:
         ramp_s: float | None = None,
     ) -> None:
         self._get_hand(hand).close(hold_s=hold_s, rate_hz=rate_hz, ramp_s=ramp_s)
+
+    def release_fingers(
+        self,
+        hand: str = "right",
+        hold_s: float = 0.5,
+        rate_hz: float = 50.0,
+        persistent: bool = True,
+    ) -> None:
+        side = str(hand).strip().lower()
+        if side == "both":
+            for each_hand in ("left", "right"):
+                self._get_hand(each_hand).release_fingers(
+                    hold_s=hold_s,
+                    rate_hz=rate_hz,
+                    persistent=persistent,
+                )
+            return
+        self._get_hand(side).release_fingers(hold_s=hold_s, rate_hz=rate_hz, persistent=persistent)
+
+    def stop_release_fingers(self, hand: str = "both") -> None:
+        side = str(hand).strip().lower()
+        if side == "both":
+            for each_hand in ("left", "right"):
+                self._get_hand(each_hand).stop_release_fingers()
+            return
+        self._get_hand(side).stop_release_fingers()
 
     def hand_pose(
         self,

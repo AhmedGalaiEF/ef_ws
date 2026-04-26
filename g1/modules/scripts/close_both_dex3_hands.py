@@ -21,10 +21,11 @@ try:
     from unitree_sdk2py.idl.unitree_hg.msg.dds_ import HandState_
     from sdk_hand import (
         Dex3HandController,
-        HAND_CLOSED,
         HAND_MAX_LIMITS,
         HAND_MIN_LIMITS,
-        HAND_OPEN,
+        HAND_THUMB_0_HOLD_TARGETS,
+        hand_closed_targets,
+        hand_open_targets,
     )
 except ImportError as exc:
     raise SystemExit(
@@ -92,7 +93,9 @@ def clamp_targets(hand: str, targets: list[float]) -> list[float]:
 
 
 def mirror_right_to_left(targets: list[float]) -> list[float]:
-    return [-float(value) for value in targets]
+    mirrored = [-float(value) for value in targets]
+    mirrored[0] = HAND_THUMB_0_HOLD_TARGETS["left"]
+    return mirrored
 
 
 class HandStateSubscriber:
@@ -153,7 +156,7 @@ def save_calibrated_right_closed(path: str, targets: list[float], args: argparse
         "domain_id": int(args.domain_id),
         "right_closed": clamp_targets("right", targets),
         "left_closed": clamp_targets("left", mirror_right_to_left(targets)),
-        "note": "left_closed is mirrored from right_closed and clipped to left-hand limits",
+        "note": "left_closed mirrors right_closed except thumb_0, then clips to left-hand limits",
     }
     with open(path, "w", encoding="utf-8") as handle:
         json.dump(payload, handle, indent=2)
@@ -183,40 +186,11 @@ def capture_right_closed(args: argparse.Namespace) -> int:
 
 
 def open_targets(hand: str) -> list[float]:
-    if hand == "right":
-        return clamp_targets(hand, list(HAND_OPEN))
-
-    # Mirror the right-hand open sample for the left hand.
-    mirrored = [
-        -HAND_OPEN[0],
-        HAND_OPEN[1],
-        HAND_OPEN[2],
-        -HAND_OPEN[3],
-        HAND_OPEN[4],
-        -HAND_OPEN[5],
-        HAND_OPEN[6],
-    ]
-    return clamp_targets(hand, mirrored)
+    return clamp_targets(hand, hand_open_targets(hand))
 
 
 def fallback_closed_targets(hand: str) -> list[float]:
-    if hand == "left":
-        mirrored = list(HAND_CLOSED)
-        mirrored[0] = -mirrored[0]
-        return clamp_targets(hand, mirrored)
-
-    # HAND_CLOSED matches the left finger curl signs except for thumb rotation.
-    # Mirror the signed finger joints for the right hand.
-    mirrored = [
-        HAND_CLOSED[0],
-        -HAND_CLOSED[1],
-        -HAND_CLOSED[2],
-        -HAND_CLOSED[3],
-        -HAND_CLOSED[4],
-        -HAND_CLOSED[5],
-        -HAND_CLOSED[6],
-    ]
-    return clamp_targets(hand, mirrored)
+    return clamp_targets(hand, hand_closed_targets(hand))
 
 
 def closed_targets(hand: str, calibrated_right_closed: list[float] | None) -> list[float]:

@@ -426,18 +426,18 @@ class _LowLevelJointController:
 LOWLEVEL_CONTROLLER = _LowLevelJointController()
 
 
-def _load_hand_sdk() -> tuple[type, list[float], list[float]]:
+def _load_hand_sdk() -> tuple[type, Any]:
     try:
-        from sdk_hand import Dex3HandController, HAND_CLOSED, HAND_OPEN
+        from sdk_hand import Dex3HandController, hand_grip_targets
 
-        return Dex3HandController, list(HAND_OPEN), list(HAND_CLOSED)
+        return Dex3HandController, hand_grip_targets
     except Exception:
         modules_dir = Path(__file__).resolve().parents[1]
         if str(modules_dir) not in sys.path:
             sys.path.insert(0, str(modules_dir))
-        from sdk_hand import Dex3HandController, HAND_CLOSED, HAND_OPEN
+        from sdk_hand import Dex3HandController, hand_grip_targets
 
-        return Dex3HandController, list(HAND_OPEN), list(HAND_CLOSED)
+        return Dex3HandController, hand_grip_targets
 
 
 class _GripController:
@@ -474,14 +474,14 @@ class _GripController:
     def _controller_for(self, hand: str, iface: str, domain_id: int) -> Any:
         key = f"{hand}:{iface}:{domain_id}"
         if key not in self._controllers:
-            cls, _open, _closed = _load_hand_sdk()
+            cls, _grip_targets = _load_hand_sdk()
             self._controllers[key] = cls(hand=hand, iface=iface, domain_id=domain_id)
         return self._controllers[key]
 
     def _run(self, hand: str, iface: str, domain_id: int) -> None:
         try:
             controller = self._controller_for(hand, iface, domain_id)
-            _cls, hand_open, hand_closed = _load_hand_sdk()
+            _cls, grip_targets = _load_hand_sdk()
             published = False
             while True:
                 with self._lock:
@@ -494,8 +494,7 @@ class _GripController:
                 error = target - current
                 if abs(error) <= 1e-6:
                     if not published:
-                        alpha = target / 100.0
-                        targets = [start + (stop - start) * alpha for start, stop in zip(hand_open, hand_closed)]
+                        targets = grip_targets(hand, target)
                         controller.write_targets_once(targets, kp=1.2, kd=0.05, tau=0.05, timeout=0)
                         published = True
                     break
@@ -503,8 +502,7 @@ class _GripController:
                     current = target
                 else:
                     current += step * (1.0 if error > 0.0 else -1.0)
-                alpha = current / 100.0
-                targets = [start + (stop - start) * alpha for start, stop in zip(hand_open, hand_closed)]
+                targets = grip_targets(hand, current)
                 controller.write_targets_once(targets, kp=1.2, kd=0.05, tau=0.05, timeout=0)
                 published = True
                 with self._lock:

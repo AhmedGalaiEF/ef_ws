@@ -17,7 +17,7 @@ try:
         Dex3HandController,
         FINGER_TO_IDXS,
         build_hand_msg,
-        hand_mid_targets,
+        hand_closed_targets,
         hand_open_targets,
     )
 except ImportError as exc:
@@ -107,15 +107,15 @@ def ramp_targets(
 
 def finger_closed_target(hand: str, finger_name: str) -> list[float]:
     targets = hand_open_targets(hand)
-    mid_targets = hand_mid_targets(hand)
+    closed_targets = hand_closed_targets(hand)
     for idx in FINGER_TO_IDXS[finger_name]:
-        targets[idx] = mid_targets[idx]
+        targets[idx] = closed_targets[idx]
     return targets
 
 
 def move_all_fingers(hand: str, controller: Dex3HandController, args: argparse.Namespace) -> None:
     open_targets = hand_open_targets(hand)
-    closed_targets = hand_mid_targets(hand)
+    closed_targets = hand_closed_targets(hand)
     publish_targets(
         controller,
         open_targets,

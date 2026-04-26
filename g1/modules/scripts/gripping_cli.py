@@ -8,15 +8,14 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 try:
-    from sdk_hand import Dex3HandController, HAND_CLOSED, HAND_OPEN
+    from sdk_hand import Dex3HandController, hand_grip_targets
 except ImportError:
     print("Could not import sdk_hand. Ensure it is in the parent directory.")
     sys.exit(1)
 
 
-def grip_targets(percent: float) -> list[float]:
-    alpha = min(1.0, max(0.0, float(percent) / 100.0))
-    return [start + (end - start) * alpha for start, end in zip(HAND_OPEN, HAND_CLOSED)]
+def grip_targets(percent: float, hand: str = "right") -> list[float]:
+    return hand_grip_targets(hand, percent)
 
 
 def send_grip(
@@ -30,7 +29,7 @@ def send_grip(
 ) -> None:
     clamped = min(100.0, max(0.0, float(percent)))
     controller.set_targets(
-        grip_targets(clamped),
+        hand_grip_targets(hand, clamped),
         hold_s=hold_s,
         rate_hz=rate_hz,
         ramp_s=ramp_s,

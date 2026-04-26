@@ -12,7 +12,13 @@ if PARENT_DIR not in sys.path:
     sys.path.insert(0, PARENT_DIR)
 
 try:
-    from sdk_hand import Dex3HandController, HAND_CLOSED, HAND_OPEN, build_hand_msg
+    from sdk_hand import (
+        Dex3HandController,
+        build_hand_msg,
+        hand_closed_targets,
+        hand_grip_targets,
+        hand_open_targets,
+    )
 except ImportError as exc:
     raise SystemExit(
         "Could not import sdk_hand. Ensure this script is run from the modules/scripts directory."
@@ -92,23 +98,19 @@ def parse_args() -> argparse.Namespace:
 
 
 def blend_targets(alpha: float) -> list[float]:
-    clamped = min(1.0, max(0.0, float(alpha)))
-    return [
-        start + (stop - start) * clamped
-        for start, stop in zip(HAND_OPEN, HAND_CLOSED)
-    ]
+    return hand_grip_targets("left", float(alpha) * 100.0)
 
 
 def resolve_targets(args: argparse.Namespace) -> list[float]:
     if args.targets is not None:
         return [float(value) for value in args.targets]
     if args.preset == "open":
-        return list(HAND_OPEN)
+        return hand_open_targets("left")
     if args.preset == "closed":
-        return list(HAND_CLOSED)
+        return hand_closed_targets("left")
     if args.alpha is not None:
         return blend_targets(args.alpha)
-    return list(HAND_OPEN)
+    return hand_open_targets("left")
 
 
 def main() -> int:

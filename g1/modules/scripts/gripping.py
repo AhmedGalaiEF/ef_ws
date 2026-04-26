@@ -13,7 +13,7 @@ except ImportError:
     sys.exit(1)
 
 try:
-    from sdk_hand import Dex3HandController, HAND_OPEN, HAND_CLOSED
+    from sdk_hand import Dex3HandController, hand_grip_targets
 except ImportError:
     print("Could not import sdk_hand. Ensure it is in the parent directory.")
     sys.exit(1)
@@ -74,10 +74,7 @@ class GrippingApp(QWidget):
 
     def on_slider_change(self):
         val = self.slider.value()
-        alpha = val / 100.0
-        
-        # Linear interpolation between HAND_OPEN and HAND_CLOSED
-        targets = [s + (e - s) * alpha for s, e in zip(HAND_OPEN, HAND_CLOSED)]
+        targets = hand_grip_targets(self.hand, val)
         
         # Update label text
         status = "Open"

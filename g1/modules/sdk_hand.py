@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import time
+import threading
 from typing import Dict
 
 from unitree_sdk2py.core import channel as channel_module
@@ -51,25 +52,68 @@ HAND_MIN_LIMITS = {
     "right": [-1.05, -1.05, -1.75, 0.0, 0.0, 0.0, 0.0],
 }
 
+HAND_THUMB_0_HOLD_TARGETS = {
+    "left": -0.09927542507648468,
+    "right": -0.03510913997888565,
+}
+
+# Backwards-compatible right-hand presets. New code should use
+# hand_open_targets(), hand_closed_targets(), or hand_grip_targets().
 HAND_OPEN = [
-    -0.15717165172100067,
-    -0.41322529315948486,
-    0.02846403606235981,
-    0.17782948911190033,
-    -0.025226416066288948,
-    0.17983606457710266,
-    -0.027690349146723747,
+    HAND_THUMB_0_HOLD_TARGETS["right"],
+    HAND_MAX_LIMITS["right"][1],
+    HAND_MAX_LIMITS["right"][2],
+    HAND_MIN_LIMITS["right"][3],
+    HAND_MIN_LIMITS["right"][4],
+    HAND_MIN_LIMITS["right"][5],
+    HAND_MIN_LIMITS["right"][6],
 ]
 
 HAND_CLOSED = [
-    0.07452802360057831,
-    0.9478388428688049,
-    1.766921877861023,
-    -1.4442411661148071,
-    -1.4384468793869019,
-    -1.5298594236373901,
-    -1.4153316020965576,
+    HAND_THUMB_0_HOLD_TARGETS["right"],
+    HAND_MIN_LIMITS["right"][1],
+    HAND_MIN_LIMITS["right"][2],
+    HAND_MAX_LIMITS["right"][3],
+    HAND_MAX_LIMITS["right"][4],
+    HAND_MAX_LIMITS["right"][5],
+    HAND_MAX_LIMITS["right"][6],
 ]
+
+HAND_CLOSED_LIMITS = {
+    "left": [
+        HAND_THUMB_0_HOLD_TARGETS["left"],
+        HAND_MAX_LIMITS["left"][1],
+        HAND_MAX_LIMITS["left"][2],
+        HAND_MIN_LIMITS["left"][3],
+        HAND_MIN_LIMITS["left"][4],
+        HAND_MIN_LIMITS["left"][5],
+        HAND_MIN_LIMITS["left"][6],
+    ],
+    "right": [
+        HAND_THUMB_0_HOLD_TARGETS["right"],
+        HAND_MIN_LIMITS["right"][1],
+        HAND_MIN_LIMITS["right"][2],
+        HAND_MAX_LIMITS["right"][3],
+        HAND_MAX_LIMITS["right"][4],
+        HAND_MAX_LIMITS["right"][5],
+        HAND_MAX_LIMITS["right"][6],
+    ],
+}
+
+HAND_OPEN_LIMITS = {
+    side: [
+        closed[0],
+        *[
+            hi if abs(closed_value - lo) < abs(closed_value - hi) else lo
+            for closed_value, lo, hi in zip(
+                closed[1:],
+                HAND_MIN_LIMITS[side][1:],
+                HAND_MAX_LIMITS[side][1:],
+            )
+        ],
+    ]
+    for side, closed in HAND_CLOSED_LIMITS.items()
+}
 
 FINGER_TO_IDXS: Dict[str, list[int]] = {
     "thumb": [0, 1, 2],
@@ -86,9 +130,30 @@ def hand_mid_targets(hand: str) -> list[float]:
     ]
 
 
-def hand_open_targets(hand: str) -> list[float]:
+def _with_thumb_0(targets: list[float], thumb_0: float | None) -> list[float]:
+    if thumb_0 is not None:
+        targets[0] = float(thumb_0)
+    return targets
+
+
+def hand_open_targets(hand: str, thumb_0: float | None = None) -> list[float]:
     side = str(hand).strip().lower()
-    return list(HAND_MIN_LIMITS[side])
+    return _with_thumb_0(list(HAND_OPEN_LIMITS[side]), thumb_0)
+
+
+def hand_closed_targets(hand: str, thumb_0: float | None = None) -> list[float]:
+    side = str(hand).strip().lower()
+    return _with_thumb_0(list(HAND_CLOSED_LIMITS[side]), thumb_0)
+
+
+def hand_grip_targets(hand: str, percent: float, thumb_0: float | None = None) -> list[float]:
+    alpha = min(1.0, max(0.0, float(percent) / 100.0))
+    open_targets = hand_open_targets(hand, thumb_0=thumb_0)
+    closed_targets = hand_closed_targets(hand, thumb_0=thumb_0)
+    return [
+        start + (stop - start) * alpha
+        for start, stop in zip(open_targets, closed_targets)
+    ]
 
 
 def pack_ris_mode(motor_id: int, status: int = 1, timeout: int = 0) -> int:
@@ -133,6 +198,8 @@ class Dex3HandController:
         self._pub = ChannelPublisher(TOPIC_HAND_BY_SIDE[self.hand], HandCmd_)
         self._pub.Init()
         self._last_targets: list[float] | None = None
+        self._release_stop: threading.Event | None = None
+        self._release_thread: threading.Thread | None = None
 
     @staticmethod
     def _interpolate_targets(
@@ -197,6 +264,14 @@ class Dex3HandController:
             time.sleep(dt)
         return matched
 
+    def _stop_release_thread(self) -> None:
+        if self._release_stop is not None:
+            self._release_stop.set()
+        if self._release_thread is not None and self._release_thread.is_alive():
+            self._release_thread.join(timeout=1.0)
+        self._release_stop = None
+        self._release_thread = None
+
     def set_targets(
         self,
         targets: list[float],
@@ -207,6 +282,7 @@ class Dex3HandController:
         tau: float = 0.05,
         ramp_s: float | None = None,
     ) -> None:
+        self._stop_release_thread()
         if len(targets) != 7:
             raise ValueError("Hand targets must contain 7 joint values.")
 
@@ -245,20 +321,75 @@ class Dex3HandController:
                 tau=tau,
             )
 
+    def _pose_targets(self, pose_targets: list[float]) -> list[float]:
+        targets = list(pose_targets)
+        if self._last_targets is not None:
+            targets[0] = float(self._last_targets[0])
+        return targets
+
     def open(self, hold_s: float = 0.6, rate_hz: float = 50.0, ramp_s: float | None = None) -> None:
-        self.set_targets(hand_open_targets(self.hand), hold_s=hold_s, rate_hz=rate_hz, ramp_s=ramp_s)
+        self.set_targets(
+            self._pose_targets(hand_open_targets(self.hand)),
+            hold_s=hold_s,
+            rate_hz=rate_hz,
+            ramp_s=ramp_s,
+        )
 
     def close(self, hold_s: float = 0.6, rate_hz: float = 50.0, ramp_s: float | None = None) -> None:
-        self.set_targets(hand_mid_targets(self.hand), hold_s=hold_s, rate_hz=rate_hz, tau=0.0, ramp_s=ramp_s)
+        self.set_targets(
+            self._pose_targets(hand_closed_targets(self.hand)),
+            hold_s=hold_s,
+            rate_hz=rate_hz,
+            tau=0.0,
+            ramp_s=ramp_s,
+        )
+
+    def release_fingers(
+        self,
+        hold_s: float = 0.5,
+        rate_hz: float = 50.0,
+        *,
+        persistent: bool = False,
+    ) -> None:
+        self._stop_release_thread()
+        targets = list(self._last_targets) if self._last_targets is not None else hand_open_targets(self.hand)
+        msg = build_hand_msg(targets, kp=0.0, kd=0.0, tau=0.0, timeout=1)
+        if persistent:
+            stop_event = threading.Event()
+
+            def _loop() -> None:
+                dt = 1.0 / max(1.0, float(rate_hz))
+                while not stop_event.is_set():
+                    self._pub.Write(msg)
+                    time.sleep(dt)
+
+            self._release_stop = stop_event
+            self._release_thread = threading.Thread(
+                target=_loop,
+                name=f"dex3-{self.hand}-release",
+                daemon=True,
+            )
+            self._release_thread.start()
+        else:
+            self.publish_for(
+                msg,
+                seconds=hold_s,
+                rate_hz=rate_hz,
+                first_write_timeout_s=1.0,
+            )
+        self._last_targets = None
+
+    def stop_release_fingers(self) -> None:
+        self._stop_release_thread()
 
     def move_finger(self, finger_name: str, hold_s: float = 1.0, settle_s: float = 0.6, rate_hz: float = 50.0) -> None:
         finger = str(finger_name).strip().lower()
         if finger not in FINGER_TO_IDXS:
             raise ValueError(f"Unknown finger '{finger_name}'.")
-        targets = hand_open_targets(self.hand)
-        mid_targets = hand_mid_targets(self.hand)
+        targets = self._pose_targets(hand_open_targets(self.hand))
+        closed_targets = self._pose_targets(hand_closed_targets(self.hand))
         for idx in FINGER_TO_IDXS[finger]:
-            targets[idx] = mid_targets[idx]
+            targets[idx] = closed_targets[idx]
         self.open(hold_s=settle_s, rate_hz=rate_hz)
         self.set_targets(targets, hold_s=hold_s, rate_hz=rate_hz, tau=0.12)
         self.open(hold_s=settle_s, rate_hz=rate_hz)
@@ -268,10 +399,15 @@ __all__ = [
     "Dex3HandController",
     "FINGER_TO_IDXS",
     "HAND_CLOSED",
+    "HAND_CLOSED_LIMITS",
     "HAND_MAX_LIMITS",
     "HAND_MIN_LIMITS",
     "HAND_OPEN",
+    "HAND_OPEN_LIMITS",
+    "HAND_THUMB_0_HOLD_TARGETS",
     "build_hand_msg",
+    "hand_closed_targets",
+    "hand_grip_targets",
     "hand_mid_targets",
     "hand_open_targets",
     "pack_ris_mode",
