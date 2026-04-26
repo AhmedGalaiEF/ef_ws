@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import json
 import math
+import os
+import struct
 import threading
 import time
 from dataclasses import dataclass
@@ -52,6 +54,65 @@ except ImportError as exc:
 DEFAULT_SPORT_TOPIC = "rt/odommodestate"
 DEFAULT_LIDAR_MAP_TOPIC = "rt/utlidar/map_state"
 DEFAULT_LIDAR_CLOUD_TOPIC = "rt/utlidar/cloud_deskewed"
+DEFAULT_LIDAR_CLOUD_FALLBACK_TOPIC = "rt/utlidar/cloud_livox_mid360"
+DEFAULT_RGBD_HOST = os.environ.get("G1_RGBD_HOST", "10.34.0.11")
+DEFAULT_RGBD_PORT = int(os.environ.get("G1_RGBD_PORT", "5555"))
+DEFAULT_RGBD_TOPIC = os.environ.get("G1_RGBD_TOPIC", "")
+HAND_STATE_TOPIC_BY_SIDE = {
+    "left": "rt/dex3/left/state",
+    "right": "rt/dex3/right/state",
+}
+HAND_JOINT_NAMES = [
+    "thumb_0",
+    "thumb_1",
+    "thumb_2",
+    "middle_0",
+    "middle_1",
+    "index_0",
+    "index_1",
+]
+BODY_JOINT_LAYOUT: list[tuple[str, int, str]] = [
+    ("left_leg", 0, "hip_pitch"),
+    ("left_leg", 1, "hip_roll"),
+    ("left_leg", 2, "hip_yaw"),
+    ("left_leg", 3, "knee"),
+    ("left_leg", 4, "ankle_pitch"),
+    ("left_leg", 5, "ankle_roll"),
+    ("right_leg", 6, "hip_pitch"),
+    ("right_leg", 7, "hip_roll"),
+    ("right_leg", 8, "hip_yaw"),
+    ("right_leg", 9, "knee"),
+    ("right_leg", 10, "ankle_pitch"),
+    ("right_leg", 11, "ankle_roll"),
+    ("waist", 12, "yaw"),
+    ("waist", 13, "roll"),
+    ("waist", 14, "pitch"),
+    ("left_arm", 15, "shoulder_pitch"),
+    ("left_arm", 16, "shoulder_roll"),
+    ("left_arm", 17, "shoulder_yaw"),
+    ("left_arm", 18, "elbow"),
+    ("left_arm", 19, "wrist_roll"),
+    ("left_arm", 20, "wrist_pitch"),
+    ("left_arm", 21, "wrist_yaw"),
+    ("right_arm", 22, "shoulder_pitch"),
+    ("right_arm", 23, "shoulder_roll"),
+    ("right_arm", 24, "shoulder_yaw"),
+    ("right_arm", 25, "elbow"),
+    ("right_arm", 26, "wrist_roll"),
+    ("right_arm", 27, "wrist_pitch"),
+    ("right_arm", 28, "wrist_yaw"),
+]
+BODY_JOINT_NAME_BY_INDEX = {
+    index: f"{group}.{name}" for group, index, name in BODY_JOINT_LAYOUT
+}
+BODY_JOINT_INDEX_BY_NAME = {
+    f"{group}.{name}": index for group, index, name in BODY_JOINT_LAYOUT
+}
+
+try:
+    from unitree_sdk2py.idl.unitree_hg.msg.dds_ import HandState_
+except Exception:
+    HandState_ = None  # type: ignore[assignment]
 
 
 @dataclass
@@ -77,6 +138,9 @@ class Robot:
         lidar_cloud_topic: str = DEFAULT_LIDAR_CLOUD_TOPIC,
         slam_info_topic: str = "rt/slam_info",
         slam_key_topic: str = "rt/slam_key_info",
+        rgbd_host: str = DEFAULT_RGBD_HOST,
+        rgbd_port: int = DEFAULT_RGBD_PORT,
+        rgbd_topic: str = DEFAULT_RGBD_TOPIC,
     ) -> None:
         self.iface = iface
         self.domain_id = int(domain_id)
@@ -85,23 +149,42 @@ class Robot:
         self.lidar_cloud_topic = lidar_cloud_topic
         self.slam_info_topic = slam_info_topic
         self.slam_key_topic = slam_key_topic
+        self.rgbd_host = str(rgbd_host)
+        self.rgbd_port = int(rgbd_port)
+        self.rgbd_topic = str(rgbd_topic)
+        self.lidar_cloud_topics = list(
+            dict.fromkeys(
+                [
+                    str(self.lidar_cloud_topic),
+                    DEFAULT_LIDAR_CLOUD_FALLBACK_TOPIC,
+                    DEFAULT_LIDAR_CLOUD_TOPIC,
+                ]
+            )
+        )
 
         self._lock = threading.Lock()
         self._sport: SportModeState_ | None = None
         self._lidar_map: HeightMap_ | None = None
         self._lidar_cloud: PointCloud2_ | None = None
+        self._lidar_cloud_by_topic: dict[str, PointCloud2_ | None] = {
+            topic: None for topic in self.lidar_cloud_topics
+        }
         self._last_sport_ts = 0.0
         self._last_lidar_map_ts = 0.0
         self._last_lidar_cloud_ts = 0.0
+        self._last_lidar_cloud_ts_by_topic: dict[str, float] = {
+            topic: 0.0 for topic in self.lidar_cloud_topics
+        }
 
         self._sport_sub: ChannelSubscriber | None = None
         self._lidar_map_sub: ChannelSubscriber | None = None
-        self._lidar_cloud_sub: ChannelSubscriber | None = None
+        self._lidar_cloud_subs: dict[str, ChannelSubscriber] = {}
         self._lowstate_sub: LatestSubscriber | None = None
         self._odom_sub: LatestSubscriber | None = None
         self._lidar_imu_sub: LatestSubscriber | None = None
         self._slam_info_sub: SlamInfoSubscriber | None = None
         self._slam_odom_sub: SlamOdomSubscriber | None = None
+        self._hand_state_subs: dict[str, LatestSubscriber] = {}
 
         self._path_points: list[tuple[float, float, float]] = []
         self._slam_client: SlamOperateClient | None = None
@@ -144,7 +227,7 @@ class Robot:
     def _get_hand(self, hand: str = "right") -> Dex3HandController:
         side = str(hand).strip().lower()
         if side not in self._hands:
-            self._hands[side] = Dex3HandController(side)
+            self._hands[side] = Dex3HandController(side, iface=self.iface, domain_id=self.domain_id)
         return self._hands[side]
 
     def _ensure_slam_info_subscriber(self) -> SlamInfoSubscriber:
@@ -170,9 +253,12 @@ class Robot:
         if self._lidar_map_sub is None:
             self._lidar_map_sub = ChannelSubscriber(self.lidar_map_topic, HeightMap_)
             self._lidar_map_sub.Init(self._lidar_map_cb, 10)
-        if self._lidar_cloud_sub is None:
-            self._lidar_cloud_sub = ChannelSubscriber(self.lidar_cloud_topic, PointCloud2_)
-            self._lidar_cloud_sub.Init(self._lidar_cloud_cb, 10)
+        for topic in self.lidar_cloud_topics:
+            if topic in self._lidar_cloud_subs:
+                continue
+            sub = ChannelSubscriber(topic, PointCloud2_)
+            sub.Init(self._make_lidar_cloud_cb(topic), 10)
+            self._lidar_cloud_subs[topic] = sub
         lowstate_type = resolve_lowstate_type()
         if lowstate_type is not None and self._lowstate_sub is None:
             self._lowstate_sub = LatestSubscriber("rt/lowstate", lowstate_type)
@@ -183,6 +269,13 @@ class Robot:
         if LidarImu_ is not None and self._lidar_imu_sub is None:
             self._lidar_imu_sub = LatestSubscriber("rt/utlidar/imu_livox_mid360", LidarImu_)
             self._lidar_imu_sub.start()
+        if HandState_ is not None:
+            for side, topic in HAND_STATE_TOPIC_BY_SIDE.items():
+                if side in self._hand_state_subs:
+                    continue
+                sub = LatestSubscriber(topic, HandState_)
+                sub.start(queue_len=20)
+                self._hand_state_subs[side] = sub
 
     def _sport_cb(self, msg: SportModeState_) -> None:
         with self._lock:
@@ -193,6 +286,17 @@ class Robot:
         with self._lock:
             self._lidar_map = msg
             self._last_lidar_map_ts = time.time()
+
+    def _make_lidar_cloud_cb(self, topic: str):
+        def _lidar_cloud_cb(msg: PointCloud2_) -> None:
+            with self._lock:
+                self._lidar_cloud = msg
+                self._lidar_cloud_by_topic[topic] = msg
+                now = time.time()
+                self._last_lidar_cloud_ts = now
+                self._last_lidar_cloud_ts_by_topic[topic] = now
+
+        return _lidar_cloud_cb
 
     def _lidar_cloud_cb(self, msg: PointCloud2_) -> None:
         with self._lock:
@@ -231,9 +335,24 @@ class Robot:
         with self._lock:
             return self._lidar_map
 
-    def get_lidar_cloud(self) -> PointCloud2_ | None:
-        with self._lock:
-            return self._lidar_cloud
+    def get_lidar_cloud(self) -> dict[str, Any] | None:
+        msg, topic, ts = self._get_latest_lidar_cloud_msg()
+        if msg is None:
+            return None
+        points = self._extract_xyz_from_cloud(msg, max_points=20000, as_dict=True)
+        return {
+            "topic": topic,
+            "timestamp": ts,
+            "width": int(getattr(msg, "width", 0) or 0),
+            "height": int(getattr(msg, "height", 0) or 0),
+            "point_step": int(getattr(msg, "point_step", 0) or 0),
+            "frame_id": self._read_attr(msg, "header", "frame_id"),
+            "point_count": len(points),
+            "points": points,
+        }
+
+    def get_lidar_cloud_msg(self) -> PointCloud2_ | None:
+        return self._get_latest_lidar_cloud_msg()[0]
 
     def get_sensor_timestamps(self) -> dict[str, float]:
         with self._lock:
@@ -242,6 +361,8 @@ class Robot:
                 "lidar_map": float(self._last_lidar_map_ts),
                 "lidar_cloud": float(self._last_lidar_cloud_ts),
             }
+            for topic, ts in self._last_lidar_cloud_ts_by_topic.items():
+                timestamps[f"lidar_cloud[{topic}]"] = float(ts)
         if self._lowstate_sub is not None:
             timestamps["lowstate"] = float(self._lowstate_sub.get_latest()[1])
         if self._odom_sub is not None:
@@ -250,6 +371,8 @@ class Robot:
             timestamps["lidar_imu"] = float(self._lidar_imu_sub.get_latest()[1])
         if self._slam_odom_sub is not None:
             timestamps["slam_odom"] = float(self._slam_odom_sub.get_latest()[1])
+        for side, sub in self._hand_state_subs.items():
+            timestamps[f"{side}_hand_state"] = float(sub.get_latest()[1])
         return timestamps
 
     def sensors_stale(self, max_age: float = 1.0) -> dict[str, bool]:
@@ -335,35 +458,60 @@ class Robot:
                 return vec
         return None
 
-    def get_low_state(self) -> Any | None:
+    def get_low_state_msg(self) -> Any | None:
         if self._lowstate_sub is None:
             return None
         return self._lowstate_sub.get_latest()[0]
 
+    def get_low_state(self) -> dict[str, Any] | None:
+        joint_state = self.get_joint_states()
+        if joint_state is None:
+            return None
+        joint_positions = [entry["position"] for entry in joint_state["joints"].values() if entry["position"] is not None]
+        joint_velocities = [entry["velocity"] for entry in joint_state["joints"].values() if entry["velocity"] is not None]
+        joint_torques = [entry["torque"] for entry in joint_state["joints"].values() if entry["torque"] is not None]
+        return {
+            "timestamp": joint_state["timestamp"],
+            "joint_count": len(joint_state["joints"]),
+            "joint_positions": joint_positions,
+            "joint_velocities": joint_velocities,
+            "joint_torques": joint_torques,
+            "imu": joint_state["imu"],
+            "joints": joint_state["joints"],
+            "sources": joint_state["sources"],
+        }
+
     def get_low_state_snapshot(self) -> LowStateSnapshot | None:
-        msg = self.get_low_state()
+        msg = self.get_low_state_msg()
         if msg is None:
             return None
         return lowstate_snapshot_from_msg(msg)
 
-    def get_joint_positions(self) -> list[float]:
-        snap = self.get_low_state_snapshot()
-        return [] if snap is None else list(snap.joint_positions)
+    def get_joint_positions(self) -> dict[str, float | None]:
+        state = self.get_joint_states()
+        if state is None:
+            return {}
+        return {name: values["position"] for name, values in state["joints"].items()}
 
-    def get_joint_velocities(self) -> list[float]:
-        snap = self.get_low_state_snapshot()
-        return [] if snap is None else list(snap.joint_velocities)
+    def get_joint_velocities(self) -> dict[str, float | None]:
+        state = self.get_joint_states()
+        if state is None:
+            return {}
+        return {name: values["velocity"] for name, values in state["joints"].items()}
 
-    def get_joint_torques(self) -> list[float]:
-        snap = self.get_low_state_snapshot()
-        return [] if snap is None else list(snap.joint_torques)
+    def get_joint_torques(self) -> dict[str, float | None]:
+        state = self.get_joint_states()
+        if state is None:
+            return {}
+        return {name: values["torque"] for name, values in state["joints"].items()}
 
-    def get_joint_position(self, joint_index: int) -> float | None:
+    def get_joint_position(self, joint_index: int | str) -> float | None:
         positions = self.get_joint_positions()
-        idx = int(joint_index)
-        if idx < 0 or idx >= len(positions):
+        key = self._resolve_joint_lookup_key(joint_index)
+        if key is None:
             return None
-        return float(positions[idx])
+        value = positions.get(key)
+        return None if value is None else float(value)
 
     def get_odom(self) -> Any | None:
         if self._odom_sub is None:
@@ -838,6 +986,9 @@ class Robot:
             self._client.SetFsmId(2)
 
     def fsm_2_squat(self) -> None:
+        self.fsm_2_squat_placeholder()
+
+    def fsm_2_squat_placeholder(self) -> None:
         self.fsm_2_airborne()
 
     def fsm_dev_mode(self) -> None:
@@ -884,7 +1035,12 @@ class Robot:
         return ImuData(rpy=rpy, gyro=gyro, acc=acc, quat=quat, temp=temp)
 
     @staticmethod
-    def _extract_xyz_from_cloud(msg: PointCloud2_, max_points: int | None = None) -> list[tuple[float, float, float]]:
+    def _extract_xyz_from_cloud(
+        msg: PointCloud2_,
+        max_points: int | None = None,
+        *,
+        as_dict: bool = False,
+    ) -> list[Any]:
         try:
             width = int(msg.width)
             height = int(msg.height)
@@ -910,9 +1066,7 @@ class Robot:
         if max_points is not None:
             total = min(total, max_points)
 
-        import struct
-
-        points: list[tuple[float, float, float]] = []
+        points: list[Any] = []
         for idx in range(total):
             base = idx * point_step
             try:
@@ -922,21 +1076,27 @@ class Robot:
             except Exception:
                 break
             if math.isfinite(x) and math.isfinite(y) and math.isfinite(z):
-                points.append((float(x), float(y), float(z)))
+                if as_dict:
+                    points.append({"x": float(x), "y": float(y), "z": float(z)})
+                else:
+                    points.append((float(x), float(y), float(z)))
         return points
 
-    def get_lidar_points(self, max_points: int | None = 20000) -> list[tuple[float, float, float]]:
-        with self._lock:
-            msg = self._lidar_cloud
+    def get_lidar_points(self, max_points: int | None = 20000) -> list[dict[str, float]]:
+        msg, _topic, _ts = self._get_latest_lidar_cloud_msg()
         if msg is None:
             return []
-        return self._extract_xyz_from_cloud(msg, max_points=max_points)
+        return self._extract_xyz_from_cloud(msg, max_points=max_points, as_dict=True)
 
     def get_camera_image_jpeg(self) -> bytes:
         code, data = self._get_video_client().GetImageSample()
         if int(code) != 0:
             raise RuntimeError(f"GetImageSample failed with code={code}")
         return bytes(data)
+
+    def get_rgb_jpeg(self, timeout: float | None = None) -> bytes:
+        _ = timeout
+        return self.get_camera_image_jpeg()
 
     def get_camera_frame_bgr(self):
         return decode_video_frame_bgr(self.get_camera_image_jpeg())
@@ -946,6 +1106,54 @@ class Robot:
 
         frame = self.get_camera_frame_bgr()
         return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+    def get_rgbd(self, timeout: float = 2.0) -> dict[str, Any]:
+        rgb_jpeg, depth_png, depth_scale, timestamp = self._recv_rgbd_payload(timeout=timeout)
+        try:
+            import cv2
+            import numpy as np
+        except Exception as exc:
+            raise RuntimeError(f"RGBD decoding requires cv2 and numpy: {exc}") from exc
+
+        rgb = cv2.imdecode(np.frombuffer(rgb_jpeg, dtype=np.uint8), cv2.IMREAD_COLOR)
+        depth_raw = cv2.imdecode(np.frombuffer(depth_png, dtype=np.uint8), cv2.IMREAD_UNCHANGED)
+        if rgb is None:
+            raise RuntimeError("Failed to decode RGB JPEG from RGBD stream.")
+        if depth_raw is None:
+            raise RuntimeError("Failed to decode depth PNG from RGBD stream.")
+        if depth_raw.ndim == 3:
+            depth_raw = cv2.cvtColor(depth_raw, cv2.COLOR_BGR2GRAY)
+
+        depth_m = depth_raw.astype("float32") * float(depth_scale)
+        valid = depth_raw > 0
+        h, w = depth_raw.shape[:2]
+        center_size = max(8, min(w, h) // 12)
+        cx = w // 2
+        cy = h // 2
+        center = depth_m[
+            max(0, cy - center_size) : min(h, cy + center_size),
+            max(0, cx - center_size) : min(w, cx + center_size),
+        ]
+        roi = depth_m[int(h * 0.25) : int(h * 0.70), int(w * 0.30) : int(w * 0.70)]
+        center_valid = center[center > 0]
+        center_depth_m = float(__import__("numpy").median(center_valid)) if center_valid.size else None
+        near_coverage_1m = float(__import__("numpy").mean((roi > 0) & (roi <= 1.0))) if roi.size else None
+
+        return {
+            "source": f"zmq://{self.rgbd_host}:{self.rgbd_port}",
+            "topic": self.rgbd_topic,
+            "timestamp": float(timestamp),
+            "rgb_jpeg": rgb_jpeg,
+            "depth_png": depth_png,
+            "rgb_bgr": rgb,
+            "rgb_rgb": cv2.cvtColor(rgb, cv2.COLOR_BGR2RGB),
+            "depth_raw": depth_raw,
+            "depth_m": depth_m,
+            "depth_scale_m_per_unit": float(depth_scale),
+            "center_depth_m": center_depth_m,
+            "near_coverage_1m": near_coverage_1m,
+            "valid_depth_fraction": float(valid.mean()) if valid.size else 0.0,
+        }
 
     # ------------------------------------------------------------------
     # SLAM + navigation
@@ -1231,8 +1439,11 @@ class Robot:
     def hanged_boot(self) -> None:
         self._client = secure_boot(iface=self.iface, domain_id=self.domain_id)
 
+    def hanging_boot_placeholder(self) -> None:
+        self.hanged_boot()
+
     def hanging_boot(self) -> None:
-        self._client = secure_boot(iface=self.iface, domain_id=self.domain_id)
+        self.hanging_boot_placeholder()
 
     def say(self, text: str = "what would you like me to say?", volume: int | None = None) -> int:
         return self._get_audio().speak(text, volume=volume)
@@ -1296,6 +1507,154 @@ class Robot:
         rate_hz: float = 50.0,
     ) -> None:
         self._get_hand(hand).move_finger(finger_name, hold_s=hold_s, settle_s=settle_s, rate_hz=rate_hz)
+
+    def _get_latest_lidar_cloud_msg(self) -> tuple[PointCloud2_ | None, str | None, float]:
+        with self._lock:
+            best_topic = None
+            best_msg = None
+            best_ts = 0.0
+            for topic in self.lidar_cloud_topics:
+                ts = float(self._last_lidar_cloud_ts_by_topic.get(topic, 0.0))
+                msg = self._lidar_cloud_by_topic.get(topic)
+                if msg is not None and ts >= best_ts:
+                    best_topic = topic
+                    best_msg = msg
+                    best_ts = ts
+        return best_msg, best_topic, best_ts
+
+    @staticmethod
+    def _series_value(values: list[float], index: int) -> float | None:
+        if index < 0 or index >= len(values):
+            return None
+        return float(values[index])
+
+    def _get_hand_state_msg(self, hand: str) -> tuple[Any | None, float]:
+        sub = self._hand_state_subs.get(str(hand).strip().lower())
+        if sub is None:
+            return None, 0.0
+        return sub.get_latest()
+
+    @staticmethod
+    def _extract_hand_joint_series(msg: Any) -> tuple[list[float | None], list[float | None], list[float | None]]:
+        positions: list[float | None] = []
+        velocities: list[float | None] = []
+        torques: list[float | None] = []
+        motor_state = list(getattr(msg, "motor_state", []) or [])
+        for idx in range(7):
+            motor = motor_state[idx] if idx < len(motor_state) else None
+            try:
+                positions.append(float(getattr(motor, "q")))
+            except Exception:
+                positions.append(None)
+            try:
+                velocities.append(float(getattr(motor, "dq")))
+            except Exception:
+                velocities.append(None)
+            try:
+                torques.append(float(getattr(motor, "tau_est")))
+            except Exception:
+                torques.append(None)
+        return positions, velocities, torques
+
+    def _resolve_joint_lookup_key(self, joint_index: int | str) -> str | None:
+        if isinstance(joint_index, str):
+            key = joint_index.strip()
+            if key in BODY_JOINT_INDEX_BY_NAME:
+                return key
+            if key.startswith("left_hand.") or key.startswith("right_hand."):
+                return key
+            if key in HAND_JOINT_NAMES:
+                return f"right_hand.{key}"
+            return None
+        idx = int(joint_index)
+        return BODY_JOINT_NAME_BY_INDEX.get(idx)
+
+    def get_joint_states(self) -> dict[str, Any] | None:
+        snap = self.get_low_state_snapshot()
+        if snap is None:
+            return None
+
+        joints: dict[str, dict[str, float | None | str]] = {}
+        for group, index, name in BODY_JOINT_LAYOUT:
+            label = f"{group}.{name}"
+            joints[label] = {
+                "position": self._series_value(snap.joint_positions, index),
+                "velocity": self._series_value(snap.joint_velocities, index),
+                "torque": self._series_value(snap.joint_torques, index),
+                "source": "lowstate",
+                "group": group,
+            }
+
+        sources: dict[str, Any] = {"body": "rt/lowstate", "hands": {}}
+        timestamp = float(snap.stamp)
+        for side in ("left", "right"):
+            hand_msg, hand_ts = self._get_hand_state_msg(side)
+            if hand_msg is None:
+                continue
+            positions, velocities, torques = self._extract_hand_joint_series(hand_msg)
+            for idx, joint_name in enumerate(HAND_JOINT_NAMES):
+                label = f"{side}_hand.{joint_name}"
+                joints[label] = {
+                    "position": positions[idx],
+                    "velocity": velocities[idx],
+                    "torque": torques[idx],
+                    "source": HAND_STATE_TOPIC_BY_SIDE[side],
+                    "group": f"{side}_hand",
+                }
+            sources["hands"][side] = HAND_STATE_TOPIC_BY_SIDE[side]
+            timestamp = max(timestamp, float(hand_ts))
+
+        imu = {
+            "rpy": snap.imu_rpy,
+            "gyro": snap.imu_gyro,
+            "acc": snap.imu_acc,
+        }
+        return {
+            "timestamp": timestamp,
+            "imu": imu,
+            "joints": joints,
+            "sources": sources,
+        }
+
+    def _recv_rgbd_payload(self, timeout: float = 2.0) -> tuple[bytes, bytes, float, float]:
+        try:
+            import zmq
+        except Exception as exc:
+            raise RuntimeError(f"RGBD access requires pyzmq: {exc}") from exc
+
+        context = zmq.Context()
+        socket = context.socket(zmq.SUB)
+        socket.setsockopt(zmq.SUBSCRIBE, self.rgbd_topic.encode("utf-8"))
+        socket.setsockopt(zmq.RCVTIMEO, 250)
+        socket.connect(f"tcp://{self.rgbd_host}:{self.rgbd_port}")
+        deadline = time.time() + max(0.2, float(timeout))
+        try:
+            time.sleep(0.1)
+            while time.time() < deadline:
+                try:
+                    parts = socket.recv_multipart()
+                except zmq.Again:
+                    continue
+                if len(parts) >= 4:
+                    parts = parts[-3:]
+                if len(parts) < 2:
+                    continue
+                rgb_jpeg = bytes(parts[0])
+                depth_png = bytes(parts[1])
+                depth_scale = 0.001
+                if len(parts) >= 3 and len(parts[2]) >= 4:
+                    try:
+                        depth_scale = float(struct.unpack("f", parts[2][:4])[0])
+                    except Exception:
+                        depth_scale = 0.001
+                return rgb_jpeg, depth_png, depth_scale, time.time()
+        finally:
+            try:
+                socket.close(0)
+                context.term()
+            except Exception:
+                pass
+        raise RuntimeError(f"No RGBD frames received from tcp://{self.rgbd_host}:{self.rgbd_port} within {timeout:.1f}s.")
 
 
 __all__ = ["Robot", "ImuData"]
