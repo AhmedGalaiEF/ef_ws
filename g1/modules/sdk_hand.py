@@ -329,7 +329,7 @@ class Dex3HandController:
 
     def open(self, hold_s: float = 0.6, rate_hz: float = 50.0, ramp_s: float | None = None) -> None:
         self.set_targets(
-            self._pose_targets(hand_open_targets(self.hand)),
+            hand_open_targets(self.hand),
             hold_s=hold_s,
             rate_hz=rate_hz,
             ramp_s=ramp_s,

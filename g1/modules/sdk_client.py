@@ -787,6 +787,139 @@ class Robot:
             timeout=timeout,
         )
 
+    def retract_arm_forward(
+        self,
+        *,
+        arm: str = "right",
+        duration_s: float = 4.0,
+        command_rate_hz: float = 50.0,
+        kp: float = 30.0,
+        kd: float = 1.5,
+        waist_kp: float = WAIST_HOLD_KP,
+        waist_kd: float = WAIST_HOLD_KD,
+        timeout: float = 3.0,
+        shoulder_roll_delta: float = 0.50,
+        shoulder_roll_restore_fraction: float = 0.45,
+        shoulder_pitch_delta: float = 0.35,
+        elbow_delta: float = 0.90,
+        wrist_roll_delta: float = 0.25,
+        wrist_pitch_delta: float = 0.75,
+    ) -> dict[str, Any]:
+        """Best-effort inverse of :meth:`extend_arm_forward`.
+
+        This exactly reverses an `extend_arm_forward` call when the forward
+        motion did not hit joint limits and the same delta parameters are used.
+        """
+        side = str(arm).strip().lower()
+        if side not in ("left", "right"):
+            raise ValueError("arm must be 'left' or 'right'.")
+        arm_joints = LEFT_ARM_JOINTS if side == "left" else RIGHT_ARM_JOINTS
+        roll_delta = abs(float(shoulder_roll_delta)) if side == "left" else -abs(float(shoulder_roll_delta))
+        pitch_delta = -abs(float(shoulder_pitch_delta))
+        elbow_delta_signed = -abs(float(elbow_delta))
+        wrist_roll_delta_signed = abs(float(wrist_roll_delta))
+        wrist_pitch_delta_signed = -abs(float(wrist_pitch_delta))
+        restore_fraction = max(0.0, min(1.0, float(shoulder_roll_restore_fraction)))
+        joint_limits = {
+            arm_joints[0]: (-3.0892, 2.6704),
+            arm_joints[1]: (-1.5882, 2.2515) if side == "left" else (-2.2515, 1.5882),
+            arm_joints[3]: (-1.0472, 2.0944),
+            arm_joints[4]: (-1.9722, 1.9722),
+            arm_joints[5]: (-1.6144, 1.6144),
+        }
+
+        def clamp_joint(joint_index: int, value: float) -> float:
+            lo, hi = joint_limits[int(joint_index)]
+            return max(lo, min(hi, float(value)))
+
+        initial_positions = self._read_joint_positions_or_raise(UPPER_BODY_JOINTS, timeout=timeout)
+        start_pose = [initial_positions[joint_index] for joint_index in arm_joints]
+
+        steps = max(1, int(max(0.02, float(duration_s)) * max(1.0, float(command_rate_hz))))
+        dt = 1.0 / max(1.0, float(command_rate_hz))
+        stage_1_steps = max(1, steps // 4)
+        stage_2_steps = max(1, steps // 4)
+        stage_3_steps = max(1, steps // 4)
+        stage_4_steps = max(1, steps - stage_1_steps - stage_2_steps - stage_3_steps)
+
+        wrist_and_elbow_retracted_pose = list(start_pose)
+        wrist_and_elbow_retracted_pose[3] = clamp_joint(arm_joints[3], float(start_pose[3]) - elbow_delta_signed)
+        wrist_and_elbow_retracted_pose[4] = clamp_joint(arm_joints[4], float(start_pose[4]) - wrist_roll_delta_signed)
+        wrist_and_elbow_retracted_pose[5] = clamp_joint(arm_joints[5], float(start_pose[5]) - wrist_pitch_delta_signed)
+
+        clearance_roll_pose = list(wrist_and_elbow_retracted_pose)
+        clearance_roll_pose[1] = clamp_joint(
+            arm_joints[1],
+            float(start_pose[1]) + (roll_delta * restore_fraction),
+        )
+
+        shoulder_pitch_retracted_pose = list(clearance_roll_pose)
+        shoulder_pitch_retracted_pose[0] = clamp_joint(arm_joints[0], float(start_pose[0]) - pitch_delta)
+
+        target_pose = list(shoulder_pitch_retracted_pose)
+        target_pose[1] = clamp_joint(
+            arm_joints[1],
+            float(start_pose[1]) - (roll_delta * (1.0 - restore_fraction)),
+        )
+        stages = [
+            (start_pose, wrist_and_elbow_retracted_pose, stage_4_steps, "undo_elbow_and_wrist_pitch"),
+            (wrist_and_elbow_retracted_pose, clearance_roll_pose, stage_3_steps, "restore_shoulder_roll_clearance"),
+            (clearance_roll_pose, shoulder_pitch_retracted_pose, stage_2_steps, "shoulder_pitch_back"),
+            (shoulder_pitch_retracted_pose, target_pose, stage_1_steps, "shoulder_roll_home"),
+        ]
+
+        for stage_start, stage_target, stage_steps, _stage_name in stages:
+            for step_idx in range(1, stage_steps + 1):
+                alpha = float(step_idx) / float(stage_steps)
+                arm_pose = [
+                    (1.0 - alpha) * float(start_q) + alpha * float(target_q)
+                    for start_q, target_q in zip(stage_start, stage_target)
+                ]
+                joint_targets = {
+                    joint_index: pose_value
+                    for joint_index, pose_value in zip(arm_joints, arm_pose)
+                }
+                self._publish_with_upper_body_hold(
+                    joint_targets,
+                    initial_positions,
+                    kp=kp,
+                    kd=kd,
+                    waist_kp=waist_kp,
+                    waist_kd=waist_kd,
+                )
+                time.sleep(dt)
+
+        return {
+            "arm": side,
+            "start_pose": start_pose,
+            "wrist_and_elbow_retracted_pose": wrist_and_elbow_retracted_pose,
+            "clearance_roll_pose": clearance_roll_pose,
+            "shoulder_pitch_retracted_pose": shoulder_pitch_retracted_pose,
+            "target_pose": target_pose,
+            "joint_names": [BODY_JOINT_NAME_BY_INDEX[joint_index] for joint_index in arm_joints],
+            "stages": [stage_name for _start, _target, _steps, stage_name in stages],
+            "command_rate_hz": float(command_rate_hz),
+            "duration_s": float(duration_s),
+        }
+
+    def retract_right_arm_forward(
+        self,
+        *,
+        duration_s: float = 4.0,
+        command_rate_hz: float = 50.0,
+        kp: float = 30.0,
+        kd: float = 1.5,
+        timeout: float = 3.0,
+    ) -> dict[str, Any]:
+        return self.retract_arm_forward(
+            arm="right",
+            duration_s=duration_s,
+            command_rate_hz=command_rate_hz,
+            kp=kp,
+            kd=kd,
+            timeout=timeout,
+        )
+
     def get_odom(self) -> Any | None:
         if self._odom_sub is None:
             return None
