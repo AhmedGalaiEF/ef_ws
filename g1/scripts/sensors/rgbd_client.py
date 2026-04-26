@@ -2,12 +2,32 @@
 from __future__ import annotations
 
 import argparse
+import os
 import struct
 import time
+
+def _fix_qt_fontdir() -> None:
+    current = os.environ.get("QT_QPA_FONTDIR")
+    if current and os.path.isdir(current):
+        return
+
+    for font_dir in (
+        "/usr/share/fonts/truetype/dejavu",
+        "/usr/share/fonts/dejavu",
+        "/usr/share/fonts",
+    ):
+        if os.path.isdir(font_dir):
+            os.environ["QT_QPA_FONTDIR"] = font_dir
+            return
+
+
+_fix_qt_fontdir()
 
 import cv2
 import numpy as np
 import zmq
+
+_fix_qt_fontdir()
 
 
 def _decode_color(payload: bytes) -> np.ndarray | None:
