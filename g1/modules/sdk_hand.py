@@ -3,12 +3,17 @@ from __future__ import annotations
 import os
 import time
 import threading
-from typing import Dict
+from typing import Any, Dict
 
 from unitree_sdk2py.core import channel as channel_module
-from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelPublisher
+from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelPublisher, ChannelSubscriber
 from unitree_sdk2py.idl.default import unitree_hg_msg_dds__HandCmd_
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import HandCmd_
+
+try:
+    from unitree_sdk2py.idl.unitree_hg.msg.dds_ import HandState_
+except Exception:
+    HandState_ = None  # type: ignore[assignment]
 
 
 channel_module.ChannelConfigHasInterface = """<?xml version="1.0" encoding="UTF-8" ?>
@@ -40,6 +45,11 @@ os.environ.setdefault(
 TOPIC_HAND_BY_SIDE = {
     "left": "rt/dex3/left/cmd",
     "right": "rt/dex3/right/cmd",
+}
+
+HAND_STATE_TOPIC_BY_SIDE = {
+    "left": "rt/dex3/left/state",
+    "right": "rt/dex3/right/state",
 }
 
 HAND_MAX_LIMITS = {
@@ -201,6 +211,51 @@ class Dex3HandController:
         self._release_stop: threading.Event | None = None
         self._release_thread: threading.Thread | None = None
 
+        self._state_positions: list[float] | None = None
+        self._state_ts: float = 0.0
+        self._state_lock = threading.Lock()
+        self._state_sub: Any | None = None
+        if HandState_ is not None:
+            self._state_sub = ChannelSubscriber(HAND_STATE_TOPIC_BY_SIDE[self.hand], HandState_)
+            self._state_sub.Init(self._state_cb, 20)
+
+    def _state_cb(self, msg: Any) -> None:
+        positions: list[float] = []
+        motor_state = list(getattr(msg, "motor_state", []) or [])
+        for idx in range(7):
+            motor = motor_state[idx] if idx < len(motor_state) else None
+            try:
+                positions.append(float(getattr(motor, "q")))
+            except Exception:
+                return
+        if len(positions) == 7:
+            with self._state_lock:
+                self._state_positions = positions
+                self._state_ts = time.time()
+
+    def _read_actual_positions(self, max_age: float = 1.0) -> list[float] | None:
+        with self._state_lock:
+            if self._state_positions is None:
+                return None
+            if (time.time() - self._state_ts) > max_age:
+                return None
+            return list(self._state_positions)
+
+    def _get_start_targets(self) -> list[float]:
+        """Return best estimate of current positions for ramp start."""
+        actual = self._read_actual_positions(max_age=1.0)
+        if actual is not None:
+            return actual
+        # On first-ever call, wait briefly for the state subscriber to receive data.
+        if self._state_sub is not None and self._last_targets is None:
+            deadline = time.time() + 0.3
+            while time.time() < deadline:
+                actual = self._read_actual_positions(max_age=2.0)
+                if actual is not None:
+                    return actual
+                time.sleep(0.02)
+        return list(self._last_targets) if self._last_targets is not None else hand_open_targets(self.hand)
+
     @staticmethod
     def _interpolate_targets(
         start: list[float],
@@ -294,7 +349,7 @@ class Dex3HandController:
             max(1.0 / rate, 0.25 if ramp_s is None else float(ramp_s)),
         )
 
-        start_targets = hand_open_targets(self.hand) if self._last_targets is None else list(self._last_targets)
+        start_targets = self._get_start_targets()
         if any(abs(dst - src) > 1e-6 for src, dst in zip(start_targets, target_list)) and ramp_duration_s > 0.0:
             ramp_steps = max(2, int(round(ramp_duration_s * rate)))
             step_dt = ramp_duration_s / float(ramp_steps)
@@ -337,7 +392,7 @@ class Dex3HandController:
 
     def close(self, hold_s: float = 0.6, rate_hz: float = 50.0, ramp_s: float | None = None) -> None:
         self.set_targets(
-            self._pose_targets(hand_closed_targets(self.hand)),
+            hand_closed_targets(self.hand),
             hold_s=hold_s,
             rate_hz=rate_hz,
             tau=0.0,
@@ -404,6 +459,7 @@ __all__ = [
     "HAND_MIN_LIMITS",
     "HAND_OPEN",
     "HAND_OPEN_LIMITS",
+    "HAND_STATE_TOPIC_BY_SIDE",
     "HAND_THUMB_0_HOLD_TARGETS",
     "build_hand_msg",
     "hand_closed_targets",

@@ -89,19 +89,27 @@ def hanger_boot_sequence(
     domain_id: int = 0,
     step: float = 0.02,
     max_height: float = 0.5,
-    max_attempts: int = 1,
+    max_attempts: int = 3,
+    client_timeout: float = 2.0,
+    require_confirmation: bool = True,
     interactive_retry: bool | None = None,
     retry_callback: Callable[[str, int], bool] | None = None,
+    confirm_callback: Callable[[str], bool] | None = None,
     logger: logging.Logger | None = None,
 ) -> LocoClient:
     if logger is None:
-        logging.basicConfig(level=logging.INFO, format="%(message)s")
         logger = logging.getLogger("hanger_boot")
+        if not logger.handlers:
+            handler = logging.StreamHandler(sys.stdout)
+            handler.setFormatter(logging.Formatter("%(message)s"))
+            logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+        logger.propagate = False
 
-    bot = create_loco_client(domain_id=domain_id, iface=iface)
+    bot = create_loco_client(domain_id=domain_id, iface=iface, timeout=float(client_timeout))
     attempts_limit = max(1, int(max_attempts))
     if interactive_retry is None:
-        interactive_retry = bool(getattr(sys.stdin, "isatty", lambda: False)())
+        interactive_retry = True
 
     try:
         cur_id, cur_mode = read_fsm_state(bot)
@@ -115,34 +123,67 @@ def hanger_boot_sequence(
     except Exception:
         pass
 
-    def show(tag: str) -> None:
-        cur_id, cur_mode = read_fsm_state(bot, retries=2, retry_delay=0.05)
+    def show(tag: str) -> tuple[Optional[int], Optional[int]]:
+        cur_id, cur_mode = read_fsm_state(bot, retries=3, retry_delay=0.05)
         logger.info("%-12s -> FSM %s   mode %s", tag, cur_id, cur_mode)
+        return cur_id, cur_mode
 
-    bot.Damp()
-    show("damp")
+    def loaded_standup_state(
+        cur_id: Optional[int],
+        cur_mode: Optional[int],
+        current_height: float,
+    ) -> bool:
+        return cur_mode == 0 and (cur_id == 4 or cur_id is None) and current_height > 0.2
 
+    def wait_for_operator(prompt: str) -> bool:
+        if confirm_callback is not None:
+            return bool(confirm_callback(prompt))
+        if interactive_retry:
+            logger.warning("%s Press Enter to continue.", prompt)
+            try:
+                input()
+            except EOFError:
+                return False
+            return True
+        return False
+
+    logger.info("stand_up command -> SetFsmId(4)")
     bot.SetFsmId(4)
     show("stand_up")
 
     attempt = 0
     while True:
         attempt += 1
+        loaded_height: Optional[float] = None
         height = 0.0
         while height < max_height:
             height += step
+            logger.info("height %.2f m command -> SetStandHeight", height)
             bot.SetStandHeight(height)
-            show(f"height {height:.2f} m")
-            if fsm_mode(bot) == 0 and height > 0.2:
+            cur_id, cur_mode = show(f"height {height:.2f} m")
+            if loaded_standup_state(cur_id, cur_mode, height):
+                loaded_height = height
                 break
 
-        if fsm_mode(bot) == 0:
+        cur_id, cur_mode = read_fsm_state(bot, retries=5, retry_delay=0.08)
+        if loaded_height is not None and loaded_standup_state(cur_id, cur_mode, loaded_height):
+            height = loaded_height
+            break
+        if loaded_height is not None:
+            logger.warning(
+                "Loaded stand was observed at %.2f m, but the confirmation read was "
+                "incomplete (FSM %s, mode %s); accepting the last good height.",
+                loaded_height,
+                cur_id,
+                cur_mode,
+            )
+            height = loaded_height
             break
 
-        mode_value = fsm_mode(bot)
         logger.warning(
-            "Feet still unloaded (mode %s) after reaching %.2f m on attempt %d/%d.",
-            mode_value,
+            "Feet still unloaded (FSM %s, mode %s) after reaching %.2f m on attempt %d/%d.",
+            cur_id,
+            cur_mode,
             height,
             attempt,
             attempts_limit,
@@ -158,8 +199,8 @@ def hanger_boot_sequence(
                 f"{attempts_limit} attempt(s). Adjust the hanger height/support and retry."
             )
         prompt = (
-            "Feet still unloaded after the stand-height sweep. "
-            "Adjust the hanger height/support, then confirm retry."
+            "Feet still unloaded after the stand-height sweep. Adjust the hanger "
+            "height/support so the soles are just in contact with the ground."
         )
         if retry_callback is not None:
             if not bool(retry_callback(prompt, attempt)):
@@ -167,12 +208,21 @@ def hanger_boot_sequence(
             continue
         if interactive_retry:
             logger.warning("%s Press Enter to retry.", prompt)
-            input()
+            try:
+                input()
+            except EOFError as exc:
+                raise TimeoutError("Boot retry needs operator confirmation, but input is unavailable.") from exc
             continue
-        raise TimeoutError(
-            "Hanger boot needs manual adjustment, but interactive retry is disabled. "
-            "Adjust the hanger height/support and call hanged_boot() again."
+        logger.warning(
+            "Retrying stand-height sweep automatically (%d/%d).",
+            attempt + 1,
+            attempts_limit,
         )
+
+    if require_confirmation and not wait_for_operator(
+        "Robot appears loaded. Confirm before commanding balanced stand."
+    ):
+        raise TimeoutError("Balanced-stand confirmation was not received.")
 
     bot.BalanceStand(0)
     show("balance")
@@ -180,8 +230,12 @@ def hanger_boot_sequence(
     show("height_ok")
     bot.Start()
     show("start")
-    force_balanced_stand_fsm(bot)
-    show("balanced")
+    for _ in range(3):
+        force_balanced_stand_fsm(bot)
+        cur_id, cur_mode = show("balanced")
+        if is_balanced_stand_state(cur_id, cur_mode):
+            break
+        time.sleep(0.1)
     return bot
 
 

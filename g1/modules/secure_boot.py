@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 
 from sdk_boot import force_balanced_stand_fsm, hanger_boot_sequence
 
@@ -45,8 +45,12 @@ def secure_boot(
     domain_id: int = 0,
     step: float = 0.02,
     max_height: float = 0.5,
-    max_attempts: int = 1,
+    max_attempts: int = 3,
+    client_timeout: float = 2.0,
+    require_confirmation: bool = True,
     interactive_retry: bool | None = None,
+    retry_callback: Callable[[str, int], bool] | None = None,
+    confirm_callback: Callable[[str], bool] | None = None,
     logger: Any | None = None,
 ) -> Any:
     client = hanger_boot_sequence(
@@ -55,7 +59,11 @@ def secure_boot(
         step=float(step),
         max_height=float(max_height),
         max_attempts=int(max_attempts),
+        client_timeout=float(client_timeout),
+        require_confirmation=bool(require_confirmation),
         interactive_retry=interactive_retry,
+        retry_callback=retry_callback,
+        confirm_callback=confirm_callback,
         logger=logger,
     )
     force_normal_gait(client)

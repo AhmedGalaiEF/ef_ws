@@ -78,6 +78,36 @@ UPPER_BODY_JOINTS = WAIST_JOINTS + LEFT_ARM_JOINTS + RIGHT_ARM_JOINTS
 ARM_SDK_NOT_USED_IDX = 29
 WAIST_HOLD_KP = 240.0
 WAIST_HOLD_KD = 12.0
+HL_ARM_ACTION_RELEASE = "release arm"
+HL_ARM_ACTION_DEFAULT_RELEASE_DELAY_S = 2.0
+HL_ARM_ACTIONS = {
+    "release arm": 99,
+    "two-hand kiss": 11,
+    "left kiss": 12,
+    "right kiss": 13,
+    "hands up": 15,
+    "clap": 17,
+    "high five": 18,
+    "hug": 19,
+    "heart": 20,
+    "right heart": 21,
+    "reject": 22,
+    "right hand up": 23,
+    "x-ray": 24,
+    "face wave": 25,
+    "high wave": 26,
+    "shake hand": 27,
+}
+HL_ARM_ACTION_ALIASES = {
+    "release": "release arm",
+    "two hand kiss": "two-hand kiss",
+    "lefthand kiss": "left kiss",
+    "left hand kiss": "left kiss",
+    "righthand kiss": "right kiss",
+    "right hand kiss": "right kiss",
+    "xray": "x-ray",
+    "x ray": "x-ray",
+}
 BODY_JOINT_LAYOUT: list[tuple[str, int, str]] = [
     ("left_leg", 0, "hip_pitch"),
     ("left_leg", 1, "hip_roll"),
@@ -170,6 +200,11 @@ class _ArmSdkPublisher:
         self._cmd.crc = self._crc.Crc(self._cmd)
         self._pub.Write(self._cmd)
 
+    def publish_arm_sdk_weight(self, weight: float) -> None:
+        self._cmd.motor_cmd[ARM_SDK_NOT_USED_IDX].q = max(0.0, min(1.0, float(weight)))
+        self._cmd.crc = self._crc.Crc(self._cmd)
+        self._pub.Write(self._cmd)
+
 
 class Robot:
     """End-user wrapper around common G1 SDK workflows."""
@@ -238,6 +273,7 @@ class Robot:
         self._audio: RobotAudio | None = None
         self._video_client: Any = None
         self._arm_sdk: _ArmSdkPublisher | None = None
+        self._arm_action_client: Any = None
         self._hands: dict[str, Dex3HandController] = {}
         self._usb_controller_thread: threading.Thread | None = None
         self._usb_controller_stop = threading.Event()
@@ -282,6 +318,15 @@ class Robot:
         if self._arm_sdk is None:
             self._arm_sdk = _ArmSdkPublisher(iface=self.iface, domain_id=self.domain_id)
         return self._arm_sdk
+
+    def _get_arm_action_client(self) -> Any:
+        if self._arm_action_client is None:
+            from unitree_sdk2py.g1.arm.g1_arm_action_client import G1ArmActionClient
+
+            self._arm_action_client = G1ArmActionClient()
+            self._arm_action_client.SetTimeout(10.0)
+            self._arm_action_client.Init()
+        return self._arm_action_client
 
     def _ensure_slam_info_subscriber(self) -> SlamInfoSubscriber:
         if self._slam_info_sub is None:
@@ -616,6 +661,177 @@ class Robot:
             kp_by_joint=waist_gains,
             kd_by_joint=waist_damping,
         )
+
+    @staticmethod
+    def _normalize_hl_arm_action_name(action: str) -> str:
+        key = " ".join(str(action).strip().lower().replace("_", " ").split())
+        key = HL_ARM_ACTION_ALIASES.get(key, key)
+        if key in HL_ARM_ACTIONS:
+            return key
+        raise ValueError(
+            "Unknown high-level arm action. Use one of: "
+            + ", ".join(sorted(HL_ARM_ACTIONS))
+        )
+
+    @staticmethod
+    def list_arm_actions() -> dict[str, int]:
+        """Return the SDK high-level arm action names supported by this wrapper."""
+        return dict(HL_ARM_ACTIONS)
+
+    def get_arm_action_list(self) -> tuple[int, Any]:
+        """Read the action list from the robot's high-level arm service."""
+        code, actions = self._get_arm_action_client().GetActionList()
+        return int(code), actions
+
+    def execute_arm_action(
+        self,
+        action: str | int,
+        *,
+        release_after_s: float | None = None,
+    ) -> int:
+        """Execute a high-level G1 arm action through the SDK arm service.
+
+        `action` may be an SDK action id or one of the names from
+        :meth:`list_arm_actions`. For gestures that the SDK example releases
+        after a pause, pass `release_after_s`; convenience methods do this by
+        default where the example does.
+        """
+        if isinstance(action, str):
+            action_name = self._normalize_hl_arm_action_name(action)
+            action_id = HL_ARM_ACTIONS[action_name]
+        else:
+            action_id = int(action)
+
+        client = self._get_arm_action_client()
+        code = int(client.ExecuteAction(int(action_id)))
+        if release_after_s is not None:
+            time.sleep(max(0.0, float(release_after_s)))
+            release_code = int(client.ExecuteAction(HL_ARM_ACTIONS[HL_ARM_ACTION_RELEASE]))
+            return release_code if code == 0 else code
+        return code
+
+    def execute_hl_arm_action(
+        self,
+        action: str | int,
+        *,
+        release_after_s: float | None = None,
+    ) -> int:
+        return self.execute_arm_action(action, release_after_s=release_after_s)
+
+    def release_arm(self) -> int:
+        return self.execute_arm_action(HL_ARM_ACTION_RELEASE)
+
+    def release_arms(
+        self,
+        *,
+        duration_s: float = 3.0,
+        command_rate_hz: float = 50.0,
+    ) -> dict[str, float]:
+        """Ramp the DDS arm_sdk enable flag from enabled to disabled.
+
+        This mirrors Stage 4 of Unitree's `g1_arm7_sdk_dds_example.py`: joint
+        targets are left untouched while the special arm_sdk weight joint
+        transitions from 1.0 to 0.0.
+        """
+        steps = max(1, int(max(0.0, float(duration_s)) * max(1.0, float(command_rate_hz))))
+        dt = 1.0 / max(1.0, float(command_rate_hz))
+        arm_sdk = self._get_arm_sdk()
+        for step_idx in range(steps + 1):
+            ratio = float(step_idx) / float(steps)
+            arm_sdk.publish_arm_sdk_weight(1.0 - ratio)
+            time.sleep(dt)
+        return {
+            "duration_s": float(duration_s),
+            "command_rate_hz": float(command_rate_hz),
+            "final_arm_sdk_weight": 0.0,
+        }
+
+    def unrelease_arms(
+        self,
+        *,
+        duration_s: float = 1.0,
+        command_rate_hz: float = 50.0,
+        kp: float = 30.0,
+        kd: float = 1.5,
+        waist_kp: float = WAIST_HOLD_KP,
+        waist_kd: float = WAIST_HOLD_KD,
+        timeout: float = 3.0,
+    ) -> dict[str, Any]:
+        """Re-enable DDS arm_sdk control while holding the current pose."""
+        positions = self._read_joint_positions_or_raise(UPPER_BODY_JOINTS, timeout=timeout)
+        steps = max(1, int(max(0.0, float(duration_s)) * max(1.0, float(command_rate_hz))))
+        dt = 1.0 / max(1.0, float(command_rate_hz))
+        arm_sdk = self._get_arm_sdk()
+        waist_gains = {joint_index: float(waist_kp) for joint_index in WAIST_JOINTS}
+        waist_damping = {joint_index: float(waist_kd) for joint_index in WAIST_JOINTS}
+        for step_idx in range(steps + 1):
+            ratio = float(step_idx) / float(steps)
+            arm_sdk.publish_targets(
+                positions,
+                kp=kp,
+                kd=kd,
+                kp_by_joint=waist_gains,
+                kd_by_joint=waist_damping,
+            )
+            arm_sdk.publish_arm_sdk_weight(ratio)
+            time.sleep(dt)
+        return {
+            "duration_s": float(duration_s),
+            "command_rate_hz": float(command_rate_hz),
+            "final_arm_sdk_weight": 1.0,
+            "joint_count": len(positions),
+        }
+
+    def shake_hand_action(self, *, release_after_s: float | None = HL_ARM_ACTION_DEFAULT_RELEASE_DELAY_S) -> int:
+        return self.execute_arm_action("shake hand", release_after_s=release_after_s)
+
+    def shake_hand(self, *, release_after_s: float | None = HL_ARM_ACTION_DEFAULT_RELEASE_DELAY_S) -> int:
+        return self.shake_hand_action(release_after_s=release_after_s)
+
+    def arm_shake_hand(self, *, release_after_s: float | None = HL_ARM_ACTION_DEFAULT_RELEASE_DELAY_S) -> int:
+        return self.shake_hand_action(release_after_s=release_after_s)
+
+    def high_five(self, *, release_after_s: float | None = HL_ARM_ACTION_DEFAULT_RELEASE_DELAY_S) -> int:
+        return self.execute_arm_action("high five", release_after_s=release_after_s)
+
+    def hug(self, *, release_after_s: float | None = HL_ARM_ACTION_DEFAULT_RELEASE_DELAY_S) -> int:
+        return self.execute_arm_action("hug", release_after_s=release_after_s)
+
+    def high_wave(self) -> int:
+        return self.execute_arm_action("high wave")
+
+    def clap(self) -> int:
+        return self.execute_arm_action("clap")
+
+    def face_wave(self) -> int:
+        return self.execute_arm_action("face wave")
+
+    def left_kiss(self) -> int:
+        return self.execute_arm_action("left kiss")
+
+    def heart(self, *, release_after_s: float | None = HL_ARM_ACTION_DEFAULT_RELEASE_DELAY_S) -> int:
+        return self.execute_arm_action("heart", release_after_s=release_after_s)
+
+    def right_heart(self, *, release_after_s: float | None = HL_ARM_ACTION_DEFAULT_RELEASE_DELAY_S) -> int:
+        return self.execute_arm_action("right heart", release_after_s=release_after_s)
+
+    def hands_up(self, *, release_after_s: float | None = HL_ARM_ACTION_DEFAULT_RELEASE_DELAY_S) -> int:
+        return self.execute_arm_action("hands up", release_after_s=release_after_s)
+
+    def x_ray(self, *, release_after_s: float | None = HL_ARM_ACTION_DEFAULT_RELEASE_DELAY_S) -> int:
+        return self.execute_arm_action("x-ray", release_after_s=release_after_s)
+
+    def right_hand_up(self, *, release_after_s: float | None = HL_ARM_ACTION_DEFAULT_RELEASE_DELAY_S) -> int:
+        return self.execute_arm_action("right hand up", release_after_s=release_after_s)
+
+    def reject(self, *, release_after_s: float | None = HL_ARM_ACTION_DEFAULT_RELEASE_DELAY_S) -> int:
+        return self.execute_arm_action("reject", release_after_s=release_after_s)
+
+    def right_kiss(self) -> int:
+        return self.execute_arm_action("right kiss")
+
+    def two_hand_kiss(self) -> int:
+        return self.execute_arm_action("two-hand kiss")
 
     def move_upper_body_joint(
         self,
@@ -1847,8 +2063,9 @@ class Robot:
         self,
         step: float = 0.02,
         max_height: float = 0.5,
-        max_attempts: int = 1,
-        interactive_retry: bool = False,
+        max_attempts: int = 3,
+        require_confirmation: bool = True,
+        interactive_retry: bool | None = None,
     ) -> None:
         self._client = secure_boot(
             iface=self.iface,
@@ -1856,6 +2073,7 @@ class Robot:
             step=step,
             max_height=max_height,
             max_attempts=max_attempts,
+            require_confirmation=require_confirmation,
             interactive_retry=interactive_retry,
         )
 

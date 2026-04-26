@@ -4541,3 +4541,121 @@ KeyError: "Callback function not found for output 'boot-status.children'."
 2026-04-26 10:36:16,841 INFO Thread-48 Callback done name=update_minimal_intervals trigger=joystick-enabled elapsed_s=0.006
 2026-04-26 10:36:35,406 INFO Thread-35 Boot final forced fsm=501 mode=None
 2026-04-26 10:36:35,414 INFO Thread-35 Boot calling force_normal_gait()
+2026-04-26 19:23:23,042 INFO MainThread Dash robot control log path: /home/unitree/ef_ws/repo/ef_ws/g1/modules/scripts/dash_robot_control.log
+2026-04-26 19:23:29,426 INFO Thread-19 Callback start name=on_lowlevel_joint_selected trigger=initial args=1 kwargs=[]
+2026-04-26 19:23:29,429 INFO Thread-19 Callback done name=on_lowlevel_joint_selected trigger=initial elapsed_s=0.003
+2026-04-26 19:23:29,434 INFO Thread-20 Callback start name=update_info trigger=initial args=2 kwargs=[]
+2026-04-26 19:23:29,436 INFO Thread-20 Callback done name=update_info trigger=initial elapsed_s=0.002
+2026-04-26 19:23:29,438 INFO Thread-21 Callback start name=update_logs trigger=initial args=2 kwargs=[]
+2026-04-26 19:23:29,441 INFO Thread-22 Callback start name=update_minimal_intervals trigger=initial args=8 kwargs=[]
+2026-04-26 19:23:29,442 INFO Thread-21 Callback done name=update_logs trigger=initial elapsed_s=0.004
+2026-04-26 19:23:29,444 INFO Thread-22 Callback done name=update_minimal_intervals trigger=initial elapsed_s=0.003
+2026-04-26 19:23:37,889 INFO Thread-23 Callback start name=on_say trigger=btn-say args=2 kwargs=[]
+2026-04-26 19:23:39,604 INFO Thread-23 Callback done name=on_say trigger=btn-say elapsed_s=1.715
+2026-04-26 19:23:45,217 INFO Thread-24 Callback start name=on_navigation trigger=btn-arm-action-shake-hand args=28 kwargs=[]
+2026-04-26 19:23:45,228 INFO Thread-24 Callback done name=on_navigation trigger=btn-arm-action-shake-hand elapsed_s=0.011
+2026-04-26 19:23:50,752 INFO arm-action-shake-hand High-level arm action completed action=shake hand rc=0
+2026-04-26 19:23:51,882 INFO Thread-25 Callback start name=on_navigation trigger=btn-handshake args=28 kwargs=[]
+2026-04-26 19:23:51,893 INFO Thread-25 Callback done name=on_navigation trigger=btn-handshake elapsed_s=0.012
+2026-04-26 19:23:51,911 INFO nav-handshake Handshake command completed rc=0
+2026-04-26 19:24:10,957 INFO Thread-26 Callback start name=on_navigation trigger=btn-arm-sdk-release-arms args=28 kwargs=[]
+2026-04-26 19:24:10,966 INFO Thread-26 Callback done name=on_navigation trigger=btn-arm-sdk-release-arms elapsed_s=0.008
+2026-04-26 19:24:14,640 INFO arm-sdk-release_arms Arm SDK action completed method=release_arms result={'duration_s': 3.0, 'command_rate_hz': 50.0, 'final_arm_sdk_weight': 0.0}
+2026-04-26 19:24:47,426 INFO Thread-27 Callback start name=on_navigation trigger=btn-hand-open-left args=28 kwargs=[]
+2026-04-26 19:24:47,437 INFO Thread-27 Callback done name=on_navigation trigger=btn-hand-open-left elapsed_s=0.011
+2026-04-26 19:24:48,318 INFO hand-open-left Hand action completed action=open hand=left
+2026-04-26 19:24:49,466 INFO Thread-28 Callback start name=on_navigation trigger=btn-hand-open-left args=28 kwargs=[]
+2026-04-26 19:24:49,477 INFO Thread-28 Callback done name=on_navigation trigger=btn-hand-open-left elapsed_s=0.011
+2026-04-26 19:24:49,836 INFO hand-open-left Hand action completed action=open hand=left
+2026-04-26 19:24:53,076 INFO Thread-29 Callback start name=on_navigation trigger=btn-hand-close-left args=28 kwargs=[]
+2026-04-26 19:24:53,086 INFO Thread-29 Callback done name=on_navigation trigger=btn-hand-close-left elapsed_s=0.010
+2026-04-26 19:24:53,698 INFO hand-close-left Hand action completed action=close hand=left
+2026-04-26 19:24:54,221 INFO Thread-30 Callback start name=on_navigation trigger=btn-hand-open-right args=28 kwargs=[]
+2026-04-26 19:24:54,233 INFO Thread-30 Callback done name=on_navigation trigger=btn-hand-open-right elapsed_s=0.012
+2026-04-26 19:24:55,114 INFO hand-open-right Hand action completed action=open hand=right
+2026-04-26 19:24:55,306 INFO Thread-31 Callback start name=on_navigation trigger=btn-hand-close-right args=28 kwargs=[]
+2026-04-26 19:24:55,315 INFO Thread-31 Callback done name=on_navigation trigger=btn-hand-close-right elapsed_s=0.009
+2026-04-26 19:24:55,926 INFO hand-close-right Hand action completed action=close hand=right
+2026-04-26 19:25:09,980 INFO Thread-32 Callback start name=on_navigation trigger=btn-hand-close-both args=28 kwargs=[]
+2026-04-26 19:25:09,989 INFO Thread-32 Callback done name=on_navigation trigger=btn-hand-close-both elapsed_s=0.009
+2026-04-26 19:25:10,715 INFO hand-close-both Hand action completed action=close hand=both
+2026-04-26 19:25:10,743 INFO Thread-33 Callback start name=on_navigation trigger=btn-hand-open-both args=28 kwargs=[]
+2026-04-26 19:25:10,753 INFO Thread-33 Callback done name=on_navigation trigger=btn-hand-open-both elapsed_s=0.010
+2026-04-26 19:25:11,972 INFO hand-open-both Hand action completed action=open hand=both
+2026-04-26 19:25:16,371 INFO Thread-34 Callback start name=toggle_joysticks trigger=btn-joystick-toggle args=2 kwargs=[]
+2026-04-26 19:25:16,377 WARNING Thread-34 Joystick control toggled enabled
+2026-04-26 19:25:16,382 INFO Thread-34 Callback done name=toggle_joysticks trigger=btn-joystick-toggle elapsed_s=0.011
+2026-04-26 19:25:16,643 INFO Thread-35 Callback start name=update_minimal_intervals trigger=joystick-enabled args=8 kwargs=[]
+2026-04-26 19:25:16,651 INFO Thread-36 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-26 19:25:16,653 INFO Thread-35 Callback done name=update_minimal_intervals trigger=joystick-enabled elapsed_s=0.010
+2026-04-26 19:25:16,660 INFO Thread-36 Callback done name=on_navigation trigger=nav-command elapsed_s=0.009
+2026-04-26 19:25:21,751 INFO Thread-86 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-26 19:25:21,761 INFO Thread-86 Callback done name=on_navigation trigger=nav-command elapsed_s=0.011
+2026-04-26 19:25:26,755 INFO Thread-136 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-26 19:25:26,761 INFO Thread-136 Callback done name=on_navigation trigger=nav-command elapsed_s=0.006
+2026-04-26 19:25:31,844 INFO Thread-187 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-26 19:25:31,850 INFO Thread-187 Callback done name=on_navigation trigger=nav-command elapsed_s=0.006
+2026-04-26 19:25:36,849 INFO Thread-237 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-26 19:25:36,855 INFO Thread-237 Callback done name=on_navigation trigger=nav-command elapsed_s=0.007
+2026-04-26 19:25:38,749 INFO Thread-257 Callback start name=update_info trigger=btn-info-refresh args=2 kwargs=[]
+2026-04-26 19:25:39,583 INFO Thread-257 Callback done name=update_info trigger=btn-info-refresh elapsed_s=0.833
+2026-04-26 19:25:41,850 INFO Thread-288 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-26 19:25:41,856 INFO Thread-288 Callback done name=on_navigation trigger=nav-command elapsed_s=0.006
+2026-04-26 19:25:46,854 INFO Thread-338 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-26 19:25:46,861 INFO Thread-338 Callback done name=on_navigation trigger=nav-command elapsed_s=0.007
+2026-04-26 19:25:50,625 INFO Thread-376 Callback start name=update_logs trigger=btn-logs-refresh args=2 kwargs=[]
+2026-04-26 19:25:50,678 INFO Thread-376 Callback done name=update_logs trigger=btn-logs-refresh elapsed_s=0.053
+2026-04-26 19:25:51,960 INFO Thread-390 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-26 19:25:51,968 INFO Thread-390 Callback done name=on_navigation trigger=nav-command elapsed_s=0.008
+2026-04-26 19:25:53,362 INFO Thread-405 Callback start name=toggle_rgb trigger=btn-rgb-toggle args=2 kwargs=[]
+2026-04-26 19:25:53,366 WARNING Thread-405 RGB feed toggled enabled
+2026-04-26 19:25:53,370 INFO Thread-405 Callback done name=toggle_rgb trigger=btn-rgb-toggle elapsed_s=0.008
+2026-04-26 19:25:53,410 INFO Thread-406 Callback start name=update_minimal_intervals trigger=rgb-enabled args=8 kwargs=[]
+2026-04-26 19:25:53,417 INFO Thread-406 Callback done name=update_minimal_intervals trigger=rgb-enabled elapsed_s=0.006
+2026-04-26 19:25:53,964 INFO Thread-413 Callback start name=update_rgb_feed trigger=rgb-interval args=3 kwargs=[]
+2026-04-26 19:25:55,548 INFO Thread-433 Callback start name=toggle_depth trigger=btn-depth-toggle args=2 kwargs=[]
+2026-04-26 19:25:55,560 WARNING Thread-433 Depth feed toggled enabled
+2026-04-26 19:25:55,568 INFO Thread-433 Callback done name=toggle_depth trigger=btn-depth-toggle elapsed_s=0.020
+2026-04-26 19:25:55,657 INFO Thread-435 Callback start name=update_minimal_intervals trigger=depth-enabled args=8 kwargs=[]
+2026-04-26 19:25:55,668 INFO Thread-435 Callback done name=update_minimal_intervals trigger=depth-enabled elapsed_s=0.011
+2026-04-26 19:25:56,260 INFO Thread-444 Callback start name=update_depth_feed trigger=depth-interval args=3 kwargs=[]
+2026-04-26 19:25:56,268 INFO Thread-444 Callback done name=update_depth_feed trigger=depth-interval elapsed_s=0.009
+2026-04-26 19:25:56,776 INFO Thread-413 Callback done name=update_rgb_feed trigger=rgb-interval elapsed_s=2.813
+2026-04-26 19:25:56,975 INFO Thread-453 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-26 19:25:56,981 INFO Thread-453 Callback done name=on_navigation trigger=nav-command elapsed_s=0.007
+2026-04-26 19:25:57,212 INFO Thread-420 Callback done name=update_rgb_feed trigger=rgb-interval elapsed_s=2.739
+2026-04-26 19:25:59,007 INFO Thread-482 Callback start name=update_rgb_feed trigger=rgb-interval args=3 kwargs=[]
+2026-04-26 19:25:59,014 INFO Thread-482 Callback done name=update_rgb_feed trigger=rgb-interval elapsed_s=0.007
+2026-04-26 19:26:01,295 INFO Thread-514 Callback start name=update_depth_feed trigger=depth-interval args=3 kwargs=[]
+2026-04-26 19:26:01,302 INFO Thread-514 Callback done name=update_depth_feed trigger=depth-interval elapsed_s=0.007
+2026-04-26 19:26:02,050 INFO Thread-525 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-26 19:26:02,057 INFO Thread-525 Callback done name=on_navigation trigger=nav-command elapsed_s=0.006
+2026-04-26 19:26:04,016 INFO Thread-552 Callback start name=update_rgb_feed trigger=rgb-interval args=3 kwargs=[]
+2026-04-26 19:26:04,023 INFO Thread-552 Callback done name=update_rgb_feed trigger=rgb-interval elapsed_s=0.007
+2026-04-26 19:26:06,766 INFO Thread-591 Callback start name=update_depth_feed trigger=depth-interval args=3 kwargs=[]
+2026-04-26 19:26:06,773 INFO Thread-591 Callback done name=update_depth_feed trigger=depth-interval elapsed_s=0.007
+2026-04-26 19:26:07,057 INFO Thread-595 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-26 19:26:07,065 INFO Thread-595 Callback done name=on_navigation trigger=nav-command elapsed_s=0.008
+2026-04-26 19:26:09,495 INFO Thread-629 Callback start name=update_rgb_feed trigger=rgb-interval args=3 kwargs=[]
+2026-04-26 19:26:09,500 INFO Thread-629 Callback done name=update_rgb_feed trigger=rgb-interval elapsed_s=0.006
+2026-04-26 19:26:12,148 INFO Thread-666 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-26 19:26:12,153 INFO Thread-666 Callback done name=on_navigation trigger=nav-command elapsed_s=0.005
+2026-04-26 19:26:12,267 INFO Thread-668 Callback start name=update_depth_feed trigger=depth-interval args=3 kwargs=[]
+2026-04-26 19:26:12,274 INFO Thread-668 Callback done name=update_depth_feed trigger=depth-interval elapsed_s=0.007
+2026-04-26 19:26:14,580 INFO Thread-699 Callback start name=update_rgb_feed trigger=rgb-interval args=3 kwargs=[]
+2026-04-26 19:26:14,586 INFO Thread-699 Callback done name=update_rgb_feed trigger=rgb-interval elapsed_s=0.006
+2026-04-26 19:26:17,149 INFO Thread-736 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-26 19:26:17,156 INFO Thread-736 Callback done name=on_navigation trigger=nav-command elapsed_s=0.006
+2026-04-26 19:26:17,278 INFO Thread-738 Callback start name=update_depth_feed trigger=depth-interval args=3 kwargs=[]
+2026-04-26 19:26:17,287 INFO Thread-738 Callback done name=update_depth_feed trigger=depth-interval elapsed_s=0.009
+2026-04-26 19:26:20,027 INFO Thread-776 Callback start name=update_rgb_feed trigger=rgb-interval args=3 kwargs=[]
+2026-04-26 19:26:20,036 INFO Thread-776 Callback done name=update_rgb_feed trigger=rgb-interval elapsed_s=0.009
+2026-04-26 19:26:22,152 INFO Thread-806 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-26 19:26:22,157 INFO Thread-806 Callback done name=on_navigation trigger=nav-command elapsed_s=0.005
+2026-04-26 19:26:22,774 INFO Thread-815 Callback start name=update_depth_feed trigger=depth-interval args=3 kwargs=[]
+2026-04-26 19:26:22,784 INFO Thread-815 Callback done name=update_depth_feed trigger=depth-interval elapsed_s=0.010
+2026-04-26 19:26:25,029 INFO Thread-846 Callback start name=update_rgb_feed trigger=rgb-interval args=3 kwargs=[]
+2026-04-26 19:26:25,037 INFO Thread-846 Callback done name=update_rgb_feed trigger=rgb-interval elapsed_s=0.009
+2026-04-26 19:26:27,264 INFO Thread-877 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-26 19:26:27,272 INFO Thread-877 Callback done name=on_navigation trigger=nav-command elapsed_s=0.008
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       

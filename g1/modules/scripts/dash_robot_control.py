@@ -1275,14 +1275,14 @@ class _BootSequenceController:
         try:
             fsm_i = int(fsm_id)
         except Exception:
-            return False
+            fsm_i = None
         if fsm_i == 501:
             return True
         try:
             mode_i = int(fsm_mode_value)
         except Exception:
             return False
-        return fsm_i == 4 and mode_i == 0
+        return (fsm_i == 4 or fsm_i is None) and mode_i == 0
 
     def _run(self, iface: str, domain_id: int) -> None:
         global ROBOT_INIT_ERR, ROBOT_INSTANCE
@@ -1292,7 +1292,7 @@ class _BootSequenceController:
             from secure_boot import force_normal_gait
 
             LOGGER.info("Boot worker creating loco client iface=%s domain_id=%s", iface, domain_id)
-            bot = create_loco_client(domain_id=domain_id, iface=iface)
+            bot = create_loco_client(domain_id=domain_id, iface=iface, timeout=2.0)
             cur_id, cur_mode = read_fsm_state(bot)
             LOGGER.info("Boot initial FSM id=%s mode=%s", cur_id, cur_mode)
             if self._is_balanced_stand_state(cur_id, cur_mode):
@@ -1304,42 +1304,62 @@ class _BootSequenceController:
                 self._set("done", f"Robot is already in balanced stand (FSM {cur_id}, mode {cur_mode}).")
                 return
 
-            self._set("running", "Damping robot before stand-up.")
-            LOGGER.info("Boot calling Damp()")
-            bot.Damp()
-            time.sleep(0.1)
             self._set("running", "Switching to stand-up FSM.")
             LOGGER.info("Boot calling SetFsmId(4)")
             bot.SetFsmId(4)
             time.sleep(0.1)
 
             height = 0.0
-            while True:
+            loaded_height = None
+            attempts_limit = 3
+            for attempt in range(1, attempts_limit + 1):
+                loaded_height = None
                 height = 0.0
                 while height < 0.5:
                     height += 0.02
-                    bot.SetStandHeight(height)
                     self._set("running", f"Raising stand height to {height:.2f} m.")
+                    bot.SetStandHeight(height)
                     time.sleep(0.05)
                     cur_id, mode = read_fsm_state(bot, retries=1, retry_delay=0.01)
                     LOGGER.info("Boot height=%.2f fsm=%s mode=%s", height, cur_id, mode)
                     if self._is_loaded_standup_state(cur_id, mode) and height > 0.2:
+                        loaded_height = height
                         break
 
-                cur_id, mode = read_fsm_state(bot, retries=1, retry_delay=0.01)
+                cur_id, mode = read_fsm_state(bot, retries=3, retry_delay=0.05)
                 LOGGER.info("Boot sweep complete height=%.2f fsm=%s mode=%s", height, cur_id, mode)
-                if self._is_loaded_standup_state(cur_id, mode):
+                if loaded_height is not None and self._is_loaded_standup_state(cur_id, mode):
+                    height = loaded_height
+                    break
+                if loaded_height is not None:
+                    LOGGER.info(
+                        "Boot accepting previously observed loaded height %.2f after incomplete confirmation fsm=%s mode=%s",
+                        loaded_height,
+                        cur_id,
+                        mode,
+                    )
+                    height = loaded_height
                     break
 
-                self._set("running", "Feet still unloaded; resetting stand height.")
+                self._set(
+                    "running",
+                    f"Feet still unloaded after attempt {attempt}/{attempts_limit}; resetting stand height.",
+                )
                 try:
                     LOGGER.info("Boot calling SetStandHeight(0.0)")
                     bot.SetStandHeight(0.0)
                 except Exception:
                     LOGGER.exception("Boot failed to reset stand height")
+                if attempt >= attempts_limit:
+                    raise TimeoutError(
+                        "Hanger boot did not reach a loaded stand state after "
+                        f"{attempts_limit} attempt(s). Adjust the hanger height/support and retry."
+                    )
                 self._wait_for_confirm(
                     "Adjust the hanger height, then press Confirm balanced stand in the dashboard."
                 )
+            else:
+                raise TimeoutError("Hanger boot did not reach a loaded stand state.")
 
             self._wait_for_confirm("Robot appears loaded. Press Confirm balanced stand to command BalanceStand.")
             LOGGER.info("Boot calling SetFsmId(501) after dashboard confirmation")
@@ -1353,8 +1373,12 @@ class _BootSequenceController:
             LOGGER.info("Boot calling Start()")
             bot.Start()
             LOGGER.info("Boot calling SetFsmId(501) after Start()")
-            force_balanced_stand_fsm(bot)
-            cur_id, mode = read_fsm_state(bot, retries=2, retry_delay=0.05)
+            for _ in range(3):
+                force_balanced_stand_fsm(bot)
+                cur_id, mode = read_fsm_state(bot, retries=2, retry_delay=0.05)
+                if self._is_balanced_stand_state(cur_id, mode):
+                    break
+                time.sleep(0.1)
             LOGGER.info("Boot final forced fsm=%s mode=%s", cur_id, mode)
             LOGGER.info("Boot calling force_normal_gait()")
             force_normal_gait(bot)
@@ -1720,6 +1744,46 @@ ACTIVE_TAB_STYLE = {
 }
 TAB_LABEL_STYLE = {"color": "#1f2933"}
 ACTIVE_TAB_LABEL_STYLE = {"color": "#0b2545"}
+ARM_ACTION_BUTTONS = [
+    ("Shake Hand", "btn-arm-action-shake-hand", "shake hand"),
+    ("High Five", "btn-arm-action-high-five", "high five"),
+    ("Hug", "btn-arm-action-hug", "hug"),
+    ("High Wave", "btn-arm-action-high-wave", "high wave"),
+    ("Clap", "btn-arm-action-clap", "clap"),
+    ("Face Wave", "btn-arm-action-face-wave", "face wave"),
+    ("Left Kiss", "btn-arm-action-left-kiss", "left kiss"),
+    ("Right Kiss", "btn-arm-action-right-kiss", "right kiss"),
+    ("Two-Hand Kiss", "btn-arm-action-two-hand-kiss", "two-hand kiss"),
+    ("Heart", "btn-arm-action-heart", "heart"),
+    ("Right Heart", "btn-arm-action-right-heart", "right heart"),
+    ("Hands Up", "btn-arm-action-hands-up", "hands up"),
+    ("Right Hand Up", "btn-arm-action-right-hand-up", "right hand up"),
+    ("X-Ray", "btn-arm-action-x-ray", "x-ray"),
+    ("Reject", "btn-arm-action-reject", "reject"),
+    ("HL Release Arm", "btn-arm-action-release-arm", "release arm"),
+]
+ARM_ACTION_BY_BUTTON_ID = {
+    button_id: action_name for _label, button_id, action_name in ARM_ACTION_BUTTONS
+}
+ARM_SDK_BUTTONS = [
+    ("Release Arms", "btn-arm-sdk-release-arms", "release_arms"),
+    ("Unrelease Arms", "btn-arm-sdk-unrelease-arms", "unrelease_arms"),
+]
+ARM_SDK_ACTION_BY_BUTTON_ID = {
+    button_id: method_name for _label, button_id, method_name in ARM_SDK_BUTTONS
+}
+HAND_BUTTONS = [
+    ("Open Left", "btn-hand-open-left", "open", "left"),
+    ("Close Left", "btn-hand-close-left", "close", "left"),
+    ("Open Right", "btn-hand-open-right", "open", "right"),
+    ("Close Right", "btn-hand-close-right", "close", "right"),
+    ("Open Both", "btn-hand-open-both", "open", "both"),
+    ("Close Both", "btn-hand-close-both", "close", "both"),
+]
+HAND_ACTION_BY_BUTTON_ID = {
+    button_id: (action_name, hand)
+    for _label, button_id, action_name, hand in HAND_BUTTONS
+}
 app.index_string = """
 <!DOCTYPE html>
 <html>
@@ -2127,6 +2191,49 @@ app.layout = dbc.Container(
                                     dbc.Button("Stop Move", id="btn-nav-stop", color="secondary", className="w-100 mt-3"),
                                     md=6,
                                 ),
+                            ],
+                            className="g-2",
+                        ),
+                        html.Hr(),
+                        html.Div("High-level arm actions", className="mt-3 mb-1"),
+                        dbc.Row(
+                            [
+                                dbc.Col(
+                                    dbc.Button(label, id=button_id, color="primary", outline=True, className="w-100 mt-2"),
+                                    md=3,
+                                    sm=6,
+                                )
+                                for label, button_id, _action_name in ARM_ACTION_BUTTONS
+                            ],
+                            className="g-2",
+                        ),
+                        html.Div("Arm SDK control", className="mt-4 mb-1"),
+                        dbc.Row(
+                            [
+                                dbc.Col(
+                                    dbc.Button(label, id=button_id, color="warning", className="w-100 mt-2"),
+                                    md=3,
+                                    sm=6,
+                                )
+                                for label, button_id, _method_name in ARM_SDK_BUTTONS
+                            ],
+                            className="g-2",
+                        ),
+                        html.Div("Hands", className="mt-4 mb-1"),
+                        dbc.Row(
+                            [
+                                dbc.Col(
+                                    dbc.Button(
+                                        label,
+                                        id=button_id,
+                                        color="success" if action_name == "open" else "secondary",
+                                        outline=True,
+                                        className="w-100 mt-2",
+                                    ),
+                                    md=2,
+                                    sm=6,
+                                )
+                                for label, button_id, action_name, _hand in HAND_BUTTONS
                             ],
                             className="g-2",
                         ),
@@ -2598,6 +2705,9 @@ def on_control(
     Input("btn-handshake", "n_clicks"),
     Input("btn-nav-stop", "n_clicks"),
     Input("nav-command", "data"),
+    *[Input(button_id, "n_clicks") for _label, button_id, _action_name in ARM_ACTION_BUTTONS],
+    *[Input(button_id, "n_clicks") for _label, button_id, _method_name in ARM_SDK_BUTTONS],
+    *[Input(button_id, "n_clicks") for _label, button_id, _action_name, _hand in HAND_BUTTONS],
     State("joystick-enabled", "data"),
     prevent_initial_call=True,
 )
@@ -2605,8 +2715,9 @@ def on_navigation(
     _handshake_clicks: int | None,
     _stop_clicks: int | None,
     command: dict[str, Any] | None,
-    joystick_enabled: bool,
+    *_button_clicks_and_state: Any,
 ) -> str:
+    joystick_enabled = bool(_button_clicks_and_state[-1]) if _button_clicks_and_state else False
     trigger = dash.ctx.triggered_id
     boot_msg = _boot_priority_message()
     if boot_msg:
@@ -2633,6 +2744,72 @@ def on_navigation(
         if trigger == "btn-nav-stop":
             NAV_WORKER.stop_async()
             return "stop() queued."
+        if isinstance(trigger, str) and trigger in ARM_ACTION_BY_BUTTON_ID:
+            action_name = ARM_ACTION_BY_BUTTON_ID[trigger]
+
+            def _arm_action() -> None:
+                robot = get_robot()
+                if robot is None:
+                    raise RuntimeError(f"Robot init failed: {ROBOT_INIT_ERR}")
+                action_methods = {
+                    "shake hand": "shake_hand",
+                    "high five": "high_five",
+                    "hug": "hug",
+                    "high wave": "high_wave",
+                    "clap": "clap",
+                    "face wave": "face_wave",
+                    "left kiss": "left_kiss",
+                    "right kiss": "right_kiss",
+                    "two-hand kiss": "two_hand_kiss",
+                    "heart": "heart",
+                    "right heart": "right_heart",
+                    "hands up": "hands_up",
+                    "right hand up": "right_hand_up",
+                    "x-ray": "x_ray",
+                    "reject": "reject",
+                    "release arm": "release_arm",
+                }
+                method_name = action_methods.get(action_name)
+                if method_name and hasattr(robot, method_name):
+                    rc = getattr(robot, method_name)()
+                else:
+                    rc = robot.execute_arm_action(action_name)
+                LOGGER.info("High-level arm action completed action=%s rc=%s", action_name, rc)
+
+            _run_robot_background(f"arm-action-{action_name.replace(' ', '-')}", _arm_action)
+            return f"High-level arm action queued: {action_name}."
+        if isinstance(trigger, str) and trigger in ARM_SDK_ACTION_BY_BUTTON_ID:
+            method_name = ARM_SDK_ACTION_BY_BUTTON_ID[trigger]
+
+            def _arm_sdk_action() -> None:
+                robot = get_robot()
+                if robot is None:
+                    raise RuntimeError(f"Robot init failed: {ROBOT_INIT_ERR}")
+                if not hasattr(robot, method_name):
+                    raise AttributeError(f"Robot does not support {method_name}().")
+                result = getattr(robot, method_name)()
+                LOGGER.info("Arm SDK action completed method=%s result=%s", method_name, result)
+
+            _run_robot_background(f"arm-sdk-{method_name}", _arm_sdk_action)
+            label = "release arms" if method_name == "release_arms" else "unrelease arms"
+            return f"Arm SDK command queued: {label}."
+        if isinstance(trigger, str) and trigger in HAND_ACTION_BY_BUTTON_ID:
+            action_name, hand = HAND_ACTION_BY_BUTTON_ID[trigger]
+
+            def _hand_action() -> None:
+                robot = get_robot()
+                if robot is None:
+                    raise RuntimeError(f"Robot init failed: {ROBOT_INIT_ERR}")
+                hands = ("left", "right") if hand == "both" else (hand,)
+                for side in hands:
+                    if action_name == "open":
+                        robot.hand_open(hand=side)
+                    else:
+                        robot.hand_close(hand=side)
+                LOGGER.info("Hand action completed action=%s hand=%s", action_name, hand)
+
+            _run_robot_background(f"hand-{action_name}-{hand}", _hand_action)
+            return f"Hand command queued: {action_name} {hand}."
         if trigger == "nav-command":
             command = command or {}
             cmd_vx = float(command.get("vx") or 0.0)
