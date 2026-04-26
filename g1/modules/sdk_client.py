@@ -919,9 +919,9 @@ class Robot:
         shoulder_roll_delta: float = 0.50,
         shoulder_roll_restore_fraction: float = 0.45,
         shoulder_pitch_delta: float = 0.35,
-        elbow_delta: float = 1.0,
-        wrist_roll_delta: float = 0.2,
-        wrist_pitch_delta: float = 0.6,
+        elbow_delta: float = 0.9,
+        wrist_roll_delta: float = 0.12,
+        wrist_pitch_delta: float = 0.4,
     ) -> dict[str, Any]:
         side = str(arm).strip().lower()
         if side not in ("left", "right"):

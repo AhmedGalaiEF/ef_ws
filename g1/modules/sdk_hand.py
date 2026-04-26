@@ -210,6 +210,7 @@ class Dex3HandController:
         self._last_targets: list[float] | None = None
         self._release_stop: threading.Event | None = None
         self._release_thread: threading.Thread | None = None
+        self._cmd_lock = threading.Lock()
 
         self._state_positions: list[float] | None = None
         self._state_ts: float = 0.0
@@ -341,40 +342,43 @@ class Dex3HandController:
         if len(targets) != 7:
             raise ValueError("Hand targets must contain 7 joint values.")
 
-        target_list = [float(value) for value in targets]
-        rate = max(1.0, float(rate_hz))
-        total_hold_s = max(0.0, float(hold_s))
-        ramp_duration_s = min(
-            total_hold_s,
-            max(1.0 / rate, 0.25 if ramp_s is None else float(ramp_s)),
-        )
+        with self._cmd_lock:
+            target_list = [float(value) for value in targets]
+            rate = max(1.0, float(rate_hz))
+            total_hold_s = max(0.0, float(hold_s))
+            ramp_duration_s = min(
+                total_hold_s,
+                max(1.0 / rate, 0.25 if ramp_s is None else float(ramp_s)),
+            )
 
-        start_targets = self._get_start_targets()
-        if any(abs(dst - src) > 1e-6 for src, dst in zip(start_targets, target_list)) and ramp_duration_s > 0.0:
-            ramp_steps = max(2, int(round(ramp_duration_s * rate)))
-            step_dt = ramp_duration_s / float(ramp_steps)
-            for step_idx in range(1, ramp_steps + 1):
-                alpha = float(step_idx) / float(ramp_steps)
-                interp_targets = self._interpolate_targets(start_targets, target_list, alpha=alpha)
+            start_targets = self._get_start_targets()
+            ramp_ran = False
+            if any(abs(dst - src) > 1e-6 for src, dst in zip(start_targets, target_list)) and ramp_duration_s > 0.0:
+                ramp_ran = True
+                ramp_steps = max(2, int(round(ramp_duration_s * rate)))
+                step_dt = ramp_duration_s / float(ramp_steps)
+                for step_idx in range(1, ramp_steps + 1):
+                    alpha = float(step_idx) / float(ramp_steps)
+                    interp_targets = self._interpolate_targets(start_targets, target_list, alpha=alpha)
+                    self._publish_targets_for(
+                        interp_targets,
+                        seconds=step_dt,
+                        rate_hz=rate,
+                        kp=kp,
+                        kd=kd,
+                        tau=tau,
+                    )
+
+            remaining_hold_s = max(0.0, total_hold_s - (ramp_duration_s if ramp_ran else 0.0))
+            if remaining_hold_s > 0.0 or self._last_targets is None:
                 self._publish_targets_for(
-                    interp_targets,
-                    seconds=step_dt,
+                    target_list,
+                    seconds=remaining_hold_s if remaining_hold_s > 0.0 else (1.0 / rate),
                     rate_hz=rate,
                     kp=kp,
                     kd=kd,
                     tau=tau,
                 )
-
-        remaining_hold_s = max(0.0, total_hold_s - ramp_duration_s)
-        if remaining_hold_s > 0.0 or self._last_targets is None:
-            self._publish_targets_for(
-                target_list,
-                seconds=remaining_hold_s if remaining_hold_s > 0.0 else (1.0 / rate),
-                rate_hz=rate,
-                kp=kp,
-                kd=kd,
-                tau=tau,
-            )
 
     def _pose_targets(self, pose_targets: list[float]) -> list[float]:
         targets = list(pose_targets)
