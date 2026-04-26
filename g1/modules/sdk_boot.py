@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
 import time
-from typing import Optional
+from typing import Callable, Optional
 
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize
 from unitree_sdk2py.g1.loco.g1_loco_api import (
@@ -88,6 +89,9 @@ def hanger_boot_sequence(
     domain_id: int = 0,
     step: float = 0.02,
     max_height: float = 0.5,
+    max_attempts: int = 1,
+    interactive_retry: bool | None = None,
+    retry_callback: Callable[[str, int], bool] | None = None,
     logger: logging.Logger | None = None,
 ) -> LocoClient:
     if logger is None:
@@ -95,6 +99,9 @@ def hanger_boot_sequence(
         logger = logging.getLogger("hanger_boot")
 
     bot = create_loco_client(domain_id=domain_id, iface=iface)
+    attempts_limit = max(1, int(max_attempts))
+    if interactive_retry is None:
+        interactive_retry = bool(getattr(sys.stdin, "isatty", lambda: False)())
 
     try:
         cur_id, cur_mode = read_fsm_state(bot)
@@ -118,7 +125,9 @@ def hanger_boot_sequence(
     bot.SetFsmId(4)
     show("stand_up")
 
+    attempt = 0
     while True:
+        attempt += 1
         height = 0.0
         while height < max_height:
             height += step
@@ -130,18 +139,40 @@ def hanger_boot_sequence(
         if fsm_mode(bot) == 0:
             break
 
+        mode_value = fsm_mode(bot)
         logger.warning(
-            "Feet still unloaded (mode %s) after reaching %.2f m. "
-            "Adjust the hanger height, then press Enter to retry.",
-            fsm_mode(bot),
+            "Feet still unloaded (mode %s) after reaching %.2f m on attempt %d/%d.",
+            mode_value,
             height,
+            attempt,
+            attempts_limit,
         )
         try:
             bot.SetStandHeight(0.0)
             show("reset")
         except Exception:
             pass
-        input()
+        if attempt >= attempts_limit:
+            raise TimeoutError(
+                "Hanger boot did not reach a loaded stand state after "
+                f"{attempts_limit} attempt(s). Adjust the hanger height/support and retry."
+            )
+        prompt = (
+            "Feet still unloaded after the stand-height sweep. "
+            "Adjust the hanger height/support, then confirm retry."
+        )
+        if retry_callback is not None:
+            if not bool(retry_callback(prompt, attempt)):
+                raise TimeoutError(f"Boot retry cancelled after attempt {attempt}.")
+            continue
+        if interactive_retry:
+            logger.warning("%s Press Enter to retry.", prompt)
+            input()
+            continue
+        raise TimeoutError(
+            "Hanger boot needs manual adjustment, but interactive retry is disabled. "
+            "Adjust the hanger height/support and call hanged_boot() again."
+        )
 
     bot.BalanceStand(0)
     show("balance")

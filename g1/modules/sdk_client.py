@@ -71,6 +71,11 @@ HAND_JOINT_NAMES = [
     "index_0",
     "index_1",
 ]
+LEFT_ARM_JOINTS = [15, 16, 17, 18, 19, 20, 21]
+WAIST_JOINTS = [12, 13, 14]
+RIGHT_ARM_JOINTS = [22, 23, 24, 25, 26, 27, 28]
+UPPER_BODY_JOINTS = WAIST_JOINTS + LEFT_ARM_JOINTS + RIGHT_ARM_JOINTS
+ARM_SDK_NOT_USED_IDX = 29
 BODY_JOINT_LAYOUT: list[tuple[str, int, str]] = [
     ("left_leg", 0, "hip_pitch"),
     ("left_leg", 1, "hip_roll"),
@@ -122,6 +127,43 @@ class ImuData:
     acc: tuple[float, float, float] | None
     quat: tuple[float, float, float, float] | None
     temp: float | None
+
+
+class _ArmSdkPublisher:
+    def __init__(self, iface: str, domain_id: int) -> None:
+        from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelPublisher
+        from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
+        from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_
+        from unitree_sdk2py.utils.crc import CRC
+
+        ChannelFactoryInitialize(int(domain_id), str(iface))
+        self._pub = ChannelPublisher("rt/arm_sdk", LowCmd_)
+        self._pub.Init()
+        self._crc = CRC()
+        self._cmd = unitree_hg_msg_dds__LowCmd_()
+        self._cmd.mode_pr = 0
+        self._cmd.mode_machine = 0
+        self._cmd.motor_cmd[ARM_SDK_NOT_USED_IDX].q = 1.0
+
+    def publish_targets(
+        self,
+        joint_targets: dict[int, float],
+        *,
+        kp: float = 30.0,
+        kd: float = 1.5,
+        dq: float = 0.0,
+        tau: float = 0.0,
+    ) -> None:
+        for joint_index, target in joint_targets.items():
+            mc = self._cmd.motor_cmd[int(joint_index)]
+            mc.mode = 1
+            mc.q = float(target)
+            mc.dq = float(dq)
+            mc.tau = float(tau)
+            mc.kp = float(kp)
+            mc.kd = float(kd)
+        self._cmd.crc = self._crc.Crc(self._cmd)
+        self._pub.Write(self._cmd)
 
 
 class Robot:
@@ -190,6 +232,7 @@ class Robot:
         self._slam_client: SlamOperateClient | None = None
         self._audio: RobotAudio | None = None
         self._video_client: Any = None
+        self._arm_sdk: _ArmSdkPublisher | None = None
         self._hands: dict[str, Dex3HandController] = {}
         self._usb_controller_thread: threading.Thread | None = None
         self._usb_controller_stop = threading.Event()
@@ -229,6 +272,11 @@ class Robot:
         if side not in self._hands:
             self._hands[side] = Dex3HandController(side, iface=self.iface, domain_id=self.domain_id)
         return self._hands[side]
+
+    def _get_arm_sdk(self) -> _ArmSdkPublisher:
+        if self._arm_sdk is None:
+            self._arm_sdk = _ArmSdkPublisher(iface=self.iface, domain_id=self.domain_id)
+        return self._arm_sdk
 
     def _ensure_slam_info_subscriber(self) -> SlamInfoSubscriber:
         if self._slam_info_sub is None:
@@ -512,6 +560,70 @@ class Robot:
             return None
         value = positions.get(key)
         return None if value is None else float(value)
+
+    def _read_joint_positions_or_raise(
+        self,
+        joint_indices: list[int],
+        *,
+        timeout: float = 3.0,
+    ) -> dict[int, float]:
+        if not self.wait_for_low_state(timeout=max(0.1, float(timeout))):
+            raise TimeoutError("Timed out waiting for rt/lowstate joint positions.")
+        values: dict[int, float] = {}
+        for joint_index in joint_indices:
+            value = self.get_joint_position(joint_index)
+            if value is None:
+                name = BODY_JOINT_NAME_BY_INDEX.get(int(joint_index), str(joint_index))
+                raise RuntimeError(f"Joint position for {name} is unavailable.")
+            values[int(joint_index)] = float(value)
+        return values
+
+    def extend_right_arm_forward(
+        self,
+        *,
+        duration_s: float = 4.0,
+        command_rate_hz: float = 50.0,
+        kp: float = 30.0,
+        kd: float = 1.5,
+        timeout: float = 3.0,
+    ) -> dict[str, Any]:
+        initial_positions = self._read_joint_positions_or_raise(UPPER_BODY_JOINTS, timeout=timeout)
+        start_pose = [initial_positions[joint_index] for joint_index in RIGHT_ARM_JOINTS]
+        target_pose = list(start_pose)
+        # Open the elbow while keeping the waist under balanced-stand control.
+        target_pose[3] = 0.03
+        target_pose[1] = min(float(target_pose[1]) + 0.25, 0.25)
+        target_pose[2] = 0.0
+        target_pose[4] = 0.0
+        target_pose[5] = 0.0
+        target_pose[6] = 0.0
+
+        steps = max(1, int(max(0.02, float(duration_s)) * max(1.0, float(command_rate_hz))))
+        dt = 1.0 / max(1.0, float(command_rate_hz))
+        arm_sdk = self._get_arm_sdk()
+        for step_idx in range(1, steps + 1):
+            alpha = float(step_idx) / float(steps)
+            right_arm_pose = [
+                (1.0 - alpha) * float(start_q) + alpha * float(target_q)
+                for start_q, target_q in zip(start_pose, target_pose)
+            ]
+            joint_targets = dict(initial_positions)
+            for joint_index, pose_value in zip(RIGHT_ARM_JOINTS, right_arm_pose):
+                joint_targets[joint_index] = pose_value
+            arm_sdk.publish_targets(
+                joint_targets,
+                kp=kp,
+                kd=kd,
+            )
+            time.sleep(dt)
+
+        return {
+            "start_pose": start_pose,
+            "target_pose": target_pose,
+            "joint_names": [BODY_JOINT_NAME_BY_INDEX[joint_index] for joint_index in RIGHT_ARM_JOINTS],
+            "command_rate_hz": float(command_rate_hz),
+            "duration_s": float(duration_s),
+        }
 
     def get_odom(self) -> Any | None:
         if self._odom_sub is None:
@@ -1436,8 +1548,21 @@ class Robot:
     # Safety + audio
     # ------------------------------------------------------------------
 
-    def hanged_boot(self) -> None:
-        self._client = secure_boot(iface=self.iface, domain_id=self.domain_id)
+    def hanged_boot(
+        self,
+        step: float = 0.02,
+        max_height: float = 0.5,
+        max_attempts: int = 1,
+        interactive_retry: bool = False,
+    ) -> None:
+        self._client = secure_boot(
+            iface=self.iface,
+            domain_id=self.domain_id,
+            step=step,
+            max_height=max_height,
+            max_attempts=max_attempts,
+            interactive_retry=interactive_retry,
+        )
 
     def hanging_boot_placeholder(self) -> None:
         self.hanged_boot()

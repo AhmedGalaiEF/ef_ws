@@ -45,6 +45,8 @@ def secure_boot(
     domain_id: int = 0,
     step: float = 0.02,
     max_height: float = 0.5,
+    max_attempts: int = 1,
+    interactive_retry: bool | None = None,
     logger: Any | None = None,
 ) -> Any:
     client = hanger_boot_sequence(
@@ -52,6 +54,8 @@ def secure_boot(
         domain_id=int(domain_id),
         step=float(step),
         max_height=float(max_height),
+        max_attempts=int(max_attempts),
+        interactive_retry=interactive_retry,
         logger=logger,
     )
     force_normal_gait(client)
