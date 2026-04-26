@@ -12,7 +12,8 @@ from unitree_sdk2py.g1.loco.g1_loco_api import (
 )
 from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
 
-BALANCED_STAND_FSM_IDS = frozenset((200, 501))
+BALANCED_STAND_FSM_ID = 501
+BALANCED_STAND_FSM_IDS = frozenset((BALANCED_STAND_FSM_ID,))
 
 
 def create_loco_client(domain_id: int, iface: str, timeout: float = 10.0) -> LocoClient:
@@ -64,9 +65,22 @@ def read_fsm_state(
     return last_id, last_mode
 
 
+def is_balanced_stand_state(fsm_id_value: object, fsm_mode_value: object = None) -> bool:
+    try:
+        return int(fsm_id_value) == BALANCED_STAND_FSM_ID
+    except Exception:
+        return False
+
+
+def force_balanced_stand_fsm(client: LocoClient) -> int:
+    if not hasattr(client, "SetFsmId"):
+        raise AttributeError("Current locomotion client does not support SetFsmId().")
+    return int(client.SetFsmId(BALANCED_STAND_FSM_ID))
+
+
 def is_balanced_stand(client: LocoClient) -> bool:
     cur_id, cur_mode = read_fsm_state(client)
-    return cur_id in BALANCED_STAND_FSM_IDS and cur_mode == 0
+    return is_balanced_stand_state(cur_id, cur_mode)
 
 
 def hanger_boot_sequence(
@@ -84,7 +98,7 @@ def hanger_boot_sequence(
 
     try:
         cur_id, cur_mode = read_fsm_state(bot)
-        if cur_id in BALANCED_STAND_FSM_IDS and cur_mode == 0:
+        if is_balanced_stand_state(cur_id, cur_mode):
             logger.info(
                 "Robot already in balanced stand (FSM %s, mode %s); skipping boot sequence.",
                 cur_id,
@@ -135,14 +149,19 @@ def hanger_boot_sequence(
     show("height_ok")
     bot.Start()
     show("start")
+    force_balanced_stand_fsm(bot)
+    show("balanced")
     return bot
 
 
 __all__ = [
+    "BALANCED_STAND_FSM_ID",
     "BALANCED_STAND_FSM_IDS",
     "create_loco_client",
+    "force_balanced_stand_fsm",
     "rpc_get_int",
     "read_fsm_state",
+    "is_balanced_stand_state",
     "is_balanced_stand",
     "hanger_boot_sequence",
 ]

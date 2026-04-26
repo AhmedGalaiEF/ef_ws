@@ -1,11 +1,11 @@
 """
 hanger_boot_sequence.py – utility to bring a hanging Unitree G-1 from
 power-on (Damp) to a balanced stand ready for walking.  The helper will now
-detect when the robot is already in that balanced stand (FSM-200) and simply
+detect when the robot is already in that balanced stand (FSM-501) and simply
 return the client immediately, avoiding a redundant second bring-up cycle.
 
 Call `hanger_boot_sequence()` from any script and it returns an initialised
-`LocoClient` instance that is already in FSM-200.  The helper now performs a
+`LocoClient` instance that is already in FSM-501.  The helper now performs a
 sanity-check after the leg-extension sweep: if the firmware still reports
 “feet unloaded” (mode = 2) we pause, print a warning and wait for the
 operator to tweak the hanger height and press <Enter>.  The sweep is then
@@ -25,6 +25,8 @@ from unitree_sdk2py.g1.loco.g1_loco_api import (
     ROBOT_API_ID_LOCO_GET_FSM_ID,
     ROBOT_API_ID_LOCO_GET_FSM_MODE,
 )
+
+BALANCED_STAND_FSM_ID = 501
 
 
 # ---------------------------------------------------------------------------
@@ -52,6 +54,19 @@ def _fsm_mode(client: LocoClient) -> Optional[int]:
     return _rpc_get_int(client, ROBOT_API_ID_LOCO_GET_FSM_MODE)
 
 
+def is_balanced_stand_state(fsm_id_value: object, fsm_mode_value: object = None) -> bool:
+    try:
+        return int(fsm_id_value) == BALANCED_STAND_FSM_ID
+    except Exception:
+        return False
+
+
+def force_balanced_stand_fsm(client: LocoClient) -> int:
+    if not hasattr(client, "SetFsmId"):
+        raise AttributeError("Current locomotion client does not support SetFsmId().")
+    return int(client.SetFsmId(BALANCED_STAND_FSM_ID))
+
+
 def hanger_boot_sequence(
     iface: str = "eth0",
     step: float = 0.02,
@@ -60,7 +75,7 @@ def hanger_boot_sequence(
 ) -> LocoClient:
     """Run the hanger-to-stand sequence.
 
-    Returns a LocoClient instance that is in FSM-200 and ready to receive
+    Returns a LocoClient instance that is in FSM-501 and ready to receive
     Move / Velocity commands.
     """
 
@@ -82,8 +97,7 @@ def hanger_boot_sequence(
     # at worst jolt a robot that is happily standing on the ground.
     #
     # Our working definition of “balanced stand ready for walking” is:
-    #     • FSM-ID 200  (Start – balance controller engaged)
-    #     • SportModeState.mode != 2  (feet *loaded*)
+    #     - FSM-ID 501  (balanced stand / start mode)
     #
     # When this condition is met we simply log the situation and return the
     # initialised LocoClient so callers can proceed to send velocity
@@ -94,9 +108,9 @@ def hanger_boot_sequence(
         cur_id = _fsm_id(bot)
         cur_mode = _fsm_mode(bot)
 
-        if cur_id == 200 and cur_mode is not None and cur_mode != 2:
+        if is_balanced_stand_state(cur_id, cur_mode):
             logger.info(
-                "Robot already in balanced stand (FSM 200, mode %s) – skipping boot sequence.",
+                "Robot already in balanced stand (FSM 501, mode %s) – skipping boot sequence.",
                 cur_mode,
             )
 
@@ -172,14 +186,20 @@ def hanger_boot_sequence(
     bot.BalanceStand(0); show("balance")
     bot.SetStandHeight(height); show("height✔")
 
-    # 5. Start the balance controller (FSM 200) ---------------------------
+    # 5. Start the balance controller, then force balanced stand FSM 501 ---
     # Leave the robot in balance-mode 0 (static) – callers can switch to
     # continuous gait (balance-mode 1) when they actually want to walk.
 
     bot.Start(); show("start")
+    force_balanced_stand_fsm(bot); show("balanced")
 
     # Caller can now send velocity commands.
     return bot
 
 
-__all__ = ["hanger_boot_sequence"]
+__all__ = [
+    "BALANCED_STAND_FSM_ID",
+    "force_balanced_stand_fsm",
+    "hanger_boot_sequence",
+    "is_balanced_stand_state",
+]

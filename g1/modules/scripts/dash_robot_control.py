@@ -5,6 +5,7 @@ import argparse
 from collections import deque
 import base64
 from dataclasses import dataclass
+import functools
 import json
 import logging
 import os
@@ -31,20 +32,89 @@ LOG_PATH = os.path.join(SCRIPT_DIR, "dash_robot_control.log")
 LOGGER = logging.getLogger("dash_robot_control")
 LOGGER.setLevel(logging.INFO)
 if not LOGGER.handlers:
-    _formatter = logging.Formatter("%(asctime)s %(levelname)s %(threadName)s %(message)s")
-    _stream_handler = logging.StreamHandler()
-    _stream_handler.setFormatter(_formatter)
+    _file_formatter = logging.Formatter("%(asctime)s %(levelname)s %(threadName)s %(message)s")
+    try:
+        from rich.logging import RichHandler
+
+        _stream_handler = RichHandler(
+            rich_tracebacks=True,
+            show_path=False,
+            show_level=True,
+            show_time=True,
+            markup=False,
+        )
+        _stream_handler.setFormatter(logging.Formatter("%(message)s"))
+    except Exception:
+        _stream_handler = logging.StreamHandler()
+        _stream_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(threadName)s %(message)s"))
     LOGGER.addHandler(_stream_handler)
     try:
         _file_handler = logging.FileHandler(LOG_PATH)
     except OSError:
         LOG_PATH = os.path.join("/tmp", f"dash_robot_control_{os.getpid()}.log")
         _file_handler = logging.FileHandler(LOG_PATH)
-    _file_handler.setFormatter(_formatter)
+    _file_handler.setFormatter(_file_formatter)
     LOGGER.addHandler(_file_handler)
     LOGGER.info("Dash robot control log path: %s", LOG_PATH)
 
+logging.getLogger("werkzeug").setLevel(logging.WARNING)
+
 from sdk_client import Robot
+
+
+CALLBACK_LOG_INTERVAL_S = float(os.environ.get("DASH_CALLBACK_LOG_INTERVAL_S", "5.0"))
+CALLBACK_SLOW_THRESHOLD_S = float(os.environ.get("DASH_CALLBACK_SLOW_THRESHOLD_S", "0.5"))
+CALLBACK_LAST_LOG: dict[str, float] = {}
+CALLBACK_LOG_LOCK = threading.Lock()
+CALLBACK_THROTTLED_TRIGGERS = {"nav-command"}
+
+
+def _callback_trigger_text() -> str:
+    try:
+        trigger = dash.ctx.triggered_id
+    except Exception:
+        return "unknown"
+    if trigger is None:
+        return "initial"
+    return str(trigger)
+
+
+def _should_log_callback(name: str, trigger: str, elapsed_s: float | None = None) -> bool:
+    if elapsed_s is not None and elapsed_s >= CALLBACK_SLOW_THRESHOLD_S:
+        return True
+    if not (trigger.endswith("-interval") or trigger in CALLBACK_THROTTLED_TRIGGERS):
+        return True
+    now = time.time()
+    key = f"{name}:{trigger}"
+    with CALLBACK_LOG_LOCK:
+        last = CALLBACK_LAST_LOG.get(key, 0.0)
+        if now - last < CALLBACK_LOG_INTERVAL_S:
+            return False
+        CALLBACK_LAST_LOG[key] = now
+    return True
+
+
+def _trace_dash_callback(func: Any) -> Any:
+    @functools.wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        name = getattr(func, "__name__", "callback")
+        trigger = _callback_trigger_text()
+        start = time.perf_counter()
+        log_start = _should_log_callback(name, trigger)
+        if log_start:
+            LOGGER.info("Callback start name=%s trigger=%s args=%s kwargs=%s", name, trigger, len(args), sorted(kwargs))
+        try:
+            result = func(*args, **kwargs)
+        except Exception:
+            elapsed = time.perf_counter() - start
+            LOGGER.exception("Callback failed name=%s trigger=%s elapsed_s=%.3f", name, trigger, elapsed)
+            raise
+        elapsed = time.perf_counter() - start
+        if log_start or _should_log_callback(name, trigger, elapsed):
+            LOGGER.info("Callback done name=%s trigger=%s elapsed_s=%.3f", name, trigger, elapsed)
+        return result
+
+    return wrapper
 
 
 def _available_ifaces() -> list[str]:
@@ -1004,6 +1074,123 @@ def get_robot() -> Robot | None:
             return None
 
 
+def _robot_move(robot: Robot, vx: float, vy: float, vyaw: float) -> int:
+    if hasattr(robot, "loco_move"):
+        return int(robot.loco_move(vx, vy, vyaw))
+    if hasattr(robot, "move"):
+        return int(getattr(robot, "move")(vx, vy, vyaw))
+    return int(robot.walk(vx, vy, vyaw))
+
+
+def _run_robot_background(name: str, action: Any) -> None:
+    def _worker() -> None:
+        try:
+            action()
+        except Exception:
+            LOGGER.exception("%s failed", name)
+
+    threading.Thread(target=_worker, name=name, daemon=True).start()
+
+
+class _NavigationCommandWorker:
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._wake = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._enabled = False
+        self._latest = (0.0, 0.0, 0.0)
+        self._seq = 0
+        self._sent_seq = 0
+        self._last_sent = 0.0
+        self._status = "Joysticks disabled."
+        self._error: str | None = None
+
+    def set_enabled(self, enabled: bool) -> None:
+        with self._lock:
+            self._enabled = bool(enabled)
+            if not self._enabled:
+                self._latest = (0.0, 0.0, 0.0)
+                self._seq += 1
+                self._status = "Joysticks disabled."
+            else:
+                self._status = "Joysticks enabled; waiting for input."
+        if enabled:
+            self._ensure_thread()
+        else:
+            self.stop_async()
+        self._wake.set()
+
+    def update(self, vx: float, vy: float, vyaw: float) -> str:
+        with self._lock:
+            if not self._enabled:
+                return "Joysticks disabled."
+            self._latest = (float(vx), float(vy), float(vyaw))
+            self._seq += 1
+            self._status = f"Queued move vx={vx:.3f}, vy={vy:.3f}, vyaw={vyaw:.3f}."
+            status = self._status
+        self._ensure_thread()
+        self._wake.set()
+        return status
+
+    def stop_async(self) -> None:
+        def _stop() -> None:
+            robot = get_robot()
+            if robot is not None:
+                robot.stop()
+
+        _run_robot_background("nav-stop", _stop)
+
+    def status(self) -> str:
+        with self._lock:
+            if self._error:
+                return f"{self._status} | last_error={self._error}"
+            return self._status
+
+    def _ensure_thread(self) -> None:
+        with self._lock:
+            if self._thread is not None and self._thread.is_alive():
+                return
+            self._thread = threading.Thread(target=self._run, name="nav-worker", daemon=True)
+            self._thread.start()
+
+    def _run(self) -> None:
+        min_period_s = 0.1
+        while True:
+            self._wake.wait(timeout=0.25)
+            self._wake.clear()
+            with self._lock:
+                enabled = self._enabled
+                seq = self._seq
+                sent_seq = self._sent_seq
+                vx, vy, vyaw = self._latest
+            if not enabled:
+                continue
+            if seq == sent_seq and time.time() - self._last_sent < 0.5:
+                continue
+            elapsed = time.time() - self._last_sent
+            if elapsed < min_period_s:
+                time.sleep(min_period_s - elapsed)
+            try:
+                robot = get_robot()
+                if robot is None:
+                    raise RuntimeError(f"Robot init failed: {ROBOT_INIT_ERR}")
+                rc = _robot_move(robot, vx, vy, vyaw)
+                self._last_sent = time.time()
+                with self._lock:
+                    self._sent_seq = seq
+                    self._error = None
+                    self._status = f"Sent move vx={vx:.3f}, vy={vy:.3f}, vyaw={vyaw:.3f}, rc={rc}."
+            except Exception as exc:
+                LOGGER.exception("Navigation worker move failed")
+                with self._lock:
+                    self._error = str(exc)
+                    self._status = f"Move failed for vx={vx:.3f}, vy={vy:.3f}, vyaw={vyaw:.3f}."
+                time.sleep(0.5)
+
+
+NAV_WORKER = _NavigationCommandWorker()
+
+
 class _BootSequenceController:
     def __init__(self) -> None:
         self._lock = threading.Lock()
@@ -1016,6 +1203,7 @@ class _BootSequenceController:
     def start(self, iface: str, domain_id: int = 0) -> str:
         global ROBOT_INIT_ERR, ROBOT_INSTANCE
         LOGGER.info("Boot start requested iface=%s domain_id=%s", iface, domain_id)
+        NAV_WORKER.set_enabled(False)
         with self._lock:
             if self._thread is not None and self._thread.is_alive():
                 LOGGER.info("Boot start ignored because thread is already alive: %s", self._message)
@@ -1036,9 +1224,8 @@ class _BootSequenceController:
         LOGGER.info("Boot confirm requested")
         with self._lock:
             if self._state != "waiting":
-                self._confirm.set()
-                self._message = f"Dashboard confirmation queued while boot state is {self._state}."
-                LOGGER.info("Boot confirm queued state=%s", self._state)
+                self._message = f"Confirmation ignored; boot is not waiting yet (state={self._state})."
+                LOGGER.info("Boot confirm ignored state=%s", self._state)
                 return self._message
             self._message = "Dashboard confirmation received; continuing boot sequence."
             self._state = "running"
@@ -1050,6 +1237,10 @@ class _BootSequenceController:
         with self._lock:
             running = self._thread is not None and self._thread.is_alive()
             return self._state, self._message, self._error, running
+
+    def priority_active(self) -> bool:
+        with self._lock:
+            return self._thread is not None and self._thread.is_alive()
 
     def _set(self, state: str, message: str, error: str | None = None) -> None:
         if error:
@@ -1075,19 +1266,27 @@ class _BootSequenceController:
             fsm_i = int(fsm_id)
         except Exception:
             return False
+        return fsm_i == 501
+
+    @staticmethod
+    def _is_loaded_standup_state(fsm_id: Any, fsm_mode_value: Any) -> bool:
+        try:
+            fsm_i = int(fsm_id)
+        except Exception:
+            return False
         if fsm_i == 501:
             return True
         try:
             mode_i = int(fsm_mode_value)
         except Exception:
-            mode_i = -1
-        return fsm_i == 200 and mode_i == 0
+            return False
+        return fsm_i == 4 and mode_i == 0
 
     def _run(self, iface: str, domain_id: int) -> None:
         global ROBOT_INIT_ERR, ROBOT_INSTANCE
         try:
             LOGGER.info("Boot worker importing SDK helpers")
-            from sdk_boot import create_loco_client, read_fsm_state
+            from sdk_boot import create_loco_client, force_balanced_stand_fsm, read_fsm_state
             from secure_boot import force_normal_gait
 
             LOGGER.info("Boot worker creating loco client iface=%s domain_id=%s", iface, domain_id)
@@ -1122,12 +1321,12 @@ class _BootSequenceController:
                     time.sleep(0.05)
                     cur_id, mode = read_fsm_state(bot, retries=1, retry_delay=0.01)
                     LOGGER.info("Boot height=%.2f fsm=%s mode=%s", height, cur_id, mode)
-                    if self._is_balanced_stand_state(cur_id, mode) and height > 0.2:
+                    if self._is_loaded_standup_state(cur_id, mode) and height > 0.2:
                         break
 
                 cur_id, mode = read_fsm_state(bot, retries=1, retry_delay=0.01)
                 LOGGER.info("Boot sweep complete height=%.2f fsm=%s mode=%s", height, cur_id, mode)
-                if self._is_balanced_stand_state(cur_id, mode):
+                if self._is_loaded_standup_state(cur_id, mode):
                     break
 
                 self._set("running", "Feet still unloaded; resetting stand height.")
@@ -1141,12 +1340,20 @@ class _BootSequenceController:
                 )
 
             self._wait_for_confirm("Robot appears loaded. Press Confirm balanced stand to command BalanceStand.")
+            LOGGER.info("Boot calling SetFsmId(501) after dashboard confirmation")
+            force_balanced_stand_fsm(bot)
+            cur_id, mode = read_fsm_state(bot, retries=2, retry_delay=0.05)
+            LOGGER.info("Boot after SetFsmId(501) fsm=%s mode=%s", cur_id, mode)
             LOGGER.info("Boot calling BalanceStand(0)")
             bot.BalanceStand(0)
             LOGGER.info("Boot calling SetStandHeight(%.2f)", height)
             bot.SetStandHeight(height)
             LOGGER.info("Boot calling Start()")
             bot.Start()
+            LOGGER.info("Boot calling SetFsmId(501) after Start()")
+            force_balanced_stand_fsm(bot)
+            cur_id, mode = read_fsm_state(bot, retries=2, retry_delay=0.05)
+            LOGGER.info("Boot final forced fsm=%s mode=%s", cur_id, mode)
             LOGGER.info("Boot calling force_normal_gait()")
             force_normal_gait(bot)
             with ROBOT_LOCK:
@@ -1159,6 +1366,15 @@ class _BootSequenceController:
 
 
 BOOT_SEQUENCE = _BootSequenceController()
+
+
+def _boot_priority_message() -> str | None:
+    state, message, err, running = BOOT_SEQUENCE.snapshot()
+    if running:
+        return f"Boot in progress ({state}): {message}"
+    if err:
+        return f"Boot error: {message}"
+    return None
 
 
 def empty_lidar_figure(title: str = "LiDAR stream") -> go.Figure:
@@ -1474,6 +1690,19 @@ def build_altegro_info() -> dict[str, Any]:
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 app.title = "Robot Control"
+_dash_callback = app.callback
+
+
+def _callback_with_trace(*args: Any, **kwargs: Any) -> Any:
+    dash_decorator = _dash_callback(*args, **kwargs)
+
+    def decorator(func: Any) -> Any:
+        return dash_decorator(_trace_dash_callback(func))
+
+    return decorator
+
+
+app.callback = _callback_with_trace  # type: ignore[method-assign]
 TAB_STYLE = {
     "color": "#1f2933",
     "backgroundColor": "#eef2f6",
@@ -1825,6 +2054,10 @@ app.layout = dbc.Container(
                                     ],
                                     md=3,
                                 ),
+                                dbc.Col(
+                                    dbc.Button("Enable Gripper", id="btn-grip-toggle", color="danger", className="w-100 mt-4"),
+                                    md=3,
+                                ),
                             ],
                             className="g-2",
                         ),
@@ -1849,6 +2082,7 @@ app.layout = dbc.Container(
                     label_style=TAB_LABEL_STYLE,
                     active_label_style=ACTIVE_TAB_LABEL_STYLE,
                     children=[
+                        dbc.Button("Enable Joysticks", id="btn-joystick-toggle", color="danger", className="mt-3"),
                         dbc.Row(
                             [
                                 dbc.Col(
@@ -1905,6 +2139,7 @@ app.layout = dbc.Container(
                     label_style=TAB_LABEL_STYLE,
                     active_label_style=ACTIVE_TAB_LABEL_STYLE,
                     children=[
+                        dbc.Button("Enable SLAM", id="btn-slam-toggle", color="danger", className="mt-3"),
                         dbc.Row(
                             [
                                 dbc.Col(dbc.Button("Start Mapping", id="btn-slam-start", color="primary", className="w-100 mt-3"), md=3),
@@ -1972,6 +2207,7 @@ app.layout = dbc.Container(
                     active_label_style=ACTIVE_TAB_LABEL_STYLE,
                     children=[
                         html.Div(f"Log file: {LOG_PATH}", className="mt-3 mb-2"),
+                        dbc.Button("Refresh Logs", id="btn-logs-refresh", color="primary", className="mb-2"),
                         html.Pre(id="logs-content", children=""),
                     ],
                 ),
@@ -1988,6 +2224,7 @@ app.layout = dbc.Container(
                                 dbc.Col(
                                     [
                                         html.Div("RGB camera feed", className="mt-3 mb-2"),
+                                        dbc.Button("Enable RGB", id="btn-rgb-toggle", color="danger", className="mb-2"),
                                         html.Img(
                                             id="rgb-feed",
                                             style={
@@ -2003,6 +2240,7 @@ app.layout = dbc.Container(
                                 dbc.Col(
                                     [
                                         html.Div("Depth camera feed (RealSense, PLASMA)", className="mt-3 mb-2"),
+                                        dbc.Button("Enable Depth", id="btn-depth-toggle", color="danger", className="mb-2"),
                                         html.Img(
                                             id="depth-feed",
                                             style={
@@ -2020,10 +2258,12 @@ app.layout = dbc.Container(
                         ),
                         html.Hr(),
                         html.Div("LiDAR stream (XY scatter from PointCloud2)", className="mt-3 mb-2"),
+                        dbc.Button("Enable LiDAR", id="btn-lidar-toggle", color="danger", className="mb-2"),
                         dcc.Graph(id="lidar-graph", figure=empty_lidar_figure()),
                         html.Div(id="lidar-status", className="mb-3"),
                         html.Hr(),
                         html.Div("IMU orientation (roll/pitch/yaw)", className="mt-3 mb-2"),
+                        dbc.Button("Enable IMU", id="btn-imu-toggle", color="danger", className="mb-2"),
                         dcc.Graph(id="imu-graph", figure=empty_imu_figure()),
                         html.Div(id="imu-status", className="mb-3"),
                     ],
@@ -2052,19 +2292,26 @@ app.layout = dbc.Container(
             active_tab="control",
             className="mb-3",
         ),
-        dcc.Interval(id="lidar-interval", interval=1000, n_intervals=0),
-        dcc.Interval(id="rgb-interval", interval=500, n_intervals=0),
-        dcc.Interval(id="depth-interval", interval=500, n_intervals=0),
+        dcc.Interval(id="lidar-interval", interval=1000, n_intervals=0, disabled=True),
+        dcc.Interval(id="rgb-interval", interval=500, n_intervals=0, disabled=True),
+        dcc.Interval(id="depth-interval", interval=500, n_intervals=0, disabled=True),
         dcc.Interval(id="boot-interval", interval=500, n_intervals=0),
-        dcc.Interval(id="lowlevel-interval", interval=500, n_intervals=0),
-        dcc.Interval(id="grip-interval", interval=500, n_intervals=0),
-        dcc.Interval(id="logs-interval", interval=1000, n_intervals=0),
-        dcc.Interval(id="slam-interval", interval=1000, n_intervals=0),
-        dcc.Interval(id="info-interval", interval=2000, n_intervals=0),
+        dcc.Interval(id="lowlevel-interval", interval=500, n_intervals=0, disabled=True),
+        dcc.Interval(id="grip-interval", interval=500, n_intervals=0, disabled=True),
+        dcc.Interval(id="logs-interval", interval=1000, n_intervals=0, disabled=True),
+        dcc.Interval(id="slam-interval", interval=1000, n_intervals=0, disabled=True),
+        dcc.Interval(id="info-interval", interval=2000, n_intervals=0, disabled=True),
         dcc.Store(id="slam-target-store", data=None),
-        dcc.Interval(id="locomotion-interval", interval=100, n_intervals=0),
+        dcc.Interval(id="locomotion-interval", interval=100, n_intervals=0, disabled=True),
         dcc.Store(id="nav-command", data={"vx": 0.0, "vy": 0.0, "vyaw": 0.0, "seq": 0}),
         dcc.Store(id="lowlevel-enabled", data=False),
+        dcc.Store(id="joystick-enabled", data=False),
+        dcc.Store(id="rgb-enabled", data=False),
+        dcc.Store(id="depth-enabled", data=False),
+        dcc.Store(id="lidar-enabled", data=False),
+        dcc.Store(id="imu-enabled", data=False),
+        dcc.Store(id="grip-enabled", data=False),
+        dcc.Store(id="slam-enabled", data=False),
     ],
     fluid=True,
 )
@@ -2072,7 +2319,10 @@ app.layout = dbc.Container(
 
 app.clientside_callback(
     """
-    function(n) {
+    function(n, enabled) {
+        if (!enabled) {
+            return window.dash_clientside.no_update;
+        }
         const v = window.__dashJoystick || {vx: 0, vy: 0, vyaw: 0};
         return {
             vx: Number(v.vx || 0),
@@ -2084,7 +2334,169 @@ app.clientside_callback(
     """,
     Output("nav-command", "data"),
     Input("locomotion-interval", "n_intervals"),
+    Input("joystick-enabled", "data"),
 )
+
+
+def _toggle_state(enabled: bool, label: str) -> tuple[bool, str, str]:
+    new_enabled = not bool(enabled)
+    return new_enabled, (f"Disable {label}" if new_enabled else f"Enable {label}"), ("success" if new_enabled else "danger")
+
+
+@app.callback(
+    Output("locomotion-interval", "disabled"),
+    Output("rgb-interval", "disabled"),
+    Output("depth-interval", "disabled"),
+    Output("lidar-interval", "disabled"),
+    Output("lowlevel-interval", "disabled"),
+    Output("grip-interval", "disabled"),
+    Output("slam-interval", "disabled"),
+    Input("boot-interval", "n_intervals"),
+    Input("joystick-enabled", "data"),
+    Input("rgb-enabled", "data"),
+    Input("depth-enabled", "data"),
+    Input("lidar-enabled", "data"),
+    Input("imu-enabled", "data"),
+    Input("lowlevel-enabled", "data"),
+    Input("grip-enabled", "data"),
+    Input("slam-enabled", "data"),
+)
+def update_minimal_intervals(
+    _boot_tick: int,
+    joystick_enabled: bool,
+    rgb_enabled: bool,
+    depth_enabled: bool,
+    lidar_enabled: bool,
+    imu_enabled: bool,
+    lowlevel_enabled: bool,
+    grip_enabled: bool,
+    slam_enabled: bool,
+) -> tuple[bool, bool, bool, bool, bool, bool, bool]:
+    if BOOT_SEQUENCE.priority_active():
+        return True, True, True, True, True, True, True
+    return (
+        not bool(joystick_enabled),
+        not bool(rgb_enabled),
+        not bool(depth_enabled),
+        not (bool(lidar_enabled) or bool(imu_enabled)),
+        not bool(lowlevel_enabled),
+        not bool(grip_enabled),
+        not bool(slam_enabled),
+    )
+
+
+@app.callback(
+    Output("joystick-enabled", "data"),
+    Output("btn-joystick-toggle", "children"),
+    Output("btn-joystick-toggle", "color"),
+    Input("btn-joystick-toggle", "n_clicks"),
+    State("joystick-enabled", "data"),
+    prevent_initial_call=True,
+)
+def toggle_joysticks(_clicks: int | None, enabled: bool) -> tuple[bool, str, str]:
+    if BOOT_SEQUENCE.priority_active():
+        NAV_WORKER.set_enabled(False)
+        return False, "Enable Joysticks", "danger"
+    new_enabled, text, color = _toggle_state(enabled, "Joysticks")
+    LOGGER.warning("Joystick control toggled %s", "enabled" if new_enabled else "disabled")
+    NAV_WORKER.set_enabled(new_enabled)
+    return new_enabled, text, color
+
+
+@app.callback(
+    Output("rgb-enabled", "data"),
+    Output("btn-rgb-toggle", "children"),
+    Output("btn-rgb-toggle", "color"),
+    Input("btn-rgb-toggle", "n_clicks"),
+    State("rgb-enabled", "data"),
+    prevent_initial_call=True,
+)
+def toggle_rgb(_clicks: int | None, enabled: bool) -> tuple[bool, str, str]:
+    if BOOT_SEQUENCE.priority_active():
+        return False, "Enable RGB", "danger"
+    new_enabled, text, color = _toggle_state(enabled, "RGB")
+    LOGGER.warning("RGB feed toggled %s", "enabled" if new_enabled else "disabled")
+    return new_enabled, text, color
+
+
+@app.callback(
+    Output("depth-enabled", "data"),
+    Output("btn-depth-toggle", "children"),
+    Output("btn-depth-toggle", "color"),
+    Input("btn-depth-toggle", "n_clicks"),
+    State("depth-enabled", "data"),
+    prevent_initial_call=True,
+)
+def toggle_depth(_clicks: int | None, enabled: bool) -> tuple[bool, str, str]:
+    if BOOT_SEQUENCE.priority_active():
+        return False, "Enable Depth", "danger"
+    new_enabled, text, color = _toggle_state(enabled, "Depth")
+    LOGGER.warning("Depth feed toggled %s", "enabled" if new_enabled else "disabled")
+    return new_enabled, text, color
+
+
+@app.callback(
+    Output("lidar-enabled", "data"),
+    Output("btn-lidar-toggle", "children"),
+    Output("btn-lidar-toggle", "color"),
+    Input("btn-lidar-toggle", "n_clicks"),
+    State("lidar-enabled", "data"),
+    prevent_initial_call=True,
+)
+def toggle_lidar(_clicks: int | None, enabled: bool) -> tuple[bool, str, str]:
+    if BOOT_SEQUENCE.priority_active():
+        return False, "Enable LiDAR", "danger"
+    new_enabled, text, color = _toggle_state(enabled, "LiDAR")
+    LOGGER.warning("LiDAR feed toggled %s", "enabled" if new_enabled else "disabled")
+    return new_enabled, text, color
+
+
+@app.callback(
+    Output("imu-enabled", "data"),
+    Output("btn-imu-toggle", "children"),
+    Output("btn-imu-toggle", "color"),
+    Input("btn-imu-toggle", "n_clicks"),
+    State("imu-enabled", "data"),
+    prevent_initial_call=True,
+)
+def toggle_imu(_clicks: int | None, enabled: bool) -> tuple[bool, str, str]:
+    if BOOT_SEQUENCE.priority_active():
+        return False, "Enable IMU", "danger"
+    new_enabled, text, color = _toggle_state(enabled, "IMU")
+    LOGGER.warning("IMU feed toggled %s", "enabled" if new_enabled else "disabled")
+    return new_enabled, text, color
+
+
+@app.callback(
+    Output("grip-enabled", "data"),
+    Output("btn-grip-toggle", "children"),
+    Output("btn-grip-toggle", "color"),
+    Input("btn-grip-toggle", "n_clicks"),
+    State("grip-enabled", "data"),
+    prevent_initial_call=True,
+)
+def toggle_grip(_clicks: int | None, enabled: bool) -> tuple[bool, str, str]:
+    if BOOT_SEQUENCE.priority_active():
+        return False, "Enable Gripper", "danger"
+    new_enabled, text, color = _toggle_state(enabled, "Gripper")
+    LOGGER.warning("Grip control toggled %s", "enabled" if new_enabled else "disabled")
+    return new_enabled, text, color
+
+
+@app.callback(
+    Output("slam-enabled", "data"),
+    Output("btn-slam-toggle", "children"),
+    Output("btn-slam-toggle", "color"),
+    Input("btn-slam-toggle", "n_clicks"),
+    State("slam-enabled", "data"),
+    prevent_initial_call=True,
+)
+def toggle_slam(_clicks: int | None, enabled: bool) -> tuple[bool, str, str]:
+    if BOOT_SEQUENCE.priority_active():
+        return False, "Enable SLAM", "danger"
+    new_enabled, text, color = _toggle_state(enabled, "SLAM")
+    LOGGER.warning("SLAM visualization toggled %s", "enabled" if new_enabled else "disabled")
+    return new_enabled, text, color
 
 
 @app.callback(
@@ -2139,6 +2551,9 @@ def on_control(
     gait_value: str,
 ) -> tuple[str, str, str]:
     trigger = dash.ctx.triggered_id
+    boot_msg = _boot_priority_message()
+    if boot_msg:
+        return boot_msg, "warning", "Dashboard controls are paused while secure boot has priority."
 
     robot = get_robot()
     if robot is None:
@@ -2172,40 +2587,43 @@ def on_control(
     Input("btn-handshake", "n_clicks"),
     Input("btn-nav-stop", "n_clicks"),
     Input("nav-command", "data"),
+    State("joystick-enabled", "data"),
     prevent_initial_call=True,
 )
 def on_navigation(
     _handshake_clicks: int | None,
     _stop_clicks: int | None,
     command: dict[str, Any] | None,
+    joystick_enabled: bool,
 ) -> str:
-    robot = get_robot()
-    if robot is None:
-        return f"Robot init failed: {ROBOT_INIT_ERR}"
-
     trigger = dash.ctx.triggered_id
+    boot_msg = _boot_priority_message()
+    if boot_msg:
+        if trigger == "nav-command":
+            NAV_WORKER.set_enabled(False)
+        return boot_msg
+    if trigger == "nav-command" and not bool(joystick_enabled):
+        return "Joysticks disabled."
+
     try:
         if trigger == "btn-handshake":
+            robot = get_robot()
+            if robot is None:
+                return f"Robot init failed: {ROBOT_INIT_ERR}"
             loco = getattr(robot, "_client", None)
             if loco is None or not hasattr(loco, "ShakeHand"):
                 raise AttributeError("Current locomotion client does not support ShakeHand().")
             rc = getattr(loco, "ShakeHand")()
             return f"Handshake command sent, rc={rc}."
         if trigger == "btn-nav-stop":
-            robot.stop()
-            return "stop() sent."
+            NAV_WORKER.stop_async()
+            return "stop() queued."
         if trigger == "nav-command":
             command = command or {}
             cmd_vx = float(command.get("vx") or 0.0)
             cmd_vy = float(command.get("vy") or 0.0)
             cmd_vyaw = float(command.get("vyaw") or 0.0)
-            if hasattr(robot, "move"):
-                rc = int(getattr(robot, "move")(cmd_vx, cmd_vy, cmd_vyaw))
-            elif hasattr(robot, "loco_move"):
-                rc = int(robot.loco_move(cmd_vx, cmd_vy, cmd_vyaw))
-            else:
-                rc = int(robot.walk(cmd_vx, cmd_vy, cmd_vyaw))
-            return f"move(vx={cmd_vx:.3f}, vy={cmd_vy:.3f}, vyaw={cmd_vyaw:.3f}) sent, rc={rc}."
+            return NAV_WORKER.update(cmd_vx, cmd_vy, cmd_vyaw)
     except Exception as exc:
         LOGGER.exception("Locomotion command failed trigger=%s command=%s", trigger, command)
         return f"Locomotion command failed: {exc}"
@@ -2232,8 +2650,11 @@ def read_warning_error_logs(max_lines: int = 200) -> str:
 @app.callback(
     Output("logs-content", "children"),
     Input("logs-interval", "n_intervals"),
+    Input("btn-logs-refresh", "n_clicks"),
 )
-def update_logs(_tick: int) -> str:
+def update_logs(_tick: int, _refresh: int | None) -> Any:
+    if dash.ctx.triggered_id != "btn-logs-refresh":
+        return dash.no_update
     return read_warning_error_logs()
 
 
@@ -2242,7 +2663,9 @@ def update_logs(_tick: int) -> str:
     Input("info-interval", "n_intervals"),
     Input("btn-info-refresh", "n_clicks"),
 )
-def update_info(_tick: int, _refresh: int | None) -> str:
+def update_info(_tick: int, _refresh: int | None) -> Any:
+    if dash.ctx.triggered_id != "btn-info-refresh":
+        return dash.no_update
     try:
         return json.dumps(build_altegro_info(), indent=2, sort_keys=True)
     except Exception as exc:
@@ -2300,6 +2723,8 @@ def _make_slam_cloud_from_points(points: list[tuple[float, float, float]], title
     State("slam-target-y", "value"),
     State("slam-target-yaw", "value"),
     State("slam-target-store", "data"),
+    State("slam-enabled", "data"),
+    prevent_initial_call=True,
 )
 def update_slam_tab(
     _tick: int,
@@ -2312,7 +2737,15 @@ def update_slam_tab(
     target_y: float | None,
     target_yaw: float | None,
     target_store: dict[str, Any] | None,
+    slam_enabled: bool,
 ) -> tuple[go.Figure, go.Figure, str, Any, Any, Any]:
+    boot_msg = _boot_priority_message()
+    if boot_msg:
+        return empty_slam_cloud_figure("SLAM paused"), empty_slam_map_figure("SLAM paused"), boot_msg, dash.no_update, dash.no_update, dash.no_update
+
+    if not bool(slam_enabled):
+        return empty_slam_cloud_figure("SLAM disabled"), empty_slam_map_figure("SLAM disabled"), "SLAM disabled.", dash.no_update, dash.no_update, dash.no_update
+
     robot = get_robot()
     if robot is None:
         msg = f"Robot init failed: {ROBOT_INIT_ERR}"
@@ -2466,6 +2899,9 @@ def on_lowlevel_target(
     pd: float | None,
     lowlevel_enabled: bool,
 ) -> str:
+    boot_msg = _boot_priority_message()
+    if boot_msg:
+        return boot_msg
     if dash.ctx.triggered_id == "lowlevel-target":
         if not bool(lowlevel_enabled):
             LOGGER.warning("LowLevel target ignored because LowLevel is disabled.")
@@ -2496,6 +2932,8 @@ def on_lowlevel_target(
     prevent_initial_call=True,
 )
 def toggle_lowlevel(_clicks: int | None, enabled: bool) -> tuple[bool, str, str]:
+    if BOOT_SEQUENCE.priority_active():
+        return False, "Enable LowLevel", "danger"
     new_enabled = not bool(enabled)
     LOGGER.warning("LowLevel control toggled %s", "enabled" if new_enabled else "disabled")
     return new_enabled, ("Disable LowLevel" if new_enabled else "Enable LowLevel"), ("success" if new_enabled else "danger")
@@ -2507,6 +2945,7 @@ def toggle_lowlevel(_clicks: int | None, enabled: bool) -> tuple[bool, str, str]
     Input("grip-target", "value"),
     Input("grip-hand", "value"),
     State("grip-max-inc", "value"),
+    State("grip-enabled", "data"),
     prevent_initial_call=True,
 )
 def on_grip_target(
@@ -2514,7 +2953,13 @@ def on_grip_target(
     percent: float | None,
     hand: str | None,
     max_increment: float | None,
+    grip_enabled: bool,
 ) -> str:
+    boot_msg = _boot_priority_message()
+    if boot_msg:
+        return boot_msg
+    if not bool(grip_enabled):
+        return "Grip: disabled."
     if dash.ctx.triggered_id in {"grip-target", "grip-hand"}:
         GRIP_CONTROLLER.start_move(
             hand=str(hand or "right"),
@@ -2536,6 +2981,9 @@ def on_grip_target(
 )
 def on_apply_iface(_n: int | None, iface_input: str | None) -> tuple[str, str]:
     global ROBOT_INSTANCE, ROBOT_INIT_ERR, ROBOT_IFACE, DEPTH_PREVIEW, RGB_PREVIEW, RGBD_PREVIEW, LIVOX_PREVIEW
+    boot_msg = _boot_priority_message()
+    if boot_msg:
+        return boot_msg, ROBOT_IFACE
     iface = (iface_input or "").strip()
     if not iface:
         return "Interface cannot be empty.", ROBOT_IFACE
@@ -2571,6 +3019,9 @@ def on_apply_iface(_n: int | None, iface_input: str | None) -> tuple[str, str]:
     prevent_initial_call=True,
 )
 def on_say(_n: int | None, text: str | None) -> str:
+    boot_msg = _boot_priority_message()
+    if boot_msg:
+        return boot_msg
     robot = get_robot()
     if robot is None:
         return f"Robot init failed: {ROBOT_INIT_ERR}"
@@ -2596,6 +3047,9 @@ def on_say(_n: int | None, text: str | None) -> str:
     prevent_initial_call=True,
 )
 def on_headlight(_n: int | None, color: str | None, intensity: int | float | None, duration: float | None) -> str:
+    boot_msg = _boot_priority_message()
+    if boot_msg:
+        return boot_msg
     robot = get_robot()
     if robot is None:
         return f"Robot init failed: {ROBOT_INIT_ERR}"
@@ -2618,8 +3072,15 @@ def on_headlight(_n: int | None, color: str | None, intensity: int | float | Non
     Output("rgb-status", "children"),
     Input("rgb-interval", "n_intervals"),
     State("rgb-feed", "src"),
+    State("rgb-enabled", "data"),
+    prevent_initial_call=True,
 )
-def update_rgb_feed(_tick: int, prev_src: str | None) -> tuple[str | None, str]:
+def update_rgb_feed(_tick: int, prev_src: str | None, rgb_enabled: bool) -> tuple[str | None, str]:
+    boot_msg = _boot_priority_message()
+    if boot_msg:
+        return prev_src, boot_msg
+    if not bool(rgb_enabled):
+        return prev_src, "RGB feed disabled."
     try:
         preview = get_rgbd_preview()
         preview.start()
@@ -2650,8 +3111,15 @@ def update_rgb_feed(_tick: int, prev_src: str | None) -> tuple[str | None, str]:
     Output("depth-status", "children"),
     Input("depth-interval", "n_intervals"),
     State("depth-feed", "src"),
+    State("depth-enabled", "data"),
+    prevent_initial_call=True,
 )
-def update_depth_feed(_tick: int, prev_src: str | None) -> tuple[str | None, str]:
+def update_depth_feed(_tick: int, prev_src: str | None, depth_enabled: bool) -> tuple[str | None, str]:
+    boot_msg = _boot_priority_message()
+    if boot_msg:
+        return prev_src, boot_msg
+    if not bool(depth_enabled):
+        return prev_src, "Depth feed disabled."
     try:
         preview = get_rgbd_preview()
         preview.start()
@@ -2677,8 +3145,27 @@ def update_depth_feed(_tick: int, prev_src: str | None) -> tuple[str | None, str
     Output("imu-graph", "figure"),
     Output("imu-status", "children"),
     Input("lidar-interval", "n_intervals"),
+    State("lidar-enabled", "data"),
+    State("imu-enabled", "data"),
+    prevent_initial_call=True,
 )
-def update_lidar(_tick: int) -> tuple[go.Figure, str, go.Figure, str]:
+def update_lidar(_tick: int, lidar_enabled: bool, imu_enabled: bool) -> tuple[go.Figure, str, go.Figure, str]:
+    boot_msg = _boot_priority_message()
+    if boot_msg:
+        return (
+            empty_lidar_figure("LiDAR paused"),
+            boot_msg,
+            empty_imu_figure("IMU paused"),
+            boot_msg,
+        )
+    if not bool(lidar_enabled) and not bool(imu_enabled):
+        return (
+            empty_lidar_figure("LiDAR disabled"),
+            "LiDAR disabled.",
+            empty_imu_figure("IMU disabled"),
+            "IMU disabled.",
+        )
+
     robot = get_robot()
     if robot is None:
         return (
@@ -2688,36 +3175,68 @@ def update_lidar(_tick: int) -> tuple[go.Figure, str, go.Figure, str]:
             f"Robot init failed: {ROBOT_INIT_ERR}",
         )
 
-    try:
-        pts = robot.get_lidar_points(max_points=4000)
-    except Exception as exc:
-        lidar_fig = empty_lidar_figure("LiDAR stream error")
-        lidar_status = f"LiDAR read failed: {exc}"
-    else:
-        if not pts:
-            live = get_livox_preview()
-            live.start()
-            xyz, live_ts, live_err = live.snapshot()
-            if xyz is not None:
-                import numpy as np
+    if bool(lidar_enabled):
+        try:
+            pts = robot.get_lidar_points(max_points=4000)
+        except Exception as exc:
+            lidar_fig = empty_lidar_figure("LiDAR stream error")
+            lidar_status = f"LiDAR read failed: {exc}"
+        else:
+            if not pts:
+                live = get_livox_preview()
+                live.start()
+                xyz, live_ts, live_err = live.snapshot()
+                if xyz is not None:
+                    import numpy as np
 
-                arr = np.asarray(xyz, dtype=np.float32)
-                if arr.ndim == 2 and arr.shape[1] >= 3:
-                    xs_a = arr[:, 0]
-                    ys_a = arr[:, 1]
-                    zs_a = arr[:, 2]
-                    # Mirror the top-down limits used by lidar_points.py.
-                    mask = (
-                        (zs_a >= -1.0)
-                        & (zs_a <= 2.0)
-                        & (np.abs(xs_a) <= 10.0)
-                        & (np.abs(ys_a) <= 10.0)
+                    arr = np.asarray(xyz, dtype=np.float32)
+                    if arr.ndim == 2 and arr.shape[1] >= 3:
+                        xs_a = arr[:, 0]
+                        ys_a = arr[:, 1]
+                        zs_a = arr[:, 2]
+                        # Mirror the top-down limits used by lidar_points.py.
+                        mask = (
+                            (zs_a >= -1.0)
+                            & (zs_a <= 2.0)
+                            & (np.abs(xs_a) <= 10.0)
+                            & (np.abs(ys_a) <= 10.0)
+                        )
+                        xs = xs_a[mask].tolist()
+                        ys = ys_a[mask].tolist()
+                        zs = zs_a[mask].tolist()
+                    else:
+                        xs, ys, zs = [], [], []
+
+                    lidar_fig = go.Figure(
+                        data=[
+                            go.Scattergl(
+                                x=xs,
+                                y=ys,
+                                mode="markers",
+                                marker={"size": 3, "color": zs, "colorscale": "Viridis", "showscale": True},
+                                name="LiDAR",
+                            )
+                        ]
                     )
-                    xs = xs_a[mask].tolist()
-                    ys = ys_a[mask].tolist()
-                    zs = zs_a[mask].tolist()
+                    lidar_fig.update_layout(
+                        template="plotly_dark",
+                        title="LiDAR stream (live_points fallback)",
+                        xaxis_title="X (m)",
+                        yaxis_title="Y (m)",
+                        margin={"l": 30, "r": 20, "t": 45, "b": 35},
+                        height=500,
+                    )
+                    age = max(0.0, time.time() - live_ts) if live_ts > 0 else -1.0
+                    lidar_status = f"Points: {len(xs)} | source: live_points | age_s: {age:.2f}"
                 else:
-                    xs, ys, zs = [], [], []
+                    stale = robot.sensors_stale(max_age=1.5)
+                    lidar_fig = empty_lidar_figure("LiDAR stream (no points yet)")
+                    extra = f" | live_err: {live_err}" if live_err else ""
+                    lidar_status = f"No LiDAR points yet. stale={stale}{extra}"
+            else:
+                xs = [p[0] for p in pts]
+                ys = [p[1] for p in pts]
+                zs = [p[2] for p in pts]
 
                 lidar_fig = go.Figure(
                     data=[
@@ -2732,84 +3251,60 @@ def update_lidar(_tick: int) -> tuple[go.Figure, str, go.Figure, str]:
                 )
                 lidar_fig.update_layout(
                     template="plotly_dark",
-                    title="LiDAR stream (live_points fallback)",
+                    title="LiDAR stream",
                     xaxis_title="X (m)",
                     yaxis_title="Y (m)",
                     margin={"l": 30, "r": 20, "t": 45, "b": 35},
                     height=500,
                 )
-                age = max(0.0, time.time() - live_ts) if live_ts > 0 else -1.0
-                lidar_status = f"Points: {len(xs)} | source: live_points | age_s: {age:.2f}"
-            else:
-                stale = robot.sensors_stale(max_age=1.5)
-                lidar_fig = empty_lidar_figure("LiDAR stream (no points yet)")
-                extra = f" | live_err: {live_err}" if live_err else ""
-                lidar_status = f"No LiDAR points yet. stale={stale}{extra}"
-        else:
-            xs = [p[0] for p in pts]
-            ys = [p[1] for p in pts]
-            zs = [p[2] for p in pts]
 
-            lidar_fig = go.Figure(
+                ts = robot.get_sensor_timestamps()
+                age = max(0.0, time.time() - ts.get("lidar_cloud", 0.0)) if ts.get("lidar_cloud", 0.0) > 0 else -1.0
+                lidar_status = (
+                    f"Points: {len(pts)} | topic: {ROBOT_LIDAR_CLOUD_TOPIC} | "
+                    f"lidar_cloud_age_s: {age:.2f}"
+                )
+    else:
+        lidar_fig = empty_lidar_figure("LiDAR disabled")
+        lidar_status = "LiDAR disabled."
+
+    if not bool(imu_enabled):
+        imu_fig = empty_imu_figure("IMU disabled")
+        imu_status = "IMU disabled."
+    else:
+        imu = robot.get_imu()
+        if imu is None:
+            imu_fig = empty_imu_figure("IMU orientation (no data yet)")
+            imu_status = "No IMU data yet."
+        else:
+            now = time.time()
+            roll = float(imu.rpy[0])
+            pitch = float(imu.rpy[1])
+            yaw = float(imu.rpy[2])
+            IMU_HISTORY.append((now, roll, pitch, yaw))
+
+            t0 = IMU_HISTORY[0][0]
+            rel_t = [row[0] - t0 for row in IMU_HISTORY]
+            roll_s = [row[1] for row in IMU_HISTORY]
+            pitch_s = [row[2] for row in IMU_HISTORY]
+            yaw_s = [row[3] for row in IMU_HISTORY]
+
+            imu_fig = go.Figure(
                 data=[
-                    go.Scattergl(
-                        x=xs,
-                        y=ys,
-                        mode="markers",
-                        marker={"size": 3, "color": zs, "colorscale": "Viridis", "showscale": True},
-                        name="LiDAR",
-                    )
+                    go.Scatter(x=rel_t, y=roll_s, mode="lines", name="roll"),
+                    go.Scatter(x=rel_t, y=pitch_s, mode="lines", name="pitch"),
+                    go.Scatter(x=rel_t, y=yaw_s, mode="lines", name="yaw"),
                 ]
             )
-            lidar_fig.update_layout(
+            imu_fig.update_layout(
                 template="plotly_dark",
-                title="LiDAR stream",
-                xaxis_title="X (m)",
-                yaxis_title="Y (m)",
+                title="IMU orientation (RPY)",
+                xaxis_title="Time (s, recent window)",
+                yaxis_title="Angle (rad)",
                 margin={"l": 30, "r": 20, "t": 45, "b": 35},
-                height=500,
+                height=320,
             )
-
-            ts = robot.get_sensor_timestamps()
-            age = max(0.0, time.time() - ts.get("lidar_cloud", 0.0)) if ts.get("lidar_cloud", 0.0) > 0 else -1.0
-            lidar_status = (
-                f"Points: {len(pts)} | topic: {ROBOT_LIDAR_CLOUD_TOPIC} | "
-                f"lidar_cloud_age_s: {age:.2f}"
-            )
-
-    imu = robot.get_imu()
-    if imu is None:
-        imu_fig = empty_imu_figure("IMU orientation (no data yet)")
-        imu_status = "No IMU data yet."
-    else:
-        now = time.time()
-        roll = float(imu.rpy[0])
-        pitch = float(imu.rpy[1])
-        yaw = float(imu.rpy[2])
-        IMU_HISTORY.append((now, roll, pitch, yaw))
-
-        t0 = IMU_HISTORY[0][0]
-        rel_t = [row[0] - t0 for row in IMU_HISTORY]
-        roll_s = [row[1] for row in IMU_HISTORY]
-        pitch_s = [row[2] for row in IMU_HISTORY]
-        yaw_s = [row[3] for row in IMU_HISTORY]
-
-        imu_fig = go.Figure(
-            data=[
-                go.Scatter(x=rel_t, y=roll_s, mode="lines", name="roll"),
-                go.Scatter(x=rel_t, y=pitch_s, mode="lines", name="pitch"),
-                go.Scatter(x=rel_t, y=yaw_s, mode="lines", name="yaw"),
-            ]
-        )
-        imu_fig.update_layout(
-            template="plotly_dark",
-            title="IMU orientation (RPY)",
-            xaxis_title="Time (s, recent window)",
-            yaxis_title="Angle (rad)",
-            margin={"l": 30, "r": 20, "t": 45, "b": 35},
-            height=320,
-        )
-        imu_status = f"Latest RPY(rad): [{roll:.3f}, {pitch:.3f}, {yaw:.3f}] | samples: {len(IMU_HISTORY)}"
+            imu_status = f"Latest RPY(rad): [{roll:.3f}, {pitch:.3f}, {yaw:.3f}] | samples: {len(IMU_HISTORY)}"
 
     return lidar_fig, lidar_status, imu_fig, imu_status
 

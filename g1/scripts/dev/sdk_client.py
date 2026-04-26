@@ -59,7 +59,7 @@ except ImportError as exc:
         "  pip install -e <path-to-unitree_sdk2_python>"
     ) from exc
 
-from secure_boot import force_normal_gait, secure_boot
+from secure_boot import force_balanced_stand_fsm, force_normal_gait, secure_boot
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -2189,11 +2189,11 @@ class Robot:
     # ------------------------------------------------------------------
 
     def balanced_stand(self, mode: int = 0) -> None:
-        """Command balanced stand (default mode=0)."""
+        """Command balanced stand and force FSM 501."""
         if hasattr(self._client, "BalanceStand"):
             self._client.BalanceStand(int(mode))
-        else:
-            self._ensure_balanced_gait_mode()
+        self._ensure_balanced_gait_mode()
+        force_balanced_stand_fsm(self._client)
 
     def hanging_boot(self) -> None:
         """Run the hanging boot flow and force normal gait mode."""

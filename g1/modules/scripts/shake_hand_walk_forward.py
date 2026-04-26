@@ -12,7 +12,13 @@ MODULES_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 if MODULES_DIR not in sys.path:
     sys.path.insert(0, MODULES_DIR)
 
-from sdk_boot import BALANCED_STAND_FSM_IDS, create_loco_client, fsm_mode, read_fsm_state
+from sdk_boot import (
+    BALANCED_STAND_FSM_IDS,
+    create_loco_client,
+    fsm_mode,
+    is_balanced_stand_state,
+    read_fsm_state,
+)
 from secure_boot import force_normal_gait
 
 
@@ -59,7 +65,7 @@ def show_fsm(loco: object, tag: str) -> tuple[int | None, int | None]:
 
 def is_balanced_stand(loco: object) -> bool:
     cur_id, cur_mode = read_fsm_state(loco)
-    return cur_id in BALANCED_STAND_FSM_IDS and cur_mode == 0
+    return is_balanced_stand_state(cur_id, cur_mode)
 
 
 def wait_for_balanced_stand(
@@ -89,7 +95,7 @@ def run_secure_boot(args: argparse.Namespace) -> object:
     loco = create_loco_client(domain_id=args.domain_id, iface=args.iface)
 
     cur_id, cur_mode = show_fsm(loco, "initial")
-    if cur_id in BALANCED_STAND_FSM_IDS and cur_mode == 0:
+    if is_balanced_stand_state(cur_id, cur_mode):
         print("Robot is already in balanced stand; skipping hanger boot.")
         force_normal_gait(loco)
         return loco
