@@ -726,24 +726,51 @@ class Robot:
         *,
         duration_s: float = 3.0,
         command_rate_hz: float = 50.0,
-    ) -> dict[str, float]:
-        """Ramp the DDS arm_sdk enable flag from enabled to disabled.
+        kp: float = 30.0,
+        kd: float = 1.5,
+        waist_kp: float = WAIST_HOLD_KP,
+        waist_kd: float = WAIST_HOLD_KD,
+        timeout: float = 3.0,
+    ) -> dict[str, Any]:
+        """Gradually release DDS arm_sdk control from the current pose.
 
-        This mirrors Stage 4 of Unitree's `g1_arm7_sdk_dds_example.py`: joint
-        targets are left untouched while the special arm_sdk weight joint
-        transitions from 1.0 to 0.0.
+        The release needs continuous pose commands while authority is fading;
+        otherwise a fresh `rt/arm_sdk` command can leave the non-weight joints
+        at their default values and the final handoff can feel abrupt.
         """
+        positions = self._read_joint_positions_or_raise(UPPER_BODY_JOINTS, timeout=timeout)
         steps = max(1, int(max(0.0, float(duration_s)) * max(1.0, float(command_rate_hz))))
         dt = 1.0 / max(1.0, float(command_rate_hz))
         arm_sdk = self._get_arm_sdk()
+        base_kp = float(kp)
+        base_kd = float(kd)
+        base_waist_kp = float(waist_kp)
+        base_waist_kd = float(waist_kd)
         for step_idx in range(steps + 1):
             ratio = float(step_idx) / float(steps)
-            arm_sdk.publish_arm_sdk_weight(1.0 - ratio)
+            # Smoothstep avoids a jerk at the beginning and end of the handoff.
+            fade = ratio * ratio * (3.0 - 2.0 * ratio)
+            authority = 1.0 - fade
+            waist_gains = {
+                joint_index: base_waist_kp * authority for joint_index in WAIST_JOINTS
+            }
+            waist_damping = {
+                joint_index: base_waist_kd * authority for joint_index in WAIST_JOINTS
+            }
+            arm_sdk.publish_targets(
+                positions,
+                kp=base_kp * authority,
+                kd=base_kd * authority,
+                kp_by_joint=waist_gains,
+                kd_by_joint=waist_damping,
+            )
+            arm_sdk.publish_arm_sdk_weight(authority)
             time.sleep(dt)
         return {
             "duration_s": float(duration_s),
             "command_rate_hz": float(command_rate_hz),
             "final_arm_sdk_weight": 0.0,
+            "joint_count": len(positions),
         }
 
     def unrelease_arms(
@@ -892,9 +919,9 @@ class Robot:
         shoulder_roll_delta: float = 0.50,
         shoulder_roll_restore_fraction: float = 0.45,
         shoulder_pitch_delta: float = 0.35,
-        elbow_delta: float = 0.90,
-        wrist_roll_delta: float = 0.25,
-        wrist_pitch_delta: float = 0.75,
+        elbow_delta: float = 1.0,
+        wrist_roll_delta: float = 0.2,
+        wrist_pitch_delta: float = 0.6,
     ) -> dict[str, Any]:
         side = str(arm).strip().lower()
         if side not in ("left", "right"):
@@ -1017,9 +1044,9 @@ class Robot:
         shoulder_roll_delta: float = 0.50,
         shoulder_roll_restore_fraction: float = 0.45,
         shoulder_pitch_delta: float = 0.35,
-        elbow_delta: float = 0.90,
-        wrist_roll_delta: float = 0.25,
-        wrist_pitch_delta: float = 0.75,
+        elbow_delta: float = 1,
+        wrist_roll_delta: float = 0.16,
+        wrist_pitch_delta: float = 0.4,
     ) -> dict[str, Any]:
         """Best-effort inverse of :meth:`extend_arm_forward`.
 
