@@ -5,13 +5,12 @@ IFACE="${IFACE:-wlan0}"
 SSID="MESSEacademy"
 PSK="technology"
 CONF="/etc/wpa_supplicant.conf"
+STATIC_IP="${STATIC_IP:-192.168.1.50}"
+PREFIX_LEN="${PREFIX_LEN:-24}"
+GATEWAY="${GATEWAY:-192.168.1.1}"
+DNS_SERVERS="${DNS_SERVERS:-8.8.8.8 1.1.1.1}"
 
 ip link set "$IFACE" up
-
-if ip -4 addr show dev "$IFACE" | grep -q ' inet '; then
-    echo "$IFACE already has an IPv4 address"
-    exit 0
-fi
 
 if ! pgrep -f "wpa_supplicant.*-i ?$IFACE" >/dev/null; then
     umask 077
@@ -28,9 +27,18 @@ for _ in $(seq 1 20); do
     sleep 1
 done
 
-if ip -4 addr show dev "$IFACE" | grep -q ' inet '; then
-    echo "$IFACE already has an IPv4 address"
-    exit 0
+if ! iw dev "$IFACE" link 2>/dev/null | grep -q '^Connected'; then
+    echo "Wi-Fi association failed on $IFACE"
+    exit 1
 fi
 
-dhclient -1 "$IFACE"
+ip addr flush dev "$IFACE"
+ip addr add "${STATIC_IP}/${PREFIX_LEN}" dev "$IFACE"
+ip route replace default via "$GATEWAY" dev "$IFACE"
+
+if [ -w /etc/resolv.conf ]; then
+    : > /etc/resolv.conf
+    for dns in $DNS_SERVERS; do
+        echo "nameserver $dns" >> /etc/resolv.conf
+    done
+fi
