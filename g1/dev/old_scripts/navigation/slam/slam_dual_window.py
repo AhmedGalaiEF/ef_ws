@@ -288,6 +288,9 @@ class _Lidar3DSession:
 
 LIDAR3D_SESSION = _Lidar3DSession()
 
+_raw_xyz_lock = threading.Lock()
+_raw_xyz_latest = None  # latest raw LiDAR frame, always updated even when mapping frozen
+
 
 class _NoOpPublisher:
     def __init__(self, *args, **kwargs) -> None:
@@ -351,12 +354,35 @@ def _install_dual_slam_runner() -> None:
 
             import live_slam as _ls  # type: ignore
 
+            def _current_corrected_pose(demo):
+                pose = demo._slam.last_pose.copy()  # type: ignore[attr-defined]
+                mount_tf = getattr(_ls, "_R_MOUNT", None)
+                if mount_tf is not None:
+                    pose = mount_tf @ pose
+                return pose
+
+            def _current_corrected_cloud(demo):
+                try:
+                    cloud = demo._slam.get_map()
+                except AttributeError:
+                    cloud = demo._slam.local_map.point_cloud()
+                mount_tf = getattr(_ls, "_R_MOUNT", None)
+                if mount_tf is not None:
+                    cloud = (cloud @ mount_tf[:3, :3].T).astype(cloud.dtype, copy=False)
+                if cloud.shape[0] > demo._vis_max_points:
+                    step = int(cloud.shape[0] / demo._vis_max_points) + 1
+                    cloud = cloud[::step]
+                return cloud
+
             if not getattr(_ls.LiveSLAMDemo.handle_points, "_dual_window_wrapped", False):
                 _orig_hp = _ls.LiveSLAMDemo.handle_points
 
                 def _safe_hp(self, xyz):
-                    if not SLAM_SESSION.is_mapping_enabled():
-                        return
+                    global _raw_xyz_latest
+                    with _raw_xyz_lock:
+                        _raw_xyz_latest = xyz.copy()
+                    mapping_enabled = SLAM_SESSION.is_mapping_enabled()
+                    was_mapping_enabled = getattr(self, "_dual_mapping_enabled_prev", True)
                     try:
                         _orig_hp(self, xyz)
                     except Exception as exc:  # pylint: disable=broad-except
@@ -370,6 +396,23 @@ def _install_dual_slam_runner() -> None:
                         if now - last > 8.0:
                             setattr(_safe_hp, "_last_kiss_log", now)
                             print("[slam_dual_window] KISS-ICP frame failed:", exc)
+                    else:
+                        if mapping_enabled:
+                            self._dual_frozen_cloud = None
+                        else:
+                            if was_mapping_enabled or getattr(self, "_dual_frozen_cloud", None) is None:
+                                try:
+                                    self._dual_frozen_cloud = _current_corrected_cloud(self).copy()
+                                except Exception:
+                                    self._dual_frozen_cloud = None
+                            frozen_cloud = getattr(self, "_dual_frozen_cloud", None)
+                            if frozen_cloud is not None:
+                                try:
+                                    self._viewer.push(frozen_cloud, _current_corrected_pose(self))
+                                except Exception:
+                                    pass
+                    finally:
+                        self._dual_mapping_enabled_prev = mapping_enabled
 
                 _safe_hp._dual_window_wrapped = True  # type: ignore[attr-defined]
                 _ls.LiveSLAMDemo.handle_points = _safe_hp  # type: ignore[assignment]
@@ -556,10 +599,10 @@ class ControlWindow(QtWidgets.QMainWindow):
         self.lidar3d_lbl = QtWidgets.QLabel("3D LiDAR: --")
         self.slam_lbl = QtWidgets.QLabel("SLAM: --")
         self.goal_lbl = QtWidgets.QLabel("Goal: --")
-        self.avoid_lbl = QtWidgets.QLabel("Avoid: --")
+        self.replan_lbl = QtWidgets.QLabel("Replanning: --")
         self.pose_lbl = QtWidgets.QLabel("Pose: --")
         self.help_lbl = QtWidgets.QLabel(
-            "Double-click the occupancy map in the viewer window to send a goal.\n"
+            "Click the occupancy map in the viewer window to send a goal.\n"
             "W/A/S/D/Q/E or Shift for base tele-op still work in the Qt app."
         )
         self.help_lbl.setWordWrap(True)
@@ -570,7 +613,7 @@ class ControlWindow(QtWidgets.QMainWindow):
             self.lidar3d_lbl,
             self.slam_lbl,
             self.goal_lbl,
-            self.avoid_lbl,
+            self.replan_lbl,
             self.pose_lbl,
         ):
             lbl.setStyleSheet("font: 12pt 'DejaVu Sans Mono';")
@@ -580,7 +623,7 @@ class ControlWindow(QtWidgets.QMainWindow):
         layout.addWidget(self.lidar3d_lbl)
         layout.addWidget(self.slam_lbl)
         layout.addWidget(self.goal_lbl)
-        layout.addWidget(self.avoid_lbl)
+        layout.addWidget(self.replan_lbl)
         layout.addWidget(self.pose_lbl)
         layout.addWidget(self.help_lbl)
 
@@ -600,11 +643,9 @@ class ControlWindow(QtWidgets.QMainWindow):
         _btn("Stop Robot", self._owner.stop_motion, 2, 0)
         _btn("Clear Goal", self._owner.clear_goal, 2, 1)
         _btn("Go To Target", self._owner.start_goal_navigation, 3, 0)
-        _btn("Stop Walk", self._owner.stop_motion, 3, 1)
-        _btn("Free Walk", self._owner.enable_free_walk, 4, 0)
-        _btn("Toggle Avoid", self._owner.toggle_obstacle_avoidance, 4, 1)
-        self._rgbd_btn = _btn("Toggle RGBD", self._owner.toggle_rgbd, 5, 0)
-        self._lidar3d_btn = _btn("Toggle 3D LiDAR", self._owner.toggle_lidar3d, 5, 1)
+        _btn("Toggle Replanning", self._owner.toggle_obstacle_avoidance, 3, 1)
+        self._rgbd_btn = _btn("Toggle RGBD", self._owner.toggle_rgbd, 4, 0)
+        self._lidar3d_btn = _btn("Toggle 3D LiDAR", self._owner.toggle_lidar3d, 4, 1)
 
         nav_form = QtWidgets.QFormLayout()
         self._speed_spin = QtWidgets.QDoubleSpinBox()
@@ -624,12 +665,20 @@ class ControlWindow(QtWidgets.QMainWindow):
         nav_form.addRow("Cmd Duration (s)", self._duration_spin)
 
         self._obstacle_spin = QtWidgets.QDoubleSpinBox()
-        self._obstacle_spin.setRange(0.20, 2.00)
-        self._obstacle_spin.setSingleStep(0.10)
+        self._obstacle_spin.setRange(0.10, 2.00)
+        self._obstacle_spin.setSingleStep(0.05)
         self._obstacle_spin.setDecimals(2)
         self._obstacle_spin.setValue(self._owner.min_obstacle_distance())
         self._obstacle_spin.valueChanged.connect(self._owner.set_min_obstacle_distance)  # type: ignore[arg-type]
         nav_form.addRow("Min Obstacle (m)", self._obstacle_spin)
+
+        self._tolerance_spin = QtWidgets.QDoubleSpinBox()
+        self._tolerance_spin.setRange(0.10, 2.00)
+        self._tolerance_spin.setSingleStep(0.05)
+        self._tolerance_spin.setDecimals(2)
+        self._tolerance_spin.setValue(self._owner.nav_goal_tolerance())
+        self._tolerance_spin.valueChanged.connect(self._owner.set_nav_goal_tolerance)  # type: ignore[arg-type]
+        nav_form.addRow("Goal Tolerance (m)", self._tolerance_spin)
         layout.addLayout(nav_form)
 
         layout.addStretch(1)
@@ -646,8 +695,8 @@ class ControlWindow(QtWidgets.QMainWindow):
         self.lidar3d_lbl.setText(f"3D LiDAR: {'ON' if self._owner.lidar3d_enabled() else 'OFF'}")
         self.slam_lbl.setText(f"SLAM: {self._owner.slam_status_text()}")
         self.goal_lbl.setText(f"Goal: {self._owner.goal_status_text()}")
-        self.avoid_lbl.setText(
-            f"Avoid: {'ON' if self._owner.obstacle_avoidance_enabled() else 'OFF'}"
+        self.replan_lbl.setText(
+            f"Replanning: {'ON' if self._owner.obstacle_avoidance_enabled() else 'OFF'}"
             f"  min={self._owner.min_obstacle_distance():.2f}m"
         )
         self.pose_lbl.setText(f"Pose: {self._owner.pose_status_text()}")
@@ -739,8 +788,9 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
         self._motion_stderr_thread = None
         self._last_motion_error = None
         self._nav_speed_mps = 0.18
-        self._nav_cmd_duration_s = 2.0
-        self._min_obstacle_dist_m = 1.0
+        self._nav_cmd_duration_s = 5.0
+        self._min_obstacle_dist_m = 0.3
+        self._goal_tolerance_m = 0.5
         self._latest_depth_guard_m = None
 
         self.win.setWindowTitle("SLAM Viewer")
@@ -773,6 +823,7 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
         self._map_worker_busy = False
         self._map_canvas = None
         self._ground_z_smooth = None
+        self._dynamic_occ_map = None
         self._hover_px: tuple[int, int] | None = None
         self._clicked_px: tuple[int, int] | None = None
         self._goal_px: tuple[int, int] | None = None
@@ -956,6 +1007,23 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
             self._nav_status = f"motion worker failed: {exc}"
             return False
 
+    def _kill_motion_worker(self) -> None:
+        proc = self._motion_proc
+        self._motion_proc = None
+        if proc is None:
+            return
+        try:
+            if proc.stdin is not None:
+                proc.stdin.close()
+        except Exception:
+            pass
+        try:
+            if proc.poll() is None:
+                proc.terminate()
+        except Exception:
+            pass
+        self._bal_mode = 0
+
     def run(self):  # noqa: D401
         self.win.show()
         self.control_win.show()
@@ -1042,7 +1110,7 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
 
         with LEGACY._slam_lock:
             data = LEGACY._slam_latest
-        if data is not None and data is not self._last_slam_ref:
+        if data is not None:
             self._last_slam_ref = data
             self._pending_slam = data
             SLAM_SESSION.touch_update()
@@ -1197,7 +1265,7 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
         except Exception:
             pass
 
-        occ = self._occ_map.copy()
+        occ = (self._dynamic_occ_map if self._dynamic_occ_map is not None else self._occ_map).copy()
         map_meta = self._map_meta
         self._clicked_px = (gx, gy)
         self._goal_px = (gx, gy)
@@ -1295,9 +1363,15 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
         return float(self._min_obstacle_dist_m)
 
     def set_min_obstacle_distance(self, value: float) -> None:
-        self._min_obstacle_dist_m = max(0.20, min(2.0, float(value)))
+        self._min_obstacle_dist_m = max(0.10, min(2.0, float(value)))
         if self._avoid_obstacles:
             self._last_replan_t = 0.0
+
+    def nav_goal_tolerance(self) -> float:
+        return float(self._goal_tolerance_m)
+
+    def set_nav_goal_tolerance(self, value: float) -> None:
+        self._goal_tolerance_m = max(0.10, min(2.0, float(value)))
 
     def obstacle_avoidance_enabled(self) -> bool:
         return bool(self._avoid_obstacles)
@@ -1315,14 +1389,16 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
             return
         if self._replan_worker_busy:
             return
-        if self._occ_map is None or self._map_meta is None:
+        if self._map_meta is None:
+            return
+        occ = self._dynamic_occ_map if self._dynamic_occ_map is not None else self._occ_map
+        if occ is None:
             return
         rob_px = getattr(self, "_robot_px", None)
         if rob_px is None:
             return
         if self._goal_px is None:
             return
-        # Replan at most ~1 Hz, and only when a new map snapshot arrived.
         now = time.monotonic()
         if now - self._last_replan_t < 1.0:
             return
@@ -1331,7 +1407,7 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
 
         rx, ry = rob_px
         gx, gy = self._goal_px
-        occ = self._occ_map.copy()
+        occ = occ.copy()
         map_meta = self._map_meta
         self._last_replan_t = now
         self._replan_worker_busy = True
@@ -1348,7 +1424,7 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
                 self._replan_worker_busy = False
 
         threading.Thread(target=_worker, daemon=True).start()
-        print(f"[slam_dual_window] Replan (avoid) map_seq={self._map_seq} from=({rx},{ry}) to=({gx},{gy})")
+        print(f"[slam_dual_window] Replan map_seq={self._map_seq} from=({rx},{ry}) to=({gx},{gy})")
 
     def _px_path_to_world(self, path_px: Iterable[tuple[int, int]]) -> list[tuple[float, float]]:
         return self._px_path_to_world_with_meta(path_px, self._map_meta)
@@ -1399,6 +1475,16 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
         except Exception:
             pass
 
+    def _is_path_blocked(self) -> bool:
+        occ = self._dynamic_occ_map if self._dynamic_occ_map is not None else self._occ_map
+        if occ is None or not self._path_px:
+            return False
+        for col, row in self._path_px:
+            if 0 <= row < occ.shape[0] and 0 <= col < occ.shape[1]:
+                if occ[row, col]:
+                    return True
+        return False
+
     def _on_nav_tick(self) -> None:
         if self._motion_proc is None or self._motion_proc.poll() is not None or not self._nav_waypoints_world or not self._nav_autonomous_active:
             return
@@ -1416,12 +1502,19 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
             )
             return
 
+        if self._is_path_blocked():
+            self._nav_status = "path blocked by obstacle"
+            self._nav_autonomous_active = False
+            self._stop_robot()
+            print("[slam_dual_window] Path blocked — stopping navigation")
+            return
+
         pose = self._latest_pose
         px, py = float(pose[0, 3]), float(pose[1, 3])
 
         while self._nav_waypoints_world:
             tx, ty = self._nav_waypoints_world[0]
-            if math.hypot(tx - px, ty - py) > 0.25:
+            if math.hypot(tx - px, ty - py) > self._goal_tolerance_m:
                 break
             self._nav_waypoints_world.pop(0)
             remaining = len(self._nav_waypoints_world)
@@ -1499,6 +1592,9 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
             self._nav_status = f"nav failed: {exc}"
             self.clear_goal()
 
+        if self._map_canvas is not None:
+            self._render_map_overlay(self._map_canvas)
+
     def start_mapping(self) -> None:
         SLAM_SESSION.set_mapping(True)
         self._nav_status = "mapping live"
@@ -1568,6 +1664,7 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
         self._nav_autonomous_active = False
         self.clear_goal()
         self._stop_robot()
+        self._last_nav_motion_cmd_t = 0.0
         self._nav_status = "stopped"
 
     def clear_goal(self) -> None:
@@ -1693,11 +1790,39 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
                 canvas,
                 [np.array(self._path_px, dtype=np.int32)],
                 isClosed=False,
-                color=(0, 0, 255),
-                thickness=2,
+                color=(0, 0, 180),
+                thickness=1,
             )
             gx, gy = self._path_px[-1]
             cv2.circle(canvas, (gx, gy), 4, (0, 0, 255), -1)
+
+        if (
+            getattr(self, "_nav_autonomous_active", False)
+            and self._nav_waypoints_world
+            and self._map_meta is not None
+        ):
+            min_x_m, min_y_m, scale_m = self._map_meta
+            wp_pts: list[tuple[int, int]] = []
+            if self._latest_pose is not None:
+                rx_wp = int(round((float(self._latest_pose[1, 3]) - min_y_m) * scale_m + 5.0))
+                ry_wp = int(round(479.0 - ((float(self._latest_pose[0, 3]) - min_x_m) * scale_m + 5.0)))
+                if 0 <= rx_wp < 480 and 0 <= ry_wp < 480:
+                    wp_pts.append((rx_wp, ry_wp))
+            for xw, yw in self._nav_waypoints_world:
+                col = int(round((yw - min_y_m) * scale_m + 5.0))
+                row = int(round(479.0 - (xw - min_x_m) * scale_m + 5.0))
+                if 0 <= col < 480 and 0 <= row < 480:
+                    wp_pts.append((col, row))
+            if len(wp_pts) > 1:
+                cv2.polylines(
+                    canvas,
+                    [np.array(wp_pts, dtype=np.int32)],
+                    isClosed=False,
+                    color=(0, 255, 0),
+                    thickness=2,
+                )
+            if wp_pts:
+                cv2.circle(canvas, wp_pts[-1], 6, (0, 255, 0), -1)
 
         if self._hover_px is not None:
             hx, hy = self._hover_px
@@ -1779,9 +1904,10 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
             self._map_result = None
         if result is None:
             return
-        canvas, occ_map, map_meta, robot_px, ground_z = result
+        canvas, occ_map, dynamic_occ_map, map_meta, robot_px, ground_z = result
         self._map_canvas = canvas
         self._occ_map = occ_map
+        self._dynamic_occ_map = dynamic_occ_map
         self._map_meta = map_meta
         self._robot_px = robot_px
         self._ground_z_smooth = ground_z
@@ -1800,11 +1926,13 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
         ground_z = self._ground_z_smooth
         clear_m = self._clear_m
         min_obstacle_dist_m = self._min_obstacle_dist_m
+        with _raw_xyz_lock:
+            raw_snap = _raw_xyz_latest.copy() if _raw_xyz_latest is not None else None
         self._map_worker_busy = True
 
         def _worker():
             try:
-                result = self._build_map_snapshot(xyz_work, pose_work, clear_m, ground_z, min_obstacle_dist_m)
+                result = self._build_map_snapshot(xyz_work, pose_work, clear_m, ground_z, min_obstacle_dist_m, raw_xyz=raw_snap)
                 with self._map_lock:
                     self._map_result = result
             finally:
@@ -1896,7 +2024,7 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
         return thick > 0, inflated
 
     @staticmethod
-    def _build_map_snapshot(xyz, pose, clear_m: float, ground_z_prev, min_obstacle_dist_m: float):  # noqa: D401
+    def _build_map_snapshot(xyz, pose, clear_m: float, ground_z_prev, min_obstacle_dist_m: float, raw_xyz=None):  # noqa: D401
         import os
         import cv2  # type: ignore
         import numpy as np  # type: ignore
@@ -1904,6 +2032,7 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
         if xyz.shape[0] == 0:
             return (
                 np.full((480, 480, 3), 30, dtype=np.uint8),
+                np.zeros((480, 480), dtype=bool),
                 np.zeros((480, 480), dtype=bool),
                 (0.0, 0.0, 1.0),
                 None,
@@ -1957,6 +2086,45 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
         canvas[occ_display] = (110, 110, 110)
         canvas[occ_raw] = (255, 255, 255)
 
+        # Dynamic obstacles from the latest raw LiDAR frame (always updated, even when mapping is frozen).
+        dynamic_occ_plan = occ_plan.copy()
+        if raw_xyz is not None and raw_xyz.shape[0] > 0:
+            dyn_pts = raw_xyz[raw_xyz[:, 2] > thresh]
+            if pose is not None and pose.shape == (4, 4):
+                rob_pos_d = pose[:3, 3]
+                diff_d = dyn_pts - rob_pos_d
+                dist_xy_d = np.linalg.norm(diff_d[:, :2], axis=1)
+                dyn_pts = dyn_pts[~((dist_xy_d < r_xy) & (np.abs(diff_d[:, 2]) < dz))]
+            if dyn_pts.shape[0] > 0:
+                dyn_col, dyn_row = world_to_px(dyn_pts[:, 0], dyn_pts[:, 1])
+                valid_d = (dyn_col >= 0) & (dyn_col < 480) & (dyn_row >= 0) & (dyn_row < 480)
+                dyn_col, dyn_row = dyn_col[valid_d], dyn_row[valid_d]
+                dyn_raw = np.zeros((480, 480), dtype=bool)
+                dyn_counts = np.zeros((480, 480), dtype=np.uint16)
+                dyn_raw[dyn_row, dyn_col] = True
+                np.add.at(dyn_counts, (dyn_row, dyn_col), 1)
+                try:
+                    support_hits = max(1, int(os.environ.get("LIDAR_DYNAMIC_MIN_HITS", 3)))
+                except ValueError:
+                    support_hits = 3
+                try:
+                    support_kernel = max(1, int(os.environ.get("LIDAR_DYNAMIC_SUPPORT_KERNEL", 3)))
+                except ValueError:
+                    support_kernel = 3
+                if support_kernel % 2 == 0:
+                    support_kernel += 1
+                support = cv2.filter2D(
+                    dyn_counts.astype(np.float32),
+                    -1,
+                    np.ones((support_kernel, support_kernel), dtype=np.float32),
+                    borderType=cv2.BORDER_CONSTANT,
+                )
+                new_dyn = dyn_raw & (support >= float(support_hits)) & ~occ_raw
+                if new_dyn.any():
+                    _, dyn_inflated = DualWindow._inflate_occupancy(new_dyn, scale, min_obstacle_dist_m)
+                    canvas[new_dyn] = (0, 0, 255)  # red (BGR) for new dynamic obstacles
+                    dynamic_occ_plan |= dyn_inflated
+
         cv2.rectangle(canvas, (0, 0), (479, 479), (255, 255, 255), 1)
 
         robot_px = None
@@ -1969,6 +2137,7 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
             rr0, rr1 = max(0, ry - 1), min(480, ry + 2)
             rc0, rc1 = max(0, rx - 1), min(480, rx + 2)
             occ_plan[rr0:rr1, rc0:rc1] = False
+            dynamic_occ_plan[rr0:rr1, rc0:rc1] = False
 
             fwd_vec = pose[:3, 0] * 0.25
             tip_world = rob_pos + fwd_vec
@@ -1976,7 +2145,7 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
             tx, ty = int(tx[0]), int(ty[0])
             cv2.arrowedLine(canvas, (rx, ry), (tx, ty), (0, 255, 0), 2, tipLength=0.8)
 
-        return canvas, occ_plan.copy(), map_meta, robot_px, ground_z
+        return canvas, occ_plan.copy(), dynamic_occ_plan.copy(), map_meta, robot_px, ground_z
 
 
 def main() -> None:

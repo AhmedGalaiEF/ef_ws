@@ -10420,3 +10420,146 @@ options:
 2026-04-27 21:56:37,961  ERROR     [slam_motion_worker]   File "/home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/slam_motion_worker.py", line 57, in main
 2026-04-27 21:56:37,961  ERROR     [slam_motion_worker]     for raw in sys.stdin:
 2026-04-27 21:56:37,961  ERROR     [slam_motion_worker] KeyboardInterrupt
+2026-04-27 22:01:57,692  INFO      No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2026-04-27 22:01:58,006  ERROR     [run_geoff_gui] Arm control disabled:
+2026-04-27 22:01:58,007  ERROR     ChannelPublisher disabled in slam_dual_window.py
+2026-04-27 22:01:58,007  ERROR     [run_geoff_gui] Dex3 hand control disabled:
+2026-04-27 22:01:58,007  ERROR     No module named 'unitree_sdk2py.dex3'
+2026-04-27 22:02:03,146  INFO      [Livox2] InfoChange handle=2021370048
+2026-04-27 22:02:13,222  INFO      [Livox2] InfoChange handle=2021370048
+2026-04-27 22:02:24,013  INFO      [slam_dual_window] Obstacle avoidance: OFF
+2026-04-27 22:02:38,736  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 22:02:39,612  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 22:02:39,862  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 22:02:41,862  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 22:02:41,987  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 22:02:48,362  INFO      [slam_dual_window] Goal set to (-1.94, -0.58)
+2026-04-27 22:03:28,129  INFO      [slam_dual_window] Goal set to (-0.21, +2.34)
+2026-04-27 22:03:30,996  INFO      [slam_dual_window] Goal set to (-3.67, +3.43)
+2026-04-27 22:03:33,987  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 22:03:35,362  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 22:03:35,987  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 22:03:36,237  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 22:03:37,040  INFO      [slam_dual_window] Goal set to (-3.40, +4.43)
+2026-04-27 22:03:38,624  INFO      [slam_dual_window] Goal set to (-0.11, +2.79)
+2026-04-27 22:03:41,330  INFO      [slam_dual_window] Nav start -> goal (-0.11, +2.79) avoid=False speed=0.25 dur=0.35
+2026-04-27 22:03:41,412  INFO      [slam_dual_window] Waypoint reached, remaining=4
+2026-04-27 22:06:30,808  INFO      [slam_dual_window] Obstacle avoidance: ON
+2026-04-27 22:06:40,376  INFO      [Livox2] InfoChange handle=2021370048
+2026-04-27 22:07:07,446  INFO      [Livox2] InfoChange handle=2021370048
+2026-04-27 22:07:25,520  INFO      [slam_dual_window] Goal set to (+2.47, +1.27)
+2026-04-27 22:07:38,500  INFO      [slam_dual_window] Nav start -> goal (+2.47, +1.27) avoid=True speed=0.25 dur=1.00
+2026-04-27 22:07:38,513  INFO      [slam_dual_window] Replan (avoid) map_seq=423 from=(329,152) to=(345,120)
+2026-04-27 22:07:38,612  INFO      [slam_dual_window] Goal set to (+2.47, +1.27)
+2026-04-27 22:07:52,622  INFO      [slam_dual_window] Nav start -> goal (+2.47, +1.27) avoid=True speed=0.25 dur=1.00
+2026-04-27 22:07:52,713  INFO      [slam_dual_window] Replan (avoid) map_seq=441 from=(329,152) to=(345,120)
+2026-04-27 22:07:52,987  INFO      [slam_dual_window] Goal set to (+2.47, +1.27)
+2026-04-27 22:08:14,721  INFO      [slam_dual_window] Nav start -> goal (+2.47, +1.27) avoid=True speed=0.25 dur=5.00
+2026-04-27 22:08:14,813  INFO      [slam_dual_window] Replan (avoid) map_seq=469 from=(329,152) to=(345,120)
+2026-04-27 22:08:14,862  INFO      [slam_dual_window] Goal set to (+2.47, +1.27)
+2026-04-27 22:08:31,279  INFO      [slam_dual_window] Nav start -> goal (+2.47, +1.27) avoid=True speed=0.25 dur=5.00
+2026-04-27 22:08:31,313  INFO      [slam_dual_window] Replan (avoid) map_seq=489 from=(329,152) to=(345,120)
+2026-04-27 22:08:31,487  INFO      [slam_dual_window] Goal set to (+2.47, +1.27)
+2026-04-27 22:08:50,193  ERROR     [slam_motion_worker] Traceback (most recent call last):
+2026-04-27 22:08:50,193  ERROR     [slam_motion_worker]   File "/home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/slam_motion_worker.py", line 100, in <module>
+2026-04-27 22:08:50,194  ERROR     [slam_motion_worker]     raise SystemExit(main())
+2026-04-27 22:08:50,195  ERROR     [slam_motion_worker]                      ^^^^^^
+2026-04-27 22:08:50,195  ERROR     [slam_motion_worker]   File "/home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/slam_motion_worker.py", line 57, in main
+2026-04-27 22:08:50,195  ERROR     [slam_motion_worker]     for raw in sys.stdin:
+2026-04-27 22:08:50,196  ERROR     [slam_motion_worker] KeyboardInterrupt
+2026-04-27 22:36:42,379  INFO      No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2026-04-27 22:36:42,713  ERROR     [run_geoff_gui] Arm control disabled:
+2026-04-27 22:36:42,713  ERROR     ChannelPublisher disabled in slam_dual_window.py
+2026-04-27 22:36:42,713  ERROR     [run_geoff_gui] Dex3 hand control disabled:
+2026-04-27 22:36:42,713  ERROR     No module named 'unitree_sdk2py.dex3'
+2026-04-27 22:36:48,031  INFO      [Livox2] InfoChange handle=2021370048
+2026-04-27 22:37:00,632  INFO      [slam_dual_window] Obstacle avoidance: OFF
+2026-04-27 22:37:07,181  INFO      [Livox2] InfoChange handle=2021370048
+2026-04-27 22:37:18,685  INFO      [slam_dual_window] Saved snapshot to /home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/maps/slam_snapshot_20260427_223717.npz
+2026-04-27 22:37:52,304  INFO      [Livox2] InfoChange handle=2021370048
+2026-04-27 22:38:13,262  INFO      [slam_dual_window] Goal set to (+1.47, -0.19)
+2026-04-27 22:38:14,268  INFO      [slam_dual_window] Goal set to (+1.43, -0.13)
+2026-04-27 22:38:14,512  INFO      [slam_dual_window] Goal set to (+1.21, -0.14)
+2026-04-27 22:38:21,569  INFO      [slam_dual_window] Nav start -> goal (+1.21, -0.14) avoid=False speed=0.25 dur=5.00
+2026-04-27 22:38:21,612  INFO      [slam_dual_window] Waypoint reached, remaining=2
+2026-04-27 22:38:52,812  INFO      [slam_dual_window] Waypoint reached, remaining=1
+2026-04-27 22:39:09,812  INFO      [slam_dual_window] Waypoint reached, remaining=0
+2026-04-27 22:39:09,813  INFO      [slam_dual_window] Goal reached
+2026-04-27 23:08:47,141  INFO      No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2026-04-27 23:08:47,474  ERROR     [run_geoff_gui] Arm control disabled:
+2026-04-27 23:08:47,474  ERROR     ChannelPublisher disabled in slam_dual_window.py
+2026-04-27 23:08:47,474  ERROR     [run_geoff_gui] Dex3 hand control disabled:
+2026-04-27 23:08:47,474  ERROR     No module named 'unitree_sdk2py.dex3'
+2026-04-27 23:08:53,157  INFO      [Livox2] InfoChange handle=2021370048
+2026-04-27 23:09:15,287  INFO      [Livox2] InfoChange handle=2021370048
+2026-04-27 23:09:32,887  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:09:34,136  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:09:34,267  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:09:35,387  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:09:35,637  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:09:35,762  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:09:42,181  INFO      [slam_dual_window] Obstacle avoidance: OFF
+2026-04-27 23:09:47,637  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:09:47,887  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:09:48,522  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:09:48,761  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:09:50,762  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:09:51,012  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:09:51,636  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:10:04,012  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:10:04,262  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:10:04,511  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:10:04,637  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:10:05,023  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:10:05,761  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:10:06,012  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:10:06,137  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:10:06,511  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:10:06,761  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:10:07,012  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:10:32,383  INFO      [Livox2] InfoChange handle=2021370048
+2026-04-27 23:10:41,136  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:10:42,012  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:10:42,147  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:10:52,387  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:10:52,762  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:11:12,761  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:11:13,012  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:11:14,159  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:11:14,386  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:11:14,512  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:11:14,761  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:11:14,887  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:11:15,137  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:11:15,387  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:11:15,637  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:11:15,893  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:11:16,136  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:11:21,879  ERROR     [slam_motion_worker] Traceback (most recent call last):
+2026-04-27 23:11:21,879  ERROR     [slam_motion_worker]   File "/home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/slam_motion_worker.py", line 182, in <module>
+2026-04-27 23:11:21,880  ERROR     [slam_motion_worker]     raise SystemExit(main())
+2026-04-27 23:11:21,881  ERROR     [slam_motion_worker]                      ^^^^^^
+2026-04-27 23:11:21,881  ERROR     [slam_motion_worker]   File "/home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/slam_motion_worker.py", line 123, in main
+2026-04-27 23:11:21,882  ERROR     [slam_motion_worker]     raw = cmd_queue.get(timeout=1.0)
+2026-04-27 23:11:21,882  ERROR     [slam_motion_worker]           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-04-27 23:11:21,882  ERROR     [slam_motion_worker]   File "/usr/lib/python3.12/queue.py", line 180, in get
+2026-04-27 23:11:21,883  ERROR     [slam_motion_worker]     self.not_empty.wait(remaining)
+2026-04-27 23:11:21,883  ERROR     [slam_motion_worker]   File "/usr/lib/python3.12/threading.py", line 359, in wait
+2026-04-27 23:11:21,883  ERROR     [slam_motion_worker]     gotit = waiter.acquire(True, timeout)
+2026-04-27 23:11:21,883  ERROR     [slam_motion_worker]             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-04-27 23:11:21,883  ERROR     [slam_motion_worker] KeyboardInterrupt
+2026-04-27 23:26:52,802  INFO      No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2026-04-27 23:26:52,951  ERROR     [run_geoff_gui] Arm control disabled:
+2026-04-27 23:26:52,951  ERROR     ChannelPublisher disabled in slam_dual_window.py
+2026-04-27 23:26:52,952  ERROR     [run_geoff_gui] Dex3 hand control disabled:
+2026-04-27 23:26:52,952  ERROR     No module named 'unitree_sdk2py.dex3'
+2026-04-27 23:26:56,182  INFO      [Livox2] InfoChange handle=2021370048
+2026-04-27 23:27:41,302  INFO      [Livox2] InfoChange handle=2021370048
+2026-04-27 23:27:58,462  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:27:59,461  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:27:59,587  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:28:00,962  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:28:01,212  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:28:02,215  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:28:13,641  INFO      [slam_dual_window] Obstacle avoidance: OFF
+2026-04-27 23:28:15,589  INFO      [slam_dual_window] No path found to clicked target.
