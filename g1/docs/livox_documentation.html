@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Livox MID-360 Documentation Bundle</title>
+    <style>
+      :root {
+        --ink: #1f2933;
+        --muted: #52606d;
+        --line: #d9e2ec;
+        --panel: #f8fbff;
+        --accent: #0b6e4f;
+        --accent-soft: #e6f4ef;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        color: var(--ink);
+        background: linear-gradient(180deg, #eef6ff 0%, #ffffff 18%);
+      }
+
+      main {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 40px 24px 64px;
+      }
+
+      h1, h2, h3 {
+        line-height: 1.2;
+        color: #123;
+      }
+
+      h1 {
+        font-size: 2.3rem;
+        margin-bottom: 0.3rem;
+      }
+
+      h2 {
+        margin-top: 2.2rem;
+        padding-bottom: 0.35rem;
+        border-bottom: 2px solid var(--line);
+      }
+
+      h3 {
+        margin-top: 1.4rem;
+      }
+
+      p, li {
+        line-height: 1.58;
+      }
+
+      .lead {
+        color: var(--muted);
+        font-size: 1.05rem;
+        max-width: 54rem;
+      }
+
+      .note,
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 14px 16px;
+      }
+
+      .note {
+        border-left: 6px solid var(--accent);
+        background: var(--accent-soft);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 12px;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 1rem 0;
+        font-size: 0.95rem;
+      }
+
+      th, td {
+        border: 1px solid var(--line);
+        padding: 0.6rem 0.7rem;
+        vertical-align: top;
+      }
+
+      th {
+        text-align: left;
+        background: #eef4fa;
+      }
+
+      pre {
+        background: #10161d;
+        color: #eef4fa;
+        padding: 14px 16px;
+        border-radius: 10px;
+        overflow-x: auto;
+      }
+
+      code {
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      }
+
+      ul {
+        padding-left: 1.2rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Livox MID-360 Documentation Bundle</h1>
+      <p class="lead">
+        Consolidated local documentation for the Livox MID-360 stack in this repository.
+        It combines the repo’s HTML guides, quick-start notes, Python SDK wrappers,
+        viewer and SLAM entry points, and the sample network configuration.
+      </p>
+
+      <div class="note">
+        Primary local sources used for this bundle:
+        <code>docs/lidar_docs.html</code>,
+        <code>docs/lidar_cheatsheet.html</code>,
+        <code>docs/geoff_stack.md</code>,
+        <code>scripts/navigation/slam/livox2_python.py</code>,
+        <code>scripts/navigation/slam/livox_python.py</code>,
+        <code>scripts/sensors/live_points.py</code>,
+        <code>scripts/navigation/slam/live_slam.py</code>,
+        <code>scripts/navigation/slam/mid360_config.json</code>.
+      </div>
+
+      <h2>1. What This Stack Contains</h2>
+      <div class="grid">
+        <div class="card">
+          <h3>SDK 2 Wrapper</h3>
+          <p><code>livox2_python.py</code> exposes a minimal push-mode wrapper around Livox-SDK2 and converts packet data into NumPy XYZ arrays.</p>
+        </div>
+        <div class="card">
+          <h3>SDK 1 Wrapper</h3>
+          <p><code>livox_python.py</code> auto-discovers Livox devices on the subnet, connects, starts sampling, and forwards frames to Python callbacks.</p>
+        </div>
+        <div class="card">
+          <h3>Live Viewer</h3>
+          <p><code>live_points.py</code> is the first-line smoke test for streaming point clouds into Open3D.</p>
+        </div>
+        <div class="card">
+          <h3>SLAM Demo</h3>
+          <p><code>live_slam.py</code> feeds Livox scans into KISS-ICP and renders a growing map and pose estimate.</p>
+        </div>
+      </div>
+
+      <h2>2. Architecture Overview</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Layer</th>
+            <th>Purpose</th>
+            <th>Location</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Livox-SDK2 / Livox-SDK</td>
+            <td>Device discovery, UDP negotiation, packet decoding, Cartesian point conversion.</td>
+            <td>External vendor libraries installed under system library paths.</td>
+          </tr>
+          <tr>
+            <td>Python ctypes wrappers</td>
+            <td>Load the shared libraries and expose point packets as NumPy arrays through <code>handle_points()</code>.</td>
+            <td><code>scripts/navigation/slam/livox2_python.py</code>, <code>scripts/navigation/slam/livox_python.py</code></td>
+          </tr>
+          <tr>
+            <td>Visualization</td>
+            <td>Open3D windows for live preview and map rendering.</td>
+            <td><code>scripts/sensors/live_points.py</code>, <code>scripts/navigation/slam/live_slam.py</code></td>
+          </tr>
+          <tr>
+            <td>Odometry / mapping</td>
+            <td>KISS-ICP registration, pose estimation, and voxel map maintenance.</td>
+            <td><code>scripts/navigation/slam/live_slam.py</code></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>The broader Geoff architecture also routes Livox MID-360 data over Ethernet/UDP into the laptop-side visualization and control stack. The repo documentation describes this path as:</p>
+      <pre><code>Livox MID-360 -> livox2_python.py -> network -> lidar_reader / GUI consumers</code></pre>
+
+      <h2>3. Network and Host Requirements</h2>
+      <ol>
+        <li>Connect the G-1 shoulder Ethernet port to the host PC.</li>
+        <li>Assign the host to the <code>192.168.123.0/24</code> subnet, typically <code>192.168.123.222</code>.</li>
+        <li>Verify reachability of the LiDAR at <code>192.168.123.120</code>.</li>
+        <li>Allow or disable firewall rules that would block Livox UDP traffic.</li>
+      </ol>
+
+      <pre><code>sudo ip addr add 192.168.123.222/24 dev &lt;your_nic&gt;
+ping 192.168.123.120</code></pre>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Traffic</th>
+            <th>Ports Mentioned In Repo Docs</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>MID-360 config ports</td>
+            <td>56100, 56200, 56300, 56400, 56500 plus matching host-side receive ports</td>
+          </tr>
+          <tr>
+            <td>Troubleshooting note from repo docs</td>
+            <td>Open UDP 55000-56000 and 7500-7510 if packet flow stalls in the SDK path</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>4. One-Time Installation</h2>
+      <h3>Recommended: Livox-SDK2</h3>
+      <pre><code>git clone https://github.com/Livox-SDK/Livox-SDK2.git
+cd Livox-SDK2
+mkdir build
+cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
+make -j$(nproc)
+sudo make install
+sudo ldconfig</code></pre>
+
+      <h3>Legacy Fallback: Livox-SDK</h3>
+      <pre><code>git clone https://github.com/Livox-SDK/Livox-SDK.git
+cd Livox-SDK
+mkdir build
+cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
+make -j$(nproc)
+sudo make install
+sudo ldconfig</code></pre>
+
+      <h3>Python Environment</h3>
+      <pre><code>python3 -m venv .venv
+source .venv/bin/activate
+pip install -r REQUIREMENTS.txt</code></pre>
+
+      <p>The local docs and scripts expect at least <code>numpy</code>, <code>open3d</code>, and <code>kiss-icp</code> for the SLAM path.</p>
+
+      <h2>5. SDK Wrapper Behavior</h2>
+      <h3>SDK 2: <code>livox2_python.py</code></h3>
+      <ul>
+        <li>Prefers <code>liblivox_lidar_sdk_shared.so</code> or <code>liblivox_lidar_sdk.so</code>.</li>
+        <li>Accepts overrides through <code>LIVOX_SDK2_LIB</code> or <code>LIVOX_SDK2_DIR</code>.</li>
+        <li>Initializes the SDK with a JSON config path and host IP.</li>
+        <li>Registers a point-cloud callback before starting SDK threads.</li>
+        <li>On info-change, forces normal work mode, enables point sending, and selects Cartesian high point data.</li>
+        <li>Aggregates many UDP packets into pseudo-frames before calling <code>handle_points()</code>.</li>
+      </ul>
+
+      <p>Aggregation defaults in the wrapper constructor:</p>
+      <pre><code>frame_time=0.20
+frame_packets=120</code></pre>
+
+      <p>Supported packet types currently handled in this wrapper:</p>
+      <ul>
+        <li><code>data_type == 1</code>: Cartesian High, converted from millimeters to meters.</li>
+        <li><code>data_type == 2</code>: Cartesian Low, converted from centimeters to meters.</li>
+      </ul>
+
+      <h3>SDK 1: <code>livox_python.py</code></h3>
+      <ul>
+        <li>Searches for <code>liblivox_sdk.so</code> or <code>LivoxSdk.dll</code>.</li>
+        <li>Supports overrides through <code>LIVOX_SDK_LIB</code> and <code>LIVOX_SDK_DIR</code>.</li>
+        <li>Uses broadcast discovery and device-state callbacks.</li>
+        <li>Connects to every detected LiDAR on the subnet and starts sampling.</li>
+        <li>Forwards Cartesian packet formats to <code>handle_points()</code> as float32 XYZ meters.</li>
+      </ul>
+
+      <h2>6. MID-360 JSON Configuration</h2>
+      <p>The repo ships a minimal sample at <code>scripts/navigation/slam/mid360_config.json</code>. It points the host side to <code>192.168.123.222</code> and uses the standard MID-360 port layout.</p>
+
+      <pre><code>{
+  "MID360": {
+    "lidar_net_info": {
+      "cmd_data_port": 56100,
+      "push_msg_port": 56200,
+      "point_data_port": 56300,
+      "imu_data_port": 56400,
+      "log_data_port": 56500
+    },
+    "host_net_info": [
+      {
+        "host_ip": "192.168.123.222",
+        "multicast_ip": "224.1.1.5",
+        "cmd_data_port": 56101,
+        "push_msg_port": 56201,
+        "point_data_port": 56301,
+        "imu_data_port": 56401,
+        "log_data_port": 56501
+      }
+    ]
+  }
+}</code></pre>
+
+      <p>The quick-start guide also references a fuller ROS-driver-flavored configuration that includes:</p>
+      <ul>
+        <li><code>lidar_summary_info.lidar_type = 8</code></li>
+        <li><code>lidar_configs[0].ip = 192.168.123.120</code></li>
+        <li><code>pcl_data_type = 1</code></li>
+        <li>Optional extrinsic roll, pitch, yaw, x, y, z fields</li>
+      </ul>
+
+      <h2>7. Running the Local Python Demos</h2>
+      <h3>Live Point Cloud Preview</h3>
+      <pre><code>cd scripts/sensors
+python3 live_points.py</code></pre>
+
+      <p>This script prefers SDK2 and falls back to SDK1 if needed. It keeps a ring buffer of recent frames in Open3D to reduce flicker and applies mount correction if the sensor is upside down.</p>
+
+      <h3>LiDAR SLAM</h3>
+      <pre><code>cd scripts/navigation/slam
+python3 live_slam.py</code></pre>
+
+      <p>For outdoor tuning:</p>
+      <pre><code>LIVOX_PRESET=outdoor python3 live_slam.py</code></pre>
+
+      <p>Internal flow documented in the repo:</p>
+      <pre><code>[ SDK callback thread ]           [ main / UI thread ]
+Livox.handle_points -> KissICP.register_frame -> viewer.push()
+        ^                                         |
+        +-------------- viewer.tick() &lt;-----------+</code></pre>
+
+      <h2>8. Runtime Controls and Environment Variables</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Variable</th>
+            <th>Effect</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>LIVOX_MOUNT=normal|upside_down</code></td>
+            <td>Controls the 180 degree X-axis correction. Repo defaults to <code>upside_down</code>.</td>
+          </tr>
+          <tr>
+            <td><code>LIVOX_PRESET=indoor|outdoor</code></td>
+            <td>Selects KISS-ICP and frame aggregation tuning in the SLAM script.</td>
+          </tr>
+          <tr>
+            <td><code>LIDAR_TILT_DEG</code></td>
+            <td>Applies a fixed inverse tilt correction to compensate for a physically tilted sensor.</td>
+          </tr>
+          <tr>
+            <td><code>LIDAR_TILT_AXIS=x|y|z</code></td>
+            <td>Selects the tilt compensation axis. Default is <code>y</code>.</td>
+          </tr>
+          <tr>
+            <td><code>LIVOX_SDK2_LIB</code>, <code>LIVOX_SDK2_DIR</code></td>
+            <td>Explicit SDK2 shared library override paths.</td>
+          </tr>
+          <tr>
+            <td><code>LIVOX_SDK_LIB</code>, <code>LIVOX_SDK_DIR</code></td>
+            <td>Explicit SDK1 shared library override paths.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>9. SLAM Presets</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Parameter</th>
+            <th>Indoor</th>
+            <th>Outdoor</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>frame_time</code></td>
+            <td>0.35 s</td>
+            <td>0.20 s</td>
+          </tr>
+          <tr>
+            <td><code>frame_packets</code></td>
+            <td>200</td>
+            <td>120</td>
+          </tr>
+          <tr>
+            <td><code>voxel_size</code></td>
+            <td>0.4 m</td>
+            <td>1.0 m</td>
+          </tr>
+          <tr>
+            <td><code>max_range</code></td>
+            <td>30 m</td>
+            <td>120 m</td>
+          </tr>
+          <tr>
+            <td><code>downsample_limit</code></td>
+            <td>5,000,000 points</td>
+            <td>3,000,000 points</td>
+          </tr>
+          <tr>
+            <td><code>min_motion</code></td>
+            <td>0.03 m</td>
+            <td>0.10 m</td>
+          </tr>
+          <tr>
+            <td><code>conv_criterion</code></td>
+            <td>5e-5</td>
+            <td>1e-4</td>
+          </tr>
+          <tr>
+            <td><code>max_iters</code></td>
+            <td>800</td>
+            <td>500</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>10. ROS Driver Quick Start</h2>
+      <p>The repo also carries a ROS Noetic quick-start for <code>livox_ros_driver2</code>:</p>
+
+      <pre><code>source /opt/ros/noetic/setup.bash
+mkdir -p ~/catkin_ws/src
+cd ~/catkin_ws/src
+git clone https://github.com/Livox-SDK/livox_ros_driver2.git
+cd livox_ros_driver2
+./build.sh ROS1
+cd ~/catkin_ws
+catkin_make -DCMAKE_BUILD_TYPE=Release -DROS_EDITION=ROS1</code></pre>
+
+      <p>Example launch:</p>
+      <pre><code>roslaunch livox_ros_driver2 msg_MID360.launch \
+    user_config_path:=/home/$USER/livox_cfg/MID360_config.json \
+    xfer_format:=0 data_src:=0</code></pre>
+
+      <p>Verification commands from the local quick-start:</p>
+      <pre><code>rostopic hz /livox/lidar
+sudo tcpdump -i &lt;your_nic&gt; udp port 56300 -n -c 5</code></pre>
+
+      <h2>11. Troubleshooting Checklist</h2>
+      <ul>
+        <li>Only one network interface should sit on <code>192.168.123.0/24</code>.</li>
+        <li>If bind or init fails, check the JSON host IP and port ownership.</li>
+        <li>If frames stall, verify raw UDP arrival with <code>tcpdump</code>.</li>
+        <li>If SDK libraries are not found, set the appropriate <code>LIVOX_SDK*</code> environment variable or install the vendor SDK system-wide.</li>
+        <li>If KISS-ICP import fails, upgrade it with <code>pip install --upgrade kiss-icp</code>.</li>
+        <li>If the Open3D viewer looks empty or white, zoom out or reset the view.</li>
+        <li>If point clouds appear inverted, set <code>LIVOX_MOUNT=normal</code> or correct tilt values.</li>
+        <li>If ROS tools cannot see the topic, confirm the ROS setup files were sourced and the driver was built for ROS1.</li>
+      </ul>
+
+      <h2>12. Relevant Local Files</h2>
+      <ul>
+        <li><code>docs/lidar_docs.html</code></li>
+        <li><code>docs/lidar_cheatsheet.html</code></li>
+        <li><code>docs/geoff_stack.md</code></li>
+        <li><code>scripts/navigation/slam/livox2_python.py</code></li>
+        <li><code>scripts/navigation/slam/livox_python.py</code></li>
+        <li><code>scripts/navigation/slam/live_slam.py</code></li>
+        <li><code>scripts/sensors/live_points.py</code></li>
+        <li><code>scripts/navigation/slam/mid360_config.json</code></li>
+      </ul>
+    </main>
+  </body>
+</html>

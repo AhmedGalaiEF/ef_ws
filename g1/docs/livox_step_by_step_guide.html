@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Livox MID-360 Step-by-Step Guide</title>
+    <style>
+      :root {
+        --bg: #f4f8fb;
+        --paper: #ffffff;
+        --ink: #1d2733;
+        --muted: #5b6875;
+        --line: #d7e1ea;
+        --accent: #17624b;
+        --accent-soft: #e8f4ef;
+        --warn: #8a5a00;
+        --warn-soft: #fff6df;
+      }
+
+      body {
+        margin: 0;
+        background: linear-gradient(180deg, #eaf3fb 0%, #f7fbff 18%, #ffffff 100%);
+        color: var(--ink);
+        font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      }
+
+      main {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 40px 24px 72px;
+      }
+
+      h1, h2, h3 {
+        line-height: 1.2;
+        color: #102235;
+      }
+
+      h1 {
+        font-size: 2.4rem;
+        margin-bottom: 0.35rem;
+      }
+
+      h2 {
+        margin-top: 2.2rem;
+        border-bottom: 2px solid var(--line);
+        padding-bottom: 0.35rem;
+      }
+
+      p, li {
+        line-height: 1.58;
+      }
+
+      .lead {
+        color: var(--muted);
+        max-width: 58rem;
+        font-size: 1.05rem;
+      }
+
+      .box, .warn {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 14px 16px;
+        margin: 1rem 0;
+      }
+
+      .box {
+        background: var(--accent-soft);
+        border-left: 6px solid var(--accent);
+      }
+
+      .warn {
+        background: var(--warn-soft);
+        border-left: 6px solid #d9a31a;
+      }
+
+      .step {
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 18px 18px 14px;
+        margin: 1rem 0;
+        box-shadow: 0 10px 24px rgba(16, 34, 53, 0.05);
+      }
+
+      .step h3 {
+        margin-top: 0;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 1rem 0;
+      }
+
+      th, td {
+        border: 1px solid var(--line);
+        padding: 0.6rem 0.7rem;
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        background: #eef4f8;
+      }
+
+      pre {
+        background: #111821;
+        color: #edf2f7;
+        padding: 14px 16px;
+        border-radius: 10px;
+        overflow-x: auto;
+      }
+
+      code {
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      }
+
+      ol, ul {
+        padding-left: 1.25rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Livox MID-360 Step-by-Step Guide</h1>
+      <p class="lead">
+        This guide walks through Livox MID-360 bring-up in this repository from a fresh host:
+        network setup, SDK install, configuration, live verification, ROS driver usage, and the
+        local Python viewer and SLAM demos.
+      </p>
+
+      <div class="box">
+        This guide is based on the local repo files
+        <code>docs/lidar_cheatsheet.html</code>,
+        <code>docs/lidar_docs.html</code>,
+        <code>scripts/navigation/slam/livox2_python.py</code>,
+        <code>scripts/navigation/slam/livox_python.py</code>,
+        <code>scripts/sensors/live_points.py</code>,
+        <code>scripts/navigation/slam/live_slam.py</code>, and
+        <code>scripts/navigation/slam/mid360_config.json</code>.
+      </div>
+
+      <h2>Before You Start</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Expected Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>LiDAR model</td>
+            <td>Livox MID-360</td>
+          </tr>
+          <tr>
+            <td>LiDAR IP</td>
+            <td><code>192.168.123.120</code></td>
+          </tr>
+          <tr>
+            <td>Typical host IP</td>
+            <td><code>192.168.123.222</code></td>
+          </tr>
+          <tr>
+            <td>Recommended SDK</td>
+            <td>Livox-SDK2</td>
+          </tr>
+          <tr>
+            <td>Repo root in this workspace</td>
+            <td><code>/home/melodse/ef_ws/g1</code></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="warn">
+        The local Python viewer and SLAM scripts assume the host is on the
+        <code>192.168.123.0/24</code> network and that the LiDAR points at that host IP in its JSON config.
+      </div>
+
+      <h2>Step 1. Connect the LiDAR Network</h2>
+      <div class="step">
+        <h3>Goal</h3>
+        <p>Place the host PC and MID-360 on the same subnet.</p>
+        <ol>
+          <li>Connect Ethernet from the G-1 shoulder port or Livox network path to your PC.</li>
+          <li>Find your network interface name with <code>ip addr</code>.</li>
+          <li>Assign the host interface an address like <code>192.168.123.222/24</code>.</li>
+          <li>Ping the MID-360 at <code>192.168.123.120</code>.</li>
+        </ol>
+        <pre><code>ip addr
+sudo ip addr add 192.168.123.222/24 dev &lt;your_nic&gt;
+ping 192.168.123.120</code></pre>
+        <p>Expected result: the sensor responds to ping and the link stays up.</p>
+      </div>
+
+      <h2>Step 2. Install Base Build Tools</h2>
+      <div class="step">
+        <h3>Goal</h3>
+        <p>Install the tools needed to build Livox SDKs and inspect traffic.</p>
+        <pre><code>sudo apt update
+sudo apt install git build-essential cmake tcpdump</code></pre>
+      </div>
+
+      <h2>Step 3. Build and Install Livox-SDK2</h2>
+      <div class="step">
+        <h3>Goal</h3>
+        <p>Install the recommended vendor SDK used by the repo’s main Livox wrapper.</p>
+        <pre><code>cd ~
+git clone https://github.com/Livox-SDK/Livox-SDK2.git
+cd Livox-SDK2
+mkdir build
+cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
+make -j$(nproc)
+sudo make install
+sudo ldconfig</code></pre>
+        <p>Expected result: the system can locate <code>liblivox_lidar_sdk.so</code> or <code>liblivox_lidar_sdk_shared.so</code>.</p>
+      </div>
+
+      <h2>Step 4. Create a Python Environment</h2>
+      <div class="step">
+        <h3>Goal</h3>
+        <p>Install Python dependencies used by the local Livox scripts.</p>
+        <pre><code>cd /home/melodse/ef_ws/g1
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r REQUIREMENTS.txt</code></pre>
+        <p>The local documentation and scripts rely on <code>numpy</code>, <code>open3d</code>, and for SLAM also <code>kiss-icp</code>.</p>
+      </div>
+
+      <h2>Step 5. Prepare the MID-360 JSON Config</h2>
+      <div class="step">
+        <h3>Goal</h3>
+        <p>Make sure the LiDAR is configured to stream packets to your host IP.</p>
+        <p>The repo already includes a sample file:</p>
+        <pre><code>/home/melodse/ef_ws/g1/scripts/navigation/slam/mid360_config.json</code></pre>
+        <p>Current sample contents:</p>
+        <pre><code>{
+  "MID360": {
+    "lidar_net_info": {
+      "cmd_data_port": 56100,
+      "push_msg_port": 56200,
+      "point_data_port": 56300,
+      "imu_data_port": 56400,
+      "log_data_port": 56500
+    },
+    "host_net_info": [
+      {
+        "host_ip": "192.168.123.222",
+        "multicast_ip": "224.1.1.5",
+        "cmd_data_port": 56101,
+        "push_msg_port": 56201,
+        "point_data_port": 56301,
+        "imu_data_port": 56401,
+        "log_data_port": 56501
+      }
+    ]
+  }
+}</code></pre>
+        <p>If your PC uses a different address, update <code>host_ip</code> and any related host-side IP fields in the configuration you actually launch with.</p>
+      </div>
+
+      <h2>Step 6. Verify Firewall and UDP Ports</h2>
+      <div class="step">
+        <h3>Goal</h3>
+        <p>Prevent the host from dropping Livox packet traffic.</p>
+        <ul>
+          <li>Allow UDP ports <code>56100</code> through <code>56500</code> used by the MID-360 config.</li>
+          <li>If SDK packet flow stalls, the local docs also suggest checking broader UDP ranges <code>55000-56000</code> and <code>7500-7510</code>.</li>
+        </ul>
+      </div>
+
+      <h2>Step 7. Test Raw Packet Arrival</h2>
+      <div class="step">
+        <h3>Goal</h3>
+        <p>Confirm that the LiDAR is actually sending UDP data to the host.</p>
+        <pre><code>sudo tcpdump -i &lt;your_nic&gt; udp port 56300 -n -c 5</code></pre>
+        <p>Expected result: you see UDP packets arriving from the MID-360 path.</p>
+      </div>
+
+      <h2>Step 8. Run the Python Live Viewer</h2>
+      <div class="step">
+        <h3>Goal</h3>
+        <p>Bring up a direct point-cloud preview before attempting SLAM.</p>
+        <ol>
+          <li>Activate the Python environment.</li>
+          <li>Change into the Livox SLAM area if the config file is expected there.</li>
+          <li>Run the viewer script.</li>
+        </ol>
+        <pre><code>cd /home/melodse/ef_ws/g1
+source .venv/bin/activate
+cd scripts/navigation/slam
+python3 ../../sensors/live_points.py</code></pre>
+        <p>Important runtime behavior from the code:</p>
+        <ul>
+          <li>The viewer prefers SDK2 and falls back to SDK1 if SDK2 is unavailable.</li>
+          <li>The default mount mode is <code>LIVOX_MOUNT=upside_down</code>.</li>
+          <li>The viewer keeps a short ring buffer to reduce flicker.</li>
+        </ul>
+        <p>Expected result: an Open3D window appears and shows a live point cloud.</p>
+      </div>
+
+      <h2>Step 9. Fix Mount Orientation If the Cloud Looks Inverted</h2>
+      <div class="step">
+        <h3>Goal</h3>
+        <p>Correct the point cloud if the LiDAR is not mounted in the repo’s default orientation.</p>
+        <pre><code>export LIVOX_MOUNT=normal
+python3 ../../sensors/live_points.py</code></pre>
+        <p>Use <code>normal</code> if your sensor is right-side up. The default in the scripts is <code>upside_down</code>.</p>
+      </div>
+
+      <h2>Step 10. Run the Local SLAM Demo</h2>
+      <div class="step">
+        <h3>Goal</h3>
+        <p>Feed Livox frames into KISS-ICP and visualize pose plus accumulated map.</p>
+        <pre><code>cd /home/melodse/ef_ws/g1
+source .venv/bin/activate
+cd scripts/navigation/slam
+python3 live_slam.py</code></pre>
+        <p>Outdoor mode:</p>
+        <pre><code>LIVOX_PRESET=outdoor python3 live_slam.py</code></pre>
+        <p>Expected result: a live map window opens and grows as the sensor moves.</p>
+      </div>
+
+      <h2>Step 11. Apply Fixed Tilt Compensation If Needed</h2>
+      <div class="step">
+        <h3>Goal</h3>
+        <p>Correct scans when the LiDAR is mounted with a known fixed tilt.</p>
+        <pre><code>LIDAR_TILT_DEG=15 LIDAR_TILT_AXIS=y python3 live_slam.py</code></pre>
+        <p>Supported axes are <code>x</code>, <code>y</code>, and <code>z</code>. The script applies the inverse correction automatically.</p>
+      </div>
+
+      <h2>Step 12. Understand the Main SLAM Presets</h2>
+      <div class="step">
+        <h3>Goal</h3>
+        <p>Choose the right preset before changing lower-level parameters.</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Parameter</th>
+              <th>Indoor</th>
+              <th>Outdoor</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><code>frame_time</code></td><td>0.35 s</td><td>0.20 s</td></tr>
+            <tr><td><code>frame_packets</code></td><td>200</td><td>120</td></tr>
+            <tr><td><code>voxel_size</code></td><td>0.4 m</td><td>1.0 m</td></tr>
+            <tr><td><code>max_range</code></td><td>30 m</td><td>120 m</td></tr>
+            <tr><td><code>downsample_limit</code></td><td>5,000,000</td><td>3,000,000</td></tr>
+            <tr><td><code>min_motion</code></td><td>0.03 m</td><td>0.10 m</td></tr>
+            <tr><td><code>conv_criterion</code></td><td>5e-5</td><td>1e-4</td></tr>
+            <tr><td><code>max_iters</code></td><td>800</td><td>500</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>Step 13. Optional ROS Noetic Driver Setup</h2>
+      <div class="step">
+        <h3>Goal</h3>
+        <p>Bring up the official ROS1 driver if you want a <code>/livox/lidar</code> topic.</p>
+        <pre><code>source /opt/ros/noetic/setup.bash
+mkdir -p ~/catkin_ws/src
+cd ~/catkin_ws/src
+git clone https://github.com/Livox-SDK/livox_ros_driver2.git
+cd livox_ros_driver2
+./build.sh ROS1
+cd ~/catkin_ws
+catkin_make -DCMAKE_BUILD_TYPE=Release -DROS_EDITION=ROS1</code></pre>
+        <p>Add these lines to <code>~/.bashrc</code> if you use the driver repeatedly:</p>
+        <pre><code>source /opt/ros/noetic/setup.bash
+source ~/catkin_ws/devel/setup.bash</code></pre>
+      </div>
+
+      <h2>Step 14. Configure the ROS Driver JSON</h2>
+      <div class="step">
+        <h3>Goal</h3>
+        <p>Point the ROS driver at the correct LiDAR IP and host IP.</p>
+        <pre><code>mkdir -p ~/livox_cfg
+cp ~/catkin_ws/src/livox_ros_driver2/config/MID360_config.json ~/livox_cfg/
+nano ~/livox_cfg/MID360_config.json</code></pre>
+        <p>Make sure the following values are correct:</p>
+        <ul>
+          <li><code>lidar_configs[0].ip = 192.168.123.120</code></li>
+          <li><code>host_net_info.*_ip = your host IP</code></li>
+          <li><code>pcl_data_type = 1</code></li>
+        </ul>
+      </div>
+
+      <h2>Step 15. Launch the ROS Driver</h2>
+      <div class="step">
+        <h3>Goal</h3>
+        <p>Publish the Livox stream into ROS.</p>
+        <pre><code>roslaunch livox_ros_driver2 msg_MID360.launch \
+    user_config_path:=/home/$USER/livox_cfg/MID360_config.json \
+    xfer_format:=0 data_src:=0</code></pre>
+        <p>Expected log lines:</p>
+        <pre><code>[ INFO] Connect lidar: 192.168.123.120 ...
+[ INFO] Init lidar success</code></pre>
+      </div>
+
+      <h2>Step 16. Verify the ROS Topic</h2>
+      <div class="step">
+        <h3>Goal</h3>
+        <p>Confirm that the ROS driver is publishing point clouds.</p>
+        <pre><code>rostopic hz /livox/lidar</code></pre>
+        <p>Expected result: roughly <code>10 Hz</code> according to the local quick-start guide.</p>
+      </div>
+
+      <h2>Step 17. Troubleshoot Common Failures</h2>
+      <div class="step">
+        <h3>Goal</h3>
+        <p>Use the shortest path to isolate the failure.</p>
+        <ul>
+          <li><strong>No ping response</strong>: recheck cable, NIC selection, and subnet assignment.</li>
+          <li><strong>No UDP packets in tcpdump</strong>: recheck LiDAR config, firewall, and physical link.</li>
+          <li><strong>SDK shared library not found</strong>: reinstall SDK2 or set <code>LIVOX_SDK2_LIB</code> or <code>LIVOX_SDK2_DIR</code>.</li>
+          <li><strong>Viewer opens but looks empty</strong>: zoom out or reset the camera.</li>
+          <li><strong>Cloud is upside down</strong>: set <code>LIVOX_MOUNT=normal</code>.</li>
+          <li><strong>SLAM script exits on KISS-ICP import</strong>: install or upgrade <code>kiss-icp</code>.</li>
+          <li><strong>ROS bind failed</strong>: your host IP in the JSON is wrong or the ports are busy.</li>
+          <li><strong>Cannot import rospy</strong>: source the ROS setup files before launching the driver.</li>
+        </ul>
+      </div>
+
+      <h2>Step 18. Local Reference Paths</h2>
+      <div class="step">
+        <h3>Files You Will Most Likely Revisit</h3>
+        <ul>
+          <li><code>/home/melodse/ef_ws/g1/docs/lidar_cheatsheet.html</code></li>
+          <li><code>/home/melodse/ef_ws/g1/docs/lidar_docs.html</code></li>
+          <li><code>/home/melodse/ef_ws/g1/scripts/navigation/slam/livox2_python.py</code></li>
+          <li><code>/home/melodse/ef_ws/g1/scripts/navigation/slam/live_slam.py</code></li>
+          <li><code>/home/melodse/ef_ws/g1/scripts/sensors/live_points.py</code></li>
+          <li><code>/home/melodse/ef_ws/g1/scripts/navigation/slam/mid360_config.json</code></li>
+        </ul>
+      </div>
+    </main>
+  </body>
+</html>

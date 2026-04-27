@@ -1,0 +1,833 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Length 3080 >>
+stream
+BT
+/F1 10 Tf
+48 760 Td
+12 TL
+(Livox MID-360 Step-by-Step Guide :root { --bg: #f4f8fb; --paper: #ffffff; --ink: #1d2733;) Tj
+T*
+(--muted: #5b6875; --line: #d7e1ea; --accent: #17624b; --accent-soft: #e8f4ef; --warn:) Tj
+T*
+(#8a5a00; --warn-soft: #fff6df; } body { margin: 0; background: linear-gradient\(180deg,) Tj
+T*
+(#eaf3fb 0%, #f7fbff 18%, #ffffff 100%\); color: var\(--ink\); font-family: "Segoe UI", Roboto,) Tj
+T*
+(Helvetica, Arial, sans-serif; } main { max-width: 980px; margin: 0 auto; padding: 40px 24px) Tj
+T*
+(72px; } h1, h2, h3 { line-height: 1.2; color: #102235; } h1 { font-size: 2.4rem;) Tj
+T*
+(margin-bottom: 0.35rem; } h2 { margin-top: 2.2rem; border-bottom: 2px solid var\(--line\);) Tj
+T*
+(padding-bottom: 0.35rem; } p, li { line-height: 1.58; } .lead { color: var\(--muted\);) Tj
+T*
+(max-width: 58rem; font-size: 1.05rem; } .box, .warn { border: 1px solid var\(--line\);) Tj
+T*
+(border-radius: 12px; padding: 14px 16px; margin: 1rem 0; } .box { background:) Tj
+T*
+(var\(--accent-soft\); border-left: 6px solid var\(--accent\); } .warn { background:) Tj
+T*
+(var\(--warn-soft\); border-left: 6px solid #d9a31a; } .step { background: var\(--paper\);) Tj
+T*
+(border: 1px solid var\(--line\); border-radius: 14px; padding: 18px 18px 14px; margin: 1rem 0;) Tj
+T*
+(box-shadow: 0 10px 24px rgba\(16, 34, 53, 0.05\); } .step h3 { margin-top: 0; } table { width:) Tj
+T*
+(100%; border-collapse: collapse; margin: 1rem 0; } th, td { border: 1px solid var\(--line\);) Tj
+T*
+(padding: 0.6rem 0.7rem; text-align: left; vertical-align: top; } th { background: #eef4f8; }) Tj
+T*
+(pre { background: #111821; color: #edf2f7; padding: 14px 16px; border-radius: 10px;) Tj
+T*
+(overflow-x: auto; } code { font-family: "SFMono-Regular", Consolas, "Liberation Mono",) Tj
+T*
+(Menlo, monospace; } ol, ul { padding-left: 1.25rem; }) Tj
+T*
+(Livox MID-360 Step-by-Step Guide) Tj
+T*
+() Tj
+T*
+(This guide walks through Livox MID-360 bring-up in this repository from a fresh host:) Tj
+T*
+(network setup, SDK install, configuration, live verification, ROS driver usage, and the) Tj
+T*
+(local Python viewer and SLAM demos.) Tj
+T*
+() Tj
+T*
+(This guide is based on the local repo files docs/lidar_cheatsheet.html,) Tj
+T*
+(docs/lidar_docs.html, scripts/navigation/slam/livox2_python.py,) Tj
+T*
+(scripts/navigation/slam/livox_python.py, scripts/sensors/live_points.py,) Tj
+T*
+(scripts/navigation/slam/live_slam.py, and scripts/navigation/slam/mid360_config.json.) Tj
+T*
+() Tj
+T*
+(Before You Start) Tj
+T*
+() Tj
+T*
+(ItemExpected Value) Tj
+T*
+() Tj
+T*
+(LiDAR modelLivox MID-360) Tj
+T*
+() Tj
+T*
+(LiDAR IP192.168.123.120) Tj
+T*
+() Tj
+T*
+(Typical host IP192.168.123.222) Tj
+T*
+() Tj
+T*
+(Recommended SDKLivox-SDK2) Tj
+T*
+() Tj
+T*
+(Repo root in this workspace/home/melodse/ef_ws/g1) Tj
+T*
+() Tj
+T*
+(The local Python viewer and SLAM scripts assume the host is on the 192.168.123.0/24 network) Tj
+T*
+(and that the LiDAR points at that host IP in its JSON config.) Tj
+T*
+() Tj
+T*
+(Step 1. Connect the LiDAR Network) Tj
+T*
+() Tj
+T*
+(Goal) Tj
+T*
+() Tj
+T*
+(Place the host PC and MID-360 on the same subnet.) Tj
+ET
+endstream
+endobj
+3 0 obj
+<< /Length 1579 >>
+stream
+BT
+/F1 10 Tf
+48 760 Td
+12 TL
+() Tj
+T*
+(- Connect Ethernet from the G-1 shoulder port or Livox network path to your PC.) Tj
+T*
+() Tj
+T*
+(- Find your network interface name with ip addr.) Tj
+T*
+() Tj
+T*
+(- Assign the host interface an address like 192.168.123.222/24.) Tj
+T*
+() Tj
+T*
+(- Ping the MID-360 at 192.168.123.120.) Tj
+T*
+() Tj
+T*
+(ip addr) Tj
+T*
+(sudo ip addr add 192.168.123.222/24 dev <your_nic>) Tj
+T*
+(ping 192.168.123.120) Tj
+T*
+() Tj
+T*
+(Expected result: the sensor responds to ping and the link stays up.) Tj
+T*
+() Tj
+T*
+(Step 2. Install Base Build Tools) Tj
+T*
+() Tj
+T*
+(Goal) Tj
+T*
+() Tj
+T*
+(Install the tools needed to build Livox SDKs and inspect traffic.) Tj
+T*
+() Tj
+T*
+(sudo apt update) Tj
+T*
+(sudo apt install git build-essential cmake tcpdump) Tj
+T*
+() Tj
+T*
+(Step 3. Build and Install Livox-SDK2) Tj
+T*
+() Tj
+T*
+(Goal) Tj
+T*
+() Tj
+T*
+(Install the recommended vendor SDK used by the repos main Livox wrapper.) Tj
+T*
+() Tj
+T*
+(cd ~) Tj
+T*
+(git clone https://github.com/Livox-SDK/Livox-SDK2.git) Tj
+T*
+(cd Livox-SDK2) Tj
+T*
+(mkdir build) Tj
+T*
+(cd build) Tj
+T*
+(cmake .. -DCMAKE_BUILD_TYPE=Release) Tj
+T*
+(make -j$\(nproc\)) Tj
+T*
+(sudo make install) Tj
+T*
+(sudo ldconfig) Tj
+T*
+() Tj
+T*
+(Expected result: the system can locate liblivox_lidar_sdk.so or) Tj
+T*
+(liblivox_lidar_sdk_shared.so.) Tj
+T*
+() Tj
+T*
+(Step 4. Create a Python Environment) Tj
+T*
+() Tj
+T*
+(Goal) Tj
+T*
+() Tj
+T*
+(Install Python dependencies used by the local Livox scripts.) Tj
+T*
+() Tj
+T*
+(cd /home/melodse/ef_ws/g1) Tj
+T*
+(python3 -m venv .venv) Tj
+T*
+(source .venv/bin/activate) Tj
+ET
+endstream
+endobj
+4 0 obj
+<< /Length 1601 >>
+stream
+BT
+/F1 10 Tf
+48 760 Td
+12 TL
+(pip install -r REQUIREMENTS.txt) Tj
+T*
+() Tj
+T*
+(The local documentation and scripts rely on numpy, open3d, and for SLAM also kiss-icp.) Tj
+T*
+() Tj
+T*
+(Step 5. Prepare the MID-360 JSON Config) Tj
+T*
+() Tj
+T*
+(Goal) Tj
+T*
+() Tj
+T*
+(Make sure the LiDAR is configured to stream packets to your host IP.) Tj
+T*
+() Tj
+T*
+(The repo already includes a sample file:) Tj
+T*
+() Tj
+T*
+(/home/melodse/ef_ws/g1/scripts/navigation/slam/mid360_config.json) Tj
+T*
+() Tj
+T*
+(Current sample contents:) Tj
+T*
+() Tj
+T*
+({) Tj
+T*
+("MID360": {) Tj
+T*
+("lidar_net_info": {) Tj
+T*
+("cmd_data_port": 56100,) Tj
+T*
+("push_msg_port": 56200,) Tj
+T*
+("point_data_port": 56300,) Tj
+T*
+("imu_data_port": 56400,) Tj
+T*
+("log_data_port": 56500) Tj
+T*
+(},) Tj
+T*
+("host_net_info": [) Tj
+T*
+({) Tj
+T*
+("host_ip": "192.168.123.222",) Tj
+T*
+("multicast_ip": "224.1.1.5",) Tj
+T*
+("cmd_data_port": 56101,) Tj
+T*
+("push_msg_port": 56201,) Tj
+T*
+("point_data_port": 56301,) Tj
+T*
+("imu_data_port": 56401,) Tj
+T*
+("log_data_port": 56501) Tj
+T*
+(}) Tj
+T*
+(]) Tj
+T*
+(}) Tj
+T*
+(}) Tj
+T*
+() Tj
+T*
+(If your PC uses a different address, update host_ip and any related host-side IP fields in) Tj
+T*
+(the configuration you actually launch with.) Tj
+T*
+() Tj
+T*
+(Step 6. Verify Firewall and UDP Ports) Tj
+T*
+() Tj
+T*
+(Goal) Tj
+T*
+() Tj
+T*
+(Prevent the host from dropping Livox packet traffic.) Tj
+T*
+() Tj
+T*
+(- Allow UDP ports 56100 through 56500 used by the MID-360 config.) Tj
+T*
+() Tj
+T*
+(- If SDK packet flow stalls, the local docs also suggest checking broader UDP ranges) Tj
+T*
+(  55000-56000 and 7500-7510.) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Length 1674 >>
+stream
+BT
+/F1 10 Tf
+48 760 Td
+12 TL
+() Tj
+T*
+(Step 7. Test Raw Packet Arrival) Tj
+T*
+() Tj
+T*
+(Goal) Tj
+T*
+() Tj
+T*
+(Confirm that the LiDAR is actually sending UDP data to the host.) Tj
+T*
+() Tj
+T*
+(sudo tcpdump -i <your_nic> udp port 56300 -n -c 5) Tj
+T*
+() Tj
+T*
+(Expected result: you see UDP packets arriving from the MID-360 path.) Tj
+T*
+() Tj
+T*
+(Step 8. Run the Python Live Viewer) Tj
+T*
+() Tj
+T*
+(Goal) Tj
+T*
+() Tj
+T*
+(Bring up a direct point-cloud preview before attempting SLAM.) Tj
+T*
+() Tj
+T*
+(- Activate the Python environment.) Tj
+T*
+() Tj
+T*
+(- Change into the Livox SLAM area if the config file is expected there.) Tj
+T*
+() Tj
+T*
+(- Run the viewer script.) Tj
+T*
+() Tj
+T*
+(cd /home/melodse/ef_ws/g1) Tj
+T*
+(source .venv/bin/activate) Tj
+T*
+(cd scripts/navigation/slam) Tj
+T*
+(python3 ../../sensors/live_points.py) Tj
+T*
+() Tj
+T*
+(Important runtime behavior from the code:) Tj
+T*
+() Tj
+T*
+(- The viewer prefers SDK2 and falls back to SDK1 if SDK2 is unavailable.) Tj
+T*
+() Tj
+T*
+(- The default mount mode is LIVOX_MOUNT=upside_down.) Tj
+T*
+() Tj
+T*
+(- The viewer keeps a short ring buffer to reduce flicker.) Tj
+T*
+() Tj
+T*
+(Expected result: an Open3D window appears and shows a live point cloud.) Tj
+T*
+() Tj
+T*
+(Step 9. Fix Mount Orientation If the Cloud Looks Inverted) Tj
+T*
+() Tj
+T*
+(Goal) Tj
+T*
+() Tj
+T*
+(Correct the point cloud if the LiDAR is not mounted in the repos default orientation.) Tj
+T*
+() Tj
+T*
+(export LIVOX_MOUNT=normal) Tj
+T*
+(python3 ../../sensors/live_points.py) Tj
+T*
+() Tj
+T*
+(Use normal if your sensor is right-side up. The default in the scripts is upside_down.) Tj
+T*
+() Tj
+T*
+(Step 10. Run the Local SLAM Demo) Tj
+T*
+() Tj
+T*
+(Goal) Tj
+ET
+endstream
+endobj
+6 0 obj
+<< /Length 1396 >>
+stream
+BT
+/F1 10 Tf
+48 760 Td
+12 TL
+() Tj
+T*
+(Feed Livox frames into KISS-ICP and visualize pose plus accumulated map.) Tj
+T*
+() Tj
+T*
+(cd /home/melodse/ef_ws/g1) Tj
+T*
+(source .venv/bin/activate) Tj
+T*
+(cd scripts/navigation/slam) Tj
+T*
+(python3 live_slam.py) Tj
+T*
+() Tj
+T*
+(Outdoor mode:) Tj
+T*
+() Tj
+T*
+(LIVOX_PRESET=outdoor python3 live_slam.py) Tj
+T*
+() Tj
+T*
+(Expected result: a live map window opens and grows as the sensor moves.) Tj
+T*
+() Tj
+T*
+(Step 11. Apply Fixed Tilt Compensation If Needed) Tj
+T*
+() Tj
+T*
+(Goal) Tj
+T*
+() Tj
+T*
+(Correct scans when the LiDAR is mounted with a known fixed tilt.) Tj
+T*
+() Tj
+T*
+(LIDAR_TILT_DEG=15 LIDAR_TILT_AXIS=y python3 live_slam.py) Tj
+T*
+() Tj
+T*
+(Supported axes are x, y, and z. The script applies the inverse correction automatically.) Tj
+T*
+() Tj
+T*
+(Step 12. Understand the Main SLAM Presets) Tj
+T*
+() Tj
+T*
+(Goal) Tj
+T*
+() Tj
+T*
+(Choose the right preset before changing lower-level parameters.) Tj
+T*
+() Tj
+T*
+(ParameterIndoorOutdoor) Tj
+T*
+() Tj
+T*
+(frame_time0.35 s0.20 s) Tj
+T*
+() Tj
+T*
+(frame_packets200120) Tj
+T*
+() Tj
+T*
+(voxel_size0.4 m1.0 m) Tj
+T*
+() Tj
+T*
+(max_range30 m120 m) Tj
+T*
+() Tj
+T*
+(downsample_limit5,000,0003,000,000) Tj
+T*
+() Tj
+T*
+(min_motion0.03 m0.10 m) Tj
+T*
+() Tj
+T*
+(conv_criterion5e-51e-4) Tj
+T*
+() Tj
+T*
+(max_iters800500) Tj
+T*
+() Tj
+T*
+(Step 13. Optional ROS Noetic Driver Setup) Tj
+T*
+() Tj
+T*
+(Goal) Tj
+T*
+() Tj
+ET
+endstream
+endobj
+7 0 obj
+<< /Length 1622 >>
+stream
+BT
+/F1 10 Tf
+48 760 Td
+12 TL
+(Bring up the official ROS1 driver if you want a /livox/lidar topic.) Tj
+T*
+() Tj
+T*
+(source /opt/ros/noetic/setup.bash) Tj
+T*
+(mkdir -p ~/catkin_ws/src) Tj
+T*
+(cd ~/catkin_ws/src) Tj
+T*
+(git clone https://github.com/Livox-SDK/livox_ros_driver2.git) Tj
+T*
+(cd livox_ros_driver2) Tj
+T*
+(./build.sh ROS1) Tj
+T*
+(cd ~/catkin_ws) Tj
+T*
+(catkin_make -DCMAKE_BUILD_TYPE=Release -DROS_EDITION=ROS1) Tj
+T*
+() Tj
+T*
+(Add these lines to ~/.bashrc if you use the driver repeatedly:) Tj
+T*
+() Tj
+T*
+(source /opt/ros/noetic/setup.bash) Tj
+T*
+(source ~/catkin_ws/devel/setup.bash) Tj
+T*
+() Tj
+T*
+(Step 14. Configure the ROS Driver JSON) Tj
+T*
+() Tj
+T*
+(Goal) Tj
+T*
+() Tj
+T*
+(Point the ROS driver at the correct LiDAR IP and host IP.) Tj
+T*
+() Tj
+T*
+(mkdir -p ~/livox_cfg) Tj
+T*
+(cp ~/catkin_ws/src/livox_ros_driver2/config/MID360_config.json ~/livox_cfg/) Tj
+T*
+(nano ~/livox_cfg/MID360_config.json) Tj
+T*
+() Tj
+T*
+(Make sure the following values are correct:) Tj
+T*
+() Tj
+T*
+(- lidar_configs[0].ip = 192.168.123.120) Tj
+T*
+() Tj
+T*
+(- host_net_info.*_ip = your host IP) Tj
+T*
+() Tj
+T*
+(- pcl_data_type = 1) Tj
+T*
+() Tj
+T*
+(Step 15. Launch the ROS Driver) Tj
+T*
+() Tj
+T*
+(Goal) Tj
+T*
+() Tj
+T*
+(Publish the Livox stream into ROS.) Tj
+T*
+() Tj
+T*
+(roslaunch livox_ros_driver2 msg_MID360.launch \\) Tj
+T*
+(user_config_path:=/home/$USER/livox_cfg/MID360_config.json \\) Tj
+T*
+(xfer_format:=0 data_src:=0) Tj
+T*
+() Tj
+T*
+(Expected log lines:) Tj
+T*
+() Tj
+T*
+([ INFO] Connect lidar: 192.168.123.120 ...) Tj
+T*
+([ INFO] Init lidar success) Tj
+T*
+() Tj
+T*
+(Step 16. Verify the ROS Topic) Tj
+T*
+() Tj
+T*
+(Goal) Tj
+ET
+endstream
+endobj
+8 0 obj
+<< /Length 1645 >>
+stream
+BT
+/F1 10 Tf
+48 760 Td
+12 TL
+() Tj
+T*
+(Confirm that the ROS driver is publishing point clouds.) Tj
+T*
+() Tj
+T*
+(rostopic hz /livox/lidar) Tj
+T*
+() Tj
+T*
+(Expected result: roughly 10 Hz according to the local quick-start guide.) Tj
+T*
+() Tj
+T*
+(Step 17. Troubleshoot Common Failures) Tj
+T*
+() Tj
+T*
+(Goal) Tj
+T*
+() Tj
+T*
+(Use the shortest path to isolate the failure.) Tj
+T*
+() Tj
+T*
+(- No ping response: recheck cable, NIC selection, and subnet assignment.) Tj
+T*
+() Tj
+T*
+(- No UDP packets in tcpdump: recheck LiDAR config, firewall, and physical link.) Tj
+T*
+() Tj
+T*
+(- SDK shared library not found: reinstall SDK2 or set LIVOX_SDK2_LIB or LIVOX_SDK2_DIR.) Tj
+T*
+() Tj
+T*
+(- Viewer opens but looks empty: zoom out or reset the camera.) Tj
+T*
+() Tj
+T*
+(- Cloud is upside down: set LIVOX_MOUNT=normal.) Tj
+T*
+() Tj
+T*
+(- SLAM script exits on KISS-ICP import: install or upgrade kiss-icp.) Tj
+T*
+() Tj
+T*
+(- ROS bind failed: your host IP in the JSON is wrong or the ports are busy.) Tj
+T*
+() Tj
+T*
+(- Cannot import rospy: source the ROS setup files before launching the driver.) Tj
+T*
+() Tj
+T*
+(Step 18. Local Reference Paths) Tj
+T*
+() Tj
+T*
+(Files You Will Most Likely Revisit) Tj
+T*
+() Tj
+T*
+(- /home/melodse/ef_ws/g1/docs/lidar_cheatsheet.html) Tj
+T*
+() Tj
+T*
+(- /home/melodse/ef_ws/g1/docs/lidar_docs.html) Tj
+T*
+() Tj
+T*
+(- /home/melodse/ef_ws/g1/scripts/navigation/slam/livox2_python.py) Tj
+T*
+() Tj
+T*
+(- /home/melodse/ef_ws/g1/scripts/navigation/slam/live_slam.py) Tj
+T*
+() Tj
+T*
+(- /home/melodse/ef_ws/g1/scripts/sensors/live_points.py) Tj
+T*
+() Tj
+T*
+(- /home/melodse/ef_ws/g1/scripts/navigation/slam/mid360_config.json) Tj
+T*
+() Tj
+ET
+endstream
+endobj
+9 0 obj
+<< /Type /Page /Parent 16 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R >> >> /Contents 2 0 R >>
+endobj
+10 0 obj
+<< /Type /Page /Parent 16 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R >> >> /Contents 3 0 R >>
+endobj
+11 0 obj
+<< /Type /Page /Parent 16 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R >> >> /Contents 4 0 R >>
+endobj
+12 0 obj
+<< /Type /Page /Parent 16 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R >> >> /Contents 5 0 R >>
+endobj
+13 0 obj
+<< /Type /Page /Parent 16 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R >> >> /Contents 6 0 R >>
+endobj
+14 0 obj
+<< /Type /Page /Parent 16 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R >> >> /Contents 7 0 R >>
+endobj
+15 0 obj
+<< /Type /Page /Parent 16 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R >> >> /Contents 8 0 R >>
+endobj
+16 0 obj
+<< /Type /Pages /Kids [9 0 R 10 0 R 11 0 R 12 0 R 13 0 R 14 0 R 15 0 R] /Count 7 >>
+endobj
+17 0 obj
+<< /Type /Catalog /Pages 16 0 R >>
+endobj
+xref
+0 18
+0000000000 65535 f 
+0000000009 00000 n 
+0000000079 00000 n 
+0000003211 00000 n 
+0000004842 00000 n 
+0000006495 00000 n 
+0000008221 00000 n 
+0000009669 00000 n 
+0000011343 00000 n 
+0000013040 00000 n 
+0000013167 00000 n 
+0000013295 00000 n 
+0000013423 00000 n 
+0000013551 00000 n 
+0000013679 00000 n 
+0000013807 00000 n 
+0000013935 00000 n 
+0000014035 00000 n 
+trailer
+<< /Size 18 /Root 17 0 R >>
+startxref
+14086
+%%EOF
