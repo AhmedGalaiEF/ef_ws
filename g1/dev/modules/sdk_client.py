@@ -2247,6 +2247,43 @@ class Robot:
                 torques.append(None)
         return positions, velocities, torques
 
+    @staticmethod
+    def _extract_hand_press_sensor_state(msg: Any) -> list[dict[str, Any]]:
+        sensors: list[dict[str, Any]] = []
+        press_sensor_state = list(getattr(msg, "press_sensor_state", []) or [])
+        for sensor in press_sensor_state:
+            raw_data = list(getattr(sensor, "data", []) or [])
+            raw_values: list[int | None] = []
+            scaled_values: list[float | None] = []
+            valid: list[bool] = []
+            for idx in range(12):
+                try:
+                    value = int(raw_data[idx])
+                except Exception:
+                    value = None
+                raw_values.append(value)
+                is_valid = value is not None and value >= 100000
+                valid.append(is_valid)
+                scaled_values.append((float(value) / 10000.0) if is_valid else None)
+            try:
+                sensor_id = int(getattr(sensor, "id"))
+            except Exception:
+                sensor_id = None
+            try:
+                temperature = int(getattr(sensor, "temp"))
+            except Exception:
+                temperature = None
+            sensors.append(
+                {
+                    "id": sensor_id,
+                    "temperature": temperature,
+                    "raw": raw_values,
+                    "values": scaled_values,
+                    "valid": valid,
+                }
+            )
+        return sensors
+
     def _resolve_joint_lookup_key(self, joint_index: int | str) -> str | None:
         if isinstance(joint_index, str):
             key = joint_index.strip()
@@ -2305,6 +2342,38 @@ class Robot:
             "imu": imu,
             "joints": joints,
             "sources": sources,
+        }
+
+    def get_hand_tactile_sensors(self, hand: str = "both") -> dict[str, Any] | None:
+        side = str(hand).strip().lower()
+        if side not in {"left", "right", "both"}:
+            raise ValueError("hand must be 'left', 'right', or 'both'.")
+
+        requested_hands = ("left", "right") if side == "both" else (side,)
+        hands: dict[str, Any] = {}
+        timestamp = 0.0
+        found_any = False
+
+        for each_hand in requested_hands:
+            hand_msg, hand_ts = self._get_hand_state_msg(each_hand)
+            if hand_msg is None:
+                hands[each_hand] = None
+                continue
+            tactile = self._extract_hand_press_sensor_state(hand_msg)
+            hands[each_hand] = {
+                "source": HAND_STATE_TOPIC_BY_SIDE[each_hand],
+                "timestamp": float(hand_ts),
+                "sensors": tactile,
+            }
+            timestamp = max(timestamp, float(hand_ts))
+            found_any = True
+
+        if not found_any:
+            return None
+
+        return {
+            "timestamp": timestamp,
+            "hands": hands,
         }
 
     def _recv_rgbd_payload(self, timeout: float = 2.0) -> tuple[bytes, bytes, float, float]:
