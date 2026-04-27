@@ -8,6 +8,10 @@ from typing import Any
 
 import math
 
+from dds_env import ensure_cyclonedds_environment
+
+ensure_cyclonedds_environment()
+
 from unitree_sdk2py.core.channel import ChannelSubscriber
 from unitree_sdk2py.idl.nav_msgs.msg.dds_ import Odometry_
 from unitree_sdk2py.idl.std_msgs.msg.dds_ import String_

@@ -3,7 +3,10 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import logging
 import math
+import os
+import re
 import socket
 import sys
 import threading
@@ -15,6 +18,32 @@ from typing import Iterable
 
 
 ROOT = Path(__file__).resolve().parent
+
+
+def _force_cyclonedds_no_shm() -> None:
+    """Disable CycloneDDS shared-memory transport for this launcher.
+
+    The Unitree SDK path in this environment is tripping a CycloneDDS
+    assertion in `dds_writecdr_impl_common` on the first real motion command.
+    That assert is consistent with an Iceoryx/shared-memory mismatch between
+    publisher state and sample allocation. Force plain UDP transport here.
+    """
+
+    if os.environ.get("CYCLONEDDS_URI"):
+        return
+    os.environ["CYCLONEDDS_URI"] = (
+        "<CycloneDDS>"
+        "<Domain>"
+        "<General>"
+        "<Interfaces><NetworkInterface autodetermine=\"true\"/></Interfaces>"
+        "</General>"
+        "<SharedMemory><Enable>false</Enable></SharedMemory>"
+        "</Domain>"
+        "</CycloneDDS>"
+    )
+
+
+_force_cyclonedds_no_shm()
 
 
 def _load_module(name: str, path: Path) -> ModuleType:
@@ -40,6 +69,104 @@ RGBD_CLIENT = _load_module(
 )
 
 from PySide6 import QtCore, QtWidgets  # type: ignore  # noqa: E402
+
+
+def _install_native_stdout_filter(*, allow_livox: bool) -> None:
+    """Filter native (C/C++) stdout spam (Livox SDK prints bypass Python logging)."""
+
+    if allow_livox:
+        return
+
+    import os
+
+    patterns = [
+        re.compile(r"^\[\d{4}-\d{2}-\d{2} .*\] \[console\] \[info\]"),
+        re.compile(r"Handle detection data"),
+        re.compile(r"Detection lidars failed"),
+        re.compile(r"general_command_handler\.cpp"),
+        re.compile(r"device_manager\.cpp"),
+        re.compile(r"mid360_command_handler\.cpp"),
+        re.compile(r"parse_cfg_file\.cpp"),
+        re.compile(r"params_check\.cpp"),
+        re.compile(r"data_handler\.cpp"),
+    ]
+
+    try:
+        orig_fd = os.dup(1)
+        r_fd, w_fd = os.pipe()
+        os.dup2(w_fd, 1)
+        os.close(w_fd)
+    except Exception:
+        return
+
+    def _writer(msg: str) -> None:
+        try:
+            os.write(orig_fd, msg.encode("utf-8", errors="replace"))
+        except Exception:
+            pass
+
+    def _reader() -> None:
+        buf = b""
+        try:
+            while True:
+                chunk = os.read(r_fd, 4096)
+                if not chunk:
+                    break
+                buf += chunk
+                while b"\n" in buf:
+                    line, buf = buf.split(b"\n", 1)
+                    s = line.decode("utf-8", errors="replace")
+                    if any(p.search(s) for p in patterns):
+                        continue
+                    _writer(s + "\n")
+        finally:
+            try:
+                if buf:
+                    s = buf.decode("utf-8", errors="replace")
+                    if not any(p.search(s) for p in patterns):
+                        _writer(s)
+            except Exception:
+                pass
+            try:
+                os.close(r_fd)
+            except Exception:
+                pass
+
+    t = threading.Thread(target=_reader, daemon=True)
+    t.start()
+
+
+def _install_console_noise_filter(*, allow_livox: bool) -> None:
+    """Reduce console spam from Livox + SDK while keeping file logs intact."""
+
+    if allow_livox:
+        return
+
+    noisy = [
+        re.compile(r"\\[Livox2\\] frame \\d+ pts"),
+        re.compile(r"\\b\\[Livox2\\]\\b"),
+        re.compile(r"Handle detection data"),
+        re.compile(r"general_command_handler\\.cpp"),
+    ]
+
+    class _NoiseFilter(logging.Filter):
+        def filter(self, record: logging.LogRecord) -> bool:  # noqa: D401
+            try:
+                msg = record.getMessage()
+            except Exception:
+                return True
+            return not any(p.search(msg) for p in noisy)
+
+    root = logging.getLogger()
+    filt = _NoiseFilter()
+    for h in list(root.handlers):
+        # Keep file logs; only filter the console handler(s).
+        if hasattr(h, "baseFilename"):
+            continue
+        try:
+            h.addFilter(filt)
+        except Exception:
+            pass
 
 
 class _SlamSession:
@@ -151,6 +278,16 @@ class _NoOpPublisher:
         return True
 
 
+class _DisabledPublisher:
+    def __init__(self, *args, **kwargs) -> None:
+        raise RuntimeError("ChannelPublisher disabled in slam_dual_window.py")
+
+
+class _DisabledSubscriber:
+    def __init__(self, *args, **kwargs) -> None:
+        raise RuntimeError("ChannelSubscriber disabled in slam_dual_window.py")
+
+
 class _DisabledDex3Client:
     def __init__(self, *args, **kwargs) -> None:
         raise RuntimeError("Dex3 disabled in slam_dual_window.py")
@@ -169,7 +306,8 @@ def _patch_upper_body_channels():
         except Exception:
             pass
 
-    _try_patch("unitree_sdk2py.core.channel", "ChannelPublisher", _NoOpPublisher)
+    _try_patch("unitree_sdk2py.core.channel", "ChannelPublisher", _DisabledPublisher)
+    _try_patch("unitree_sdk2py.core.channel", "ChannelSubscriber", _DisabledSubscriber)
     _try_patch("unitree_sdk2py.dex3", "Dex3Client", _DisabledDex3Client)
 
     try:
@@ -203,7 +341,12 @@ def _install_dual_slam_runner() -> None:
                             self._viewer.push(xyz, None)
                         except Exception:
                             pass
-                        print("[slam_dual_window] KISS-ICP frame failed:", exc)
+                        # KISS-ICP can fail transiently and can spam the console.
+                        now = time.monotonic()
+                        last = getattr(_safe_hp, "_last_kiss_log", 0.0)
+                        if now - last > 8.0:
+                            setattr(_safe_hp, "_last_kiss_log", now)
+                            print("[slam_dual_window] KISS-ICP frame failed:", exc)
 
                 _safe_hp._dual_window_wrapped = True  # type: ignore[attr-defined]
                 _ls.LiveSLAMDemo.handle_points = _safe_hp  # type: ignore[assignment]
@@ -249,6 +392,22 @@ _install_dual_slam_runner()
 
 
 def _disabled_rx_realsense(_stop_evt: threading.Event) -> None:
+    return
+
+
+def _disabled_keyboard_controller(_stop_evt: threading.Event, _iface: str, _backend: str) -> None:
+    return
+
+
+def _disabled_rx_battery(_stop_evt: threading.Event, _iface: str) -> None:
+    return
+
+
+def _disabled_arm_tick(self) -> None:  # noqa: D401
+    return
+
+
+def _disabled_hand_tick(self) -> None:  # noqa: D401
     return
 
 
@@ -371,6 +530,7 @@ class ControlWindow(QtWidgets.QMainWindow):
         self.lidar3d_lbl = QtWidgets.QLabel("3D LiDAR: --")
         self.slam_lbl = QtWidgets.QLabel("SLAM: --")
         self.goal_lbl = QtWidgets.QLabel("Goal: --")
+        self.avoid_lbl = QtWidgets.QLabel("Avoid: --")
         self.pose_lbl = QtWidgets.QLabel("Pose: --")
         self.help_lbl = QtWidgets.QLabel(
             "Double-click the occupancy map in the viewer window to send a goal.\n"
@@ -378,7 +538,15 @@ class ControlWindow(QtWidgets.QMainWindow):
         )
         self.help_lbl.setWordWrap(True)
 
-        for lbl in (self.mapping_lbl, self.rgbd_lbl, self.lidar3d_lbl, self.slam_lbl, self.goal_lbl, self.pose_lbl):
+        for lbl in (
+            self.mapping_lbl,
+            self.rgbd_lbl,
+            self.lidar3d_lbl,
+            self.slam_lbl,
+            self.goal_lbl,
+            self.avoid_lbl,
+            self.pose_lbl,
+        ):
             lbl.setStyleSheet("font: 12pt 'DejaVu Sans Mono';")
 
         layout.addWidget(self.mapping_lbl)
@@ -386,6 +554,7 @@ class ControlWindow(QtWidgets.QMainWindow):
         layout.addWidget(self.lidar3d_lbl)
         layout.addWidget(self.slam_lbl)
         layout.addWidget(self.goal_lbl)
+        layout.addWidget(self.avoid_lbl)
         layout.addWidget(self.pose_lbl)
         layout.addWidget(self.help_lbl)
 
@@ -404,10 +573,12 @@ class ControlWindow(QtWidgets.QMainWindow):
         _btn("Save Snapshot", self._owner.save_snapshot, 1, 1)
         _btn("Stop Robot", self._owner.stop_motion, 2, 0)
         _btn("Clear Goal", self._owner.clear_goal, 2, 1)
-        _btn("Free Walk", self._owner.enable_free_walk, 3, 0)
+        _btn("Go To Target", self._owner.start_goal_navigation, 3, 0)
         _btn("Stop Walk", self._owner.stop_motion, 3, 1)
-        self._rgbd_btn = _btn("Toggle RGBD", self._owner.toggle_rgbd, 4, 0)
-        self._lidar3d_btn = _btn("Toggle 3D LiDAR", self._owner.toggle_lidar3d, 4, 1)
+        _btn("Free Walk", self._owner.enable_free_walk, 4, 0)
+        _btn("Toggle Avoid", self._owner.toggle_obstacle_avoidance, 4, 1)
+        self._rgbd_btn = _btn("Toggle RGBD", self._owner.toggle_rgbd, 5, 0)
+        self._lidar3d_btn = _btn("Toggle 3D LiDAR", self._owner.toggle_lidar3d, 5, 1)
 
         layout.addStretch(1)
 
@@ -423,6 +594,7 @@ class ControlWindow(QtWidgets.QMainWindow):
         self.lidar3d_lbl.setText(f"3D LiDAR: {'ON' if self._owner.lidar3d_enabled() else 'OFF'}")
         self.slam_lbl.setText(f"SLAM: {self._owner.slam_status_text()}")
         self.goal_lbl.setText(f"Goal: {self._owner.goal_status_text()}")
+        self.avoid_lbl.setText(f"Avoid: {'ON' if self._owner.obstacle_avoidance_enabled() else 'OFF'}")
         self.pose_lbl.setText(f"Pose: {self._owner.pose_status_text()}")
 
 
@@ -458,6 +630,7 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
         iface: str,
         ground_clear_in: float,
         *,
+        enable_robot_control: bool,
         rgbd_host: str,
         rgbd_port: int,
         rgbd_topic: str = "",
@@ -469,13 +642,43 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
         max_points: int,
         **kwargs,
     ):
+        input_backend = kwargs.get("input_backend", "qt")
+        requested_input_backend = input_backend
+        # Do not let the legacy constructor boot the robot client or start its
+        # keyboard controller. We bring the robot client up lazily on first use
+        # so the UI can start even on deployments where initial DDS writes are
+        # unstable.
+        kwargs["input_backend"] = "curses"
+
         orig_rx = LEGACY._rx_realsense
+        orig_kb = getattr(LEGACY, "_run_keyboard_controller", None)
+        orig_batt = getattr(LEGACY, "_rx_battery", None)
+        orig_arm_tick = getattr(LEGACY.GeoffWindow, "_on_arm_tick", None)
+        orig_hand_tick = getattr(LEGACY.GeoffWindow, "_on_hand_tick", None)
         LEGACY._rx_realsense = _disabled_rx_realsense
+        if orig_kb is not None:
+            LEGACY._run_keyboard_controller = _disabled_keyboard_controller
+        if orig_batt is not None:
+            LEGACY._rx_battery = _disabled_rx_battery
+        if orig_arm_tick is not None:
+            LEGACY.GeoffWindow._on_arm_tick = _disabled_arm_tick  # type: ignore[assignment]
+        if orig_hand_tick is not None:
+            LEGACY.GeoffWindow._on_hand_tick = _disabled_hand_tick  # type: ignore[assignment]
         try:
             with _patch_upper_body_channels():
                 super().__init__(iface, ground_clear_in, **kwargs)
         finally:
             LEGACY._rx_realsense = orig_rx
+            if orig_kb is not None:
+                LEGACY._run_keyboard_controller = orig_kb
+            if orig_batt is not None:
+                LEGACY._rx_battery = orig_batt
+            if orig_arm_tick is not None:
+                LEGACY.GeoffWindow._on_arm_tick = orig_arm_tick  # type: ignore[assignment]
+            if orig_hand_tick is not None:
+                LEGACY.GeoffWindow._on_hand_tick = orig_hand_tick  # type: ignore[assignment]
+        self._input_backend = requested_input_backend
+        self._bot = None
 
         self.win.setWindowTitle("SLAM Viewer")
         self.control_win = ControlWindow(self)
@@ -509,7 +712,20 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
         self._ground_z_smooth = None
         self._hover_px: tuple[int, int] | None = None
         self._clicked_px: tuple[int, int] | None = None
+        self._goal_px: tuple[int, int] | None = None
+        self._goal_ready = False
+        self._nav_autonomous_active = False
+        self._avoid_obstacles = True
+        self._last_replan_t = 0.0
+        self._replan_worker_busy = False
+        self._map_seq = 0
+        self._last_plan_map_seq = -1
+        self._last_wp_log_t = 0.0
+        self._last_wp_remaining = None
+        self._iface_name = iface
         self._iface_valid = iface in {name for _, name in socket.if_nameindex()}
+        self._robot_control_enabled = bool(enable_robot_control)
+        self._robot_boot_failed = False
         LIDAR3D_SESSION.set_enabled(True)
         RGBD_SESSION.set_max_fps(rgbd_fps)
         RGBD_SESSION.set_enabled(rgbd_enabled)
@@ -519,6 +735,10 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
             self._cmap = pg.colormap.get("turbo")  # type: ignore[attr-defined]
         except Exception:
             self._cmap = None
+        try:
+            self._map_img.setOpts(axisOrder="row-major")  # type: ignore[attr-defined]
+        except Exception:
+            pass
 
         try:
             self._btn_damp.setEnabled(False)
@@ -540,14 +760,14 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
                 self._hand_timer.stop()
         except Exception:
             pass
-        try:
-            if self._bot is not None:
-                self._bot.SetBalanceMode(0)
-                self._bot.Move(0.0, 0.0, 0.0, continous_move=True)
-        except Exception:
-            pass
-        if not self._iface_valid:
+        if not self._robot_control_enabled:
+            self._bot = None
+            self._nav_status = "robot control disabled"
+        elif not self._iface_valid:
             self._nav_status = f"invalid iface: {iface}"
+        else:
+            if self._bot is None:
+                self._nav_status = "robot ready to connect"
 
         self._threads.append(
             threading.Thread(
@@ -574,6 +794,32 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
             self.map_view.scene().sigMouseMoved.connect(self._on_map_hover)
         except Exception:
             pass
+
+    def _ensure_robot_client(self) -> bool:
+        if not self._robot_control_enabled:
+            self._nav_status = "robot control disabled"
+            return False
+        if not self._iface_valid:
+            self._nav_status = f"invalid iface: {self._iface_name}"
+            return False
+        if self._bot is not None:
+            return True
+        if self._robot_boot_failed:
+            self._nav_status = "robot client unavailable (DDS/CycloneDDS?)"
+            return False
+        try:
+            _force_cyclonedds_no_shm()
+            from hanger_boot_sequence import hanger_boot_sequence  # type: ignore
+
+            self._bot = hanger_boot_sequence(iface=self._iface_name)
+            self._nav_status = "robot connected"
+            return True
+        except Exception as exc:  # pylint: disable=broad-except
+            self._robot_boot_failed = True
+            self._nav_status = "robot client unavailable (DDS/CycloneDDS?)"
+            print("[slam_dual_window] Robot boot failed:", exc, file=sys.stderr)
+            self._bot = None
+            return False
 
     def run(self):  # noqa: D401
         self.win.show()
@@ -695,6 +941,12 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
         return np.clip(arr, 0.0, 1.0)
 
     def _on_drive_tick(self):  # noqa: D401
+        # Prevent the legacy teleop loop from fighting autonomous navigation.
+        # Otherwise it keeps issuing Move(0,0,0) when no keys are pressed,
+        # which produces stop-go "stutter" during nav.
+        if getattr(self, "_nav_autonomous_active", False):
+            return
+
         lim = self._current_speed_limit()
 
         if self._is_pressed("w") and not self._is_pressed("s"):
@@ -720,6 +972,18 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
 
         if self._is_pressed("space"):
             self._vx = self._vy = self._omega = 0.0
+
+        # Do not publish continuous zero-velocity commands while idle. The
+        # legacy GUI wrote Move(0,0,0) every tick, but in this launcher that
+        # causes unnecessary DDS traffic and can trip CycloneDDS assertions on
+        # some deployments before the user even starts teleop or navigation.
+        if (
+            self._vx == 0.0
+            and self._vy == 0.0
+            and self._omega == 0.0
+            and not any(self._is_pressed(k) for k in ("w", "a", "s", "d", "q", "e", "space"))
+        ):
+            return
 
         if self._is_pressed("z") or self._is_pressed("esc"):
             try:
@@ -772,6 +1036,12 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
         occ = self._occ_map.copy()
         map_meta = self._map_meta
         self._clicked_px = (gx, gy)
+        self._goal_px = (gx, gy)
+        self._goal_ready = False
+        self._nav_autonomous_active = False
+        self._stop_robot()
+        if self._map_canvas is not None:
+            self._render_map_overlay(self._map_canvas)
         request_id = self._plan_request_id + 1
         self._plan_request_id = request_id
         self._nav_status = "planning path..."
@@ -786,11 +1056,13 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
 
     def _on_map_hover(self, pos) -> None:  # noqa: D401
         self._hover_px = self._scene_to_map_px(pos)
+        if self._map_canvas is not None:
+            self._render_map_overlay(self._map_canvas)
 
     def _scene_to_map_px(self, scene_pos):
         try:
-            img_pt = self._map_img.mapFromScene(scene_pos)
-            gx, gy = int(round(img_pt.x())), int(round(img_pt.y()))
+            view_pt = self._map_vb.mapSceneToView(scene_pos)  # type: ignore[attr-defined]
+            gx, gy = int(round(view_pt.x())), int(round(view_pt.y()))
         except Exception:
             return None
         if 0 <= gx < 480 and 0 <= gy < 480:
@@ -809,16 +1081,85 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
         if path is None or len(path) <= 1:
             print("[slam_dual_window] No path found to clicked target.")
             self._nav_status = "no path found"
+            self._goal_ready = False
+            self._nav_autonomous_active = False
             return
 
         self._path_px = path
         self._nav_waypoints_world = self._compress_waypoints(world_path)
         self._nav_goal_world = self._nav_waypoints_world[-1] if self._nav_waypoints_world else None
-        self._nav_status = f"tracking {len(self._nav_waypoints_world)} waypoints"
+        self._goal_ready = self._nav_goal_world is not None
+        self._nav_autonomous_active = False
+        self._last_plan_map_seq = self._map_seq
+        self._nav_status = f"goal ready: {len(self._nav_waypoints_world)} waypoints"
 
         if self._nav_goal_world is not None:
             gxw, gyw = self._nav_goal_world
             print(f"[slam_dual_window] Goal set to ({gxw:+.2f}, {gyw:+.2f})")
+
+    def start_goal_navigation(self) -> None:
+        if not self._ensure_robot_client():
+            self._nav_status = "robot client unavailable"
+            return
+        if not self._goal_ready or not self._nav_waypoints_world or self._nav_goal_world is None:
+            self._nav_status = "define a target first"
+            return
+        self._nav_autonomous_active = True
+        self._last_replan_t = 0.0
+        self._nav_status = f"autonomous nav: {len(self._nav_waypoints_world)} waypoints"
+        gx, gy = self._nav_goal_world
+        print(f"[slam_dual_window] Nav start -> goal ({gx:+.2f}, {gy:+.2f}) avoid={self._avoid_obstacles}")
+
+    def obstacle_avoidance_enabled(self) -> bool:
+        return bool(self._avoid_obstacles)
+
+    def toggle_obstacle_avoidance(self) -> None:
+        self._avoid_obstacles = not self._avoid_obstacles
+        state = "ON" if self._avoid_obstacles else "OFF"
+        print(f"[slam_dual_window] Obstacle avoidance: {state}")
+        # If we are already navigating, enabling avoidance should replan ASAP.
+        if self._avoid_obstacles and self._nav_autonomous_active:
+            self._last_replan_t = 0.0
+
+    def _maybe_replan(self) -> None:
+        if not self._avoid_obstacles or not self._nav_autonomous_active:
+            return
+        if self._replan_worker_busy:
+            return
+        if self._occ_map is None or self._map_meta is None:
+            return
+        rob_px = getattr(self, "_robot_px", None)
+        if rob_px is None:
+            return
+        if self._goal_px is None:
+            return
+        # Replan at most ~1 Hz, and only when a new map snapshot arrived.
+        now = time.monotonic()
+        if now - self._last_replan_t < 1.0:
+            return
+        if self._map_seq <= self._last_plan_map_seq:
+            return
+
+        rx, ry = rob_px
+        gx, gy = self._goal_px
+        occ = self._occ_map.copy()
+        map_meta = self._map_meta
+        self._last_replan_t = now
+        self._replan_worker_busy = True
+        request_id = self._plan_request_id + 1
+        self._plan_request_id = request_id
+
+        def _worker():
+            try:
+                path = self._plan_path(rx, ry, gx, gy, occ)
+                world_path = self._px_path_to_world_with_meta(path, map_meta) if path else None
+                with self._plan_lock:
+                    self._plan_result = (request_id, path, world_path, map_meta)
+            finally:
+                self._replan_worker_busy = False
+
+        threading.Thread(target=_worker, daemon=True).start()
+        print(f"[slam_dual_window] Replan (avoid) map_seq={self._map_seq} from=({rx},{ry}) to=({gx},{gy})")
 
     def _px_path_to_world(self, path_px: Iterable[tuple[int, int]]) -> list[tuple[float, float]]:
         return self._px_path_to_world_with_meta(path_px, self._map_meta)
@@ -869,15 +1210,17 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
         except Exception:
             pass
         try:
-            self._bot.Move(0.0, 0.0, 0.0, continous_move=True)
+            self._bot.SetBalanceMode(0)
         except Exception:
             pass
 
     def _on_nav_tick(self) -> None:
-        if self._bot is None or not self._nav_waypoints_world:
+        if self._bot is None or not self._nav_waypoints_world or not self._nav_autonomous_active:
             return
         if self._latest_pose is None:
             return
+
+        self._maybe_replan()
 
         pose = self._latest_pose
         px, py = float(pose[0, 3]), float(pose[1, 3])
@@ -887,11 +1230,20 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
             if math.hypot(tx - px, ty - py) > 0.25:
                 break
             self._nav_waypoints_world.pop(0)
+            remaining = len(self._nav_waypoints_world)
+            now = time.monotonic()
+            if self._last_wp_remaining != remaining and now - self._last_wp_log_t > 1.0:
+                self._last_wp_log_t = now
+                self._last_wp_remaining = remaining
+                print(f"[slam_dual_window] Waypoint reached, remaining={remaining}")
 
         if not self._nav_waypoints_world:
             self._nav_status = "goal reached"
             self._nav_goal_world = None
+            self._goal_ready = False
+            self._nav_autonomous_active = False
             self._stop_robot()
+            print("[slam_dual_window] Goal reached")
             return
 
         tx, ty = self._nav_waypoints_world[0]
@@ -914,6 +1266,14 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
             omega = self._clamp(0.9 * heading_err, 0.35)
 
         try:
+            # Match legacy teleop behaviour: static balance when stopped, gait when moving.
+            desired_mode = 0 if (vx == 0.0 and vy == 0.0 and omega == 0.0) else 1
+            if getattr(self, "_bal_mode", None) != desired_mode:
+                try:
+                    self._bot.SetBalanceMode(desired_mode)
+                    self._bal_mode = desired_mode
+                except Exception:
+                    pass
             self._bot.Move(vx, vy, omega, continous_move=True)
             with LEGACY._state_lock:
                 LEGACY._state["vel"] = (vx, vy, omega)
@@ -978,6 +1338,7 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
         print(f"[slam_dual_window] Saved snapshot to {save_path}")
 
     def enable_free_walk(self) -> None:
+        self._nav_autonomous_active = False
         if self._bot is None:
             self._nav_status = "robot client unavailable"
             return
@@ -992,6 +1353,7 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
             self._nav_status = f"FreeWalk failed: {exc}"
 
     def stop_motion(self) -> None:
+        self._nav_autonomous_active = False
         self.clear_goal()
         self._stop_robot()
         try:
@@ -1006,6 +1368,9 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
         self._nav_goal_world = None
         self._path_px = None
         self._clicked_px = None
+        self._goal_px = None
+        self._goal_ready = False
+        self._nav_autonomous_active = False
 
     def toggle_rgbd(self) -> None:
         enabled = not RGBD_SESSION.is_enabled()
@@ -1194,6 +1559,7 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
         self._map_meta = map_meta
         self._robot_px = robot_px
         self._ground_z_smooth = ground_z
+        self._map_seq += 1
         self._render_map_overlay(canvas)
 
     def _schedule_map_update(self, xyz, pose) -> None:
@@ -1324,11 +1690,23 @@ def main() -> None:
     parser.add_argument("--slam-fps", type=float, default=2.0, help="Maximum 3-D point-cloud redraw rate")
     parser.add_argument("--map-fps", type=float, default=1.5, help="Maximum occupancy-map redraw rate")
     parser.add_argument("--max-points", type=int, default=30000, help="Maximum rendered point count")
+    grp = parser.add_mutually_exclusive_group()
+    grp.add_argument(
+        "--enable-robot-control",
+        action="store_true",
+        help="(Deprecated) Robot control is enabled by default; use --no-robot-control to disable",
+    )
+    grp.add_argument("--no-robot-control", action="store_true", help="Disable Unitree robot control and tele-op")
+    parser.add_argument("--show-livox-logs", action="store_true", help="Do not filter Livox/SDK console spam")
     args = parser.parse_args()
+
+    _install_console_noise_filter(allow_livox=bool(args.show_livox_logs))
+    _install_native_stdout_filter(allow_livox=bool(args.show_livox_logs))
 
     window = DualWindow(
         args.iface,
         args.clear,
+        enable_robot_control=bool(args.enable_robot_control) or (not bool(args.no_robot_control)),
         rgbd_host=args.rgbd_host,
         rgbd_port=args.rgbd_port,
         rgbd_topic=args.rgbd_topic,

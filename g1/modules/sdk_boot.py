@@ -6,6 +6,10 @@ import sys
 import time
 from typing import Callable, Optional
 
+from dds_env import ensure_cyclonedds_environment
+
+ensure_cyclonedds_environment()
+
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize
 from unitree_sdk2py.g1.loco.g1_loco_api import (
     ROBOT_API_ID_LOCO_GET_FSM_ID,

@@ -19,6 +19,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Optional
 
+from dds_env import ensure_cyclonedds_environment
 from sdk_audio import RobotAudio
 from sdk_boot import create_loco_client, rpc_get_int
 from sdk_hand import Dex3HandController
@@ -35,6 +36,8 @@ from sdk_sensors import (
     resolve_lowstate_type,
 )
 from sdk_slam import SlamInfoSubscriber, SlamOdomSubscriber, SlamOperateClient, SlamResponse
+
+ensure_cyclonedds_environment()
 
 try:
     from unitree_sdk2py.core.channel import ChannelSubscriber
@@ -1227,13 +1230,22 @@ class Robot:
         result = self._client.Move(float(vx), float(vy), float(vyaw), continous_move=True)
         return self._normalize_sdk_status(result)
 
-    def walk(self, vx: float = 0.0, vy: float = 0.0, vyaw: float = 0.0) -> int:
-        self.set_gait_type(0)
-        return self.loco_move(vx, vy, vyaw)
-
-    def run(self, vx: float = 0.0, vy: float = 0.0, vyaw: float = 0.0) -> int:
-        self.set_gait_type(1)
-        return self.loco_move(vx, vy, vyaw)
+    def move_for(
+        self,
+        duration: float,
+        vx: float = 0.0,
+        vy: float = 0.0,
+        vyaw: float = 0.0,
+    ) -> int:
+        duration_s = float(duration)
+        if duration_s < 0.0:
+            raise ValueError("duration must be >= 0.0")
+        result = self.loco_move(vx, vy, vyaw)
+        try:
+            time.sleep(duration_s)
+        finally:
+            self.stop()
+        return result
 
     def stop_moving(self) -> None:
         if hasattr(self._client, "StopMove"):
@@ -1354,7 +1366,7 @@ class Robot:
                     vx = -ly * float(max_vx)
                     vy = -lx * float(max_vy)
                     vyaw = -rx * float(max_vyaw)
-                    self.walk(vx=vx, vy=vy, vyaw=vyaw)
+                    self.loco_move(vx=vx, vy=vy, vyaw=vyaw)
 
                 time.sleep(dt)
         finally:
@@ -1419,196 +1431,35 @@ class Robot:
             thread.join(timeout=max(0.0, float(join_timeout)))
         self._usb_controller_thread = None
 
-    @staticmethod
-    def _wrap_angle(value: float) -> float:
-        while value > math.pi:
-            value -= 2.0 * math.pi
-        while value < -math.pi:
-            value += 2.0 * math.pi
-        return value
+    def walk_mode(self) -> None:
+        if hasattr(self._client, "SetFsmId"):
+            self._client.SetFsmId(501)
+            return
+        raise AttributeError("Current locomotion client does not support FSM mode setting API.")
 
-    @staticmethod
-    def _clamp(value: float, lo: float, hi: float) -> float:
-        return max(lo, min(hi, value))
+    def run_mode(self) -> None:
+        if hasattr(self._client, "SetFsmId"):
+            self._client.SetFsmId(802)
+            return
+        raise AttributeError("Current locomotion client does not support FSM mode setting API.")
 
-    @staticmethod
-    def _normalize_gait_type(gait_type: int | str) -> int:
-        if isinstance(gait_type, str):
-            key = gait_type.strip().lower().replace("-", "_").replace(" ", "_")
-            alias = {
-                "normal": 0,
-                "balanced": 0,
-                "balance": 0,
-                "static": 0,
-                "stand": 0,
-                "continuous": 1,
-                "walk": 1,
-                "walking": 1,
-                "dynamic": 1,
-                "run": 1,
-            }
-            if key not in alias:
-                raise ValueError(f"Unknown gait_type '{gait_type}'.")
-            return int(alias[key])
-        return int(gait_type)
-
-    def set_gait_type(self, gait_type: int | str = 0) -> int:
-        mode = self._normalize_gait_type(gait_type)
+    def dev_mode(self) -> None:
         if hasattr(self._client, "SetGaitType"):
-            return int(self._client.SetGaitType(mode))
+            self._client.SetGaitType(3)
+            return
         if hasattr(self._client, "SetBalanceMode"):
-            return int(self._client.SetBalanceMode(mode))
-        raise AttributeError("Current locomotion client does not support gait mode setting API.")
+            self._client.SetBalanceMode(3)
+            return
+        raise AttributeError("Current locomotion client does not support dev mode gait API.")
 
     def balanced_stand(self, mode: int = 0) -> None:
         if hasattr(self._client, "BalanceStand"):
             self._client.BalanceStand(int(mode))
-        else:
-            self.set_gait_type(int(mode))
-
-    def _move_for_feedback(
-        self,
-        distance: float,
-        gait_type: int,
-        max_vx: float,
-        max_vyaw: float,
-        pos_tolerance: float,
-        yaw_tolerance: float,
-        timeout: float,
-        tick: float,
-        kp_lin: float,
-        kp_yaw: float,
-    ) -> bool:
-        pos0 = self.get_position()
-        yaw0 = self.get_yaw()
-        if pos0 is None or yaw0 is None:
-            raise RuntimeError("walk_for/run_for requires live position and IMU yaw.")
-
-        if abs(float(distance)) <= float(pos_tolerance):
-            self.stop()
-            return True
-
-        sign = 1.0 if float(distance) >= 0.0 else -1.0
-        target_x = float(pos0[0]) + float(distance) * math.cos(float(yaw0))
-        target_y = float(pos0[1]) + float(distance) * math.sin(float(yaw0))
-
-        self.set_gait_type(int(gait_type))
-        t0 = time.time()
-        ok = False
-        try:
-            while (time.time() - t0) <= max(0.1, float(timeout)):
-                pos = self.get_position()
-                yaw = self.get_yaw()
-                if pos is None or yaw is None:
-                    time.sleep(max(0.01, float(tick)))
-                    continue
-                dx = target_x - float(pos[0])
-                dy = target_y - float(pos[1])
-                dist = math.hypot(dx, dy)
-                if dist <= float(pos_tolerance):
-                    ok = True
-                    break
-                target_heading = math.atan2(dy, dx)
-                heading_err = self._wrap_angle(target_heading - float(yaw))
-                if abs(heading_err) > float(yaw_tolerance):
-                    vx_cmd = 0.0
-                else:
-                    vx_cmd = sign * self._clamp(float(kp_lin) * dist, 0.0, max(0.0, float(max_vx)))
-                vyaw_cmd = self._clamp(float(kp_yaw) * heading_err, -max_vyaw, max_vyaw)
-                self.loco_move(vx_cmd, 0.0, vyaw_cmd)
-                time.sleep(max(0.01, float(tick)))
-        finally:
-            self.stop()
-        return ok
-
-    def walk_for(
-        self,
-        distance: float,
-        max_vx: float = 0.25,
-        max_vyaw: float = 0.5,
-        pos_tolerance: float = 0.05,
-        yaw_tolerance: float = 0.20,
-        timeout: float = 20.0,
-        tick: float = 0.05,
-        kp_lin: float = 0.9,
-        kp_yaw: float = 1.6,
-    ) -> bool:
-        return self._move_for_feedback(
-            distance=distance,
-            gait_type=0,
-            max_vx=max_vx,
-            max_vyaw=max_vyaw,
-            pos_tolerance=pos_tolerance,
-            yaw_tolerance=yaw_tolerance,
-            timeout=timeout,
-            tick=tick,
-            kp_lin=kp_lin,
-            kp_yaw=kp_yaw,
-        )
-
-    def run_for(
-        self,
-        distance: float,
-        max_vx: float = 0.45,
-        max_vyaw: float = 0.8,
-        pos_tolerance: float = 0.07,
-        yaw_tolerance: float = 0.25,
-        timeout: float = 15.0,
-        tick: float = 0.05,
-        kp_lin: float = 1.0,
-        kp_yaw: float = 1.8,
-    ) -> bool:
-        return self._move_for_feedback(
-            distance=distance,
-            gait_type=1,
-            max_vx=max_vx,
-            max_vyaw=max_vyaw,
-            pos_tolerance=pos_tolerance,
-            yaw_tolerance=yaw_tolerance,
-            timeout=timeout,
-            tick=tick,
-            kp_lin=kp_lin,
-            kp_yaw=kp_yaw,
-        )
-
-    def turn_for(
-        self,
-        angle_deg: float,
-        max_vyaw: float = 0.8,
-        yaw_tolerance_deg: float = 2.5,
-        timeout: float = 10.0,
-        tick: float = 0.05,
-        kp_yaw: float = 1.8,
-        gait_type: int = 0,
-    ) -> bool:
-        yaw0 = self.get_yaw()
-        if yaw0 is None:
-            raise RuntimeError("turn_for requires live IMU yaw.")
-        delta = math.radians(float(angle_deg))
-        tol = math.radians(max(0.1, float(yaw_tolerance_deg)))
-        if abs(delta) <= tol:
-            self.stop()
-            return True
-        target = self._wrap_angle(float(yaw0) + delta)
-        self.set_gait_type(int(gait_type))
-        t0 = time.time()
-        ok = False
-        try:
-            while (time.time() - t0) <= max(0.1, float(timeout)):
-                yaw = self.get_yaw()
-                if yaw is None:
-                    time.sleep(max(0.01, float(tick)))
-                    continue
-                err = self._wrap_angle(target - float(yaw))
-                if abs(err) <= tol:
-                    ok = True
-                    break
-                vyaw_cmd = self._clamp(float(kp_yaw) * err, -max_vyaw, max_vyaw)
-                self.loco_move(0.0, 0.0, vyaw_cmd)
-                time.sleep(max(0.01, float(tick)))
-        finally:
-            self.stop()
-        return ok
+            return
+        if hasattr(self._client, "SetFsmId") and int(mode) == 0:
+            self._client.SetFsmId(500)
+            return
+        raise AttributeError("Current locomotion client does not support balanced stand API.")
 
     def _rpc_get_int(self, api_id: int) -> Optional[int]:
         return rpc_get_int(self._client, api_id)
@@ -1902,9 +1753,9 @@ class Robot:
             return False
 
         try:
-            self.set_gait_type(0)
+            self.walk_mode()
         except Exception as exc:
-            print(f"[navigate_path] warning: failed to set gait_type=0 ({exc})")
+            print(f"[navigate_path] warning: failed to enter walk mode ({exc})")
 
         ok = True
         try:

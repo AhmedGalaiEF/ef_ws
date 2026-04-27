@@ -5,6 +5,10 @@ import time
 import threading
 from typing import Any, Dict
 
+from dds_env import ensure_cyclonedds_environment
+
+ensure_cyclonedds_environment()
+
 from unitree_sdk2py.core import channel as channel_module
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelPublisher, ChannelSubscriber
 from unitree_sdk2py.idl.default import unitree_hg_msg_dds__HandCmd_

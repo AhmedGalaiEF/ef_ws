@@ -10,6 +10,8 @@ import wave
 from pathlib import Path
 from typing import Optional
 
+from dds_env import ensure_cyclonedds_environment
+
 
 _NAMED_COLORS = {
     "white": (255, 255, 255),
@@ -26,6 +28,7 @@ _NAMED_COLORS = {
 
 
 def _load_audio_client():
+    ensure_cyclonedds_environment()
     from unitree_sdk2py.g1.audio.g1_audio_client import AudioClient
 
     return AudioClient

@@ -5,6 +5,10 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
+from dds_env import ensure_cyclonedds_environment
+
+ensure_cyclonedds_environment()
+
 from unitree_sdk2py.core.channel import ChannelSubscriber
 
 try:

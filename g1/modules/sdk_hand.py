@@ -5,6 +5,10 @@ import time
 import threading
 from typing import Any, Dict
 
+from dds_env import ensure_cyclonedds_environment
+
+ensure_cyclonedds_environment()
+
 from unitree_sdk2py.core import channel as channel_module
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelPublisher, ChannelSubscriber
 from unitree_sdk2py.idl.default import unitree_hg_msg_dds__HandCmd_
@@ -166,6 +170,16 @@ def hand_grip_targets(hand: str, percent: float, thumb_0: float | None = None) -
     ]
 
 
+def clamp_hand_targets(hand: str, targets: list[float]) -> list[float]:
+    side = str(hand).strip().lower()
+    if len(targets) != 7:
+        raise ValueError("Hand targets must contain 7 joint values.")
+    return [
+        max(float(lo), min(float(hi), float(value)))
+        for value, lo, hi in zip(targets, HAND_MIN_LIMITS[side], HAND_MAX_LIMITS[side])
+    ]
+
+
 def pack_ris_mode(motor_id: int, status: int = 1, timeout: int = 0) -> int:
     return (
         (int(motor_id) & 0x0F)
@@ -240,7 +254,7 @@ class Dex3HandController:
                 return None
             if (time.time() - self._state_ts) > max_age:
                 return None
-            return list(self._state_positions)
+            return clamp_hand_targets(self.hand, list(self._state_positions))
 
     def _get_start_targets(self) -> list[float]:
         """Return best estimate of current positions for ramp start."""
@@ -255,7 +269,9 @@ class Dex3HandController:
                 if actual is not None:
                     return actual
                 time.sleep(0.02)
-        return list(self._last_targets) if self._last_targets is not None else hand_open_targets(self.hand)
+        if self._last_targets is not None:
+            return clamp_hand_targets(self.hand, list(self._last_targets))
+        return clamp_hand_targets(self.hand, hand_open_targets(self.hand))
 
     @staticmethod
     def _interpolate_targets(
@@ -277,12 +293,19 @@ class Dex3HandController:
         kd: float,
         tau: float,
     ) -> None:
+        targets = clamp_hand_targets(self.hand, targets)
         self.publish_for(
             build_hand_msg(targets, kp=kp, kd=kd, tau=tau),
             seconds=seconds,
             rate_hz=rate_hz,
         )
         self._last_targets = list(targets)
+
+    def _targets_reached(self, targets: list[float], *, tolerance: float = 0.08) -> bool:
+        actual = self._read_actual_positions(max_age=0.5)
+        if actual is None:
+            return False
+        return all(abs(float(goal) - float(current)) <= float(tolerance) for goal, current in zip(targets, actual))
 
     def write_targets_once(
         self,
@@ -294,8 +317,7 @@ class Dex3HandController:
         timeout: int = 0,
         first_write_timeout_s: float | None = None,
     ) -> bool:
-        if len(targets) != 7:
-            raise ValueError("Hand targets must contain 7 joint values.")
+        targets = clamp_hand_targets(self.hand, targets)
         msg = build_hand_msg(targets, kp=kp, kd=kd, tau=tau, timeout=timeout)
         ok = self._pub.Write(msg, timeout=first_write_timeout_s)
         self._last_targets = [float(value) for value in targets]
@@ -343,7 +365,7 @@ class Dex3HandController:
             raise ValueError("Hand targets must contain 7 joint values.")
 
         with self._cmd_lock:
-            target_list = [float(value) for value in targets]
+            target_list = clamp_hand_targets(self.hand, [float(value) for value in targets])
             rate = max(1.0, float(rate_hz))
             total_hold_s = max(0.0, float(hold_s))
             ramp_duration_s = min(
@@ -351,7 +373,7 @@ class Dex3HandController:
                 max(1.0 / rate, 0.25 if ramp_s is None else float(ramp_s)),
             )
 
-            start_targets = self._get_start_targets()
+            start_targets = clamp_hand_targets(self.hand, self._get_start_targets())
             ramp_ran = False
             if any(abs(dst - src) > 1e-6 for src, dst in zip(start_targets, target_list)) and ramp_duration_s > 0.0:
                 ramp_ran = True
@@ -379,6 +401,16 @@ class Dex3HandController:
                     kd=kd,
                     tau=tau,
                 )
+            settle_deadline = time.time() + max(0.25, total_hold_s)
+            while time.time() < settle_deadline and not self._targets_reached(target_list):
+                self._publish_targets_for(
+                    target_list,
+                    seconds=1.0 / rate,
+                    rate_hz=rate,
+                    kp=kp,
+                    kd=kd,
+                    tau=tau,
+                )
 
     def _pose_targets(self, pose_targets: list[float]) -> list[float]:
         targets = list(pose_targets)
@@ -391,6 +423,9 @@ class Dex3HandController:
             hand_open_targets(self.hand),
             hold_s=hold_s,
             rate_hz=rate_hz,
+            kp=1.5,
+            kd=0.1,
+            tau=0.03,
             ramp_s=ramp_s,
         )
 
@@ -399,7 +434,9 @@ class Dex3HandController:
             hand_closed_targets(self.hand),
             hold_s=hold_s,
             rate_hz=rate_hz,
-            tau=0.0,
+            kp=1.5,
+            kd=0.1,
+            tau=0.03,
             ramp_s=ramp_s,
         )
 

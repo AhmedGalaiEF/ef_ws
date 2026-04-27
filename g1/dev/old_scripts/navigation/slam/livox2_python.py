@@ -292,7 +292,19 @@ class Livox2:
             except Exception as exc:
                 print("Exception in handle_points:", exc, file=sys.stderr)
 
-            print(f"[Livox2] frame {frame_xyz.shape[0]} pts  (Δt={elapsed*1000:.1f} ms)")
+            # Printing every frame is extremely noisy when stdout is redirected
+            # into Python logging (as in the Qt GUI). Keep it opt-in.
+            try:
+                import os
+
+                if os.environ.get("LIVOX2_LOG_FRAMES", "0") == "1":
+                    last = getattr(self, "_last_frame_log_t", 0.0)
+                    now_t = time.time()
+                    if now_t - last > 2.0:
+                        setattr(self, "_last_frame_log_t", now_t)
+                        print(f"[Livox2] frame {frame_xyz.shape[0]} pts  (Δt={elapsed*1000:.1f} ms)")
+            except Exception:
+                pass
 
             buf = []
             last_t = now
