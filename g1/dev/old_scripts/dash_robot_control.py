@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import argparse
 from collections import deque
 import base64
 from dataclasses import dataclass
@@ -46,7 +47,7 @@ ROBOT_INSTANCE: Robot | None = None
 ROBOT_INIT_ERR: str | None = None
 ROBOT_IFACE = "eth0"
 ROBOT_LIDAR_CLOUD_TOPIC = "rt/utlidar/cloud_livox_mid360"
-RGBD_HOST = os.environ.get("G1_RGBD_HOST", "10.34.0.11")
+RGBD_HOST = os.environ.get("G1_RGBD_HOST", "10.34.0.83")
 RGBD_PORT = int(os.environ.get("G1_RGBD_PORT", "5555"))
 RGBD_TOPIC = os.environ.get("G1_RGBD_TOPIC", "")
 IMU_HISTORY: deque[tuple[float, float, float, float]] = deque(maxlen=300)
@@ -2801,5 +2802,19 @@ def update_lidar(_tick: int) -> tuple[go.Figure, str, go.Figure, str]:
     return lidar_fig, lidar_status, imu_fig, imu_status
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Dash robot control dashboard.")
+    parser.add_argument("--host", default="0.0.0.0")
+    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--robot-ip", "--rgbd-host", dest="rgbd_host", default=RGBD_HOST)
+    parser.add_argument("--rgbd-port", type=int, default=RGBD_PORT)
+    parser.add_argument("--rgbd-topic", default=RGBD_TOPIC)
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8000, debug=False)
+    args = parse_args()
+    RGBD_HOST = str(args.rgbd_host)
+    RGBD_PORT = int(args.rgbd_port)
+    RGBD_TOPIC = str(args.rgbd_topic)
+    app.run(host=str(args.host), port=int(args.port), debug=False)

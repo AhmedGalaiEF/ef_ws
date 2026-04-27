@@ -219,7 +219,7 @@ def main() -> int:
     )
     parser.add_argument("--prompt", required=True, help="Target text prompt, for example 'a photo of a soda can'")
     parser.add_argument("--negative-prompt", default="", help="Optional negative comparison prompt")
-    parser.add_argument("--host", default="10.34.0.11", help="Publisher host/IP")
+    parser.add_argument("--host", "--robot-ip", dest="host", default="10.34.0.83", help="Publisher host/IP")
     parser.add_argument("--port", type=int, default=5555, help="Publisher TCP port")
     parser.add_argument("--topic", default="", help="ZMQ subscription prefix; empty subscribes to all")
     parser.add_argument("--timeout-ms", type=int, default=200, help="Receive timeout in milliseconds")

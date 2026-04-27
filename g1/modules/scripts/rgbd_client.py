@@ -123,7 +123,7 @@ def _overlay_info(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="ZeroMQ RGBD viewer for image_server.py RealSense streams.")
-    parser.add_argument("--host", default="10.34.0.11", help="Publisher host/IP")
+    parser.add_argument("--host", "--robot-ip", dest="host", default="10.34.0.83", help="Publisher host/IP")
     parser.add_argument("--port", type=int, default=5555, help="Publisher TCP port")
     parser.add_argument("--topic", default="", help="ZMQ subscription prefix; empty subscribes to all")
     parser.add_argument("--timeout-ms", type=int, default=3000, help="Receive timeout in milliseconds")

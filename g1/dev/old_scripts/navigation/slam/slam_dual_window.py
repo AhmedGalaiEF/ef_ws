@@ -1315,7 +1315,7 @@ def main() -> None:
     parser.add_argument("--hand", choices=["left", "right"], default="left")
     parser.add_argument("--grip-force", type=float, dest="grip_force", default=0.3)
     parser.add_argument("--input", choices=("qt", "pynput", "curses"), default="qt")
-    parser.add_argument("--rgbd-host", default="10.34.0.11", help="ZeroMQ RGBD publisher host")
+    parser.add_argument("--rgbd-host", "--robot-ip", dest="rgbd_host", default="10.34.0.83", help="ZeroMQ RGBD publisher host")
     parser.add_argument("--rgbd-port", type=int, default=5555, help="ZeroMQ RGBD publisher port")
     parser.add_argument("--rgbd-topic", default="", help="Optional ZeroMQ subscription prefix")
     parser.add_argument("--gui-fps", type=float, default=8.0, help="Maximum GUI refresh rate")

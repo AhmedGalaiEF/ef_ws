@@ -147,7 +147,11 @@ ROBOT_INSTANCE: Any | None = None
 ROBOT_INIT_ERR: str | None = None
 ROBOT_IFACE = _default_iface()
 ROBOT_LIDAR_CLOUD_TOPIC = "rt/utlidar/cloud_livox_mid360"
-RGBD_HOST = os.environ.get("G1_RGBD_HOST", "10.34.0.11")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+LIVOX_WRAPPER_DIR = Path(os.environ.get("LIVOX_WRAPPER_DIR", REPO_ROOT / "dev" / "old_scripts" / "navigation" / "slam"))
+LIVOX_CONFIG = Path(os.environ.get("LIVOX_CONFIG", LIVOX_WRAPPER_DIR / "mid360_config.json"))
+LIVOX_HOST_IP = os.environ.get("HOST_IP", "192.168.123.222")
+RGBD_HOST = os.environ.get("G1_RGBD_HOST", "10.34.0.83")
 RGBD_PORT = int(os.environ.get("G1_RGBD_PORT", "5555"))
 RGBD_TOPIC = os.environ.get("G1_RGBD_TOPIC", "")
 IMU_HISTORY: deque[tuple[float, float, float, float]] = deque(maxlen=300)
@@ -887,7 +891,7 @@ class _ZmqRgbdPreviewReceiver:
 class _LivoxPointsReceiver:
     """
     Fallback point receiver using the same Livox SDK wrappers as
-    /home/ag/ef_ws/g1/scripts/sensors/live_points.py.
+    the local Livox wrapper modules.
     """
 
     def __init__(self) -> None:
@@ -925,22 +929,30 @@ class _LivoxPointsReceiver:
             return merged, self._latest_ts, self._error
 
     def _run(self) -> None:
-        sensors_dir = Path(__file__).resolve().parents[2] / "scripts" / "sensors"
-        if str(sensors_dir) not in sys.path:
-            sys.path.insert(0, str(sensors_dir))
+        wrapper_dirs = [
+            Path(os.environ.get("LIVOX_WRAPPER_DIR", LIVOX_WRAPPER_DIR)),
+            REPO_ROOT / "dev" / "old_scripts" / "navigation" / "slam",
+            REPO_ROOT / "dev" / "old_scripts" / "navigation" / "obstacle_avoidance",
+            REPO_ROOT / "dev" / "old_scripts" / "sensors",
+        ]
+        for wrapper_dir in wrapper_dirs:
+            if wrapper_dir.exists() and str(wrapper_dir) not in sys.path:
+                sys.path.insert(0, str(wrapper_dir))
 
         base_cls = None
         sdk2 = False
+        sdk2_error = None
         try:
             from livox2_python import Livox2 as base_cls  # type: ignore[assignment]
 
             sdk2 = True
-        except Exception:
+        except Exception as exc:
+            sdk2_error = exc
             try:
                 from livox_python import Livox as base_cls  # type: ignore[assignment]
             except Exception as exc:
                 with self._lock:
-                    self._error = f"Livox wrapper import failed: {exc}"
+                    self._error = f"Livox wrapper import failed: sdk2={sdk2_error}; sdk1={exc}"
                 return
 
         receiver = self
@@ -948,10 +960,10 @@ class _LivoxPointsReceiver:
         class _DashLivox(base_cls):  # type: ignore[misc, valid-type]
             def __init__(self) -> None:
                 if sdk2:
-                    cfg = sensors_dir / "mid360_config.json"
+                    cfg = Path(os.environ.get("LIVOX_CONFIG", LIVOX_CONFIG))
                     if not cfg.exists():
                         raise RuntimeError(f"Missing Livox config: {cfg}")
-                    host_ip = os.environ.get("HOST_IP", "192.168.123.222")
+                    host_ip = os.environ.get("HOST_IP", LIVOX_HOST_IP)
                     super().__init__(str(cfg), host_ip=host_ip)
                 else:
                     super().__init__()
@@ -2865,12 +2877,25 @@ def update_info(_tick: int, _refresh: int | None) -> Any:
         return f"Info update failed: {exc}"
 
 
-def _make_slam_cloud_from_points(points: list[tuple[float, float, float]], title: str) -> go.Figure:
+def _point_xyz(point: Any) -> tuple[float, float, float] | None:
+    try:
+        if isinstance(point, dict):
+            return float(point["x"]), float(point["y"]), float(point["z"])
+        return float(point[0]), float(point[1]), float(point[2])
+    except Exception:
+        return None
+
+
+def _make_slam_cloud_from_points(points: list[Any], title: str) -> go.Figure:
     if not points:
         return empty_slam_cloud_figure(title)
-    xs = [float(p[0]) for p in points]
-    ys = [float(p[1]) for p in points]
-    zs = [float(p[2]) for p in points]
+    xyz = [_point_xyz(p) for p in points]
+    xyz = [p for p in xyz if p is not None]
+    if not xyz:
+        return empty_slam_cloud_figure(title)
+    xs = [p[0] for p in xyz]
+    ys = [p[1] for p in xyz]
+    zs = [p[2] for p in xyz]
     fig = go.Figure(
         data=[
             go.Scatter3d(
@@ -2989,7 +3014,7 @@ def update_slam_tab(
         LOGGER.exception("SLAM tab command failed trigger=%s", trigger)
         status_parts.append(f"SLAM command failed: {exc}")
 
-    points: list[tuple[float, float, float]] = []
+    points: list[Any] = []
     try:
         points = robot.get_lidar_points(max_points=12000)
     except Exception as exc:
@@ -3426,9 +3451,11 @@ def update_lidar(_tick: int, lidar_enabled: bool, imu_enabled: bool) -> tuple[go
                     extra = f" | live_err: {live_err}" if live_err else ""
                     lidar_status = f"No LiDAR points yet. stale={stale}{extra}"
             else:
-                xs = [p[0] for p in pts]
-                ys = [p[1] for p in pts]
-                zs = [p[2] for p in pts]
+                xyz = [_point_xyz(p) for p in pts]
+                xyz = [p for p in xyz if p is not None]
+                xs = [p[0] for p in xyz]
+                ys = [p[1] for p in xyz]
+                zs = [p[2] for p in xyz]
 
                 lidar_fig = go.Figure(
                     data=[
@@ -3453,7 +3480,7 @@ def update_lidar(_tick: int, lidar_enabled: bool, imu_enabled: bool) -> tuple[go
                 ts = robot.get_sensor_timestamps()
                 age = max(0.0, time.time() - ts.get("lidar_cloud", 0.0)) if ts.get("lidar_cloud", 0.0) > 0 else -1.0
                 lidar_status = (
-                    f"Points: {len(pts)} | topic: {ROBOT_LIDAR_CLOUD_TOPIC} | "
+                    f"Points: {len(xyz)} | topic: {ROBOT_LIDAR_CLOUD_TOPIC} | "
                     f"lidar_cloud_age_s: {age:.2f}"
                 )
     else:
@@ -3506,7 +3533,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--iface", default=ROBOT_IFACE, help="Robot network interface.")
-    parser.add_argument("--rgbd-host", default=RGBD_HOST)
+    parser.add_argument("--lidar-cloud-topic", default=ROBOT_LIDAR_CLOUD_TOPIC)
+    parser.add_argument("--livox-wrapper-dir", default=str(LIVOX_WRAPPER_DIR))
+    parser.add_argument("--livox-config", default=str(LIVOX_CONFIG))
+    parser.add_argument("--livox-host-ip", default=LIVOX_HOST_IP)
+    parser.add_argument("--rgbd-host", "--robot-ip", dest="rgbd_host", default=RGBD_HOST)
     parser.add_argument("--rgbd-port", type=int, default=RGBD_PORT)
     parser.add_argument("--rgbd-topic", default=RGBD_TOPIC)
     return parser.parse_args()
@@ -3515,6 +3546,13 @@ def parse_args() -> argparse.Namespace:
 if __name__ == "__main__":
     args = parse_args()
     ROBOT_IFACE = str(args.iface)
+    ROBOT_LIDAR_CLOUD_TOPIC = str(args.lidar_cloud_topic)
+    LIVOX_WRAPPER_DIR = Path(args.livox_wrapper_dir).expanduser()
+    LIVOX_CONFIG = Path(args.livox_config).expanduser()
+    LIVOX_HOST_IP = str(args.livox_host_ip)
+    os.environ["LIVOX_WRAPPER_DIR"] = str(LIVOX_WRAPPER_DIR)
+    os.environ["LIVOX_CONFIG"] = str(LIVOX_CONFIG)
+    os.environ["HOST_IP"] = LIVOX_HOST_IP
     RGBD_HOST = str(args.rgbd_host)
     RGBD_PORT = int(args.rgbd_port)
     RGBD_TOPIC = str(args.rgbd_topic)

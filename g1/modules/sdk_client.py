@@ -55,7 +55,7 @@ DEFAULT_SPORT_TOPIC = "rt/odommodestate"
 DEFAULT_LIDAR_MAP_TOPIC = "rt/utlidar/map_state"
 DEFAULT_LIDAR_CLOUD_TOPIC = "rt/utlidar/cloud_deskewed"
 DEFAULT_LIDAR_CLOUD_FALLBACK_TOPIC = "rt/utlidar/cloud_livox_mid360"
-DEFAULT_RGBD_HOST = os.environ.get("G1_RGBD_HOST", "10.34.0.11")
+DEFAULT_RGBD_HOST = os.environ.get("G1_RGBD_HOST", "10.34.0.83")
 DEFAULT_RGBD_PORT = int(os.environ.get("G1_RGBD_PORT", "5555"))
 DEFAULT_RGBD_TOPIC = os.environ.get("G1_RGBD_TOPIC", "")
 HAND_STATE_TOPIC_BY_SIDE = {
@@ -2357,13 +2357,20 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Smoke test for sdk_client Robot wrapper")
     parser.add_argument("--iface", default="eth0")
     parser.add_argument(
+        "--robot-ip",
+        "--rgbd-host",
+        dest="rgbd_host",
+        default=DEFAULT_RGBD_HOST,
+        help="Robot RGBD publisher IP/host.",
+    )
+    parser.add_argument(
         "--safety-boot",
         action="store_true",
         help="Run the hanged safety boot sequence during initialization.",
     )
     args = parser.parse_args()
 
-    bot = Robot(iface=args.iface, safety_boot=args.safety_boot)
+    bot = Robot(iface=args.iface, safety_boot=args.safety_boot, rgbd_host=args.rgbd_host)
     time.sleep(0.6)
     print("FSM:", bot.get_fsm())
     print("IMU:", bot.get_imu())
