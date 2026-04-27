@@ -252,6 +252,26 @@ class _RgbdSession:
 RGBD_SESSION = _RgbdSession()
 
 
+def _compute_forward_depth_min(depth, depth_scale) -> float | None:
+    try:
+        import numpy as np  # type: ignore
+    except Exception:
+        return None
+    if depth is None or depth_scale is None:
+        return None
+    h, w = depth.shape[:2]
+    x0, x1 = int(w * 0.30), int(w * 0.70)
+    y0, y1 = int(h * 0.30), int(h * 0.85)
+    roi = depth[y0:y1, x0:x1]
+    if roi.size == 0:
+        return None
+    meters = roi.astype(np.float32) * float(depth_scale)
+    valid = np.isfinite(meters) & (meters > 0.05) & (meters < 10.0)
+    if not np.any(valid):
+        return None
+    return float(np.min(meters[valid]))
+
+
 class _Lidar3DSession:
     def __init__(self) -> None:
         self.lock = threading.Lock()
@@ -481,9 +501,11 @@ def _rx_rgbd_zmq(
                         2,
                     )
                     probe = None
+                    depth_min_m = None
                 else:
                     depth_vis = RGBD_CLIENT._colorize_depth(depth, max_depth_m, depth_scale)
                     probe = (depth.shape[1] // 2, depth.shape[0] // 2)
+                    depth_min_m = _compute_forward_depth_min(depth, depth_scale)
 
                 frame_count += 1
                 elapsed = max(time.time() - t_start, 1e-6)
@@ -507,6 +529,7 @@ def _rx_rgbd_zmq(
                 combo = cv2.hconcat([color, depth_vis])
                 with LEGACY._state_lock:
                     LEGACY._state["rgbd"] = combo
+                    LEGACY._state["depth_guard_m"] = depth_min_m
                 last_emit = now
                 blank_sent = False
         finally:
@@ -599,6 +622,14 @@ class ControlWindow(QtWidgets.QMainWindow):
         self._duration_spin.setValue(self._owner.nav_cmd_duration())
         self._duration_spin.valueChanged.connect(self._owner.set_nav_cmd_duration)  # type: ignore[arg-type]
         nav_form.addRow("Cmd Duration (s)", self._duration_spin)
+
+        self._obstacle_spin = QtWidgets.QDoubleSpinBox()
+        self._obstacle_spin.setRange(0.20, 2.00)
+        self._obstacle_spin.setSingleStep(0.10)
+        self._obstacle_spin.setDecimals(2)
+        self._obstacle_spin.setValue(self._owner.min_obstacle_distance())
+        self._obstacle_spin.valueChanged.connect(self._owner.set_min_obstacle_distance)  # type: ignore[arg-type]
+        nav_form.addRow("Min Obstacle (m)", self._obstacle_spin)
         layout.addLayout(nav_form)
 
         layout.addStretch(1)
@@ -615,7 +646,10 @@ class ControlWindow(QtWidgets.QMainWindow):
         self.lidar3d_lbl.setText(f"3D LiDAR: {'ON' if self._owner.lidar3d_enabled() else 'OFF'}")
         self.slam_lbl.setText(f"SLAM: {self._owner.slam_status_text()}")
         self.goal_lbl.setText(f"Goal: {self._owner.goal_status_text()}")
-        self.avoid_lbl.setText(f"Avoid: {'ON' if self._owner.obstacle_avoidance_enabled() else 'OFF'}")
+        self.avoid_lbl.setText(
+            f"Avoid: {'ON' if self._owner.obstacle_avoidance_enabled() else 'OFF'}"
+            f"  min={self._owner.min_obstacle_distance():.2f}m"
+        )
         self.pose_lbl.setText(f"Pose: {self._owner.pose_status_text()}")
 
 
@@ -706,6 +740,8 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
         self._last_motion_error = None
         self._nav_speed_mps = 0.18
         self._nav_cmd_duration_s = 2.0
+        self._min_obstacle_dist_m = 1.0
+        self._latest_depth_guard_m = None
 
         self.win.setWindowTitle("SLAM Viewer")
         self.control_win = ControlWindow(self)
@@ -973,6 +1009,7 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
             rgbd = LEGACY._state.get("rgbd")
             vx, vy, om = LEGACY._state.get("vel", (0.0, 0.0, 0.0))
             soc = LEGACY._state.get("soc")
+            self._latest_depth_guard_m = LEGACY._state.get("depth_guard_m")
 
         if rgbd is not None and rgbd is not self._last_rgbd_ref and getattr(rgbd, "shape", None) == (480, 1280, 3):
             self._last_rgbd_ref = rgbd
@@ -1015,6 +1052,8 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
 
         self._apply_pending_plan_result()
         self._apply_pending_map_result()
+        if self._map_canvas is not None and self._latest_pose is not None:
+            self._render_map_overlay(self._map_canvas)
 
         if self._pending_slam is None:
             self._show_no_slam_placeholders()
@@ -1252,6 +1291,14 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
     def set_nav_cmd_duration(self, value: float) -> None:
         self._nav_cmd_duration_s = max(0.20, min(5.0, float(value)))
 
+    def min_obstacle_distance(self) -> float:
+        return float(self._min_obstacle_dist_m)
+
+    def set_min_obstacle_distance(self, value: float) -> None:
+        self._min_obstacle_dist_m = max(0.20, min(2.0, float(value)))
+        if self._avoid_obstacles:
+            self._last_replan_t = 0.0
+
     def obstacle_avoidance_enabled(self) -> bool:
         return bool(self._avoid_obstacles)
 
@@ -1360,6 +1407,15 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
 
         self._maybe_replan()
 
+        if self._latest_depth_guard_m is not None and self._latest_depth_guard_m <= self._min_obstacle_dist_m:
+            self._nav_status = f"depth stop: obstacle {self._latest_depth_guard_m:.2f}m"
+            self._nav_autonomous_active = False
+            self._stop_robot()
+            print(
+                f"[slam_dual_window] Depth guard stop: {self._latest_depth_guard_m:.2f}m <= {self._min_obstacle_dist_m:.2f}m"
+            )
+            return
+
         pose = self._latest_pose
         px, py = float(pose[0, 3]), float(pose[1, 3])
 
@@ -1394,14 +1450,16 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
         heading_err = self._wrap_angle(target_yaw - yaw)
 
         vy = 0.0
-        if abs(heading_err) > 0.35:
+        if abs(heading_err) > 0.75:
             vx = 0.0
-            omega = self._clamp(1.2 * heading_err, 0.45)
+            omega = self._clamp(-0.9 * heading_err, 0.30)
         else:
             vx = self._clamp(0.55 * dist, self._nav_speed_mps)
             if dist < 0.40:
                 vx = self._clamp(0.35 * dist, min(0.16, self._nav_speed_mps))
-            omega = self._clamp(0.9 * heading_err, 0.35)
+            omega = self._clamp(-0.7 * heading_err, 0.22)
+            if abs(heading_err) > 0.30:
+                vx *= 0.65
 
         try:
             # Match legacy teleop behaviour: static balance when stopped, gait when moving.
@@ -1616,7 +1674,10 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
         x = float(self._latest_pose[0, 3])
         y = float(self._latest_pose[1, 3])
         yaw_deg = math.degrees(self._yaw_from_pose(self._latest_pose))
-        return f"x={x:+.2f} y={y:+.2f} yaw={yaw_deg:+.1f}deg"
+        depth_txt = ""
+        if self._latest_depth_guard_m is not None:
+            depth_txt = f" depth={self._latest_depth_guard_m:.2f}m"
+        return f"x={x:+.2f} y={y:+.2f} yaw={yaw_deg:+.1f}deg{depth_txt}"
 
     def _render_map_overlay(self, canvas) -> None:
         try:
@@ -1679,6 +1740,22 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
             except Exception:
                 pass
 
+        if self._latest_pose is not None and self._map_meta is not None:
+            try:
+                min_x, min_y, scale = self._map_meta
+                rx = int(round((float(self._latest_pose[1, 3]) - min_y) * scale + 5.0))
+                ry = int(round(479.0 - ((float(self._latest_pose[0, 3]) - min_x) * scale + 5.0)))
+                yaw = self._yaw_from_pose(self._latest_pose)
+                tip_len = 18
+                tip = (
+                    int(round(rx + tip_len * math.sin(yaw))),
+                    int(round(ry - tip_len * math.cos(yaw))),
+                )
+                cv2.circle(canvas, (rx, ry), 5, (255, 220, 0), -1)
+                cv2.arrowedLine(canvas, (rx, ry), tip, (255, 220, 0), 2, tipLength=0.35)
+            except Exception:
+                pass
+
         if self._pending_slam is None:
             cv2.putText(
                 canvas,
@@ -1722,11 +1799,12 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
         pose_work = pose.copy() if pose is not None and getattr(pose, "shape", None) == (4, 4) else None
         ground_z = self._ground_z_smooth
         clear_m = self._clear_m
+        min_obstacle_dist_m = self._min_obstacle_dist_m
         self._map_worker_busy = True
 
         def _worker():
             try:
-                result = self._build_map_snapshot(xyz_work, pose_work, clear_m, ground_z)
+                result = self._build_map_snapshot(xyz_work, pose_work, clear_m, ground_z, min_obstacle_dist_m)
                 with self._map_lock:
                     self._map_result = result
             finally:
@@ -1796,11 +1874,11 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
         return None
 
     @staticmethod
-    def _inflate_occupancy(occ, scale: float):
+    def _inflate_occupancy(occ, scale: float, min_obstacle_dist_m: float):
         import cv2  # type: ignore
         import numpy as np  # type: ignore
 
-        inflate_radius_m = 0.28
+        inflate_radius_m = max(0.20, min(2.0, float(min_obstacle_dist_m)))
         wall_thicken_px = max(1, int(round(scale * 0.05)))
         inflate_px = max(wall_thicken_px + 1, int(round(scale * inflate_radius_m)))
 
@@ -1818,7 +1896,7 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
         return thick > 0, inflated
 
     @staticmethod
-    def _build_map_snapshot(xyz, pose, clear_m: float, ground_z_prev):  # noqa: D401
+    def _build_map_snapshot(xyz, pose, clear_m: float, ground_z_prev, min_obstacle_dist_m: float):  # noqa: D401
         import os
         import cv2  # type: ignore
         import numpy as np  # type: ignore
@@ -1875,7 +1953,7 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
             px_obs, py_obs = px_obs[valid], py_obs[valid]
             occ_raw[py_obs, px_obs] = True
 
-        occ_display, occ_plan = DualWindow._inflate_occupancy(occ_raw, scale)
+        occ_display, occ_plan = DualWindow._inflate_occupancy(occ_raw, scale, min_obstacle_dist_m)
         canvas[occ_display] = (110, 110, 110)
         canvas[occ_raw] = (255, 255, 255)
 
@@ -1916,7 +1994,7 @@ def main() -> None:
     parser.add_argument("--hand", choices=["left", "right"], default="left")
     parser.add_argument("--grip-force", type=float, dest="grip_force", default=0.3)
     parser.add_argument("--input", choices=("qt", "pynput", "curses"), default="qt")
-    parser.add_argument("--rgbd-host", "--robot-ip", dest="rgbd_host", default="10.34.0.83", help="ZeroMQ RGBD publisher host")
+    parser.add_argument("--rgbd-host", "--robot-ip", dest="rgbd_host", default="192.168.123.164", help="ZeroMQ RGBD publisher host")
     parser.add_argument("--rgbd-port", type=int, default=5555, help="ZeroMQ RGBD publisher port")
     parser.add_argument("--rgbd-topic", default="", help="Optional ZeroMQ subscription prefix")
     parser.add_argument("--gui-fps", type=float, default=8.0, help="Maximum GUI refresh rate")
