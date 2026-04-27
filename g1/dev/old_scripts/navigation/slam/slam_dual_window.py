@@ -3,11 +3,14 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import heapq
+import json
 import logging
 import math
 import os
 import re
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -580,6 +583,24 @@ class ControlWindow(QtWidgets.QMainWindow):
         self._rgbd_btn = _btn("Toggle RGBD", self._owner.toggle_rgbd, 5, 0)
         self._lidar3d_btn = _btn("Toggle 3D LiDAR", self._owner.toggle_lidar3d, 5, 1)
 
+        nav_form = QtWidgets.QFormLayout()
+        self._speed_spin = QtWidgets.QDoubleSpinBox()
+        self._speed_spin.setRange(0.05, 1.00)
+        self._speed_spin.setSingleStep(0.05)
+        self._speed_spin.setDecimals(2)
+        self._speed_spin.setValue(self._owner.nav_speed())
+        self._speed_spin.valueChanged.connect(self._owner.set_nav_speed)  # type: ignore[arg-type]
+        nav_form.addRow("Nav Speed (m/s)", self._speed_spin)
+
+        self._duration_spin = QtWidgets.QDoubleSpinBox()
+        self._duration_spin.setRange(0.20, 5.00)
+        self._duration_spin.setSingleStep(0.10)
+        self._duration_spin.setDecimals(2)
+        self._duration_spin.setValue(self._owner.nav_cmd_duration())
+        self._duration_spin.valueChanged.connect(self._owner.set_nav_cmd_duration)  # type: ignore[arg-type]
+        nav_form.addRow("Cmd Duration (s)", self._duration_spin)
+        layout.addLayout(nav_form)
+
         layout.addStretch(1)
 
         self._timer = QtCore.QTimer(self)
@@ -679,6 +700,12 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
                 LEGACY.GeoffWindow._on_hand_tick = orig_hand_tick  # type: ignore[assignment]
         self._input_backend = requested_input_backend
         self._bot = None
+        self._motion_proc = None
+        self._motion_stdout_thread = None
+        self._motion_stderr_thread = None
+        self._last_motion_error = None
+        self._nav_speed_mps = 0.18
+        self._nav_cmd_duration_s = 2.0
 
         self.win.setWindowTitle("SLAM Viewer")
         self.control_win = ControlWindow(self)
@@ -722,6 +749,7 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
         self._last_plan_map_seq = -1
         self._last_wp_log_t = 0.0
         self._last_wp_remaining = None
+        self._last_nav_motion_cmd_t = 0.0
         self._iface_name = iface
         self._iface_valid = iface in {name for _, name in socket.if_nameindex()}
         self._robot_control_enabled = bool(enable_robot_control)
@@ -802,23 +830,94 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
         if not self._iface_valid:
             self._nav_status = f"invalid iface: {self._iface_name}"
             return False
-        if self._bot is not None:
+        if self._motion_proc is not None and self._motion_proc.poll() is None:
             return True
         if self._robot_boot_failed:
             self._nav_status = "robot client unavailable (DDS/CycloneDDS?)"
             return False
         try:
             _force_cyclonedds_no_shm()
-            from hanger_boot_sequence import hanger_boot_sequence  # type: ignore
-
-            self._bot = hanger_boot_sequence(iface=self._iface_name)
-            self._nav_status = "robot connected"
+            worker = ROOT / "slam_motion_worker.py"
+            self._motion_proc = subprocess.Popen(
+                [sys.executable, str(worker), "--iface", self._iface_name],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,
+            )
+            self._start_motion_pipe_threads(self._motion_proc)
+            self._send_motion_cmd({"cmd": "boot"})
+            self._nav_status = "robot connecting..."
             return True
         except Exception as exc:  # pylint: disable=broad-except
             self._robot_boot_failed = True
             self._nav_status = "robot client unavailable (DDS/CycloneDDS?)"
             print("[slam_dual_window] Robot boot failed:", exc, file=sys.stderr)
-            self._bot = None
+            self._motion_proc = None
+            return False
+
+    def _start_motion_pipe_threads(self, proc) -> None:
+        def _stdout_reader() -> None:
+            stream = proc.stdout
+            if stream is None:
+                return
+            try:
+                for raw in stream:
+                    line = raw.strip()
+                    if not line:
+                        continue
+                    try:
+                        msg = json.loads(line)
+                    except Exception:
+                        print(f"[slam_motion_worker] {line}")
+                        continue
+                    if msg.get("ok"):
+                        cmd = msg.get("cmd", "?")
+                        if cmd == "boot":
+                            self._nav_status = "robot connected"
+                        elif cmd == "move":
+                            self._last_motion_error = None
+                    else:
+                        err = str(msg.get("error", "worker error"))
+                        cmd = msg.get("cmd", "?")
+                        self._last_motion_error = err
+                        self._nav_status = f"{cmd} failed: {err[:48]}"
+                        print(f"[slam_motion_worker] {cmd} failed: {err}", file=sys.stderr)
+            finally:
+                if self._motion_proc is proc and proc.poll() is not None:
+                    self._nav_status = "motion worker exited"
+
+        def _stderr_reader() -> None:
+            stream = proc.stderr
+            if stream is None:
+                return
+            for raw in stream:
+                line = raw.rstrip()
+                if not line:
+                    continue
+                self._last_motion_error = line
+                print(f"[slam_motion_worker] {line}", file=sys.stderr)
+
+        self._motion_stdout_thread = threading.Thread(target=_stdout_reader, daemon=True)
+        self._motion_stderr_thread = threading.Thread(target=_stderr_reader, daemon=True)
+        self._motion_stdout_thread.start()
+        self._motion_stderr_thread.start()
+
+    def _send_motion_cmd(self, payload: dict) -> bool:
+        proc = self._motion_proc
+        if proc is None or proc.poll() is not None or proc.stdin is None:
+            if self._last_motion_error:
+                self._nav_status = f"robot client unavailable: {self._last_motion_error[:40]}"
+            else:
+                self._nav_status = "robot client unavailable"
+            return False
+        try:
+            proc.stdin.write(json.dumps(payload) + "\n")
+            proc.stdin.flush()
+            return True
+        except Exception as exc:  # pylint: disable=broad-except
+            self._nav_status = f"motion worker failed: {exc}"
             return False
 
     def run(self):  # noqa: D401
@@ -831,7 +930,35 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
             self.control_win.close()
         except Exception:
             pass
-        super()._on_quit()
+        try:
+            self._send_motion_cmd({"cmd": "quit"})
+        except Exception:
+            pass
+        try:
+            if self._motion_proc is not None:
+                self._motion_proc.terminate()
+        except Exception:
+            pass
+        self._stop_evt.set()
+        try:
+            self._nav_timer.stop()
+        except Exception:
+            pass
+        try:
+            if hasattr(self, "_refresh"):
+                self._refresh.stop()
+        except Exception:
+            pass
+        try:
+            if hasattr(self, "_drive_timer"):
+                self._drive_timer.stop()
+        except Exception:
+            pass
+        for t in getattr(self, "_threads", []):
+            try:
+                t.join(timeout=1.0)
+            except Exception:
+                pass
 
     def _on_tick(self):
         now = time.time()
@@ -987,27 +1114,25 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
 
         if self._is_pressed("z") or self._is_pressed("esc"):
             try:
-                if self._bot is not None:
-                    self._bot.StopMove()
-                    self._bot.SetBalanceMode(0)
+                self._send_motion_cmd({"cmd": "stop"})
             except Exception:
                 pass
             self.app.quit()
             return
 
-        if self._bot is not None:
+        if self._motion_proc is not None and self._motion_proc.poll() is None:
             try:
-                self._bot.Move(self._vx, self._vy, self._omega, continous_move=True)  # type: ignore[arg-type]
+                self._send_motion_cmd({"cmd": "move", "vx": self._vx, "vy": self._vy, "omega": self._omega})
                 desired_mode = 0 if (self._vx == self._vy == self._omega == 0.0) else 1
                 if desired_mode != self._bal_mode:
                     try:
-                        self._bot.SetBalanceMode(desired_mode)
+                        self._send_motion_cmd({"cmd": "set_balance", "mode": desired_mode})
                         self._bal_mode = desired_mode
                     except Exception:
                         pass
             except Exception as exc:
                 print("[slam_dual_window] Move failed:", exc, file=sys.stderr)
-                self._bot = None
+                self._motion_proc = None
 
         with LEGACY._state_lock:
             LEGACY._state["vel"] = (self._vx, self._vy, self._omega)
@@ -1106,9 +1231,26 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
             return
         self._nav_autonomous_active = True
         self._last_replan_t = 0.0
+        self._last_wp_log_t = 0.0
+        self._last_nav_motion_cmd_t = 0.0
         self._nav_status = f"autonomous nav: {len(self._nav_waypoints_world)} waypoints"
         gx, gy = self._nav_goal_world
-        print(f"[slam_dual_window] Nav start -> goal ({gx:+.2f}, {gy:+.2f}) avoid={self._avoid_obstacles}")
+        print(
+            f"[slam_dual_window] Nav start -> goal ({gx:+.2f}, {gy:+.2f}) "
+            f"avoid={self._avoid_obstacles} speed={self._nav_speed_mps:.2f} dur={self._nav_cmd_duration_s:.2f}"
+        )
+
+    def nav_speed(self) -> float:
+        return float(self._nav_speed_mps)
+
+    def set_nav_speed(self, value: float) -> None:
+        self._nav_speed_mps = max(0.05, min(1.0, float(value)))
+
+    def nav_cmd_duration(self) -> float:
+        return float(self._nav_cmd_duration_s)
+
+    def set_nav_cmd_duration(self, value: float) -> None:
+        self._nav_cmd_duration_s = max(0.20, min(5.0, float(value)))
 
     def obstacle_avoidance_enabled(self) -> bool:
         return bool(self._avoid_obstacles)
@@ -1203,19 +1345,15 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
         return angle
 
     def _stop_robot(self) -> None:
-        if self._bot is None:
+        if self._motion_proc is None or self._motion_proc.poll() is not None:
             return
         try:
-            self._bot.StopMove()
-        except Exception:
-            pass
-        try:
-            self._bot.SetBalanceMode(0)
+            self._send_motion_cmd({"cmd": "stop"})
         except Exception:
             pass
 
     def _on_nav_tick(self) -> None:
-        if self._bot is None or not self._nav_waypoints_world or not self._nav_autonomous_active:
+        if self._motion_proc is None or self._motion_proc.poll() is not None or not self._nav_waypoints_world or not self._nav_autonomous_active:
             return
         if self._latest_pose is None:
             return
@@ -1260,9 +1398,9 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
             vx = 0.0
             omega = self._clamp(1.2 * heading_err, 0.45)
         else:
-            vx = self._clamp(0.55 * dist, 0.30)
+            vx = self._clamp(0.55 * dist, self._nav_speed_mps)
             if dist < 0.40:
-                vx = self._clamp(0.35 * dist, 0.16)
+                vx = self._clamp(0.35 * dist, min(0.16, self._nav_speed_mps))
             omega = self._clamp(0.9 * heading_err, 0.35)
 
         try:
@@ -1270,11 +1408,29 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
             desired_mode = 0 if (vx == 0.0 and vy == 0.0 and omega == 0.0) else 1
             if getattr(self, "_bal_mode", None) != desired_mode:
                 try:
-                    self._bot.SetBalanceMode(desired_mode)
+                    self._send_motion_cmd({"cmd": "set_balance", "mode": desired_mode})
                     self._bal_mode = desired_mode
                 except Exception:
                     pass
-            self._bot.Move(vx, vy, omega, continous_move=True)
+            now_cmd = time.monotonic()
+            min_cmd_dt = max(0.10, self._nav_cmd_duration_s * 0.85)
+            if now_cmd - self._last_nav_motion_cmd_t < min_cmd_dt:
+                self._nav_status = (
+                    f"nav wp={len(self._nav_waypoints_world)} "
+                    f"err={dist:.2f}m hdg={math.degrees(heading_err):+.0f}deg waiting"
+                )
+                return
+            if not self._send_motion_cmd(
+                {
+                    "cmd": "move",
+                    "vx": vx,
+                    "vy": vy,
+                    "omega": omega,
+                    "duration": self._nav_cmd_duration_s,
+                }
+            ):
+                raise RuntimeError(self._nav_status)
+            self._last_nav_motion_cmd_t = now_cmd
             with LEGACY._state_lock:
                 LEGACY._state["vel"] = (vx, vy, omega)
             self._nav_status = (
@@ -1339,16 +1495,14 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
 
     def enable_free_walk(self) -> None:
         self._nav_autonomous_active = False
-        if self._bot is None:
+        if not self._ensure_robot_client():
             self._nav_status = "robot client unavailable"
             return
-        fn = getattr(self._bot, "FreeWalk", None)
-        if not callable(fn):
-            self._nav_status = "FreeWalk unsupported"
-            return
         try:
-            fn()
-            self._nav_status = "free walk enabled"
+            if self._send_motion_cmd({"cmd": "free_walk"}):
+                self._nav_status = "free walk enabled"
+            else:
+                self._nav_status = "FreeWalk failed"
         except Exception as exc:  # pylint: disable=broad-except
             self._nav_status = f"FreeWalk failed: {exc}"
 
@@ -1356,11 +1510,6 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
         self._nav_autonomous_active = False
         self.clear_goal()
         self._stop_robot()
-        try:
-            if self._bot is not None:
-                self._bot.SetBalanceMode(0)
-        except Exception:
-            pass
         self._nav_status = "stopped"
 
     def clear_goal(self) -> None:
@@ -1586,6 +1735,89 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
         threading.Thread(target=_worker, daemon=True).start()
 
     @staticmethod
+    def _plan_path(sx: int, sy: int, gx: int, gy: int, occ):  # noqa: D401
+        import cv2  # type: ignore
+        import numpy as np  # type: ignore
+
+        h, w = occ.shape
+        if not (0 <= sx < w and 0 <= sy < h and 0 <= gx < w and 0 <= gy < h):
+            return None
+        if occ[sy, sx] or occ[gy, gx]:
+            return None
+
+        free_uint8 = (~occ).astype(np.uint8)
+        dist = cv2.distanceTransform(free_uint8, cv2.DIST_L2, 5)
+        max_dist = float(dist.max()) or 1.0
+        clearance_floor = max(2.0, min(10.0, max_dist * 0.08))
+        bias = 5.0
+
+        def cell_cost(x: int, y: int) -> float:
+            d = max(float(dist[y, x]), clearance_floor)
+            d_norm = min(d / max_dist, 1.0)
+            return 1.0 + bias * (1.0 - d_norm)
+
+        open_set: list[tuple[float, tuple[int, int]]] = []
+        heapq.heappush(open_set, (0.0, (sx, sy)))
+        came_from: dict[tuple[int, int], tuple[int, int]] = {}
+        g_score = {(sx, sy): 0.0}
+
+        def heuristic(x: int, y: int) -> float:
+            return math.hypot(gx - x, gy - y)
+
+        while open_set:
+            _, current = heapq.heappop(open_set)
+            cx, cy = current
+            if current == (gx, gy):
+                path = [current]
+                while current in came_from:
+                    current = came_from[current]
+                    path.append(current)
+                path.reverse()
+                return path
+
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    if dx == dy == 0:
+                        continue
+                    nx, ny = cx + dx, cy + dy
+                    if not (0 <= nx < w and 0 <= ny < h):
+                        continue
+                    if occ[ny, nx]:
+                        continue
+                    if dx != 0 and dy != 0:
+                        if occ[cy, nx] or occ[ny, cx]:
+                            continue
+                    step = math.hypot(dx, dy) * cell_cost(nx, ny)
+                    tentative = g_score[current] + step
+                    if tentative < g_score.get((nx, ny), float("inf")):
+                        came_from[(nx, ny)] = current
+                        g_score[(nx, ny)] = tentative
+                        heapq.heappush(open_set, (tentative + heuristic(nx, ny), (nx, ny)))
+        return None
+
+    @staticmethod
+    def _inflate_occupancy(occ, scale: float):
+        import cv2  # type: ignore
+        import numpy as np  # type: ignore
+
+        inflate_radius_m = 0.28
+        wall_thicken_px = max(1, int(round(scale * 0.05)))
+        inflate_px = max(wall_thicken_px + 1, int(round(scale * inflate_radius_m)))
+
+        occ_u8 = occ.astype(np.uint8) * 255
+        wall_kernel = cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE,
+            (2 * wall_thicken_px + 1, 2 * wall_thicken_px + 1),
+        )
+        thick = cv2.dilate(occ_u8, wall_kernel)
+        inflate_kernel = cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE,
+            (2 * inflate_px + 1, 2 * inflate_px + 1),
+        )
+        inflated = cv2.dilate(thick, inflate_kernel) > 0
+        return thick > 0, inflated
+
+    @staticmethod
     def _build_map_snapshot(xyz, pose, clear_m: float, ground_z_prev):  # noqa: D401
         import os
         import cv2  # type: ignore
@@ -1635,14 +1867,17 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
 
         thresh = ground_z + clear_m
         pts = xyz[xyz[:, 2] > thresh]
-        occ = np.zeros((480, 480), dtype=bool)
+        occ_raw = np.zeros((480, 480), dtype=bool)
 
         if pts.shape[0] > 0:
             px_obs, py_obs = world_to_px(pts[:, 0], pts[:, 1])
             valid = (px_obs >= 0) & (px_obs < 480) & (py_obs >= 0) & (py_obs < 480)
             px_obs, py_obs = px_obs[valid], py_obs[valid]
-            occ[py_obs, px_obs] = True
-            canvas[py_obs, px_obs] = (255, 255, 255)
+            occ_raw[py_obs, px_obs] = True
+
+        occ_display, occ_plan = DualWindow._inflate_occupancy(occ_raw, scale)
+        canvas[occ_display] = (110, 110, 110)
+        canvas[occ_raw] = (255, 255, 255)
 
         cv2.rectangle(canvas, (0, 0), (479, 479), (255, 255, 255), 1)
 
@@ -1655,7 +1890,7 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
 
             rr0, rr1 = max(0, ry - 1), min(480, ry + 2)
             rc0, rc1 = max(0, rx - 1), min(480, rx + 2)
-            occ[rr0:rr1, rc0:rc1] = False
+            occ_plan[rr0:rr1, rc0:rc1] = False
 
             fwd_vec = pose[:3, 0] * 0.25
             tip_world = rob_pos + fwd_vec
@@ -1663,7 +1898,7 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
             tx, ty = int(tx[0]), int(ty[0])
             cv2.arrowedLine(canvas, (rx, ry), (tx, ty), (0, 255, 0), 2, tipLength=0.8)
 
-        return canvas, occ.copy(), map_meta, robot_px, ground_z
+        return canvas, occ_plan.copy(), map_meta, robot_px, ground_z
 
 
 def main() -> None:

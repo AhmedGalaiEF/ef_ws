@@ -2667,3 +2667,387 @@ options:
 2026-04-27 21:09:44,370  INFO      [slam_dual_window] Saved snapshot to /home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/maps/slam_snapshot_20260427_210943.npz
 2026-04-27 21:09:52,662  INFO      [slam_dual_window] Goal set to (+0.07, -2.74)
 2026-04-27 21:09:52,912  INFO      [slam_dual_window] Goal set to (+0.07, -2.74)
+2026-04-27 21:15:11,525  INFO      No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2026-04-27 21:15:11,834  ERROR     [run_geoff_gui] Arm control disabled:
+2026-04-27 21:15:11,834  ERROR     ChannelPublisher disabled in slam_dual_window.py
+2026-04-27 21:15:11,834  ERROR     [run_geoff_gui] Dex3 hand control disabled:
+2026-04-27 21:15:11,834  ERROR     No module named 'unitree_sdk2py.dex3'
+2026-04-27 21:15:16,996  INFO      [Livox2] InfoChange handle=2021370048
+2026-04-27 21:15:34,512  INFO      [slam_dual_window] Saved snapshot to /home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/maps/slam_snapshot_20260427_211533.npz
+2026-04-27 21:15:42,978  INFO      [slam_dual_window] Goal set to (+1.95, +0.10)
+2026-04-27 21:15:43,212  INFO      [slam_dual_window] Goal set to (+1.95, +0.10)
+2026-04-27 21:15:47,877  INFO      [slam_dual_window] Nav start -> goal (+1.95, +0.10) avoid=True
+2026-04-27 21:15:47,913  INFO      [slam_dual_window] Replan (avoid) map_seq=40 from=(328,189) to=(330,161)
+2026-04-27 21:15:47,913  INFO      [slam_dual_window] Waypoint reached, remaining=3
+2026-04-27 21:15:47,965  INFO      [slam_dual_window] Goal set to (+1.95, +0.10)
+2026-04-27 21:16:11,869  INFO      [slam_dual_window] Obstacle avoidance: OFF
+2026-04-27 21:16:14,339  INFO      [slam_dual_window] Nav start -> goal (+1.95, +0.10) avoid=False
+2026-04-27 21:16:28,107  INFO      [slam_dual_window] Goal set to (-0.41, -2.87)
+2026-04-27 21:16:28,280  INFO      [slam_dual_window] Goal set to (-0.41, -2.87)
+2026-04-27 21:16:39,946  INFO      [slam_dual_window] Goal set to (-4.14, -1.42)
+2026-04-27 21:16:40,131  INFO      [slam_dual_window] Goal set to (-4.14, -1.42)
+2026-04-27 21:16:42,774  INFO      [slam_dual_window] Goal set to (-3.22, +3.22)
+2026-04-27 21:16:43,177  INFO      [slam_dual_window] Goal set to (-3.22, +3.22)
+2026-04-27 21:16:48,486  INFO      [slam_dual_window] Goal set to (-3.68, -0.97)
+2026-04-27 21:16:48,663  INFO      [slam_dual_window] Goal set to (-3.68, -0.97)
+2026-04-27 21:16:51,885  INFO      [slam_dual_window] Goal set to (-1.02, -3.48)
+2026-04-27 21:16:54,229  INFO      [slam_dual_window] Goal set to (-4.14, -1.19)
+2026-04-27 21:16:54,401  INFO      [slam_dual_window] Goal set to (-4.14, -1.19)
+2026-04-27 21:17:07,019  INFO      [slam_dual_window] Nav start -> goal (-4.14, -1.19) avoid=False
+2026-04-27 21:17:07,111  INFO      [slam_dual_window] Waypoint reached, remaining=6
+2026-04-27 21:17:26,114  ERROR     Traceback (most recent call last):
+2026-04-27 21:17:26,115  ERROR       File "/home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/slam_dual_window.py", line 865, in _on_quit
+2026-04-27 21:17:26,117  ERROR     super()._on_quit()
+2026-04-27 21:17:26,118  ERROR       File "/home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/unreliabale/run_geoff_gui_input.py", line 2405, in _on_quit
+2026-04-27 21:17:26,119  ERROR     self._drive_timer.stop()
+2026-04-27 21:17:26,120  ERROR     ^
+2026-04-27 21:17:26,120  ERROR     ^
+2026-04-27 21:17:26,121  ERROR     ^
+2026-04-27 21:17:26,121  ERROR     ^
+2026-04-27 21:17:26,121  ERROR     ^
+2026-04-27 21:17:26,121  ERROR     ^
+2026-04-27 21:17:26,121  ERROR     ^
+2026-04-27 21:17:26,122  ERROR     ^
+2026-04-27 21:17:26,122  ERROR     ^
+2026-04-27 21:17:26,122  ERROR     ^
+2026-04-27 21:17:26,123  ERROR     ^
+2026-04-27 21:17:26,123  ERROR     ^
+2026-04-27 21:17:26,123  ERROR     ^
+2026-04-27 21:17:26,123  ERROR     ^
+2026-04-27 21:17:26,123  ERROR     ^
+2026-04-27 21:17:26,123  ERROR     ^
+2026-04-27 21:17:26,124  ERROR     ^
+2026-04-27 21:17:26,124  ERROR     AttributeError
+2026-04-27 21:17:26,124  ERROR     :
+2026-04-27 21:17:26,124  ERROR     'DualWindow' object has no attribute '_drive_timer'
+2026-04-27 21:17:26,125  ERROR     . Did you mean: '_nav_timer'?
+2026-04-27 21:24:36,987  INFO      No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2026-04-27 21:24:37,296  ERROR     [run_geoff_gui] Arm control disabled:
+2026-04-27 21:24:37,296  ERROR     ChannelPublisher disabled in slam_dual_window.py
+2026-04-27 21:24:37,296  ERROR     [run_geoff_gui] Dex3 hand control disabled:
+2026-04-27 21:24:37,296  ERROR     No module named 'unitree_sdk2py.dex3'
+2026-04-27 21:24:42,412  INFO      [Livox2] InfoChange handle=2021370048
+2026-04-27 21:24:53,183  INFO      [slam_dual_window] Goal set to (-0.76, -2.03)
+2026-04-27 21:24:54,945  INFO      [slam_dual_window] Goal set to (-3.73, +0.76)
+2026-04-27 21:24:57,662  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 21:24:59,544  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 21:24:59,787  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 21:25:01,027  INFO      [slam_dual_window] Goal set to (-3.36, +2.89)
+2026-04-27 21:25:01,201  INFO      [slam_dual_window] Goal set to (-3.36, +2.89)
+2026-04-27 21:25:03,422  INFO      [slam_dual_window] Goal set to (-3.36, +0.11)
+2026-04-27 21:25:09,573  INFO      [slam_dual_window] Nav start -> goal (-3.36, +0.11) avoid=True
+2026-04-27 21:25:09,613  INFO      [slam_dual_window] Replan (avoid) map_seq=35 from=(297,292) to=(299,328)
+2026-04-27 21:25:09,614  INFO      [slam_dual_window] Waypoint reached, remaining=4
+2026-04-27 21:25:09,912  INFO      [slam_dual_window] Goal set to (-3.36, +0.11)
+2026-04-27 21:25:10,679  ERROR     [slam_motion_worker] python: ./src/core/ddsc/src/dds_write.c:318: dds_writecdr_impl_common: Assertion `(wr->m_iox_pub == NULL) == (d->a.iox_chunk == NULL)' failed.
+2026-04-27 21:25:21,723  INFO      [slam_dual_window] Obstacle avoidance: OFF
+2026-04-27 21:25:26,956  INFO      [slam_dual_window] Nav start -> goal (-3.36, +0.11) avoid=False
+2026-04-27 21:25:28,055  ERROR     [slam_motion_worker] python: ./src/core/ddsc/src/dds_write.c:318: dds_writecdr_impl_common: Assertion `(wr->m_iox_pub == NULL) == (d->a.iox_chunk == NULL)' failed.
+2026-04-27 21:25:31,714  ERROR     Traceback (most recent call last):
+2026-04-27 21:25:31,715  ERROR       File "/home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/slam_dual_window.py", line 921, in _on_quit
+2026-04-27 21:25:31,717  ERROR     super()._on_quit()
+2026-04-27 21:25:31,718  ERROR       File "/home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/unreliabale/run_geoff_gui_input.py", line 2405, in _on_quit
+2026-04-27 21:25:31,721  ERROR     self._drive_timer.stop()
+2026-04-27 21:25:31,722  ERROR     ^
+2026-04-27 21:25:31,723  ERROR     ^
+2026-04-27 21:25:31,724  ERROR     ^
+2026-04-27 21:25:31,724  ERROR     ^
+2026-04-27 21:25:31,724  ERROR     ^
+2026-04-27 21:25:31,725  ERROR     ^
+2026-04-27 21:25:31,725  ERROR     ^
+2026-04-27 21:25:31,725  ERROR     ^
+2026-04-27 21:25:31,725  ERROR     ^
+2026-04-27 21:25:31,725  ERROR     ^
+2026-04-27 21:25:31,725  ERROR     ^
+2026-04-27 21:25:31,725  ERROR     ^
+2026-04-27 21:25:31,725  ERROR     ^
+2026-04-27 21:25:31,725  ERROR     ^
+2026-04-27 21:25:31,725  ERROR     ^
+2026-04-27 21:25:31,726  ERROR     ^
+2026-04-27 21:25:31,726  ERROR     ^
+2026-04-27 21:25:31,726  ERROR     AttributeError
+2026-04-27 21:25:31,726  ERROR     :
+2026-04-27 21:25:31,726  ERROR     'DualWindow' object has no attribute '_drive_timer'
+2026-04-27 21:25:31,726  ERROR     . Did you mean: '_nav_timer'?
+2026-04-27 21:29:40,373  INFO      No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2026-04-27 21:29:40,680  ERROR     [run_geoff_gui] Arm control disabled:
+2026-04-27 21:29:40,681  ERROR     ChannelPublisher disabled in slam_dual_window.py
+2026-04-27 21:29:40,681  ERROR     [run_geoff_gui] Dex3 hand control disabled:
+2026-04-27 21:29:40,681  ERROR     No module named 'unitree_sdk2py.dex3'
+2026-04-27 21:29:45,766  INFO      [Livox2] InfoChange handle=2021370048
+2026-04-27 21:29:57,678  INFO      [slam_dual_window] Saved snapshot to /home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/maps/slam_snapshot_20260427_212956.npz
+2026-04-27 21:29:58,676  INFO      [slam_dual_window] Obstacle avoidance: OFF
+2026-04-27 21:30:00,597  INFO      [slam_dual_window] Goal set to (-4.00, +0.45)
+2026-04-27 21:30:06,709  INFO      [slam_dual_window] Nav start -> goal (-4.00, +0.45) avoid=False
+2026-04-27 21:30:06,713  INFO      [slam_dual_window] Waypoint reached, remaining=5
+2026-04-27 21:30:07,847  ERROR     [slam_motion_worker] python: ./src/core/ddsc/src/dds_write.c:318: dds_writecdr_impl_common: Assertion `(wr->m_iox_pub == NULL) == (d->a.iox_chunk == NULL)' failed.
+2026-04-27 21:30:23,829  INFO      [slam_dual_window] Obstacle avoidance: ON
+2026-04-27 21:30:25,073  INFO      [slam_dual_window] Nav start -> goal (-4.00, +0.45) avoid=True
+2026-04-27 21:30:25,113  INFO      [slam_dual_window] Replan (avoid) map_seq=50 from=(298,292) to=(303,335)
+2026-04-27 21:30:25,412  INFO      [slam_dual_window] Goal set to (-4.00, +0.45)
+2026-04-27 21:30:26,184  ERROR     [slam_motion_worker] python: ./src/core/ddsc/src/dds_write.c:318: dds_writecdr_impl_common: Assertion `(wr->m_iox_pub == NULL) == (d->a.iox_chunk == NULL)' failed.
+2026-04-27 21:35:05,504  INFO      No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2026-04-27 21:35:05,808  ERROR     [run_geoff_gui] Arm control disabled:
+2026-04-27 21:35:05,808  ERROR     ChannelPublisher disabled in slam_dual_window.py
+2026-04-27 21:35:05,808  ERROR     [run_geoff_gui] Dex3 hand control disabled:
+2026-04-27 21:35:05,809  ERROR     No module named 'unitree_sdk2py.dex3'
+2026-04-27 21:35:06,017  ERROR     Traceback (most recent call last):
+2026-04-27 21:35:06,230  ERROR       File "/home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/slam_dual_window.py", line 1970, in <module>
+2026-04-27 21:35:06,313  ERROR     main()
+2026-04-27 21:35:06,371  ERROR       File "/home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/slam_dual_window.py", line 1941, in main
+2026-04-27 21:35:06,422  ERROR     window = DualWindow(
+2026-04-27 21:35:06,423  ERROR     ^
+2026-04-27 21:35:06,424  ERROR     ^
+2026-04-27 21:35:06,424  ERROR     ^
+2026-04-27 21:35:06,424  ERROR     ^
+2026-04-27 21:35:06,425  ERROR     ^
+2026-04-27 21:35:06,425  ERROR     ^
+2026-04-27 21:35:06,425  ERROR     ^
+2026-04-27 21:35:06,426  ERROR     ^
+2026-04-27 21:35:06,426  ERROR     ^
+2026-04-27 21:35:06,427  ERROR     ^
+2026-04-27 21:35:06,427  ERROR     ^
+2026-04-27 21:35:06,428  ERROR       File "/home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/slam_dual_window.py", line 709, in __init__
+2026-04-27 21:35:06,428  ERROR     self.control_win = ControlWindow(self)
+2026-04-27 21:35:06,428  ERROR     ^
+2026-04-27 21:35:06,429  ERROR     ^
+2026-04-27 21:35:06,429  ERROR     ^
+2026-04-27 21:35:06,430  ERROR     ^
+2026-04-27 21:35:06,431  ERROR     ^
+2026-04-27 21:35:06,431  ERROR     ^
+2026-04-27 21:35:06,432  ERROR     ^
+2026-04-27 21:35:06,433  ERROR     ^
+2026-04-27 21:35:06,433  ERROR     ^
+2026-04-27 21:35:06,434  ERROR     ^
+2026-04-27 21:35:06,434  ERROR     ^
+2026-04-27 21:35:06,435  ERROR     ^
+2026-04-27 21:35:06,436  ERROR     ^
+2026-04-27 21:35:06,436  ERROR     ^
+2026-04-27 21:35:06,436  ERROR     ^
+2026-04-27 21:35:06,437  ERROR     ^
+2026-04-27 21:35:06,437  ERROR     ^
+2026-04-27 21:35:06,437  ERROR     ^
+2026-04-27 21:35:06,438  ERROR     ^
+2026-04-27 21:35:06,438  ERROR       File "/home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/slam_dual_window.py", line 591, in __init__
+2026-04-27 21:35:06,439  ERROR     self._speed_spin.setValue(self._owner.nav_speed())
+2026-04-27 21:35:06,439  ERROR     ^
+2026-04-27 21:35:06,439  ERROR     ^
+2026-04-27 21:35:06,440  ERROR     ^
+2026-04-27 21:35:06,440  ERROR     ^
+2026-04-27 21:35:06,441  ERROR     ^
+2026-04-27 21:35:06,443  ERROR     ^
+2026-04-27 21:35:06,444  ERROR     ^
+2026-04-27 21:35:06,444  ERROR     ^
+2026-04-27 21:35:06,445  ERROR     ^
+2026-04-27 21:35:06,446  ERROR     ^
+2026-04-27 21:35:06,446  ERROR     ^
+2026-04-27 21:35:06,446  ERROR     ^
+2026-04-27 21:35:06,447  ERROR     ^
+2026-04-27 21:35:06,448  ERROR     ^
+2026-04-27 21:35:06,448  ERROR     ^
+2026-04-27 21:35:06,448  ERROR     ^
+2026-04-27 21:35:06,449  ERROR     ^
+2026-04-27 21:35:06,449  ERROR     ^
+2026-04-27 21:35:06,449  ERROR     ^
+2026-04-27 21:35:06,449  ERROR     ^
+2026-04-27 21:35:06,451  ERROR     ^
+2026-04-27 21:35:06,452  ERROR     ^
+2026-04-27 21:35:06,453  ERROR     ^
+2026-04-27 21:35:06,453  ERROR       File "/home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/slam_dual_window.py", line 1244, in nav_speed
+2026-04-27 21:35:06,454  ERROR     return float(self._nav_speed_mps)
+2026-04-27 21:35:06,455  ERROR     ^
+2026-04-27 21:35:06,456  ERROR     ^
+2026-04-27 21:35:06,456  ERROR     ^
+2026-04-27 21:35:06,456  ERROR     ^
+2026-04-27 21:35:06,457  ERROR     ^
+2026-04-27 21:35:06,457  ERROR     ^
+2026-04-27 21:35:06,458  ERROR     ^
+2026-04-27 21:35:06,459  ERROR     ^
+2026-04-27 21:35:06,460  ERROR     ^
+2026-04-27 21:35:06,460  ERROR     ^
+2026-04-27 21:35:06,463  ERROR     ^
+2026-04-27 21:35:06,463  ERROR     ^
+2026-04-27 21:35:06,463  ERROR     ^
+2026-04-27 21:35:06,464  ERROR     ^
+2026-04-27 21:35:06,464  ERROR     ^
+2026-04-27 21:35:06,464  ERROR     ^
+2026-04-27 21:35:06,465  ERROR     ^
+2026-04-27 21:35:06,465  ERROR     ^
+2026-04-27 21:35:06,466  ERROR     ^
+2026-04-27 21:35:06,467  ERROR     AttributeError
+2026-04-27 21:35:06,468  ERROR     :
+2026-04-27 21:35:06,469  ERROR     'DualWindow' object has no attribute '_nav_speed_mps'
+2026-04-27 21:35:10,856  INFO      No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2026-04-27 21:35:11,161  ERROR     [run_geoff_gui] Arm control disabled:
+2026-04-27 21:35:11,161  ERROR     ChannelPublisher disabled in slam_dual_window.py
+2026-04-27 21:35:11,161  ERROR     [run_geoff_gui] Dex3 hand control disabled:
+2026-04-27 21:35:11,161  ERROR     No module named 'unitree_sdk2py.dex3'
+2026-04-27 21:35:11,767  ERROR     Traceback (most recent call last):
+2026-04-27 21:35:11,768  ERROR       File "/home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/slam_dual_window.py", line 1970, in <module>
+2026-04-27 21:35:11,768  ERROR     main()
+2026-04-27 21:35:11,769  ERROR       File "/home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/slam_dual_window.py", line 1941, in main
+2026-04-27 21:35:11,770  ERROR     window = DualWindow(
+2026-04-27 21:35:11,770  ERROR     ^
+2026-04-27 21:35:11,771  ERROR     ^
+2026-04-27 21:35:11,771  ERROR     ^
+2026-04-27 21:35:11,772  ERROR     ^
+2026-04-27 21:35:11,772  ERROR     ^
+2026-04-27 21:35:11,772  ERROR     ^
+2026-04-27 21:35:11,773  ERROR     ^
+2026-04-27 21:35:11,774  ERROR     ^
+2026-04-27 21:35:11,774  ERROR     ^
+2026-04-27 21:35:11,774  ERROR     ^
+2026-04-27 21:35:11,774  ERROR     ^
+2026-04-27 21:35:11,774  ERROR       File "/home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/slam_dual_window.py", line 709, in __init__
+2026-04-27 21:35:11,775  ERROR     self.control_win = ControlWindow(self)
+2026-04-27 21:35:11,776  ERROR     ^
+2026-04-27 21:35:11,776  ERROR     ^
+2026-04-27 21:35:11,778  ERROR     ^
+2026-04-27 21:35:11,778  ERROR     ^
+2026-04-27 21:35:11,779  ERROR     ^
+2026-04-27 21:35:11,779  ERROR     ^
+2026-04-27 21:35:11,780  ERROR     ^
+2026-04-27 21:35:11,780  ERROR     ^
+2026-04-27 21:35:11,781  ERROR     ^
+2026-04-27 21:35:11,781  ERROR     ^
+2026-04-27 21:35:11,781  ERROR     ^
+2026-04-27 21:35:11,782  ERROR     ^
+2026-04-27 21:35:11,782  ERROR     ^
+2026-04-27 21:35:11,783  ERROR     ^
+2026-04-27 21:35:11,783  ERROR     ^
+2026-04-27 21:35:11,783  ERROR     ^
+2026-04-27 21:35:11,784  ERROR     ^
+2026-04-27 21:35:11,785  ERROR     ^
+2026-04-27 21:35:11,785  ERROR     ^
+2026-04-27 21:35:11,786  ERROR       File "/home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/slam_dual_window.py", line 591, in __init__
+2026-04-27 21:35:11,787  ERROR     self._speed_spin.setValue(self._owner.nav_speed())
+2026-04-27 21:35:11,787  ERROR     ^
+2026-04-27 21:35:11,788  ERROR     ^
+2026-04-27 21:35:11,790  ERROR     ^
+2026-04-27 21:35:11,791  ERROR     ^
+2026-04-27 21:35:11,791  ERROR     ^
+2026-04-27 21:35:11,791  ERROR     ^
+2026-04-27 21:35:11,792  ERROR     ^
+2026-04-27 21:35:11,792  ERROR     ^
+2026-04-27 21:35:11,792  ERROR     ^
+2026-04-27 21:35:11,793  ERROR     ^
+2026-04-27 21:35:11,794  ERROR     ^
+2026-04-27 21:35:11,794  ERROR     ^
+2026-04-27 21:35:11,795  ERROR     ^
+2026-04-27 21:35:11,795  ERROR     ^
+2026-04-27 21:35:11,797  ERROR     ^
+2026-04-27 21:35:11,797  ERROR     ^
+2026-04-27 21:35:11,798  ERROR     ^
+2026-04-27 21:35:11,799  ERROR     ^
+2026-04-27 21:35:11,799  ERROR     ^
+2026-04-27 21:35:11,800  ERROR     ^
+2026-04-27 21:35:11,800  ERROR     ^
+2026-04-27 21:35:11,800  ERROR     ^
+2026-04-27 21:35:11,801  ERROR     ^
+2026-04-27 21:35:11,801  ERROR       File "/home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/slam_dual_window.py", line 1244, in nav_speed
+2026-04-27 21:35:11,802  ERROR     return float(self._nav_speed_mps)
+2026-04-27 21:35:11,802  ERROR     ^
+2026-04-27 21:35:11,803  ERROR     ^
+2026-04-27 21:35:11,803  ERROR     ^
+2026-04-27 21:35:11,803  ERROR     ^
+2026-04-27 21:35:11,804  ERROR     ^
+2026-04-27 21:35:11,806  ERROR     ^
+2026-04-27 21:35:11,808  ERROR     ^
+2026-04-27 21:35:11,808  ERROR     ^
+2026-04-27 21:35:11,808  ERROR     ^
+2026-04-27 21:35:11,809  ERROR     ^
+2026-04-27 21:35:11,809  ERROR     ^
+2026-04-27 21:35:11,810  ERROR     ^
+2026-04-27 21:35:11,811  ERROR     ^
+2026-04-27 21:35:11,811  ERROR     ^
+2026-04-27 21:35:11,811  ERROR     ^
+2026-04-27 21:35:11,812  ERROR     ^
+2026-04-27 21:35:11,814  ERROR     ^
+2026-04-27 21:35:11,814  ERROR     ^
+2026-04-27 21:35:11,814  ERROR     ^
+2026-04-27 21:35:11,814  ERROR     AttributeError
+2026-04-27 21:35:11,816  ERROR     :
+2026-04-27 21:35:11,816  ERROR     'DualWindow' object has no attribute '_nav_speed_mps'
+2026-04-27 21:35:59,873  INFO      No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2026-04-27 21:36:00,177  ERROR     [run_geoff_gui] Arm control disabled:
+2026-04-27 21:36:00,178  ERROR     ChannelPublisher disabled in slam_dual_window.py
+2026-04-27 21:36:00,178  ERROR     [run_geoff_gui] Dex3 hand control disabled:
+2026-04-27 21:36:00,178  ERROR     No module named 'unitree_sdk2py.dex3'
+2026-04-27 21:36:05,415  INFO      [Livox2] InfoChange handle=2021370048
+2026-04-27 21:36:15,803  INFO      [slam_dual_window] Saved snapshot to /home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/maps/slam_snapshot_20260427_213614.npz
+2026-04-27 21:36:17,687  INFO      [slam_dual_window] Goal set to (-4.20, +1.32)
+2026-04-27 21:36:20,562  INFO      [slam_dual_window] Goal set to (-2.43, +3.57)
+2026-04-27 21:36:22,437  INFO      [slam_dual_window] Goal set to (-1.61, -2.63)
+2026-04-27 21:36:23,936  INFO      [slam_dual_window] Goal set to (-3.59, -0.66)
+2026-04-27 21:36:28,167  INFO      [slam_dual_window] Obstacle avoidance: OFF
+2026-04-27 21:36:38,024  INFO      [slam_dual_window] Nav start -> goal (-3.59, -0.66) avoid=False speed=0.25 dur=2.00
+2026-04-27 21:36:38,112  INFO      [slam_dual_window] Waypoint reached, remaining=6
+2026-04-27 21:36:38,150  ERROR     [slam_motion_worker] Traceback (most recent call last):
+2026-04-27 21:36:38,151  ERROR     [slam_motion_worker]   File "/home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/slam_motion_worker.py", line 100, in <module>
+2026-04-27 21:36:38,152  ERROR     [slam_motion_worker]     raise SystemExit(main())
+2026-04-27 21:36:38,152  ERROR     [slam_motion_worker]                      ^^^^^^
+2026-04-27 21:36:38,152  ERROR     [slam_motion_worker]   File "/home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/slam_motion_worker.py", line 48, in main
+2026-04-27 21:36:38,153  ERROR     [slam_motion_worker]     Robot = _load_robot_type()
+2026-04-27 21:36:38,153  ERROR     [slam_motion_worker]             ^^^^^^^^^^^^^^^^^^
+2026-04-27 21:36:38,154  ERROR     [slam_motion_worker]   File "/home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/slam_motion_worker.py", line 35, in _load_robot_type
+2026-04-27 21:36:38,154  ERROR     [slam_motion_worker]     spec.loader.exec_module(module)
+2026-04-27 21:36:38,154  ERROR     [slam_motion_worker]   File "<frozen importlib._bootstrap_external>", line 995, in exec_module
+2026-04-27 21:36:38,155  ERROR     [slam_motion_worker]   File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+2026-04-27 21:36:38,155  ERROR     [slam_motion_worker]   File "/home/ag/ef_ws/g1/dev/modules/sdk_client.py", line 22, in <module>
+2026-04-27 21:36:38,155  ERROR     [slam_motion_worker]     from dds_env import ensure_cyclonedds_environment
+2026-04-27 21:36:38,156  ERROR     [slam_motion_worker] ModuleNotFoundError: No module named 'dds_env'
+2026-04-27 21:37:25,103  INFO      [slam_dual_window] Nav start -> goal (-3.59, -0.66) avoid=False speed=0.25 dur=2.00
+2026-04-27 21:37:25,177  ERROR     [slam_motion_worker] Traceback (most recent call last):
+2026-04-27 21:37:25,177  ERROR     [slam_motion_worker]   File "/home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/slam_motion_worker.py", line 100, in <module>
+2026-04-27 21:37:25,177  ERROR     [slam_motion_worker]     raise SystemExit(main())
+2026-04-27 21:37:25,178  ERROR     [slam_motion_worker]                      ^^^^^^
+2026-04-27 21:37:25,179  ERROR     [slam_motion_worker]   File "/home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/slam_motion_worker.py", line 48, in main
+2026-04-27 21:37:25,179  ERROR     [slam_motion_worker]     Robot = _load_robot_type()
+2026-04-27 21:37:25,179  ERROR     [slam_motion_worker]             ^^^^^^^^^^^^^^^^^^
+2026-04-27 21:37:25,179  ERROR     [slam_motion_worker]   File "/home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/slam_motion_worker.py", line 35, in _load_robot_type
+2026-04-27 21:37:25,180  ERROR     [slam_motion_worker]     spec.loader.exec_module(module)
+2026-04-27 21:37:25,181  ERROR     [slam_motion_worker]   File "<frozen importlib._bootstrap_external>", line 995, in exec_module
+2026-04-27 21:37:25,181  ERROR     [slam_motion_worker]   File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+2026-04-27 21:37:25,181  ERROR     [slam_motion_worker]   File "/home/ag/ef_ws/g1/dev/modules/sdk_client.py", line 23, in <module>
+2026-04-27 21:37:25,181  ERROR     [slam_motion_worker]     from sdk_audio import RobotAudio
+2026-04-27 21:37:25,181  ERROR     [slam_motion_worker] ModuleNotFoundError: No module named 'sdk_audio'
+2026-04-27 21:37:47,157  INFO      [slam_dual_window] Nav start -> goal (-3.59, -0.66) avoid=False speed=0.25 dur=2.00
+2026-04-27 21:38:56,571  ERROR     [slam_motion_worker] 1777318736.571385 [0]        tev: ddsi_udp_conn_write to udp/239.255.0.1:7400 failed with retcode -1
+2026-04-27 21:38:58,171  ERROR     [slam_motion_worker] 1777318738.171437 [0]        tev: ddsi_udp_conn_write to udp/239.255.0.1:7400 failed with retcode -1
+2026-04-27 21:38:59,568  ERROR     [slam_motion_worker] 1777318739.567926 [0]        tev: ddsi_udp_conn_write to udp/239.255.0.1:7400 failed with retcode -1
+2026-04-27 21:38:59,667  ERROR     [slam_motion_worker] 1777318739.667500 [0]        tev: ddsi_udp_conn_write to udp/239.255.0.1:7400 failed with retcode -1
+2026-04-27 21:38:59,668  ERROR     [slam_motion_worker] 1777318739.667962 [0]        tev: ddsi_udp_conn_write to udp/239.255.0.1:7400 failed with retcode -1
+2026-04-27 21:38:59,768  ERROR     [slam_motion_worker] 1777318739.768414 [0]        tev: ddsi_udp_conn_write to udp/239.255.0.1:7400 failed with retcode -1
+2026-04-27 21:38:59,869  ERROR     [slam_motion_worker] 1777318739.868782 [0]        tev: ddsi_udp_conn_write to udp/239.255.0.1:7400 failed with retcode -1
+2026-04-27 21:38:59,969  ERROR     [slam_motion_worker] 1777318739.968884 [0]        tev: ddsi_udp_conn_write to udp/239.255.0.1:7400 failed with retcode -1
+2026-04-27 21:39:00,069  ERROR     [slam_motion_worker] 1777318740.068972 [0]        tev: ddsi_udp_conn_write to udp/239.255.0.1:7400 failed with retcode -1
+2026-04-27 21:39:07,667  ERROR     [slam_motion_worker] 1777318747.667634 [0]        tev: ddsi_udp_conn_write to udp/239.255.0.1:7400 failed with retcode -1
+2026-04-27 21:39:15,667  ERROR     [slam_motion_worker] 1777318755.667672 [0]        tev: ddsi_udp_conn_write to udp/239.255.0.1:7400 failed with retcode -1
+2026-04-27 21:39:49,105  INFO      [slam_dual_window] Obstacle avoidance: ON
+2026-04-27 21:39:52,186  INFO      [slam_dual_window] Goal set to (+0.23, -1.68)
+2026-04-27 21:39:52,333  INFO      [slam_dual_window] Goal set to (+0.23, -1.68)
+2026-04-27 21:39:57,992  INFO      [slam_dual_window] Nav start -> goal (+0.23, -1.68) avoid=True speed=0.25 dur=2.00
+2026-04-27 21:39:58,012  INFO      [slam_dual_window] Replan (avoid) map_seq=295 from=(261,215) to=(237,211)
+2026-04-27 21:39:58,013  INFO      [slam_dual_window] Waypoint reached, remaining=3
+2026-04-27 21:39:58,062  INFO      [slam_dual_window] Goal set to (+0.23, -1.68)
+2026-04-27 21:40:11,199  INFO      [slam_dual_window] Goal set to (-0.25, +1.39)
+2026-04-27 21:40:12,061  INFO      [slam_dual_window] Goal set to (-0.25, +1.39)
+2026-04-27 21:40:12,206  INFO      [slam_dual_window] Goal set to (-0.25, +1.39)
+2026-04-27 21:40:16,389  INFO      [slam_dual_window] Nav start -> goal (-0.25, +1.39) avoid=True speed=0.25 dur=2.00
+2026-04-27 21:40:16,413  INFO      [slam_dual_window] Replan (avoid) map_seq=318 from=(261,215) to=(282,218)
+2026-04-27 21:40:16,438  INFO      [slam_dual_window] Goal set to (-0.25, +1.39)
+2026-04-27 21:41:01,686  INFO      [slam_dual_window] Goal set to (-0.39, +1.46)
+2026-04-27 21:41:01,814  INFO      [slam_dual_window] Goal set to (-0.39, +1.46)
+2026-04-27 21:41:06,358  INFO      [slam_dual_window] Nav start -> goal (-0.39, +1.46) avoid=True speed=0.25 dur=5.00
+2026-04-27 21:41:06,412  INFO      [slam_dual_window] Replan (avoid) map_seq=381 from=(261,215) to=(283,220)
+2026-04-27 21:41:06,437  INFO      [slam_dual_window] Goal set to (-0.39, +1.46)
+2026-04-27 21:41:14,552  INFO      [slam_dual_window] Nav start -> goal (-0.39, +1.46) avoid=True speed=0.25 dur=5.00
+2026-04-27 21:41:14,612  INFO      [slam_dual_window] Replan (avoid) map_seq=392 from=(261,215) to=(283,220)
+2026-04-27 21:41:14,812  INFO      [slam_dual_window] Goal set to (-0.39, +1.46)
+2026-04-27 21:41:26,879  ERROR     [slam_motion_worker] Traceback (most recent call last):
+2026-04-27 21:41:26,880  ERROR     [slam_motion_worker]   File "/home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/slam_motion_worker.py", line 100, in <module>
+2026-04-27 21:41:26,881  ERROR     [slam_motion_worker]     raise SystemExit(main())
+2026-04-27 21:41:26,881  ERROR     [slam_motion_worker]                      ^^^^^^
+2026-04-27 21:41:26,882  ERROR     [slam_motion_worker]   File "/home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/slam_motion_worker.py", line 57, in main
+2026-04-27 21:41:26,883  ERROR     [slam_motion_worker]     for raw in sys.stdin:
+2026-04-27 21:41:26,883  ERROR     [slam_motion_worker] KeyboardInterrupt
