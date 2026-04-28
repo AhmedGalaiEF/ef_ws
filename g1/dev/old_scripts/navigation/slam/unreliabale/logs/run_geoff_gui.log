@@ -10420,3 +10420,69 @@ options:
 2026-04-27 21:56:37,961  ERROR     [slam_motion_worker]   File "/home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/slam_motion_worker.py", line 57, in main
 2026-04-27 21:56:37,961  ERROR     [slam_motion_worker]     for raw in sys.stdin:
 2026-04-27 21:56:37,961  ERROR     [slam_motion_worker] KeyboardInterrupt
+2026-04-28 17:35:00,369  ERROR     Traceback (most recent call last):
+2026-04-28 17:35:00,369  ERROR       File "/home/melodse/ef_ws/g1/dev/old_scripts/navigation/slam/g1_slam_nav_gui.py", line 207, in <module>
+2026-04-28 17:35:00,370  ERROR     main()
+2026-04-28 17:35:00,370  ERROR       File "/home/melodse/ef_ws/g1/dev/old_scripts/navigation/slam/g1_slam_nav_gui.py", line 178, in main
+2026-04-28 17:35:00,370  ERROR     window = G1SlamNavWindow(
+2026-04-28 17:35:00,371  ERROR     ^
+2026-04-28 17:35:00,371  ERROR     ^
+2026-04-28 17:35:00,371  ERROR     ^
+2026-04-28 17:35:00,371  ERROR     ^
+2026-04-28 17:35:00,371  ERROR     ^
+2026-04-28 17:35:00,371  ERROR     ^
+2026-04-28 17:35:00,372  ERROR     ^
+2026-04-28 17:35:00,372  ERROR     ^
+2026-04-28 17:35:00,372  ERROR     ^
+2026-04-28 17:35:00,372  ERROR     ^
+2026-04-28 17:35:00,372  ERROR     ^
+2026-04-28 17:35:00,372  ERROR     ^
+2026-04-28 17:35:00,372  ERROR     ^
+2026-04-28 17:35:00,372  ERROR     ^
+2026-04-28 17:35:00,373  ERROR     ^
+2026-04-28 17:35:00,373  ERROR     ^
+2026-04-28 17:35:00,373  ERROR       File "/home/melodse/ef_ws/g1/dev/old_scripts/navigation/slam/g1_slam_nav_gui.py", line 125, in __init__
+2026-04-28 17:35:00,373  ERROR     super().__init__(*args, **kwargs)
+2026-04-28 17:35:00,373  ERROR       File "/home/melodse/ef_ws/g1/dev/old_scripts/navigation/slam/slam_dual_window.py", line 724, in __init__
+2026-04-28 17:35:00,374  ERROR     super().__init__(iface, ground_clear_in, **kwargs)
+2026-04-28 17:35:00,374  ERROR       File "/home/melodse/ef_ws/g1/dev/old_scripts/navigation/slam/unreliabale/run_geoff_gui_input.py", line 481, in __init__
+2026-04-28 17:35:00,374  ERROR     import pyqtgraph.opengl as gl  # type: ignore
+2026-04-28 17:35:00,375  ERROR     ^
+2026-04-28 17:35:00,375  ERROR     ^
+2026-04-28 17:35:00,375  ERROR     ^
+2026-04-28 17:35:00,375  ERROR     ^
+2026-04-28 17:35:00,375  ERROR     ^
+2026-04-28 17:35:00,375  ERROR     ^
+2026-04-28 17:35:00,375  ERROR     ^
+2026-04-28 17:35:00,376  ERROR     ^
+2026-04-28 17:35:00,376  ERROR     ^
+2026-04-28 17:35:00,376  ERROR     ^
+2026-04-28 17:35:00,376  ERROR     ^
+2026-04-28 17:35:00,376  ERROR     ^
+2026-04-28 17:35:00,376  ERROR     ^
+2026-04-28 17:35:00,376  ERROR     ^
+2026-04-28 17:35:00,376  ERROR     ^
+2026-04-28 17:35:00,377  ERROR     ^
+2026-04-28 17:35:00,377  ERROR     ^
+2026-04-28 17:35:00,377  ERROR     ^
+2026-04-28 17:35:00,377  ERROR     ^
+2026-04-28 17:35:00,377  ERROR     ^
+2026-04-28 17:35:00,377  ERROR     ^
+2026-04-28 17:35:00,377  ERROR     ^
+2026-04-28 17:35:00,378  ERROR     ^
+2026-04-28 17:35:00,378  ERROR     ^
+2026-04-28 17:35:00,378  ERROR     ^
+2026-04-28 17:35:00,378  ERROR     ^
+2026-04-28 17:35:00,378  ERROR     ^
+2026-04-28 17:35:00,378  ERROR     ^
+2026-04-28 17:35:00,378  ERROR     ^
+2026-04-28 17:35:00,378  ERROR     ModuleNotFoundError
+2026-04-28 17:35:00,379  ERROR     :
+2026-04-28 17:35:00,379  ERROR     No module named 'pyqtgraph'
+2026-04-28 17:35:15,568  INFO      No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2026-04-28 17:35:16,800  ERROR     [run_geoff_gui] Arm control disabled:
+2026-04-28 17:35:16,800  ERROR     ChannelPublisher disabled in slam_dual_window.py
+2026-04-28 17:35:16,801  ERROR     [run_geoff_gui] Dex3 hand control disabled:
+2026-04-28 17:35:16,801  ERROR     No module named 'unitree_sdk2py.dex3'
+2026-04-28 17:35:20,151  ERROR     [slam_dual_window] SLAM thread disabled:
+2026-04-28 17:35:20,151  ERROR     '_StreamToLogger' object has no attribute 'isatty'

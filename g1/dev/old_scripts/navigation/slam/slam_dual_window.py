@@ -1820,8 +1820,12 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
         h, w = occ.shape
         if not (0 <= sx < w and 0 <= sy < h and 0 <= gx < w and 0 <= gy < h):
             return None
-        if occ[sy, sx] or occ[gy, gx]:
+        start = DualWindow._nearest_free_cell(sx, sy, occ)
+        goal = DualWindow._nearest_free_cell(gx, gy, occ)
+        if start is None or goal is None:
             return None
+        sx, sy = start
+        gx, gy = goal
 
         free_uint8 = (~occ).astype(np.uint8)
         dist = cv2.distanceTransform(free_uint8, cv2.DIST_L2, 5)
@@ -1871,6 +1875,30 @@ class DualWindow(LEGACY.GeoffWindow):  # type: ignore[misc]
                         came_from[(nx, ny)] = current
                         g_score[(nx, ny)] = tentative
                         heapq.heappush(open_set, (tentative + heuristic(nx, ny), (nx, ny)))
+        return None
+
+    @staticmethod
+    def _nearest_free_cell(x: int, y: int, occ, max_radius: int = 24):
+        h, w = occ.shape
+        if not (0 <= x < w and 0 <= y < h):
+            return None
+        if not occ[y, x]:
+            return (x, y)
+
+        for radius in range(1, max_radius + 1):
+            x0 = max(0, x - radius)
+            x1 = min(w - 1, x + radius)
+            y0 = max(0, y - radius)
+            y1 = min(h - 1, y + radius)
+
+            for nx in range(x0, x1 + 1):
+                for ny in (y0, y1):
+                    if 0 <= ny < h and not occ[ny, nx]:
+                        return (nx, ny)
+            for ny in range(y0 + 1, y1):
+                for nx in (x0, x1):
+                    if 0 <= nx < w and not occ[ny, nx]:
+                        return (nx, ny)
         return None
 
     @staticmethod
