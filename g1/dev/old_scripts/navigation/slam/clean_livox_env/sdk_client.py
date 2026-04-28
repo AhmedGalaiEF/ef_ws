@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import json
 import math
-import numpy as np
 import os
+import struct
 import threading
 import time
 from dataclasses import dataclass
@@ -56,8 +56,6 @@ except ImportError as exc:
 
 DEFAULT_SPORT_TOPIC = "rt/odommodestate"
 DEFAULT_LIDAR_MAP_TOPIC = "rt/utlidar/map_state"
-DEFAULT_SLAM_POINTS_TOPIC = "rt/unitree/slam_mapping/points"
-DEFAULT_SLAM_RELOCATION_POINTS_TOPIC = "rt/unitree/slam_relocation/points"
 DEFAULT_LIDAR_CLOUD_TOPIC = "rt/utlidar/cloud_deskewed"
 DEFAULT_LIDAR_CLOUD_FALLBACK_TOPIC = "rt/utlidar/cloud_livox_mid360"
 DEFAULT_RGBD_HOST = os.environ.get("G1_RGBD_HOST", "10.34.0.83")
@@ -223,7 +221,6 @@ class Robot:
         sport_topic: str = DEFAULT_SPORT_TOPIC,
         lidar_map_topic: str = DEFAULT_LIDAR_MAP_TOPIC,
         lidar_cloud_topic: str = DEFAULT_LIDAR_CLOUD_TOPIC,
-        slam_points_topic: str = DEFAULT_SLAM_POINTS_TOPIC,
         slam_info_topic: str = "rt/slam_info",
         slam_key_topic: str = "rt/slam_key_info",
         rgbd_host: str = DEFAULT_RGBD_HOST,
@@ -235,23 +232,11 @@ class Robot:
         self.sport_topic = sport_topic
         self.lidar_map_topic = lidar_map_topic
         self.lidar_cloud_topic = lidar_cloud_topic
-        self.slam_points_topic = str(slam_points_topic)
         self.slam_info_topic = slam_info_topic
         self.slam_key_topic = slam_key_topic
         self.rgbd_host = str(rgbd_host)
         self.rgbd_port = int(rgbd_port)
         self.rgbd_topic = str(rgbd_topic)
-        self.point_cloud_topics = list(
-            dict.fromkeys(
-                [
-                    self.slam_points_topic,
-                    DEFAULT_SLAM_RELOCATION_POINTS_TOPIC,
-                    str(self.lidar_cloud_topic),
-                    DEFAULT_LIDAR_CLOUD_FALLBACK_TOPIC,
-                    DEFAULT_LIDAR_CLOUD_TOPIC,
-                ]
-            )
-        )
         self.lidar_cloud_topics = list(
             dict.fromkeys(
                 [
@@ -267,13 +252,13 @@ class Robot:
         self._lidar_map: HeightMap_ | None = None
         self._lidar_cloud: PointCloud2_ | None = None
         self._lidar_cloud_by_topic: dict[str, PointCloud2_ | None] = {
-            topic: None for topic in self.point_cloud_topics
+            topic: None for topic in self.lidar_cloud_topics
         }
         self._last_sport_ts = 0.0
         self._last_lidar_map_ts = 0.0
         self._last_lidar_cloud_ts = 0.0
         self._last_lidar_cloud_ts_by_topic: dict[str, float] = {
-            topic: 0.0 for topic in self.point_cloud_topics
+            topic: 0.0 for topic in self.lidar_cloud_topics
         }
 
         self._sport_sub: ChannelSubscriber | None = None
@@ -369,7 +354,7 @@ class Robot:
         if self._lidar_map_sub is None:
             self._lidar_map_sub = ChannelSubscriber(self.lidar_map_topic, HeightMap_)
             self._lidar_map_sub.Init(self._lidar_map_cb, 10)
-        for topic in self.point_cloud_topics:
+        for topic in self.lidar_cloud_topics:
             if topic in self._lidar_cloud_subs:
                 continue
             sub = ChannelSubscriber(topic, PointCloud2_)
@@ -1188,10 +1173,9 @@ class Robot:
 
     def get_odom_pose(self) -> tuple[float, float, float] | None:
         msg = self.get_odom()
-        pose = odom_pose_from_msg(msg) if msg is not None else None
-        if pose is not None:
-            return pose
-        return odom_pose_from_msg(self.get_sport_state())
+        if msg is None:
+            return None
+        return odom_pose_from_msg(msg)
 
     def get_lidar_imu(self) -> Any | None:
         if self._lidar_imu_sub is None:
@@ -1566,52 +1550,37 @@ class Robot:
         except Exception:
             return []
 
-        if point_step <= 0 or not raw:
+        if point_step <= 0:
             return []
+
+        x_off, y_off, z_off = 0, 4, 8
         try:
-            fields = {str(field.name).lower(): field for field in list(msg.fields)}
-            if "x" not in fields or "y" not in fields or "z" not in fields:
-                return []
-            dtype = np.dtype(
-                {
-                    "names": ["x", "y", "z"],
-                    "formats": ["<f4", "<f4", "<f4"],
-                    "offsets": [
-                        int(fields["x"].offset),
-                        int(fields["y"].offset),
-                        int(fields["z"].offset),
-                    ],
-                    "itemsize": point_step,
-                }
-            )
+            fields = list(msg.fields)
+            name_to_off = {str(field.name).lower(): int(field.offset) for field in fields}
+            x_off = name_to_off.get("x", x_off)
+            y_off = name_to_off.get("y", y_off)
+            z_off = name_to_off.get("z", z_off)
         except Exception:
-            return []
+            pass
 
-        total = max(0, min(width * height, len(raw) // point_step))
-        if total <= 0:
-            return []
-
-        try:
-            arr = np.frombuffer(raw, dtype=dtype, count=total)
-            pts = np.stack([arr["x"], arr["y"], arr["z"]], axis=1).astype(np.float32, copy=False)
-        except Exception:
-            return []
-
-        mask = np.isfinite(pts).all(axis=1)
-        pts = pts[mask]
-        if pts.size == 0:
-            return []
-
-        if max_points is not None and max_points > 0 and pts.shape[0] > max_points:
-            indices = np.linspace(0, pts.shape[0] - 1, num=max_points, dtype=np.int64)
-            pts = pts[indices]
+        total = max(0, width * height)
+        if max_points is not None:
+            total = min(total, max_points)
 
         points: list[Any] = []
-        for x, y, z in pts:
-            if as_dict:
-                points.append({"x": float(x), "y": float(y), "z": float(z)})
-            else:
-                points.append((float(x), float(y), float(z)))
+        for idx in range(total):
+            base = idx * point_step
+            try:
+                x = struct.unpack_from("<f", raw, base + x_off)[0]
+                y = struct.unpack_from("<f", raw, base + y_off)[0]
+                z = struct.unpack_from("<f", raw, base + z_off)[0]
+            except Exception:
+                break
+            if math.isfinite(x) and math.isfinite(y) and math.isfinite(z):
+                if as_dict:
+                    points.append({"x": float(x), "y": float(y), "z": float(z)})
+                else:
+                    points.append((float(x), float(y), float(z)))
         return points
 
     def get_lidar_points(self, max_points: int | None = 20000) -> list[dict[str, float]]:
@@ -2086,7 +2055,7 @@ class Robot:
             best_topic = None
             best_msg = None
             best_ts = 0.0
-            for topic in self.point_cloud_topics:
+            for topic in self.lidar_cloud_topics:
                 ts = float(self._last_lidar_cloud_ts_by_topic.get(topic, 0.0))
                 msg = self._lidar_cloud_by_topic.get(topic)
                 if msg is not None and ts >= best_ts:

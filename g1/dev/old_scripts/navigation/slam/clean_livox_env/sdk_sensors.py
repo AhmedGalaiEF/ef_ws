@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import importlib
-import math
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -161,23 +160,12 @@ def odom_pose_from_msg(msg: Any) -> tuple[float, float, float] | None:
         qy = float(ori.y)
         qz = float(ori.z)
         qw = float(ori.w)
+        siny_cosp = 2.0 * (qw * qz + qx * qy)
+        cosy_cosp = 1.0 - 2.0 * (qy * qy + qz * qz)
+        yaw = float(__import__("math").atan2(siny_cosp, cosy_cosp))
+        return (x, y, yaw)
     except Exception:
-        try:
-            position = msg.position()
-            quaternion = msg.imu_state().quaternion()
-            x = float(position[0])
-            y = float(position[1])
-            qw = float(quaternion[0])
-            qx = float(quaternion[1])
-            qy = float(quaternion[2])
-            qz = float(quaternion[3])
-        except Exception:
-            return None
-
-    siny_cosp = 2.0 * (qw * qz + qx * qy)
-    cosy_cosp = 1.0 - 2.0 * (qy * qy + qz * qz)
-    yaw = float(math.atan2(siny_cosp, cosy_cosp))
-    return (x, y, yaw)
+        return None
 
 
 __all__ = [

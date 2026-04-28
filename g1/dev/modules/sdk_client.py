@@ -1553,35 +1553,52 @@ class Robot:
         if point_step <= 0:
             return []
 
-        x_off, y_off, z_off = 0, 4, 8
         try:
-            fields = list(msg.fields)
-            name_to_off = {str(field.name).lower(): int(field.offset) for field in fields}
-            x_off = name_to_off.get("x", x_off)
-            y_off = name_to_off.get("y", y_off)
-            z_off = name_to_off.get("z", z_off)
+            import numpy as np
+
+            fields = {str(field.name).lower(): field for field in list(msg.fields)}
+            if "x" not in fields or "y" not in fields or "z" not in fields:
+                return []
+            x_off = int(fields["x"].offset)
+            y_off = int(fields["y"].offset)
+            z_off = int(fields["z"].offset)
+            dtype = np.dtype(
+                {
+                    "names": ["x", "y", "z"],
+                    "formats": ["<f4", "<f4", "<f4"],
+                    "offsets": [x_off, y_off, z_off],
+                    "itemsize": point_step,
+                }
+            )
         except Exception:
-            pass
+            return []
 
-        total = max(0, width * height)
-        if max_points is not None:
-            total = min(total, max_points)
+        total = max(0, min(width * height, len(raw) // point_step))
+        if total <= 0:
+            return []
 
-        points: list[Any] = []
-        for idx in range(total):
-            base = idx * point_step
-            try:
-                x = struct.unpack_from("<f", raw, base + x_off)[0]
-                y = struct.unpack_from("<f", raw, base + y_off)[0]
-                z = struct.unpack_from("<f", raw, base + z_off)[0]
-            except Exception:
-                break
-            if math.isfinite(x) and math.isfinite(y) and math.isfinite(z):
-                if as_dict:
-                    points.append({"x": float(x), "y": float(y), "z": float(z)})
-                else:
-                    points.append((float(x), float(y), float(z)))
-        return points
+        try:
+            arr = np.frombuffer(raw, dtype=dtype, count=total)
+            xyz = np.stack([arr["x"], arr["y"], arr["z"]], axis=1)
+        except Exception:
+            return []
+
+        try:
+            mask = np.isfinite(xyz).all(axis=1)
+            xyz = xyz[mask]
+        except Exception:
+            return []
+
+        if xyz.size == 0:
+            return []
+
+        if max_points is not None and max_points > 0 and xyz.shape[0] > max_points:
+            step = int(xyz.shape[0] / max_points) + 1
+            xyz = xyz[::step]
+
+        if as_dict:
+            return [{"x": float(x), "y": float(y), "z": float(z)} for x, y, z in xyz]
+        return [(float(x), float(y), float(z)) for x, y, z in xyz]
 
     def get_lidar_points(self, max_points: int | None = 20000) -> list[dict[str, float]]:
         msg, _topic, _ts = self._get_latest_lidar_cloud_msg()

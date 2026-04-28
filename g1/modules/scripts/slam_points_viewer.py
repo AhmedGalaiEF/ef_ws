@@ -237,12 +237,12 @@ def main() -> None:
 
             pose = _pose_from_info_payload(info_sub.get_info())
             if pose is None:
-                odom_pose = odom_sub.get_pose_full()
+                odom_pose = odom_sub.get_pose()
                 if odom_pose is not None:
-                    x, y, z, qx, qy, qz, qw = odom_pose
+                    x, y, yaw = odom_pose
                     pose = np.eye(4, dtype=float)
-                    pose[:3, :3] = _quat_to_mat(float(qx), float(qy), float(qz), float(qw))
-                    pose[:3, 3] = [float(x), float(y), float(z)]
+                    pose[:3, :3] = _quat_to_mat(0.0, 0.0, math.sin(float(yaw) * 0.5), math.cos(float(yaw) * 0.5))
+                    pose[:3, 3] = [float(x), float(y), 0.0]
 
             if not viewer.update(latest_pts, pose):
                 break

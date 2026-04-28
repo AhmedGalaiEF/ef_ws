@@ -1,0 +1,11 @@
+2026-04-28 17:57:23,739  INFO      No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2026-04-28 17:57:24,057  ERROR     [run_geoff_gui] Arm control disabled:
+2026-04-28 17:57:24,058  ERROR     ChannelPublisher disabled in slam_dual_window.py
+2026-04-28 17:57:24,058  ERROR     [run_geoff_gui] Dex3 hand control disabled:
+2026-04-28 17:57:24,058  ERROR     No module named 'unitree_sdk2py.dex3'
+2026-04-28 17:57:29,823  INFO      [Livox2] InfoChange handle=2021370048
+2026-04-28 17:57:37,887  INFO      [Livox2] InfoChange handle=2021370048
+2026-04-28 17:57:46,720  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:57:46,849  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:57:48,096  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:57:48,345  INFO      [slam_dual_window] No path found to clicked target.

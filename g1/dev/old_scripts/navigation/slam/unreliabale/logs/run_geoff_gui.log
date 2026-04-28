@@ -10563,3 +10563,159 @@ options:
 2026-04-27 23:28:02,215  INFO      [slam_dual_window] No path found to clicked target.
 2026-04-27 23:28:13,641  INFO      [slam_dual_window] Obstacle avoidance: OFF
 2026-04-27 23:28:15,589  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:57:07,915  INFO      No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2026-04-27 23:57:08,065  ERROR     [run_geoff_gui] Arm control disabled:
+2026-04-27 23:57:08,065  ERROR     ChannelPublisher disabled in slam_dual_window.py
+2026-04-27 23:57:08,065  ERROR     [run_geoff_gui] Dex3 hand control disabled:
+2026-04-27 23:57:08,065  ERROR     No module named 'unitree_sdk2py.dex3'
+2026-04-27 23:57:11,326  INFO      [Livox2] InfoChange handle=2021370048
+2026-04-27 23:57:25,261  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:57:25,387  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:57:50,511  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-27 23:57:50,637  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 14:19:11,001  INFO      No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2026-04-28 14:19:12,067  ERROR     [run_geoff_gui] Arm control disabled:
+2026-04-28 14:19:12,067  ERROR     ChannelPublisher disabled in slam_dual_window.py
+2026-04-28 14:19:12,068  ERROR     [run_geoff_gui] Dex3 hand control disabled:
+2026-04-28 14:19:12,068  ERROR     No module named 'unitree_sdk2py.dex3'
+2026-04-28 14:19:26,297  INFO      [Livox2] InfoChange handle=2021370048
+2026-04-28 14:21:30,934  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 14:21:42,559  INFO      [Livox2] InfoChange handle=2021370048
+2026-04-28 14:21:43,886  ERROR     /home/ag/.guv/envs/unitree/lib/python3.12/site-packages/pyqtgraph/opengl/GLViewWidget.py:256: RuntimeWarning: 
+Traceback (most recent call last):
+  File "/home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/slam_dual_window.py", line 2217, in <module>
+    main()
+  File "/home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/slam_dual_window.py", line 2213, in main
+    window.run()
+  File "/home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/slam_dual_window.py", line 1030, in run
+    sys.exit(self.app.exec())
+  File "/home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/slam_dual_window.py", line 1744, in toggle_lidar3d
+    self.gl_view.setVisible(enabled)
+  File "/home/ag/.guv/envs/unitree/lib/python3.12/site-packages/pyqtgraph/opengl/GLViewWidget.py", line 217, in paintGL
+    self.paint(region=region, viewport=region)
+  File "/home/ag/.guv/envs/unitree/lib/python3.12/site-packages/pyqtgraph/opengl/GLViewWidget.py", line 229, in paint
+    self.drawItemTree(useItemNames=useItemNames)
+  File "/home/ag/.guv/envs/unitree/lib/python3.12/site-packages/pyqtgraph/opengl/GLViewWidget.py", line 261, in drawItemTree
+    self.drawItemTree(i, useItemNames=useItemNames)
+  File "/home/ag/.guv/envs/unitree/lib/python3.12/site-packages/pyqtgraph/opengl/GLViewWidget.py", line 256, in drawItemTree
+    debug.printExc()
+  --- exception caught here ---
+  File "/home/ag/.guv/envs/unitree/lib/python3.12/site-packages/pyqtgraph/opengl/GLViewWidget.py", line 253, in drawItemTree
+    i.paint()
+  File "/home/ag/.guv/envs/unitree/lib/python3.12/site-packages/pyqtgraph/opengl/items/GLScatterPlotItem.py", line 195, in paint
+    GL.glVertexAttrib4f(loc, *self.color)
+TypeError: this function takes at least 5 arguments (1 given)
+  debug.printExc()
+2026-04-28 14:21:43,888  INFO      Error while drawing item <pyqtgraph.opengl.items.GLScatterPlotItem.GLScatterPlotItem(0x1c1ae720) at 0x7137436456c0>.
+2026-04-28 14:21:43,896  ERROR     /home/ag/.guv/envs/unitree/lib/python3.12/site-packages/pyqtgraph/opengl/GLViewWidget.py:256: RuntimeWarning: 
+Traceback (most recent call last):
+  File "/home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/slam_dual_window.py", line 2217, in <module>
+    main()
+  File "/home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/slam_dual_window.py", line 2213, in main
+    window.run()
+  File "/home/ag/ef_ws/g1/dev/old_scripts/navigation/slam/slam_dual_window.py", line 1030, in run
+    sys.exit(self.app.exec())
+  File "/home/ag/.guv/envs/unitree/lib/python3.12/site-packages/pyqtgraph/opengl/GLViewWidget.py", line 217, in paintGL
+    self.paint(region=region, viewport=region)
+  File "/home/ag/.guv/envs/unitree/lib/python3.12/site-packages/pyqtgraph/opengl/GLViewWidget.py", line 229, in paint
+    self.drawItemTree(useItemNames=useItemNames)
+  File "/home/ag/.guv/envs/unitree/lib/python3.12/site-packages/pyqtgraph/opengl/GLViewWidget.py", line 261, in drawItemTree
+    self.drawItemTree(i, useItemNames=useItemNames)
+  File "/home/ag/.guv/envs/unitree/lib/python3.12/site-packages/pyqtgraph/opengl/GLViewWidget.py", line 256, in drawItemTree
+    debug.printExc()
+  --- exception caught here ---
+  File "/home/ag/.guv/envs/unitree/lib/python3.12/site-packages/pyqtgraph/opengl/GLViewWidget.py", line 253, in drawItemTree
+    i.paint()
+  File "/home/ag/.guv/envs/unitree/lib/python3.12/site-packages/pyqtgraph/opengl/items/GLScatterPlotItem.py", line 195, in paint
+    GL.glVertexAttrib4f(loc, *self.color)
+TypeError: this function takes at least 5 arguments (1 given)
+  debug.printExc()
+2026-04-28 14:21:43,897  INFO      Error while drawing item <pyqtgraph.opengl.items.GLScatterPlotItem.GLScatterPlotItem(0x1c1ae720) at 0x7137436456c0>.
+2026-04-28 14:21:43,906  INFO      Error while drawing item <pyqtgraph.opengl.items.GLScatterPlotItem.GLScatterPlotItem(0x1c1ae720) at 0x7137436456c0>.
+2026-04-28 14:21:47,600  INFO      [Livox2] InfoChange handle=2021370048
+2026-04-28 14:22:37,763  INFO      [Livox2] InfoChange handle=2021370048
+2026-04-28 14:23:20,014  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 14:23:20,873  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 14:23:21,130  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 14:24:05,002  INFO      [slam_dual_window] Goal set to (+0.63, -0.28)
+2026-04-28 14:24:05,481  INFO      [slam_dual_window] Goal set to (+0.63, -0.28)
+2026-04-28 14:24:09,430  INFO      [slam_dual_window] Nav start -> goal (+0.63, -0.28) avoid=True speed=0.25 dur=5.00
+2026-04-28 14:24:09,488  INFO      [slam_dual_window] Replan map_seq=362 from=(262,265) to=(259,257)
+2026-04-28 14:24:09,491  INFO      [slam_dual_window] Waypoint reached, remaining=1
+2026-04-28 14:24:09,578  INFO      [slam_dual_window] Goal set to (+0.63, -0.28)
+2026-04-28 17:13:33,479  INFO      No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2026-04-28 17:13:33,980  ERROR     [run_geoff_gui] Arm control disabled:
+2026-04-28 17:13:33,981  ERROR     ChannelPublisher disabled in slam_dual_window.py
+2026-04-28 17:13:33,981  ERROR     [run_geoff_gui] Dex3 hand control disabled:
+2026-04-28 17:13:33,981  ERROR     No module named 'unitree_sdk2py.dex3'
+2026-04-28 17:13:41,933  INFO      [Livox2] InfoChange handle=2021370048
+2026-04-28 17:14:38,095  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:14:39,469  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:14:39,594  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:18:21,672  INFO      No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2026-04-28 17:18:21,980  ERROR     [run_geoff_gui] Arm control disabled:
+2026-04-28 17:18:21,980  ERROR     ChannelPublisher disabled in slam_dual_window.py
+2026-04-28 17:18:21,981  ERROR     [run_geoff_gui] Dex3 hand control disabled:
+2026-04-28 17:18:21,981  ERROR     No module named 'unitree_sdk2py.dex3'
+2026-04-28 17:18:28,388  INFO      [Livox2] InfoChange handle=2021370048
+2026-04-28 17:19:24,170  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:19:25,063  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:19:25,295  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:19:25,794  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:19:25,919  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:19:26,669  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:19:27,044  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:19:27,546  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:19:27,808  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:19:28,044  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:19:28,295  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:19:28,796  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:19:40,506  INFO      [Livox2] InfoChange handle=2021370048
+2026-04-28 17:19:49,823  INFO      [slam_dual_window] Goal set to (+2.54, -1.88)
+2026-04-28 17:20:08,547  INFO      [slam_dual_window] Goal set to (+2.20, -1.88)
+2026-04-28 17:24:03,083  INFO      No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2026-04-28 17:24:03,396  ERROR     [run_geoff_gui] Arm control disabled:
+2026-04-28 17:24:03,396  ERROR     ChannelPublisher disabled in slam_dual_window.py
+2026-04-28 17:24:03,396  ERROR     [run_geoff_gui] Dex3 hand control disabled:
+2026-04-28 17:24:03,397  ERROR     No module named 'unitree_sdk2py.dex3'
+2026-04-28 17:24:09,765  INFO      [Livox2] InfoChange handle=2021370048
+2026-04-28 17:26:35,919  INFO      [slam_dual_window] Goal set to (+2.62, -1.86)
+2026-04-28 17:27:02,707  INFO      [slam_dual_window] Goal set to (+1.69, +2.02)
+2026-04-28 17:27:02,919  INFO      [slam_dual_window] Goal set to (+1.69, +2.02)
+2026-04-28 17:33:31,083  INFO      No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2026-04-28 17:33:31,391  ERROR     [run_geoff_gui] Arm control disabled:
+2026-04-28 17:33:31,391  ERROR     ChannelPublisher disabled in slam_dual_window.py
+2026-04-28 17:33:31,392  ERROR     [run_geoff_gui] Dex3 hand control disabled:
+2026-04-28 17:33:31,392  ERROR     No module named 'unitree_sdk2py.dex3'
+2026-04-28 17:33:37,762  INFO      [Livox2] InfoChange handle=2021370048
+2026-04-28 17:33:44,171  INFO      [slam_dual_window] Goal set to (+2.69, -2.64)
+2026-04-28 17:33:44,305  INFO      [slam_dual_window] Goal set to (+2.69, -2.64)
+2026-04-28 17:34:51,140  INFO      No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2026-04-28 17:34:51,439  ERROR     [run_geoff_gui] Arm control disabled:
+2026-04-28 17:34:51,439  ERROR     ChannelPublisher disabled in slam_dual_window.py
+2026-04-28 17:34:51,440  ERROR     [run_geoff_gui] Dex3 hand control disabled:
+2026-04-28 17:34:51,440  ERROR     No module named 'unitree_sdk2py.dex3'
+2026-04-28 17:34:57,787  INFO      [Livox2] InfoChange handle=2021370048
+2026-04-28 17:35:05,919  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:35:06,309  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:35:06,556  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:35:09,919  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:35:10,169  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:35:10,299  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:35:11,794  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:35:11,929  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:35:12,057  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:35:12,294  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:35:12,438  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:35:12,669  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:35:13,044  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:35:14,420  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:35:14,670  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:35:16,545  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:35:16,670  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:35:22,933  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:35:23,169  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:35:23,294  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:35:23,446  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:35:23,669  INFO      [slam_dual_window] No path found to clicked target.
+2026-04-28 17:35:23,795  INFO      [slam_dual_window] No path found to clicked target.
