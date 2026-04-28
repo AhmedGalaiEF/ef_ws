@@ -366,7 +366,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.pill_slam.set_value("Running" if telemetry.slam_running else "Stopped")
         self.pill_nav.set_value("Active" if telemetry.nav_active else "Idle")
         age = 0.0 if map_snapshot.updated_at <= 0.0 else max(0.0, time.time() - map_snapshot.updated_at)
-        self.pill_map.set_value(f"{map_snapshot.width}x{map_snapshot.height}  age={age:.1f}s")
+        ros_flag = "ROS ok" if telemetry.ros_bridge_ready else "ROS wait"
+        self.pill_map.set_value(f"{map_snapshot.width}x{map_snapshot.height}  age={age:.1f}s  {ros_flag}")
 
         self.map_canvas.set_snapshot(map_snapshot)
 
@@ -376,7 +377,8 @@ class MainWindow(QtWidgets.QMainWindow):
             self.goal_lbl.setText(
                 f"Goal: ({telemetry.goal[0]:+.2f}, {telemetry.goal[1]:+.2f})\n"
                 f"Pose source: {telemetry.pose_source}\n"
-                f"Status: {telemetry.status}"
+                f"Status: {telemetry.status}\n"
+                f"ROS bridge: {telemetry.ros_bridge_status}"
             )
 
         camera_rgb = state["camera_rgb"]
@@ -405,9 +407,13 @@ class MainWindow(QtWidgets.QMainWindow):
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="New G1 navigation GUI with direct SDK backend.")
-    parser.add_argument("--iface", default="eth0", help="NIC connected to the robot")
+    parser.add_argument("--iface", default="enp1s0", help="NIC connected to the robot")
     parser.add_argument("--map-resolution", type=float, default=0.05)
     parser.add_argument("--map-size-m", type=float, default=24.0)
+    parser.add_argument("--ros-lidar-topic", default="/livox/points", help="ROS 2 PointCloud2 topic for lidar")
+    parser.add_argument("--ros-rgb-topic", default="/rgbd/color/image_raw", help="ROS 2 Image topic for RGB")
+    parser.add_argument("--ros-depth-topic", default="/rgbd/depth/image_raw", help="ROS 2 Image topic for depth")
+    parser.add_argument("--no-ros-topics", action="store_true", help="Disable ROS 2 CycloneDDS sensor subscriptions")
     args = parser.parse_args()
 
     app = QtWidgets.QApplication([])
@@ -415,6 +421,10 @@ def main() -> None:
         iface=args.iface,
         map_resolution=args.map_resolution,
         map_size_m=args.map_size_m,
+        ros_topics_enabled=not args.no_ros_topics,
+        ros_lidar_topic=args.ros_lidar_topic,
+        ros_rgb_topic=args.ros_rgb_topic,
+        ros_depth_topic=args.ros_depth_topic,
     )
     window = MainWindow(controller)
     window.show()

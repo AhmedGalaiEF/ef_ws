@@ -84,6 +84,12 @@ LEFT_ARM_JOINTS = [15, 16, 17, 18, 19, 20, 21]
 WAIST_JOINTS = [12, 13, 14]
 RIGHT_ARM_JOINTS = [22, 23, 24, 25, 26, 27, 28]
 UPPER_BODY_JOINTS = WAIST_JOINTS + LEFT_ARM_JOINTS + RIGHT_ARM_JOINTS
+HIP_JOINTS = [0, 1, 2, 6, 7, 8]
+PBD_TEACH_RECORD_JOINTS = {
+    "left": list(LEFT_ARM_JOINTS) + [12],
+    "right": list(RIGHT_ARM_JOINTS) + [12],
+    "both": list(LEFT_ARM_JOINTS) + list(RIGHT_ARM_JOINTS) + [12],
+}
 ARM_SDK_NOT_USED_IDX = 29
 WAIST_HOLD_KP = 240.0
 WAIST_HOLD_KD = 12.0
@@ -304,6 +310,7 @@ class Robot:
         iface: str = "eth0",
         domain_id: int = 0,
         safety_boot: bool = False,
+        recover_dev_mode_on_init: bool = True,
         auto_start_sensors: bool = True,
         sport_topic: str = DEFAULT_SPORT_TOPIC,
         lidar_map_topic: str = DEFAULT_LIDAR_MAP_TOPIC,
@@ -386,10 +393,17 @@ class Robot:
             self._client = secure_boot(iface=self.iface, domain_id=self.domain_id)
         else:
             self._client = create_loco_client(domain_id=self.domain_id, iface=self.iface)
-            force_normal_gait(self._client)
+            #if recover_dev_mode_on_init:
+                #self.leave_dev_mode(restart_wait_s=1.0)
 
         if auto_start_sensors:
             self.start_sensors()
+
+    @staticmethod
+    def _motion_switcher_result_code(result: Any) -> Any:
+        if isinstance(result, tuple):
+            return result[0]
+        return result
 
     def _get_slam_client(self) -> SlamOperateClient:
         if self._slam_client is None:
@@ -735,11 +749,16 @@ class Robot:
     def _with_upper_body_hold(
         joint_targets: dict[int, float],
         upper_body_positions: dict[int, float],
+        *,
+        hip_positions: dict[int, float] | None = None,
     ) -> dict[int, float]:
         targets = {
             int(joint_index): float(upper_body_positions[int(joint_index)])
             for joint_index in UPPER_BODY_JOINTS
         }
+        if hip_positions:
+            for joint_index in HIP_JOINTS:
+                targets[int(joint_index)] = float(hip_positions[int(joint_index)])
         for joint_index, value in joint_targets.items():
             targets[int(joint_index)] = float(value)
         return targets
@@ -753,16 +772,28 @@ class Robot:
         kd: float = 1.5,
         waist_kp: float = WAIST_HOLD_KP,
         waist_kd: float = WAIST_HOLD_KD,
+        hip_positions: dict[int, float] | None = None,
+        hip_kp: float = WAIST_HOLD_KP,
+        hip_kd: float = WAIST_HOLD_KD,
     ) -> None:
-        targets = self._with_upper_body_hold(joint_targets, upper_body_positions)
+        targets = self._with_upper_body_hold(
+            joint_targets,
+            upper_body_positions,
+            hip_positions=hip_positions,
+        )
         waist_gains = {joint_index: float(waist_kp) for joint_index in WAIST_JOINTS}
         waist_damping = {joint_index: float(waist_kd) for joint_index in WAIST_JOINTS}
+        hip_gains = {}
+        hip_damping = {}
+        if hip_positions:
+            hip_gains = {joint_index: float(hip_kp) for joint_index in HIP_JOINTS}
+            hip_damping = {joint_index: float(hip_kd) for joint_index in HIP_JOINTS}
         self._get_arm_sdk().publish_targets(
             targets,
             kp=kp,
             kd=kd,
-            kp_by_joint=waist_gains,
-            kd_by_joint=waist_damping,
+            kp_by_joint={**waist_gains, **hip_gains},
+            kd_by_joint={**waist_damping, **hip_damping},
         )
 
     @staticmethod
@@ -968,40 +999,49 @@ class Robot:
         arm_joints: list[int],
         arm_positions: dict[int, float],
         waist_positions: dict[int, float],
+        hip_positions: dict[int, float],
         *,
         waist_kp: float = WAIST_HOLD_KP,
         waist_kd: float = WAIST_HOLD_KD,
+        hip_kp: float = WAIST_HOLD_KP,
+        hip_kd: float = WAIST_HOLD_KD,
     ) -> None:
-        targets = dict(waist_positions)
+        targets = {**hip_positions, **waist_positions}
         arm_kp = {int(joint_index): 0.0 for joint_index in arm_joints}
         arm_kd = {int(joint_index): 0.0 for joint_index in arm_joints}
         for joint_index in arm_joints:
             targets[int(joint_index)] = float(arm_positions[int(joint_index)])
         waist_gains = {int(joint_index): float(waist_kp) for joint_index in waist_positions}
         waist_damping = {int(joint_index): float(waist_kd) for joint_index in waist_positions}
+        hip_gains = {int(joint_index): float(hip_kp) for joint_index in hip_positions}
+        hip_damping = {int(joint_index): float(hip_kd) for joint_index in hip_positions}
         self._get_arm_sdk().publish_targets(
             targets,
             kp=0.0,
             kd=0.0,
-            kp_by_joint={**arm_kp, **waist_gains},
-            kd_by_joint={**arm_kd, **waist_damping},
+            kp_by_joint={**arm_kp, **waist_gains, **hip_gains},
+            kd_by_joint={**arm_kd, **waist_damping, **hip_damping},
         )
 
     def teach(
         self,
         *,
         arm: str = "both",
-        out: str = "/tmp/pbd_motion.npz",
+        out: str = "/tmp/pbd_motion.csv",
         log_path: str | None = None,
         duration_s: float = 0.0,
         poll_s: float = 0.02,
         waist_kp: float = WAIST_HOLD_KP,
         waist_kd: float = WAIST_HOLD_KD,
+        hip_kp: float = WAIST_HOLD_KP,
+        hip_kd: float = WAIST_HOLD_KD,
         timeout: float = 3.0,
     ) -> dict[str, Any]:
         side = _normalize_arm_selection(arm)
         arm_joints = list(PBD_ARM_JOINTS[side])
+        record_joints = list(PBD_TEACH_RECORD_JOINTS[side])
         waist_positions = self._read_joint_positions_or_raise(WAIST_JOINTS, timeout=timeout)
+        hip_positions = self._read_joint_positions_or_raise(HIP_JOINTS, timeout=timeout)
         arm_positions = self._read_joint_positions_or_raise(arm_joints, timeout=timeout)
 
         os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
@@ -1017,7 +1057,7 @@ class Robot:
 
         with open(resolved_log_path, "w", encoding="utf-8", newline="") as handle:
             writer = csv.writer(handle)
-            writer.writerow(["t_s", *[f"j{joint_index}" for joint_index in arm_joints]])
+            writer.writerow(["t_s", *[f"j{joint_index}" for joint_index in record_joints]])
             try:
                 while True:
                     now = time.time()
@@ -1032,22 +1072,27 @@ class Robot:
                         arm_joints,
                         arm_positions,
                         waist_positions,
+                        hip_positions,
                         waist_kp=waist_kp,
                         waist_kd=waist_kd,
+                        hip_kp=hip_kp,
+                        hip_kd=hip_kd,
                     )
                     snapshot = self.get_low_state_snapshot()
                     if snapshot is None:
                         continue
+                    joint_positions = list(snapshot.joint_positions)
 
                     row: list[float] = []
-                    for joint_index in arm_joints:
-                        q_val = snapshot.q[int(joint_index)]
-                        if q_val is None:
+                    for joint_index in record_joints:
+                        index = int(joint_index)
+                        if index < 0 or index >= len(joint_positions):
                             raise RuntimeError(
                                 f"Joint position for {BODY_JOINT_NAME_BY_INDEX.get(int(joint_index), joint_index)} is unavailable."
                             )
-                        q_float = float(q_val)
-                        arm_positions[int(joint_index)] = q_float
+                        q_float = float(joint_positions[index])
+                        if index in arm_positions:
+                            arm_positions[index] = q_float
                         row.append(q_float)
 
                     t_rel = now - start
@@ -1063,27 +1108,30 @@ class Robot:
 
         np.savez(
             out,
-            joints=np.asarray(arm_joints, dtype=np.int32),
+            joints=np.asarray(record_joints, dtype=np.int32),
             ts=np.asarray(timestamps, dtype=np.float32),
             qs=np.asarray(samples, dtype=np.float32),
+            fk_qs=np.asarray(samples, dtype=np.float32),
             poll_s=np.asarray([sample_period], dtype=np.float32),
             representation=np.asarray(["joint_space"], dtype="<U16"),
         )
         return {
             "arm": side,
-            "joint_count": len(arm_joints),
+            "joint_count": len(record_joints),
             "sample_count": len(timestamps),
             "duration_s": float(timestamps[-1]) if timestamps else 0.0,
             "poll_s": sample_period,
             "out": os.path.abspath(out),
             "log_path": os.path.abspath(resolved_log_path),
             "waist_hold_joints": list(WAIST_JOINTS),
+            "hip_hold_joints": list(HIP_JOINTS),
+            "recorded_joints": list(record_joints),
         }
 
     def repeat(
         self,
-        motion_file: str,
         *,
+        motion_file: str = '/tmp/pbd_motion.csv',
         arm: str = "both",
         speed: float = 1.0,
         command_rate_hz: float = 50.0,
@@ -1092,6 +1140,8 @@ class Robot:
         kd: float = 1.0,
         waist_kp: float = WAIST_HOLD_KP,
         waist_kd: float = WAIST_HOLD_KD,
+        hip_kp: float = WAIST_HOLD_KP,
+        hip_kd: float = WAIST_HOLD_KD,
         timeout: float = 3.0,
     ) -> dict[str, Any]:
         side = _normalize_arm_selection(arm)
@@ -1109,6 +1159,8 @@ class Robot:
             raise ValueError("Invalid motion file: joints and qs width mismatch.")
 
         requested_joints = list(PBD_ARM_JOINTS[side])
+        if 12 in recorded_joints:
+            requested_joints.append(12)
         joint_to_col = {joint_index: idx for idx, joint_index in enumerate(recorded_joints)}
         missing = [joint_index for joint_index in requested_joints if joint_index not in joint_to_col]
         if missing:
@@ -1116,12 +1168,17 @@ class Robot:
         active_cols = [joint_to_col[joint_index] for joint_index in requested_joints]
         active_qs = qs[:, active_cols]
 
-        positions = self._read_joint_positions_or_raise(UPPER_BODY_JOINTS, timeout=timeout)
+        upper_body_positions = self._read_joint_positions_or_raise(UPPER_BODY_JOINTS, timeout=timeout)
+        hip_positions = self._read_joint_positions_or_raise(HIP_JOINTS, timeout=timeout)
         first_targets = {
             int(joint_index): float(active_qs[0, idx])
             for idx, joint_index in enumerate(requested_joints)
         }
-        current_targets = self._with_upper_body_hold(first_targets, positions)
+        current_targets = self._with_upper_body_hold(
+            first_targets,
+            upper_body_positions,
+            hip_positions=hip_positions,
+        )
         steps = max(1, int(max(0.0, float(start_ramp_s)) * max(1.0, float(command_rate_hz))))
         dt = 1.0 / max(1.0, float(command_rate_hz))
         if float(start_ramp_s) > 0.0:
@@ -1129,7 +1186,10 @@ class Robot:
                 alpha = float(step_idx) / float(steps)
                 blended = {}
                 for joint_index, target in current_targets.items():
-                    start_q = float(positions[int(joint_index)])
+                    if joint_index in upper_body_positions:
+                        start_q = float(upper_body_positions[int(joint_index)])
+                    else:
+                        start_q = float(hip_positions[int(joint_index)])
                     blended[int(joint_index)] = start_q + (float(target) - start_q) * alpha
                 self._publish_with_upper_body_hold(
                     {joint_index: blended[joint_index] for joint_index in requested_joints},
@@ -1138,16 +1198,22 @@ class Robot:
                     kd=kd,
                     waist_kp=waist_kp,
                     waist_kd=waist_kd,
+                    hip_positions=blended,
+                    hip_kp=hip_kp,
+                    hip_kd=hip_kd,
                 )
                 time.sleep(dt)
         else:
             self._publish_with_upper_body_hold(
                 first_targets,
-                positions,
+                upper_body_positions,
                 kp=kp,
                 kd=kd,
                 waist_kp=waist_kp,
                 waist_kd=waist_kd,
+                hip_positions=hip_positions,
+                hip_kp=hip_kp,
+                hip_kd=hip_kd,
             )
 
         replay_ts = ts / max(1e-6, float(speed))
@@ -1164,11 +1230,14 @@ class Robot:
             }
             self._publish_with_upper_body_hold(
                 joint_targets,
-                positions,
+                upper_body_positions,
                 kp=kp,
                 kd=kd,
                 waist_kp=waist_kp,
                 waist_kd=waist_kd,
+                hip_positions=hip_positions,
+                hip_kp=hip_kp,
+                hip_kd=hip_kd,
             )
             time.sleep(dt)
 
@@ -1178,11 +1247,14 @@ class Robot:
         }
         self._publish_with_upper_body_hold(
             final_targets,
-            positions,
+            upper_body_positions,
             kp=kp,
             kd=kd,
             waist_kp=waist_kp,
             waist_kd=waist_kd,
+            hip_positions=hip_positions,
+            hip_kp=hip_kp,
+            hip_kd=hip_kd,
         )
         return {
             "arm": side,
@@ -1193,6 +1265,7 @@ class Robot:
             "speed": max(1e-6, float(speed)),
             "duration_s": t_final,
             "waist_hold_joints": list(WAIST_JOINTS),
+            "hip_hold_joints": list(HIP_JOINTS),
         }
 
     def move_upper_body_joint(
@@ -1758,7 +1831,7 @@ class Robot:
             return
         raise AttributeError("Current locomotion client does not support FSM mode setting API.")
 
-    def dev_mode(self) -> None:
+    def enter_dev_mode(self) -> None:
         if hasattr(self._client, "SetGaitType"):
             self._client.SetGaitType(3)
             return
@@ -1767,50 +1840,8 @@ class Robot:
             return
         raise AttributeError("Current locomotion client does not support dev mode gait API.")
 
-    def leave_dev_mode(self, restart_wait_s: float = 5.0) -> None:
-        msc = MotionSwitcherClient()
-        msc.SetTimeout(10.0)
-        msc.Init()
-
-        def _result_code(result: Any) -> Any:
-            if isinstance(result, tuple):
-                return result[0]
-            return result
-
-        code = _result_code(msc.CheckMode())
-        if int(code) != 0:
-            raise RuntimeError(f"MotionSwitcherClient.CheckMode() failed with code {code}.")
-
-        code = _result_code(msc.ReleaseMode())
-        if int(code) != 0:
-            raise RuntimeError(f"MotionSwitcherClient.ReleaseMode() failed with code {code}.")
-
-        time.sleep(1.0)
-
-        code = _result_code(msc.SelectMode("ai"))
-        if int(code) != 0:
-            time.sleep(1.0)
-            retry_code = _result_code(msc.SelectMode("ai"))
-            if int(retry_code) != 0:
-                raise RuntimeError(
-                    "MotionSwitcherClient.SelectMode('ai') failed "
-                    f"with code {code} and retry code {retry_code}. "
-                    "The robot motion service likely has not accepted the mode handoff yet."
-                )
-
-        time.sleep(max(0.0, float(restart_wait_s)))
-
-        self._client = create_loco_client(domain_id=self.domain_id, iface=self.iface)
-        force_normal_gait(self._client)
-
-    def balanced_stand(self, mode: int = 0) -> None:
-        if hasattr(self._client, "BalanceStand"):
-            self._client.BalanceStand(int(mode))
-            return
-        if hasattr(self._client, "SetFsmId") and int(mode) == 0:
-            self._client.SetFsmId(500)
-            return
-        raise AttributeError("Current locomotion client does not support balanced stand API.")
+    def dev_mode(self) -> None:
+        self.enter_dev_mode()
 
     def _rpc_get_int(self, api_id: int) -> Optional[int]:
         return rpc_get_int(self._client, api_id)
@@ -1842,12 +1873,6 @@ class Robot:
 
     def fsm_2_squat_placeholder(self) -> None:
         self.fsm_2_airborne()
-
-    def fsm_dev_mode(self) -> None:
-        if hasattr(self._client, "Start"):
-            self._client.Start()
-        elif hasattr(self._client, "SetFsmId"):
-            self._client.SetFsmId(500)
 
     # ------------------------------------------------------------------
     # IMU + lidar getters

@@ -2,6 +2,11 @@
 from __future__ import annotations
 
 import math
+import os
+import pickle
+import struct
+import subprocess
+import sys
 import threading
 import time
 from dataclasses import dataclass, field
@@ -39,6 +44,8 @@ class TelemetrySnapshot:
     status: str = "idle"
     robot_connected: bool = False
     sensor_stale: dict[str, bool] = field(default_factory=dict)
+    ros_bridge_ready: bool = False
+    ros_bridge_status: str = "disabled"
 
 
 @dataclass
@@ -274,6 +281,190 @@ class OccupancyGrid:
         OccupancyGrid._draw_line(img, p, tip, (255, 220, 0), thickness=1)
 
 
+class RosSensorBridge:
+    def __init__(
+        self,
+        *,
+        enabled: bool = True,
+        point_topic: str = "/livox/points",
+        rgb_topic: str = "/rgbd/color/image_raw",
+        depth_topic: str = "/rgbd/depth/image_raw",
+    ) -> None:
+        self.enabled = bool(enabled)
+        self.point_topic = str(point_topic)
+        self.rgb_topic = str(rgb_topic)
+        self.depth_topic = str(depth_topic)
+        self._lock = threading.Lock()
+        self._stop_evt = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._proc: subprocess.Popen[bytes] | None = None
+        self._init_error: str | None = None
+        self._ready = False
+        self._status_message = "disabled" if not self.enabled else "starting"
+        self._latest_points: np.ndarray | None = None
+        self._latest_points_ts = 0.0
+        self._latest_rgb: np.ndarray | None = None
+        self._latest_rgb_ts = 0.0
+        self._latest_depth: np.ndarray | None = None
+        self._latest_depth_ts = 0.0
+        if self.enabled:
+            self._thread = threading.Thread(target=self._reader_loop, name="g1-nav-ros2-bridge", daemon=True)
+            self._thread.start()
+
+    def shutdown(self) -> None:
+        self._stop_evt.set()
+        self._terminate_worker()
+        if self._thread is not None and self._thread.is_alive():
+            self._thread.join(timeout=2.0)
+
+    def status(self) -> dict[str, bool]:
+        with self._lock:
+            return {
+                "ros_bridge_error": self._init_error is not None,
+                "ros_bridge_ready": self._ready,
+                "ros_lidar_stale": self._is_stale(self._latest_points_ts, max_age=1.5),
+                "ros_rgb_stale": self._is_stale(self._latest_rgb_ts, max_age=1.5),
+                "ros_depth_stale": self._is_stale(self._latest_depth_ts, max_age=1.5),
+            }
+
+    def get_points(self) -> tuple[np.ndarray | None, float]:
+        with self._lock:
+            return (
+                None if self._latest_points is None else np.array(self._latest_points, copy=True),
+                self._latest_points_ts,
+            )
+
+    def get_rgb(self) -> tuple[np.ndarray | None, float]:
+        with self._lock:
+            return (
+                None if self._latest_rgb is None else np.array(self._latest_rgb, copy=True),
+                self._latest_rgb_ts,
+            )
+
+    def get_depth(self) -> tuple[np.ndarray | None, float]:
+        with self._lock:
+            return (
+                None if self._latest_depth is None else np.array(self._latest_depth, copy=True),
+                self._latest_depth_ts,
+            )
+
+    @property
+    def init_error(self) -> str | None:
+        with self._lock:
+            return self._init_error
+
+    @property
+    def ready(self) -> bool:
+        with self._lock:
+            return self._ready
+
+    @property
+    def status_message(self) -> str:
+        with self._lock:
+            return self._status_message
+
+    @staticmethod
+    def _is_stale(stamp: float, max_age: float) -> bool:
+        if stamp <= 0.0:
+            return True
+        return (time.time() - stamp) > float(max_age)
+
+    def _reader_loop(self) -> None:
+        try:
+            worker = Path(__file__).resolve().parent / "g1_nav_ros_bridge_worker.py"
+            env = dict(os.environ)
+            env.setdefault("RMW_IMPLEMENTATION", "rmw_cyclonedds_cpp")
+            self._proc = subprocess.Popen(
+                [
+                    sys.executable,
+                    str(worker),
+                    "--lidar-topic",
+                    self.point_topic,
+                    "--rgb-topic",
+                    self.rgb_topic,
+                    "--depth-topic",
+                    self.depth_topic,
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                stdin=subprocess.DEVNULL,
+                env=env,
+                bufsize=0,
+            )
+            if self._proc.stdout is None:
+                raise RuntimeError("ROS bridge worker stdout pipe is unavailable.")
+            with self._lock:
+                self._status_message = f"worker pid={self._proc.pid}"
+            while not self._stop_evt.is_set():
+                header = self._proc.stdout.read(4)
+                if not header:
+                    break
+                size = struct.unpack("<I", header)[0]
+                payload = self._proc.stdout.read(size)
+                if len(payload) != size:
+                    break
+                self._handle_message(pickle.loads(payload))
+            if self._proc.poll() not in (None, 0):
+                stderr_text = b""
+                if self._proc.stderr is not None:
+                    try:
+                        stderr_text = self._proc.stderr.read() or b""
+                    except Exception:
+                        stderr_text = b""
+                raise RuntimeError(
+                    f"ROS bridge worker exited rc={self._proc.returncode}: {stderr_text.decode(errors='replace').strip()}"
+                )
+        except Exception as exc:
+            with self._lock:
+                self._init_error = str(exc)
+                self._status_message = str(exc)
+        finally:
+            self._terminate_worker()
+
+    def _terminate_worker(self) -> None:
+        proc = self._proc
+        self._proc = None
+        if proc is None:
+            return
+        if proc.poll() is None:
+            try:
+                proc.terminate()
+                proc.wait(timeout=1.0)
+            except Exception:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+
+    def _handle_message(self, msg: dict[str, Any]) -> None:
+        kind = str(msg.get("kind", ""))
+        stamp = float(msg.get("stamp", time.time()))
+        if kind == "status":
+            if bool(msg.get("ok", False)):
+                with self._lock:
+                    self._ready = True
+                    self._status_message = str(msg.get("message", "ready"))
+            else:
+                with self._lock:
+                    self._init_error = str(msg.get("message", "unknown ROS bridge worker error"))
+                    self._status_message = self._init_error
+            return
+        if kind == "points":
+            with self._lock:
+                self._latest_points = np.array(msg.get("data"), copy=True)
+                self._latest_points_ts = stamp
+            return
+        if kind == "rgb":
+            with self._lock:
+                self._latest_rgb = np.array(msg.get("data"), copy=True)
+                self._latest_rgb_ts = stamp
+            return
+        if kind == "depth":
+            with self._lock:
+                self._latest_depth = np.array(msg.get("data"), copy=True)
+                self._latest_depth_ts = stamp
+
+
 class NavigationController:
     def __init__(
         self,
@@ -281,6 +472,10 @@ class NavigationController:
         iface: str = "eth0",
         map_resolution: float = 0.05,
         map_size_m: float = 24.0,
+        ros_topics_enabled: bool = True,
+        ros_lidar_topic: str = "/livox/points",
+        ros_rgb_topic: str = "/rgbd/color/image_raw",
+        ros_depth_topic: str = "/rgbd/depth/image_raw",
     ) -> None:
         self.iface = str(iface)
         self.map = OccupancyGrid(resolution=map_resolution, size_m=map_size_m)
@@ -296,6 +491,14 @@ class NavigationController:
         self._nav_active = False
         self._mapping_enabled = True
         self._avoid_enabled = True
+        self._ros_bridge = RosSensorBridge(
+            enabled=ros_topics_enabled,
+            point_topic=ros_lidar_topic,
+            rgb_topic=ros_rgb_topic,
+            depth_topic=ros_depth_topic,
+        )
+        self._ros_bridge_error_logged = False
+        self._ros_bridge_ready_logged = False
         self._stop_evt = threading.Event()
         self._worker = threading.Thread(target=self._loop, name="g1-nav-backend", daemon=True)
         self._worker.start()
@@ -304,6 +507,7 @@ class NavigationController:
         self._stop_evt.set()
         if self._worker.is_alive():
             self._worker.join(timeout=2.0)
+        self._ros_bridge.shutdown()
         if self.robot is not None:
             try:
                 self.robot.stop()
@@ -552,13 +756,24 @@ class NavigationController:
                     goal=self._goal_world,
                     status=self._telemetry.status,
                     robot_connected=True,
-                    sensor_stale=dict(state.get("sensor_stale", {})),
+                    sensor_stale={**dict(state.get("sensor_stale", {})), **self._ros_bridge.status()},
+                    ros_bridge_ready=self._ros_bridge.ready,
+                    ros_bridge_status=self._ros_bridge.status_message,
                 )
                 with self._lock:
                     self._telemetry = telemetry
+                if self._ros_bridge.ready and not self._ros_bridge_ready_logged:
+                    self._ros_bridge_ready_logged = True
+                    self.log(f"ROS 2 bridge ready on topics lidar={self._ros_bridge.point_topic} rgb={self._ros_bridge.rgb_topic} depth={self._ros_bridge.depth_topic}.")
+                ros_error = self._ros_bridge.init_error
+                if ros_error and not self._ros_bridge_error_logged:
+                    self._ros_bridge_error_logged = True
+                    self.log(f"ROS 2 CycloneDDS bridge unavailable: {ros_error}")
                 if pose is not None and self._mapping_enabled:
-                    points = robot.get_lidar_points(max_points=2500)
-                    cloud = self._points_to_numpy(points)
+                    cloud, cloud_ts = self._ros_bridge.get_points()
+                    if cloud is None or (time.time() - cloud_ts) > 1.5:
+                        points = robot.get_lidar_points(max_points=2500)
+                        cloud = self._points_to_numpy(points)
                     if cloud.size > 0:
                         self.map.insert(pose, cloud)
                 if pose is not None and self._goal_world is not None and not self._path_world:
@@ -576,7 +791,9 @@ class NavigationController:
 
     def _refresh_camera(self, robot: "Robot") -> None:
         try:
-            frame = robot.get_camera_frame_rgb()
+            frame, stamp = self._ros_bridge.get_rgb()
+            if frame is None or (time.time() - stamp) > 1.5:
+                frame = robot.get_camera_frame_rgb()
             if frame is not None:
                 with self._lock:
                     self._camera_rgb = np.array(frame, copy=True)
