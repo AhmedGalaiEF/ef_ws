@@ -84,12 +84,6 @@ LEFT_ARM_JOINTS = [15, 16, 17, 18, 19, 20, 21]
 WAIST_JOINTS = [12, 13, 14]
 RIGHT_ARM_JOINTS = [22, 23, 24, 25, 26, 27, 28]
 UPPER_BODY_JOINTS = WAIST_JOINTS + LEFT_ARM_JOINTS + RIGHT_ARM_JOINTS
-HIP_JOINTS = [0, 1, 2, 6, 7, 8]
-PBD_TEACH_RECORD_JOINTS = {
-    "left": list(LEFT_ARM_JOINTS) + [12],
-    "right": list(RIGHT_ARM_JOINTS) + [12],
-    "both": list(LEFT_ARM_JOINTS) + list(RIGHT_ARM_JOINTS) + [12],
-}
 ARM_SDK_NOT_USED_IDX = 29
 WAIST_HOLD_KP = 240.0
 WAIST_HOLD_KD = 12.0
@@ -165,6 +159,10 @@ PBD_ARM_JOINTS = {
     "right": list(RIGHT_ARM_JOINTS),
     "both": list(LEFT_ARM_JOINTS) + list(RIGHT_ARM_JOINTS),
 }
+PBD_HAND_JOINT_LABELS = {
+    "left": [f"left_hand.{name}" for name in HAND_JOINT_NAMES],
+    "right": [f"right_hand.{name}" for name in HAND_JOINT_NAMES],
+}
 
 
 def _normalize_arm_selection(arm: str) -> str:
@@ -199,19 +197,8 @@ def _load_pbd_motion_file(path: str) -> dict[str, np.ndarray]:
                     joint_cols.append((int(match.group(1)), name))
             if not joint_cols:
                 raise ValueError(f"CSV must include joint columns like j22,j23,...: {path}")
-            hand_cols: dict[str, list[tuple[int, str]]] = {}
-            for side in ("left", "right"):
-                prefix = f"{side}_hand."
-                cols: list[tuple[int, str]] = []
-                for idx, joint_name in enumerate(HAND_JOINT_NAMES):
-                    col_name = f"{prefix}{joint_name}"
-                    if col_name in reader.fieldnames:
-                        cols.append((idx, col_name))
-                if cols:
-                    hand_cols[side] = cols
             ts_vals: list[float] = []
             q_rows: list[list[float]] = []
-            hand_rows: dict[str, list[list[float]]] = {side: [] for side in hand_cols}
             for row in reader:
                 if not row:
                     continue
@@ -220,18 +207,13 @@ def _load_pbd_motion_file(path: str) -> dict[str, np.ndarray]:
                     continue
                 ts_vals.append(float(raw_t))
                 q_rows.append([float(row[col_name]) for _, col_name in joint_cols])
-                for side, cols in hand_cols.items():
-                    hand_rows[side].append([float(row[col_name]) for _, col_name in cols])
             if not ts_vals or not q_rows:
                 raise ValueError(f"CSV has no data rows: {path}")
-            result = {
+            return {
                 "joints": np.asarray([joint for joint, _ in joint_cols], dtype=int),
                 "ts": np.asarray(ts_vals, dtype=float),
                 "qs": np.asarray(q_rows, dtype=float),
             }
-            for side, rows in hand_rows.items():
-                result[f"{side}_hand_qs"] = np.asarray(rows, dtype=float)
-            return result
     if ext in (".pkl", ".pickle"):
         with open(path, "rb") as handle:
             obj = pickle.load(handle)
@@ -765,16 +747,11 @@ class Robot:
     def _with_upper_body_hold(
         joint_targets: dict[int, float],
         upper_body_positions: dict[int, float],
-        *,
-        hip_positions: dict[int, float] | None = None,
     ) -> dict[int, float]:
         targets = {
             int(joint_index): float(upper_body_positions[int(joint_index)])
             for joint_index in UPPER_BODY_JOINTS
         }
-        if hip_positions:
-            for joint_index in HIP_JOINTS:
-                targets[int(joint_index)] = float(hip_positions[int(joint_index)])
         for joint_index, value in joint_targets.items():
             targets[int(joint_index)] = float(value)
         return targets
@@ -788,28 +765,16 @@ class Robot:
         kd: float = 1.5,
         waist_kp: float = WAIST_HOLD_KP,
         waist_kd: float = WAIST_HOLD_KD,
-        hip_positions: dict[int, float] | None = None,
-        hip_kp: float = WAIST_HOLD_KP,
-        hip_kd: float = WAIST_HOLD_KD,
     ) -> None:
-        targets = self._with_upper_body_hold(
-            joint_targets,
-            upper_body_positions,
-            hip_positions=hip_positions,
-        )
+        targets = self._with_upper_body_hold(joint_targets, upper_body_positions)
         waist_gains = {joint_index: float(waist_kp) for joint_index in WAIST_JOINTS}
         waist_damping = {joint_index: float(waist_kd) for joint_index in WAIST_JOINTS}
-        hip_gains = {}
-        hip_damping = {}
-        if hip_positions:
-            hip_gains = {joint_index: float(hip_kp) for joint_index in HIP_JOINTS}
-            hip_damping = {joint_index: float(hip_kd) for joint_index in HIP_JOINTS}
         self._get_arm_sdk().publish_targets(
             targets,
             kp=kp,
             kd=kd,
-            kp_by_joint={**waist_gains, **hip_gains},
-            kd_by_joint={**waist_damping, **hip_damping},
+            kp_by_joint=waist_gains,
+            kd_by_joint=waist_damping,
         )
 
     @staticmethod
@@ -1015,54 +980,69 @@ class Robot:
         arm_joints: list[int],
         arm_positions: dict[int, float],
         waist_positions: dict[int, float],
-        hip_positions: dict[int, float],
         *,
         waist_kp: float = WAIST_HOLD_KP,
         waist_kd: float = WAIST_HOLD_KD,
-        hip_kp: float = WAIST_HOLD_KP,
-        hip_kd: float = WAIST_HOLD_KD,
     ) -> None:
-        targets = {**hip_positions, **waist_positions}
+        targets = dict(waist_positions)
         arm_kp = {int(joint_index): 0.0 for joint_index in arm_joints}
         arm_kd = {int(joint_index): 0.0 for joint_index in arm_joints}
         for joint_index in arm_joints:
             targets[int(joint_index)] = float(arm_positions[int(joint_index)])
         waist_gains = {int(joint_index): float(waist_kp) for joint_index in waist_positions}
         waist_damping = {int(joint_index): float(waist_kd) for joint_index in waist_positions}
-        hip_gains = {int(joint_index): float(hip_kp) for joint_index in hip_positions}
-        hip_damping = {int(joint_index): float(hip_kd) for joint_index in hip_positions}
         self._get_arm_sdk().publish_targets(
             targets,
             kp=0.0,
             kd=0.0,
-            kp_by_joint={**arm_kp, **waist_gains, **hip_gains},
-            kd_by_joint={**arm_kd, **waist_damping, **hip_damping},
+            kp_by_joint={**arm_kp, **waist_gains},
+            kd_by_joint={**arm_kd, **waist_damping},
         )
 
     def teach(
         self,
         *,
         arm: str = "both",
-        out: str = "/tmp/pbd_motion.csv",
+        out: str = "/tmp/pbd_motion.npz",
         log_path: str | None = None,
         duration_s: float = 0.0,
-        poll_s: float = 0.02,
+        poll_s: float = 0.01,
         waist_kp: float = WAIST_HOLD_KP,
         waist_kd: float = WAIST_HOLD_KD,
-        hip_kp: float = WAIST_HOLD_KP,
-        hip_kd: float = WAIST_HOLD_KD,
         timeout: float = 3.0,
     ) -> dict[str, Any]:
         side = _normalize_arm_selection(arm)
         arm_joints = list(PBD_ARM_JOINTS[side])
-        record_joints = list(PBD_TEACH_RECORD_JOINTS[side])
-        active_hand_sides = ("left", "right") if side == "both" else (side,)
+        done_event = threading.Event()
+
+        def _wait_for_enter() -> None:
+            try:
+                input("Press Enter when the teach motion is complete...")
+            except EOFError:
+                return
+            done_event.set()
+
+        prompt_thread = threading.Thread(
+            target=_wait_for_enter,
+            name="teach-enter-confirm",
+            daemon=True,
+        )
+        self.release_arms(timeout=timeout)
+        self.unrelease_arms(timeout=timeout)
         waist_positions = self._read_joint_positions_or_raise(WAIST_JOINTS, timeout=timeout)
-        hip_positions = self._read_joint_positions_or_raise(HIP_JOINTS, timeout=timeout)
         arm_positions = self._read_joint_positions_or_raise(arm_joints, timeout=timeout)
-        recorded_hand_sides: list[str] = [
-            hand_side for hand_side in active_hand_sides if self.get_hand_state_snapshot(hand_side) is not None
-        ]
+        self._publish_pbd_teach_hold(
+            arm_joints,
+            arm_positions,
+            waist_positions,
+            waist_kp=waist_kp,
+            waist_kd=waist_kd,
+        )
+        self.zero_torque_fingers("both")
+        left_hand_snapshot = self.get_hand_state_snapshot("left")
+        right_hand_snapshot = self.get_hand_state_snapshot("right")
+        if left_hand_snapshot is None or right_hand_snapshot is None:
+            raise RuntimeError("Hand state is unavailable. Are rt/dex3/*/state topics publishing?")
 
         os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
         resolved_log_path = log_path or f"{os.path.splitext(out)[0]}.csv"
@@ -1072,21 +1052,22 @@ class Robot:
         duration_limit = max(0.0, float(duration_s))
         timestamps: list[float] = []
         samples: list[list[float]] = []
-        hand_samples: dict[str, list[list[float]]] = {hand_side: [] for hand_side in recorded_hand_sides}
+        left_hand_samples: list[list[float]] = []
+        right_hand_samples: list[list[float]] = []
         start = time.time()
         next_tick = start
+        duration_notice_sent = False
+        prompt_thread.start()
 
         with open(resolved_log_path, "w", encoding="utf-8", newline="") as handle:
             writer = csv.writer(handle)
             writer.writerow(
                 [
+                    "phase",
                     "t_s",
-                    *[f"j{joint_index}" for joint_index in record_joints],
-                    *[
-                        f"{hand_side}_hand.{joint_name}"
-                        for hand_side in recorded_hand_sides
-                        for joint_name in HAND_JOINT_NAMES
-                    ],
+                    "joint_indices",
+                    "target_positions",
+                    "actual_positions",
                 ]
             )
             try:
@@ -1096,113 +1077,124 @@ class Robot:
                         time.sleep(min(0.02, next_tick - now))
                         continue
                     next_tick += sample_period
-                    if duration_limit > 0.0 and (now - start) >= duration_limit:
+                    if done_event.is_set():
                         break
+                    if duration_limit > 0.0 and (now - start) >= duration_limit:
+                        if not duration_notice_sent:
+                            print("Teach duration limit reached. Press Enter to finish recording.")
+                            duration_notice_sent = True
 
+                    commanded_row = [float(arm_positions[int(joint_index)]) for joint_index in arm_joints]
                     self._publish_pbd_teach_hold(
                         arm_joints,
                         arm_positions,
                         waist_positions,
-                        hip_positions,
                         waist_kp=waist_kp,
                         waist_kd=waist_kd,
-                        hip_kp=hip_kp,
-                        hip_kd=hip_kd,
                     )
                     snapshot = self.get_low_state_snapshot()
                     if snapshot is None:
                         continue
-                    joint_positions = list(snapshot.joint_positions)
-                    hand_row_values: dict[str, list[float]] = {}
-                    missing_required_hand_sample = False
-                    for hand_side in recorded_hand_sides:
-                        hand_snapshot = self.get_hand_state_snapshot(hand_side)
-                        if hand_snapshot is None:
-                            missing_required_hand_sample = True
-                            break
-                        positions_by_name = dict(hand_snapshot.get("positions") or {})
-                        try:
-                            hand_row_values[hand_side] = [
-                                float(positions_by_name[joint_name]) for joint_name in HAND_JOINT_NAMES
-                            ]
-                        except Exception:
-                            missing_required_hand_sample = True
-                            break
-                    if missing_required_hand_sample:
+                    left_hand_snapshot = self.get_hand_state_snapshot("left")
+                    right_hand_snapshot = self.get_hand_state_snapshot("right")
+                    if left_hand_snapshot is None or right_hand_snapshot is None:
                         continue
 
                     row: list[float] = []
-                    for joint_index in record_joints:
-                        index = int(joint_index)
-                        if index < 0 or index >= len(joint_positions):
+                    for joint_index in arm_joints:
+                        q_val = snapshot.joint_positions[int(joint_index)]
+                        if q_val is None:
                             raise RuntimeError(
                                 f"Joint position for {BODY_JOINT_NAME_BY_INDEX.get(int(joint_index), joint_index)} is unavailable."
                             )
-                        q_float = float(joint_positions[index])
-                        if index in arm_positions:
-                            arm_positions[index] = q_float
+                        q_float = float(q_val)
+                        arm_positions[int(joint_index)] = q_float
                         row.append(q_float)
+                    left_hand_row = [
+                        float(left_hand_snapshot["positions"][joint_name])
+                        for joint_name in HAND_JOINT_NAMES
+                    ]
+                    right_hand_row = [
+                        float(right_hand_snapshot["positions"][joint_name])
+                        for joint_name in HAND_JOINT_NAMES
+                    ]
 
                     t_rel = now - start
                     timestamps.append(t_rel)
                     samples.append(row)
-                    for hand_side in recorded_hand_sides:
-                        hand_samples[hand_side].append(list(hand_row_values[hand_side]))
-                    csv_hand_values: list[str] = [
-                        f"{value:.6f}"
-                        for hand_side in recorded_hand_sides
-                        for value in hand_row_values[hand_side]
-                    ]
-                    writer.writerow([f"{t_rel:.6f}", *[f"{value:.6f}" for value in row], *csv_hand_values])
+                    left_hand_samples.append(left_hand_row)
+                    right_hand_samples.append(right_hand_row)
+                    writer.writerow(
+                        [
+                            "teach",
+                            f"{t_rel:.6f}",
+                            " ".join(
+                                [str(joint_index) for joint_index in arm_joints]
+                                + PBD_HAND_JOINT_LABELS["left"]
+                                + PBD_HAND_JOINT_LABELS["right"]
+                            ),
+                            " ".join(
+                                [f"{value:.6f}" for value in commanded_row]
+                                + [f"{value:.6f}" for value in left_hand_row]
+                                + [f"{value:.6f}" for value in right_hand_row]
+                            ),
+                            " ".join(
+                                [f"{value:.6f}" for value in row]
+                                + [f"{value:.6f}" for value in left_hand_row]
+                                + [f"{value:.6f}" for value in right_hand_row]
+                            ),
+                        ]
+                    )
                     handle.flush()
+                    print(
+                        f"[teach] t={t_rel:.3f}s joints={arm_joints + PBD_HAND_JOINT_LABELS['left'] + PBD_HAND_JOINT_LABELS['right']} "
+                        f"target={[round(value, 4) for value in commanded_row]} "
+                        f"actual={[round(value, 4) for value in row + left_hand_row + right_hand_row]}"
+                    )
             except KeyboardInterrupt:
                 pass
 
         if not timestamps:
             raise RuntimeError("No samples recorded. Is rt/lowstate publishing?")
 
-        save_payload: dict[str, np.ndarray] = {
-            "joints": np.asarray(record_joints, dtype=np.int32),
-            "ts": np.asarray(timestamps, dtype=np.float32),
-            "qs": np.asarray(samples, dtype=np.float32),
-            "fk_qs": np.asarray(samples, dtype=np.float32),
-            "poll_s": np.asarray([sample_period], dtype=np.float32),
-            "representation": np.asarray(["joint_space"], dtype="<U16"),
-        }
-        for hand_side in recorded_hand_sides:
-            save_payload[f"{hand_side}_hand_qs"] = np.asarray(hand_samples[hand_side], dtype=np.float32)
         np.savez(
             out,
-            **save_payload,
+            joints=np.asarray(arm_joints, dtype=np.int32),
+            ts=np.asarray(timestamps, dtype=np.float32),
+            qs=np.asarray(samples, dtype=np.float32),
+            left_hand_joints=np.asarray(PBD_HAND_JOINT_LABELS["left"], dtype="<U32"),
+            right_hand_joints=np.asarray(PBD_HAND_JOINT_LABELS["right"], dtype="<U32"),
+            left_hand_qs=np.asarray(left_hand_samples, dtype=np.float32),
+            right_hand_qs=np.asarray(right_hand_samples, dtype=np.float32),
+            poll_s=np.asarray([sample_period], dtype=np.float32),
+            representation=np.asarray(["joint_space"], dtype="<U16"),
         )
+        self.unrelease_arms(timeout=timeout)
         return {
             "arm": side,
-            "joint_count": len(record_joints),
+            "joint_count": len(arm_joints),
             "sample_count": len(timestamps),
             "duration_s": float(timestamps[-1]) if timestamps else 0.0,
             "poll_s": sample_period,
             "out": os.path.abspath(out),
             "log_path": os.path.abspath(resolved_log_path),
             "waist_hold_joints": list(WAIST_JOINTS),
-            "hip_hold_joints": list(HIP_JOINTS),
-            "recorded_joints": list(record_joints),
-            "recorded_hands": list(recorded_hand_sides),
         }
 
     def repeat(
         self,
         *,
-        motion_file: str = '/tmp/pbd_motion.csv',
+        motion_file: str = '/tmp/pbd_motion.npz',
         arm: str = "both",
+        log_path: str | None = None,
         speed: float = 1.0,
         command_rate_hz: float = 50.0,
         start_ramp_s: float = 0.8,
+        final_hold_s: float = 0.5,
         kp: float = 40.0,
         kd: float = 1.0,
         waist_kp: float = WAIST_HOLD_KP,
         waist_kd: float = WAIST_HOLD_KD,
-        hip_kp: float = WAIST_HOLD_KP,
-        hip_kd: float = WAIST_HOLD_KD,
         timeout: float = 3.0,
     ) -> dict[str, Any]:
         side = _normalize_arm_selection(arm)
@@ -1220,39 +1212,45 @@ class Robot:
             raise ValueError("Invalid motion file: joints and qs width mismatch.")
 
         requested_joints = list(PBD_ARM_JOINTS[side])
-        if 12 in recorded_joints:
-            requested_joints.append(12)
         joint_to_col = {joint_index: idx for idx, joint_index in enumerate(recorded_joints)}
         missing = [joint_index for joint_index in requested_joints if joint_index not in joint_to_col]
         if missing:
             raise ValueError(f"Motion file missing required joints for arm={side}: {missing}.")
         active_cols = [joint_to_col[joint_index] for joint_index in requested_joints]
         active_qs = qs[:, active_cols]
-        hand_qs_by_side: dict[str, np.ndarray] = {}
-        for hand_side in ("left", "right"):
-            key = f"{hand_side}_hand_qs"
-            if key not in data:
-                continue
-            hand_qs = np.asarray(data[key], dtype=float)
-            if hand_qs.ndim != 2 or hand_qs.shape[1] != len(HAND_JOINT_NAMES):
-                raise ValueError(
-                    f"Invalid motion file: {key} must have shape (N, {len(HAND_JOINT_NAMES)})."
-                )
-            if hand_qs.shape[0] != ts.shape[0]:
-                raise ValueError(f"Invalid motion file: {key} length mismatch with ts.")
-            hand_qs_by_side[hand_side] = hand_qs
+        left_hand_qs = np.asarray(data.get("left_hand_qs", np.empty((0, 7))), dtype=float)
+        right_hand_qs = np.asarray(data.get("right_hand_qs", np.empty((0, 7))), dtype=float)
+        replay_hands = left_hand_qs.shape == (ts.shape[0], 7) and right_hand_qs.shape == (ts.shape[0], 7)
+        resolved_log_path = log_path or f"{os.path.splitext(motion_file)[0]}_repeat.csv"
+        os.makedirs(os.path.dirname(os.path.abspath(resolved_log_path)), exist_ok=True)
 
-        upper_body_positions = self._read_joint_positions_or_raise(UPPER_BODY_JOINTS, timeout=timeout)
-        hip_positions = self._read_joint_positions_or_raise(HIP_JOINTS, timeout=timeout)
+        self.unrelease_arms(timeout=timeout)
+        if replay_hands:
+            self.stop_release_fingers("both")
+            self._get_hand("left").set_targets(
+                left_hand_qs[0].tolist(),
+                hold_s=max(0.4, float(start_ramp_s)),
+                rate_hz=command_rate_hz,
+                kp=0.8,
+                kd=0.05,
+                tau=0.02,
+                ramp_s=max(0.4, float(start_ramp_s)),
+            )
+            self._get_hand("right").set_targets(
+                right_hand_qs[0].tolist(),
+                hold_s=max(0.4, float(start_ramp_s)),
+                rate_hz=command_rate_hz,
+                kp=0.8,
+                kd=0.05,
+                tau=0.02,
+                ramp_s=max(0.4, float(start_ramp_s)),
+            )
+        positions = self._read_joint_positions_or_raise(UPPER_BODY_JOINTS, timeout=timeout)
         first_targets = {
             int(joint_index): float(active_qs[0, idx])
             for idx, joint_index in enumerate(requested_joints)
         }
-        current_targets = self._with_upper_body_hold(
-            first_targets,
-            upper_body_positions,
-            hip_positions=hip_positions,
-        )
+        current_targets = self._with_upper_body_hold(first_targets, positions)
         steps = max(1, int(max(0.0, float(start_ramp_s)) * max(1.0, float(command_rate_hz))))
         dt = 1.0 / max(1.0, float(command_rate_hz))
         if float(start_ramp_s) > 0.0:
@@ -1260,10 +1258,7 @@ class Robot:
                 alpha = float(step_idx) / float(steps)
                 blended = {}
                 for joint_index, target in current_targets.items():
-                    if joint_index in upper_body_positions:
-                        start_q = float(upper_body_positions[int(joint_index)])
-                    else:
-                        start_q = float(hip_positions[int(joint_index)])
+                    start_q = float(positions[int(joint_index)])
                     blended[int(joint_index)] = start_q + (float(target) - start_q) * alpha
                 self._publish_with_upper_body_hold(
                     {joint_index: blended[joint_index] for joint_index in requested_joints},
@@ -1272,93 +1267,185 @@ class Robot:
                     kd=kd,
                     waist_kp=waist_kp,
                     waist_kd=waist_kd,
-                    hip_positions=blended,
-                    hip_kp=hip_kp,
-                    hip_kd=hip_kd,
                 )
-                for hand_side, hand_qs in hand_qs_by_side.items():
-                    self._get_hand(hand_side).write_targets_once(
-                        hand_qs[0, :].astype(float).tolist(),
-                        kp=1.2,
-                        kd=0.05,
-                        tau=0.05,
-                    )
                 time.sleep(dt)
         else:
             self._publish_with_upper_body_hold(
                 first_targets,
-                upper_body_positions,
+                positions,
                 kp=kp,
                 kd=kd,
                 waist_kp=waist_kp,
                 waist_kd=waist_kd,
-                hip_positions=hip_positions,
-                hip_kp=hip_kp,
-                hip_kd=hip_kd,
             )
-            for hand_side, hand_qs in hand_qs_by_side.items():
-                self._get_hand(hand_side).write_targets_once(
-                    hand_qs[0, :].astype(float).tolist(),
-                    kp=1.2,
-                    kd=0.05,
-                    tau=0.05,
-                )
 
         replay_ts = ts / max(1e-6, float(speed))
         t_final = float(replay_ts[-1])
         start = time.time()
-        while True:
-            elapsed = time.time() - start
-            if elapsed > t_final:
-                break
-            q_row = _interp_motion_row(replay_ts, active_qs, elapsed)
-            joint_targets = {
-                int(joint_index): float(q_row[idx])
-                for idx, joint_index in enumerate(requested_joints)
-            }
-            self._publish_with_upper_body_hold(
-                joint_targets,
-                upper_body_positions,
-                kp=kp,
-                kd=kd,
-                waist_kp=waist_kp,
-                waist_kd=waist_kd,
-                hip_positions=hip_positions,
-                hip_kp=hip_kp,
-                hip_kd=hip_kd,
-            )
-            for hand_side, hand_qs in hand_qs_by_side.items():
-                hand_targets = _interp_motion_row(replay_ts, hand_qs, elapsed)
-                self._get_hand(hand_side).write_targets_once(
-                    hand_targets.astype(float).tolist(),
-                    kp=1.2,
-                    kd=0.05,
-                    tau=0.05,
-                )
-            time.sleep(dt)
-
-        final_targets = {
-            int(joint_index): float(active_qs[-1, idx])
+        previous_desired_row = np.asarray(active_qs[0], dtype=float)
+        commanded_targets = {
+            int(joint_index): float(active_qs[0, idx])
             for idx, joint_index in enumerate(requested_joints)
         }
-        self._publish_with_upper_body_hold(
-            final_targets,
-            upper_body_positions,
-            kp=kp,
-            kd=kd,
-            waist_kp=waist_kp,
-            waist_kd=waist_kd,
-            hip_positions=hip_positions,
-            hip_kp=hip_kp,
-            hip_kd=hip_kd,
-        )
-        for hand_side, hand_qs in hand_qs_by_side.items():
-            self._get_hand(hand_side).write_targets_once(
-                hand_qs[-1, :].astype(float).tolist(),
-                kp=1.2,
-                kd=0.05,
-                tau=0.05,
+        with open(resolved_log_path, "w", encoding="utf-8", newline="") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(
+                [
+                    "phase",
+                    "t_s",
+                    "joint_indices",
+                    "target_positions",
+                    "actual_positions",
+                ]
             )
+            while True:
+                elapsed = time.time() - start
+                if elapsed > t_final:
+                    break
+                latest_positions = self._read_joint_positions_or_raise(UPPER_BODY_JOINTS, timeout=timeout)
+                desired_row = np.asarray(_interp_motion_row(replay_ts, active_qs, elapsed), dtype=float)
+                row_delta = desired_row - previous_desired_row
+                for idx, joint_index in enumerate(requested_joints):
+                    joint_key = int(joint_index)
+                    commanded_targets[joint_key] = float(commanded_targets[joint_key] + row_delta[idx])
+                self._publish_with_upper_body_hold(
+                    commanded_targets,
+                    latest_positions,
+                    kp=kp,
+                    kd=kd,
+                    waist_kp=waist_kp,
+                    waist_kd=waist_kd,
+                )
+                if replay_hands:
+                    left_hand_desired = np.asarray(_interp_motion_row(replay_ts, left_hand_qs, elapsed), dtype=float)
+                    right_hand_desired = np.asarray(_interp_motion_row(replay_ts, right_hand_qs, elapsed), dtype=float)
+                    self._get_hand("left").write_targets_once(
+                        left_hand_desired.tolist(),
+                        kp=0.8,
+                        kd=0.05,
+                        tau=0.02,
+                    )
+                    self._get_hand("right").write_targets_once(
+                        right_hand_desired.tolist(),
+                        kp=0.8,
+                        kd=0.05,
+                        tau=0.02,
+                    )
+                    left_hand_actual = self.get_hand_state_snapshot("left")
+                    right_hand_actual = self.get_hand_state_snapshot("right")
+                else:
+                    left_hand_desired = right_hand_desired = None
+                    left_hand_actual = right_hand_actual = None
+                actual_row = [float(latest_positions[int(joint_index)]) for joint_index in requested_joints]
+                target_row = [float(commanded_targets[int(joint_index)]) for joint_index in requested_joints]
+                writer.writerow(
+                    [
+                        "repeat",
+                        f"{elapsed:.6f}",
+                        " ".join(
+                            [str(joint_index) for joint_index in requested_joints]
+                            + (PBD_HAND_JOINT_LABELS["left"] + PBD_HAND_JOINT_LABELS["right"] if replay_hands else [])
+                        ),
+                        " ".join(
+                            [f"{value:.6f}" for value in target_row]
+                            + (
+                                [f"{value:.6f}" for value in left_hand_desired.tolist()]
+                                + [f"{value:.6f}" for value in right_hand_desired.tolist()]
+                                if replay_hands
+                                else []
+                            )
+                        ),
+                        " ".join(
+                            [f"{value:.6f}" for value in actual_row]
+                            + (
+                                [f"{float(left_hand_actual['positions'][joint_name]):.6f}" for joint_name in HAND_JOINT_NAMES]
+                                + [f"{float(right_hand_actual['positions'][joint_name]):.6f}" for joint_name in HAND_JOINT_NAMES]
+                                if replay_hands and left_hand_actual is not None and right_hand_actual is not None
+                                else []
+                            )
+                        ),
+                    ]
+                )
+                handle.flush()
+                print(
+                    f"[repeat] t={elapsed:.3f}s joints={requested_joints + (PBD_HAND_JOINT_LABELS['left'] + PBD_HAND_JOINT_LABELS['right'] if replay_hands else [])} "
+                    f"target={[round(value, 4) for value in target_row] + ([round(value, 4) for value in left_hand_desired.tolist()] + [round(value, 4) for value in right_hand_desired.tolist()] if replay_hands else [])} "
+                    f"actual={[round(value, 4) for value in actual_row] + ([round(float(left_hand_actual['positions'][joint_name]), 4) for joint_name in HAND_JOINT_NAMES] + [round(float(right_hand_actual['positions'][joint_name]), 4) for joint_name in HAND_JOINT_NAMES] if replay_hands and left_hand_actual is not None and right_hand_actual is not None else [])}"
+                )
+                previous_desired_row = desired_row
+                time.sleep(dt)
+
+            final_targets = {
+                int(joint_index): float(active_qs[-1, idx])
+                for idx, joint_index in enumerate(requested_joints)
+            }
+            hold_deadline = time.time() + max(0.0, float(final_hold_s))
+            while True:
+                final_positions = self._read_joint_positions_or_raise(UPPER_BODY_JOINTS, timeout=timeout)
+                self._publish_with_upper_body_hold(
+                    final_targets,
+                    final_positions,
+                    kp=kp,
+                    kd=kd,
+                    waist_kp=waist_kp,
+                    waist_kd=waist_kd,
+                )
+                if replay_hands:
+                    self._get_hand("left").write_targets_once(
+                        left_hand_qs[-1].tolist(),
+                        kp=0.8,
+                        kd=0.05,
+                        tau=0.02,
+                    )
+                    self._get_hand("right").write_targets_once(
+                        right_hand_qs[-1].tolist(),
+                        kp=0.8,
+                        kd=0.05,
+                        tau=0.02,
+                    )
+                    left_hand_actual = self.get_hand_state_snapshot("left")
+                    right_hand_actual = self.get_hand_state_snapshot("right")
+                else:
+                    left_hand_actual = right_hand_actual = None
+                actual_row = [float(final_positions[int(joint_index)]) for joint_index in requested_joints]
+                target_row = [float(final_targets[int(joint_index)]) for joint_index in requested_joints]
+                writer.writerow(
+                    [
+                        "repeat_final_hold",
+                        f"{time.time() - start:.6f}",
+                        " ".join(
+                            [str(joint_index) for joint_index in requested_joints]
+                            + (PBD_HAND_JOINT_LABELS["left"] + PBD_HAND_JOINT_LABELS["right"] if replay_hands else [])
+                        ),
+                        " ".join(
+                            [f"{value:.6f}" for value in target_row]
+                            + (
+                                [f"{value:.6f}" for value in left_hand_qs[-1].tolist()]
+                                + [f"{value:.6f}" for value in right_hand_qs[-1].tolist()]
+                                if replay_hands
+                                else []
+                            )
+                        ),
+                        " ".join(
+                            [f"{value:.6f}" for value in actual_row]
+                            + (
+                                [f"{float(left_hand_actual['positions'][joint_name]):.6f}" for joint_name in HAND_JOINT_NAMES]
+                                + [f"{float(right_hand_actual['positions'][joint_name]):.6f}" for joint_name in HAND_JOINT_NAMES]
+                                if replay_hands and left_hand_actual is not None and right_hand_actual is not None
+                                else []
+                            )
+                        ),
+                    ]
+                )
+                handle.flush()
+                print(
+                    f"[repeat_final_hold] joints={requested_joints + (PBD_HAND_JOINT_LABELS['left'] + PBD_HAND_JOINT_LABELS['right'] if replay_hands else [])} "
+                    f"target={[round(value, 4) for value in target_row] + ([round(value, 4) for value in left_hand_qs[-1].tolist()] + [round(value, 4) for value in right_hand_qs[-1].tolist()] if replay_hands else [])} "
+                    f"actual={[round(value, 4) for value in actual_row] + ([round(float(left_hand_actual['positions'][joint_name]), 4) for joint_name in HAND_JOINT_NAMES] + [round(float(right_hand_actual['positions'][joint_name]), 4) for joint_name in HAND_JOINT_NAMES] if replay_hands and left_hand_actual is not None and right_hand_actual is not None else [])}"
+                )
+                if time.time() >= hold_deadline:
+                    break
+                time.sleep(dt)
         return {
             "arm": side,
             "motion_file": os.path.abspath(motion_file),
@@ -1367,9 +1454,9 @@ class Robot:
             "command_rate_hz": float(command_rate_hz),
             "speed": max(1e-6, float(speed)),
             "duration_s": t_final,
+            "final_hold_s": max(0.0, float(final_hold_s)),
+            "log_path": os.path.abspath(resolved_log_path),
             "waist_hold_joints": list(WAIST_JOINTS),
-            "hip_hold_joints": list(HIP_JOINTS),
-            "replayed_hands": sorted(hand_qs_by_side.keys()),
         }
 
     def move_upper_body_joint(
@@ -1432,7 +1519,7 @@ class Robot:
         shoulder_roll_restore_fraction: float = 0.45,
         shoulder_pitch_delta: float = 0.35,
         elbow_delta: float = 0.9,
-        wrist_roll_delta: float = 0.12,
+        wrist_roll_delta: float = 0.4,
         wrist_pitch_delta: float = 0.4,
     ) -> dict[str, Any]:
         side = str(arm).strip().lower()
@@ -1524,24 +1611,6 @@ class Robot:
             "duration_s": float(duration_s),
         }
 
-    def extend_right_arm_forward(
-        self,
-        *,
-        duration_s: float = 4.0,
-        command_rate_hz: float = 50.0,
-        kp: float = 30.0,
-        kd: float = 1.5,
-        timeout: float = 3.0,
-    ) -> dict[str, Any]:
-        return self.extend_arm_forward(
-            arm="right",
-            duration_s=duration_s,
-            command_rate_hz=command_rate_hz,
-            kp=kp,
-            kd=kd,
-            timeout=timeout,
-        )
-
     def retract_arm_forward(
         self,
         *,
@@ -1557,7 +1626,7 @@ class Robot:
         shoulder_roll_restore_fraction: float = 0.45,
         shoulder_pitch_delta: float = 0.35,
         elbow_delta: float = 1,
-        wrist_roll_delta: float = 0.16,
+        wrist_roll_delta: float = 0.2,
         wrist_pitch_delta: float = 0.4,
     ) -> dict[str, Any]:
         """Best-effort inverse of :meth:`extend_arm_forward`.
@@ -1656,24 +1725,6 @@ class Robot:
             "command_rate_hz": float(command_rate_hz),
             "duration_s": float(duration_s),
         }
-
-    def retract_right_arm_forward(
-        self,
-        *,
-        duration_s: float = 4.0,
-        command_rate_hz: float = 50.0,
-        kp: float = 30.0,
-        kd: float = 1.5,
-        timeout: float = 3.0,
-    ) -> dict[str, Any]:
-        return self.retract_arm_forward(
-            arm="right",
-            duration_s=duration_s,
-            command_rate_hz=command_rate_hz,
-            kp=kp,
-            kd=kd,
-            timeout=timeout,
-        )
 
     def get_odom(self) -> Any | None:
         if self._odom_sub is None:
@@ -2513,6 +2564,66 @@ class Robot:
                 self._get_hand(each_hand).stop_release_fingers()
             return
         self._get_hand(side).stop_release_fingers()
+
+    def unrelease_fingers(
+        self,
+        hand: str = "both",
+        hold_s: float = 0.4,
+        rate_hz: float = 50.0,
+        ramp_s: float | None = 0.2,
+    ) -> None:
+        side = str(hand).strip().lower()
+        if side == "both":
+            for each_hand in ("left", "right"):
+                self._get_hand(each_hand).stop_release_fingers()
+                self._get_hand(each_hand).open(hold_s=hold_s, rate_hz=rate_hz, ramp_s=ramp_s)
+            return
+        self._get_hand(side).stop_release_fingers()
+        self._get_hand(side).open(hold_s=hold_s, rate_hz=rate_hz, ramp_s=ramp_s)
+
+    def zero_torque_fingers(
+        self,
+        hand: str = "both",
+        *,
+        rate_hz: float = 50.0,
+        persistent: bool = True,
+    ) -> None:
+        side = str(hand).strip().lower()
+        if side == "both":
+            for each_hand in ("left", "right"):
+                controller = self._get_hand(each_hand)
+                current_targets = list(controller._last_targets) if controller._last_targets is not None else None
+                if current_targets is not None:
+                    controller.set_targets(
+                        current_targets,
+                        hold_s=0.15,
+                        rate_hz=rate_hz,
+                        kp=1.0,
+                        kd=0.05,
+                        tau=0.02,
+                    )
+                controller.release_fingers(
+                    hold_s=0.2,
+                    rate_hz=rate_hz,
+                    persistent=persistent,
+                )
+            return
+        controller = self._get_hand(side)
+        current_targets = list(controller._last_targets) if controller._last_targets is not None else None
+        if current_targets is not None:
+            controller.set_targets(
+                current_targets,
+                hold_s=0.15,
+                rate_hz=rate_hz,
+                kp=1.0,
+                kd=0.05,
+                tau=0.02,
+            )
+        controller.release_fingers(
+            hold_s=0.2,
+            rate_hz=rate_hz,
+            persistent=persistent,
+        )
 
     def hand_pose(
         self,
