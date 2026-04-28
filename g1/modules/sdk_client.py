@@ -999,6 +999,42 @@ class Robot:
             kd_by_joint={**arm_kd, **waist_damping},
         )
 
+    def _capture_current_upper_body_pose(
+        self,
+        *,
+        duration_s: float = 0.6,
+        command_rate_hz: float = 50.0,
+        kp: float = 20.0,
+        kd: float = 1.0,
+        waist_kp: float = WAIST_HOLD_KP,
+        waist_kd: float = WAIST_HOLD_KD,
+        timeout: float = 3.0,
+    ) -> dict[str, Any]:
+        positions = self._read_joint_positions_or_raise(UPPER_BODY_JOINTS, timeout=timeout)
+        steps = max(1, int(max(0.0, float(duration_s)) * max(1.0, float(command_rate_hz))))
+        dt = 1.0 / max(1.0, float(command_rate_hz))
+        arm_sdk = self._get_arm_sdk()
+        waist_gains = {joint_index: float(waist_kp) for joint_index in WAIST_JOINTS}
+        waist_damping = {joint_index: float(waist_kd) for joint_index in WAIST_JOINTS}
+        for step_idx in range(steps + 1):
+            ratio = float(step_idx) / float(steps)
+            smooth = ratio * ratio * (3.0 - 2.0 * ratio)
+            arm_sdk.publish_targets(
+                positions,
+                kp=kp * smooth,
+                kd=kd * smooth,
+                kp_by_joint=waist_gains,
+                kd_by_joint=waist_damping,
+            )
+            arm_sdk.publish_arm_sdk_weight(smooth)
+            time.sleep(dt)
+        return {
+            "duration_s": float(duration_s),
+            "command_rate_hz": float(command_rate_hz),
+            "final_arm_sdk_weight": 1.0,
+            "joint_count": len(positions),
+        }
+
     def teach(
         self,
         *,
@@ -1169,7 +1205,17 @@ class Robot:
             poll_s=np.asarray([sample_period], dtype=np.float32),
             representation=np.asarray(["joint_space"], dtype="<U16"),
         )
-        self.unrelease_arms(timeout=timeout)
+        self.stop_release_fingers("both")
+        self._capture_current_upper_body_pose(
+            duration_s=0.8,
+            command_rate_hz=max(50.0, 1.0 / max(1e-3, sample_period)),
+            kp=18.0,
+            kd=0.9,
+            waist_kp=waist_kp,
+            waist_kd=waist_kd,
+            timeout=timeout,
+        )
+        self.release_arms(timeout=timeout)
         return {
             "arm": side,
             "joint_count": len(arm_joints),
@@ -1190,7 +1236,7 @@ class Robot:
         speed: float = 1.0,
         command_rate_hz: float = 50.0,
         start_ramp_s: float = 0.8,
-        final_hold_s: float = 0.5,
+        final_hold_s: float = 0.8,
         kp: float = 40.0,
         kd: float = 1.0,
         waist_kp: float = WAIST_HOLD_KP,
@@ -1224,26 +1270,44 @@ class Robot:
         resolved_log_path = log_path or f"{os.path.splitext(motion_file)[0]}_repeat.csv"
         os.makedirs(os.path.dirname(os.path.abspath(resolved_log_path)), exist_ok=True)
 
+        self.release_arms(timeout=timeout)
         self.unrelease_arms(timeout=timeout)
+        self._publish_pbd_teach_hold(
+            requested_joints,
+            self._read_joint_positions_or_raise(requested_joints, timeout=timeout),
+            self._read_joint_positions_or_raise(WAIST_JOINTS, timeout=timeout),
+            waist_kp=waist_kp,
+            waist_kd=waist_kd,
+        )
+        self.zero_torque_fingers("both")
+        self._capture_current_upper_body_pose(
+            duration_s=max(0.6, min(1.2, float(start_ramp_s))),
+            command_rate_hz=command_rate_hz,
+            kp=min(20.0, float(kp) * 0.5),
+            kd=min(1.0, float(kd)),
+            waist_kp=waist_kp,
+            waist_kd=waist_kd,
+            timeout=timeout,
+        )
         if replay_hands:
             self.stop_release_fingers("both")
             self._get_hand("left").set_targets(
                 left_hand_qs[0].tolist(),
-                hold_s=max(0.4, float(start_ramp_s)),
+                hold_s=max(0.8, float(start_ramp_s)),
                 rate_hz=command_rate_hz,
-                kp=0.8,
+                kp=0.55,
                 kd=0.05,
-                tau=0.02,
-                ramp_s=max(0.4, float(start_ramp_s)),
+                tau=0.015,
+                ramp_s=max(0.8, float(start_ramp_s)),
             )
             self._get_hand("right").set_targets(
                 right_hand_qs[0].tolist(),
-                hold_s=max(0.4, float(start_ramp_s)),
+                hold_s=max(0.8, float(start_ramp_s)),
                 rate_hz=command_rate_hz,
-                kp=0.8,
+                kp=0.55,
                 kd=0.05,
-                tau=0.02,
-                ramp_s=max(0.4, float(start_ramp_s)),
+                tau=0.015,
+                ramp_s=max(0.8, float(start_ramp_s)),
             )
         positions = self._read_joint_positions_or_raise(UPPER_BODY_JOINTS, timeout=timeout)
         first_targets = {
@@ -1446,6 +1510,7 @@ class Robot:
                 if time.time() >= hold_deadline:
                     break
                 time.sleep(dt)
+        self.release_arms(timeout=timeout)
         return {
             "arm": side,
             "motion_file": os.path.abspath(motion_file),
