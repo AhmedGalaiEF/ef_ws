@@ -199,8 +199,19 @@ def _load_pbd_motion_file(path: str) -> dict[str, np.ndarray]:
                     joint_cols.append((int(match.group(1)), name))
             if not joint_cols:
                 raise ValueError(f"CSV must include joint columns like j22,j23,...: {path}")
+            hand_cols: dict[str, list[tuple[int, str]]] = {}
+            for side in ("left", "right"):
+                prefix = f"{side}_hand."
+                cols: list[tuple[int, str]] = []
+                for idx, joint_name in enumerate(HAND_JOINT_NAMES):
+                    col_name = f"{prefix}{joint_name}"
+                    if col_name in reader.fieldnames:
+                        cols.append((idx, col_name))
+                if cols:
+                    hand_cols[side] = cols
             ts_vals: list[float] = []
             q_rows: list[list[float]] = []
+            hand_rows: dict[str, list[list[float]]] = {side: [] for side in hand_cols}
             for row in reader:
                 if not row:
                     continue
@@ -209,13 +220,18 @@ def _load_pbd_motion_file(path: str) -> dict[str, np.ndarray]:
                     continue
                 ts_vals.append(float(raw_t))
                 q_rows.append([float(row[col_name]) for _, col_name in joint_cols])
+                for side, cols in hand_cols.items():
+                    hand_rows[side].append([float(row[col_name]) for _, col_name in cols])
             if not ts_vals or not q_rows:
                 raise ValueError(f"CSV has no data rows: {path}")
-            return {
+            result = {
                 "joints": np.asarray([joint for joint, _ in joint_cols], dtype=int),
                 "ts": np.asarray(ts_vals, dtype=float),
                 "qs": np.asarray(q_rows, dtype=float),
             }
+            for side, rows in hand_rows.items():
+                result[f"{side}_hand_qs"] = np.asarray(rows, dtype=float)
+            return result
     if ext in (".pkl", ".pickle"):
         with open(path, "rb") as handle:
             obj = pickle.load(handle)
@@ -1040,9 +1056,13 @@ class Robot:
         side = _normalize_arm_selection(arm)
         arm_joints = list(PBD_ARM_JOINTS[side])
         record_joints = list(PBD_TEACH_RECORD_JOINTS[side])
+        active_hand_sides = ("left", "right") if side == "both" else (side,)
         waist_positions = self._read_joint_positions_or_raise(WAIST_JOINTS, timeout=timeout)
         hip_positions = self._read_joint_positions_or_raise(HIP_JOINTS, timeout=timeout)
         arm_positions = self._read_joint_positions_or_raise(arm_joints, timeout=timeout)
+        recorded_hand_sides: list[str] = [
+            hand_side for hand_side in active_hand_sides if self.get_hand_state_snapshot(hand_side) is not None
+        ]
 
         os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
         resolved_log_path = log_path or f"{os.path.splitext(out)[0]}.csv"
@@ -1052,12 +1072,23 @@ class Robot:
         duration_limit = max(0.0, float(duration_s))
         timestamps: list[float] = []
         samples: list[list[float]] = []
+        hand_samples: dict[str, list[list[float]]] = {hand_side: [] for hand_side in recorded_hand_sides}
         start = time.time()
         next_tick = start
 
         with open(resolved_log_path, "w", encoding="utf-8", newline="") as handle:
             writer = csv.writer(handle)
-            writer.writerow(["t_s", *[f"j{joint_index}" for joint_index in record_joints]])
+            writer.writerow(
+                [
+                    "t_s",
+                    *[f"j{joint_index}" for joint_index in record_joints],
+                    *[
+                        f"{hand_side}_hand.{joint_name}"
+                        for hand_side in recorded_hand_sides
+                        for joint_name in HAND_JOINT_NAMES
+                    ],
+                ]
+            )
             try:
                 while True:
                     now = time.time()
@@ -1082,6 +1113,23 @@ class Robot:
                     if snapshot is None:
                         continue
                     joint_positions = list(snapshot.joint_positions)
+                    hand_row_values: dict[str, list[float]] = {}
+                    missing_required_hand_sample = False
+                    for hand_side in recorded_hand_sides:
+                        hand_snapshot = self.get_hand_state_snapshot(hand_side)
+                        if hand_snapshot is None:
+                            missing_required_hand_sample = True
+                            break
+                        positions_by_name = dict(hand_snapshot.get("positions") or {})
+                        try:
+                            hand_row_values[hand_side] = [
+                                float(positions_by_name[joint_name]) for joint_name in HAND_JOINT_NAMES
+                            ]
+                        except Exception:
+                            missing_required_hand_sample = True
+                            break
+                    if missing_required_hand_sample:
+                        continue
 
                     row: list[float] = []
                     for joint_index in record_joints:
@@ -1098,7 +1146,14 @@ class Robot:
                     t_rel = now - start
                     timestamps.append(t_rel)
                     samples.append(row)
-                    writer.writerow([f"{t_rel:.6f}", *[f"{value:.6f}" for value in row]])
+                    for hand_side in recorded_hand_sides:
+                        hand_samples[hand_side].append(list(hand_row_values[hand_side]))
+                    csv_hand_values: list[str] = [
+                        f"{value:.6f}"
+                        for hand_side in recorded_hand_sides
+                        for value in hand_row_values[hand_side]
+                    ]
+                    writer.writerow([f"{t_rel:.6f}", *[f"{value:.6f}" for value in row], *csv_hand_values])
                     handle.flush()
             except KeyboardInterrupt:
                 pass
@@ -1106,14 +1161,19 @@ class Robot:
         if not timestamps:
             raise RuntimeError("No samples recorded. Is rt/lowstate publishing?")
 
+        save_payload: dict[str, np.ndarray] = {
+            "joints": np.asarray(record_joints, dtype=np.int32),
+            "ts": np.asarray(timestamps, dtype=np.float32),
+            "qs": np.asarray(samples, dtype=np.float32),
+            "fk_qs": np.asarray(samples, dtype=np.float32),
+            "poll_s": np.asarray([sample_period], dtype=np.float32),
+            "representation": np.asarray(["joint_space"], dtype="<U16"),
+        }
+        for hand_side in recorded_hand_sides:
+            save_payload[f"{hand_side}_hand_qs"] = np.asarray(hand_samples[hand_side], dtype=np.float32)
         np.savez(
             out,
-            joints=np.asarray(record_joints, dtype=np.int32),
-            ts=np.asarray(timestamps, dtype=np.float32),
-            qs=np.asarray(samples, dtype=np.float32),
-            fk_qs=np.asarray(samples, dtype=np.float32),
-            poll_s=np.asarray([sample_period], dtype=np.float32),
-            representation=np.asarray(["joint_space"], dtype="<U16"),
+            **save_payload,
         )
         return {
             "arm": side,
@@ -1126,6 +1186,7 @@ class Robot:
             "waist_hold_joints": list(WAIST_JOINTS),
             "hip_hold_joints": list(HIP_JOINTS),
             "recorded_joints": list(record_joints),
+            "recorded_hands": list(recorded_hand_sides),
         }
 
     def repeat(
@@ -1167,6 +1228,19 @@ class Robot:
             raise ValueError(f"Motion file missing required joints for arm={side}: {missing}.")
         active_cols = [joint_to_col[joint_index] for joint_index in requested_joints]
         active_qs = qs[:, active_cols]
+        hand_qs_by_side: dict[str, np.ndarray] = {}
+        for hand_side in ("left", "right"):
+            key = f"{hand_side}_hand_qs"
+            if key not in data:
+                continue
+            hand_qs = np.asarray(data[key], dtype=float)
+            if hand_qs.ndim != 2 or hand_qs.shape[1] != len(HAND_JOINT_NAMES):
+                raise ValueError(
+                    f"Invalid motion file: {key} must have shape (N, {len(HAND_JOINT_NAMES)})."
+                )
+            if hand_qs.shape[0] != ts.shape[0]:
+                raise ValueError(f"Invalid motion file: {key} length mismatch with ts.")
+            hand_qs_by_side[hand_side] = hand_qs
 
         upper_body_positions = self._read_joint_positions_or_raise(UPPER_BODY_JOINTS, timeout=timeout)
         hip_positions = self._read_joint_positions_or_raise(HIP_JOINTS, timeout=timeout)
@@ -1202,6 +1276,13 @@ class Robot:
                     hip_kp=hip_kp,
                     hip_kd=hip_kd,
                 )
+                for hand_side, hand_qs in hand_qs_by_side.items():
+                    self._get_hand(hand_side).write_targets_once(
+                        hand_qs[0, :].astype(float).tolist(),
+                        kp=1.2,
+                        kd=0.05,
+                        tau=0.05,
+                    )
                 time.sleep(dt)
         else:
             self._publish_with_upper_body_hold(
@@ -1215,6 +1296,13 @@ class Robot:
                 hip_kp=hip_kp,
                 hip_kd=hip_kd,
             )
+            for hand_side, hand_qs in hand_qs_by_side.items():
+                self._get_hand(hand_side).write_targets_once(
+                    hand_qs[0, :].astype(float).tolist(),
+                    kp=1.2,
+                    kd=0.05,
+                    tau=0.05,
+                )
 
         replay_ts = ts / max(1e-6, float(speed))
         t_final = float(replay_ts[-1])
@@ -1239,6 +1327,14 @@ class Robot:
                 hip_kp=hip_kp,
                 hip_kd=hip_kd,
             )
+            for hand_side, hand_qs in hand_qs_by_side.items():
+                hand_targets = _interp_motion_row(replay_ts, hand_qs, elapsed)
+                self._get_hand(hand_side).write_targets_once(
+                    hand_targets.astype(float).tolist(),
+                    kp=1.2,
+                    kd=0.05,
+                    tau=0.05,
+                )
             time.sleep(dt)
 
         final_targets = {
@@ -1256,6 +1352,13 @@ class Robot:
             hip_kp=hip_kp,
             hip_kd=hip_kd,
         )
+        for hand_side, hand_qs in hand_qs_by_side.items():
+            self._get_hand(hand_side).write_targets_once(
+                hand_qs[-1, :].astype(float).tolist(),
+                kp=1.2,
+                kd=0.05,
+                tau=0.05,
+            )
         return {
             "arm": side,
             "motion_file": os.path.abspath(motion_file),
@@ -1266,6 +1369,7 @@ class Robot:
             "duration_s": t_final,
             "waist_hold_joints": list(WAIST_JOINTS),
             "hip_hold_joints": list(HIP_JOINTS),
+            "replayed_hands": sorted(hand_qs_by_side.keys()),
         }
 
     def move_upper_body_joint(
