@@ -1,0 +1,17 @@
+[Unit]
+Description=Unitree G1 ROS2 Dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=%h/ef_ws/g1
+Environment=PYTHONUNBUFFERED=1
+Environment=RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+ExecStart=/bin/bash -lc 'source /opt/ros/foxy/setup.bash && python3 dashboards/dash_robot_control_ros2.py'
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

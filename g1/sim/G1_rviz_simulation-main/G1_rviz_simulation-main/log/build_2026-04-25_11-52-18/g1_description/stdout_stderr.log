@@ -1,0 +1,78 @@
+running egg_info
+creating build/g1_description/g1_description.egg-info
+writing build/g1_description/g1_description.egg-info/PKG-INFO
+writing dependency_links to build/g1_description/g1_description.egg-info/dependency_links.txt
+writing entry points to build/g1_description/g1_description.egg-info/entry_points.txt
+writing requirements to build/g1_description/g1_description.egg-info/requires.txt
+writing top-level names to build/g1_description/g1_description.egg-info/top_level.txt
+writing manifest file 'build/g1_description/g1_description.egg-info/SOURCES.txt'
+reading manifest file 'build/g1_description/g1_description.egg-info/SOURCES.txt'
+writing manifest file 'build/g1_description/g1_description.egg-info/SOURCES.txt'
+running build
+running build_py
+creating /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/build/g1_description/build
+creating /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/build/g1_description/build/lib
+creating /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/build/g1_description/build/lib/g1_description
+copying g1_description/demo_joint_motion.py -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/build/g1_description/build/lib/g1_description
+copying g1_description/rviz_joint_motion.py -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/build/g1_description/build/lib/g1_description
+copying g1_description/__init__.py -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/build/g1_description/build/lib/g1_description
+copying g1_description/lowstate_jointstate_bridge.py -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/build/g1_description/build/lib/g1_description
+running install
+running install_lib
+byte-compiling /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/lib/python3.12/site-packages/g1_description/demo_joint_motion.py to demo_joint_motion.cpython-312.pyc
+byte-compiling /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/lib/python3.12/site-packages/g1_description/rviz_joint_motion.py to rviz_joint_motion.cpython-312.pyc
+byte-compiling /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/lib/python3.12/site-packages/g1_description/__init__.py to __init__.cpython-312.pyc
+byte-compiling /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/lib/python3.12/site-packages/g1_description/lowstate_jointstate_bridge.py to lowstate_jointstate_bridge.cpython-312.pyc
+running install_data
+copying resource/g1_description -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/ament_index/resource_index/packages
+copying launch/rviz_sim.launch.py -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/launch
+copying launch/robot_state_publisher.launch.py -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/launch
+copying meshes/dex1_col_1.stl -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/dex1_col_2.stl -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/Link16_L.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/d455_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/Dex1_finger_link_2.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/Link22_R.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/Link11_L.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/Link13_R.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/Link17_R.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/Link12_L.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/Dex1_base_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/Link13_L.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/left_base_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/left_hand_index_1_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/Link20_L.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/left_hand_middle_0_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/Link14_L.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/R_hand_base_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/Link16_R.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/Dex1_finger_link_1.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/Link14_R.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/head_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/head_servo_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/Link22_L.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/left_elbow_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/L_hand_base_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/Link17_L.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/Link18_R.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/Link19_R.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/Link18_L.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/Link15_R.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/left_hand_middle_1_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/left_ankle_pitch_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/Link15_L.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/Link11_R.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/left_ankle_roll_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/Link19_L.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/Link12_R.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/Link21_L.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/left_hand_index_0_link.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/Link20_R.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+copying meshes/Link21_R.STL -> /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/share/g1_description/meshes
+running install_egg_info
+Copying build/g1_description/g1_description.egg-info to /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/lib/python3.12/site-packages/g1_description-0.0.0-py3.12.egg-info
+running install_scripts
+Installing demo_joint_motion script to /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/lib/g1_description
+Installing lowstate_jointstate_bridge script to /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/lib/g1_description
+Installing rviz_joint_motion script to /home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/install/g1_description/lib/g1_description
+writing list of installed files to '/home/melodse/ef_ws/g1/sim/G1_rviz_simulation-main/G1_rviz_simulation-main/build/g1_description/install.log'

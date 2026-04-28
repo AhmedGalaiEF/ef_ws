@@ -10,10 +10,13 @@ helpers or removed from the core wrapper.
 """
 from __future__ import annotations
 
+import csv
 import json
 import math
 import numpy as np
 import os
+import pickle
+import re
 import threading
 import time
 from dataclasses import dataclass
@@ -41,6 +44,7 @@ ensure_cyclonedds_environment()
 
 try:
     from unitree_sdk2py.core.channel import ChannelSubscriber
+    from unitree_sdk2py.comm.motion_switcher.motion_switcher_client import MotionSwitcherClient
     from unitree_sdk2py.idl.sensor_msgs.msg.dds_ import PointCloud2_
     from unitree_sdk2py.idl.unitree_go.msg.dds_ import HeightMap_, SportModeState_
     from unitree_sdk2py.g1.loco.g1_loco_api import (
@@ -150,6 +154,87 @@ BODY_JOINT_NAME_BY_INDEX = {
 BODY_JOINT_INDEX_BY_NAME = {
     f"{group}.{name}": index for group, index, name in BODY_JOINT_LAYOUT
 }
+PBD_ARM_JOINTS = {
+    "left": list(LEFT_ARM_JOINTS),
+    "right": list(RIGHT_ARM_JOINTS),
+    "both": list(LEFT_ARM_JOINTS) + list(RIGHT_ARM_JOINTS),
+}
+
+
+def _normalize_arm_selection(arm: str) -> str:
+    side = str(arm).strip().lower()
+    if side not in PBD_ARM_JOINTS:
+        raise ValueError("arm must be 'left', 'right', or 'both'.")
+    return side
+
+
+def _load_pbd_motion_file(path: str) -> dict[str, np.ndarray]:
+    if not path:
+        raise ValueError("motion file path is empty")
+    if not os.path.exists(path):
+        raise FileNotFoundError(path)
+
+    ext = os.path.splitext(path)[1].lower()
+    if ext == ".npz":
+        with np.load(path, allow_pickle=True) as data:
+            return {k: np.asarray(data[k]) for k in data.files}
+    if ext == ".csv":
+        with open(path, "r", encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            if not reader.fieldnames:
+                raise ValueError(f"CSV has no header: {path}")
+            ts_key = next((k for k in ("t_s", "ts", "time_s", "time") if k in reader.fieldnames), None)
+            if ts_key is None:
+                raise ValueError(f"CSV must include one time column (t_s/ts/time_s/time): {path}")
+            joint_cols: list[tuple[int, str]] = []
+            for name in reader.fieldnames:
+                match = re.fullmatch(r"j(\d+)", str(name).strip().lower())
+                if match:
+                    joint_cols.append((int(match.group(1)), name))
+            if not joint_cols:
+                raise ValueError(f"CSV must include joint columns like j22,j23,...: {path}")
+            ts_vals: list[float] = []
+            q_rows: list[list[float]] = []
+            for row in reader:
+                if not row:
+                    continue
+                raw_t = row.get(ts_key)
+                if raw_t is None or str(raw_t).strip() == "":
+                    continue
+                ts_vals.append(float(raw_t))
+                q_rows.append([float(row[col_name]) for _, col_name in joint_cols])
+            if not ts_vals or not q_rows:
+                raise ValueError(f"CSV has no data rows: {path}")
+            return {
+                "joints": np.asarray([joint for joint, _ in joint_cols], dtype=int),
+                "ts": np.asarray(ts_vals, dtype=float),
+                "qs": np.asarray(q_rows, dtype=float),
+            }
+    if ext in (".pkl", ".pickle"):
+        with open(path, "rb") as handle:
+            obj = pickle.load(handle)
+        if not isinstance(obj, dict):
+            raise ValueError(f"Pickle motion file must contain a dict, got: {type(obj).__name__}")
+        return {str(k): np.asarray(v) for k, v in obj.items()}
+    raise ValueError(
+        f"Unsupported motion file format for '{path}'. "
+        "Use .npz, .csv (t_s + jXX columns), or .pkl/.pickle dict."
+    )
+
+
+def _interp_motion_row(ts: np.ndarray, qs: np.ndarray, t: float) -> np.ndarray:
+    if t <= float(ts[0]):
+        return qs[0]
+    if t >= float(ts[-1]):
+        return qs[-1]
+    hi = int(np.searchsorted(ts, t, side="right"))
+    lo = max(0, hi - 1)
+    t0 = float(ts[lo])
+    t1 = float(ts[hi])
+    if t1 <= t0:
+        return qs[hi]
+    alpha = (t - t0) / (t1 - t0)
+    return qs[lo] * (1.0 - alpha) + qs[hi] * alpha
 
 try:
     from unitree_sdk2py.idl.unitree_hg.msg.dds_ import HandState_
@@ -878,6 +963,238 @@ class Robot:
     def two_hand_kiss(self) -> int:
         return self.execute_arm_action("two-hand kiss")
 
+    def _publish_pbd_teach_hold(
+        self,
+        arm_joints: list[int],
+        arm_positions: dict[int, float],
+        waist_positions: dict[int, float],
+        *,
+        waist_kp: float = WAIST_HOLD_KP,
+        waist_kd: float = WAIST_HOLD_KD,
+    ) -> None:
+        targets = dict(waist_positions)
+        arm_kp = {int(joint_index): 0.0 for joint_index in arm_joints}
+        arm_kd = {int(joint_index): 0.0 for joint_index in arm_joints}
+        for joint_index in arm_joints:
+            targets[int(joint_index)] = float(arm_positions[int(joint_index)])
+        waist_gains = {int(joint_index): float(waist_kp) for joint_index in waist_positions}
+        waist_damping = {int(joint_index): float(waist_kd) for joint_index in waist_positions}
+        self._get_arm_sdk().publish_targets(
+            targets,
+            kp=0.0,
+            kd=0.0,
+            kp_by_joint={**arm_kp, **waist_gains},
+            kd_by_joint={**arm_kd, **waist_damping},
+        )
+
+    def teach(
+        self,
+        *,
+        arm: str = "both",
+        out: str = "/tmp/pbd_motion.npz",
+        log_path: str | None = None,
+        duration_s: float = 0.0,
+        poll_s: float = 0.02,
+        waist_kp: float = WAIST_HOLD_KP,
+        waist_kd: float = WAIST_HOLD_KD,
+        timeout: float = 3.0,
+    ) -> dict[str, Any]:
+        side = _normalize_arm_selection(arm)
+        arm_joints = list(PBD_ARM_JOINTS[side])
+        waist_positions = self._read_joint_positions_or_raise(WAIST_JOINTS, timeout=timeout)
+        arm_positions = self._read_joint_positions_or_raise(arm_joints, timeout=timeout)
+
+        os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
+        resolved_log_path = log_path or f"{os.path.splitext(out)[0]}.csv"
+        os.makedirs(os.path.dirname(os.path.abspath(resolved_log_path)), exist_ok=True)
+
+        sample_period = max(1e-3, float(poll_s))
+        duration_limit = max(0.0, float(duration_s))
+        timestamps: list[float] = []
+        samples: list[list[float]] = []
+        start = time.time()
+        next_tick = start
+
+        with open(resolved_log_path, "w", encoding="utf-8", newline="") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(["t_s", *[f"j{joint_index}" for joint_index in arm_joints]])
+            try:
+                while True:
+                    now = time.time()
+                    if now < next_tick:
+                        time.sleep(min(0.02, next_tick - now))
+                        continue
+                    next_tick += sample_period
+                    if duration_limit > 0.0 and (now - start) >= duration_limit:
+                        break
+
+                    self._publish_pbd_teach_hold(
+                        arm_joints,
+                        arm_positions,
+                        waist_positions,
+                        waist_kp=waist_kp,
+                        waist_kd=waist_kd,
+                    )
+                    snapshot = self.get_low_state_snapshot()
+                    if snapshot is None:
+                        continue
+
+                    row: list[float] = []
+                    for joint_index in arm_joints:
+                        q_val = snapshot.q[int(joint_index)]
+                        if q_val is None:
+                            raise RuntimeError(
+                                f"Joint position for {BODY_JOINT_NAME_BY_INDEX.get(int(joint_index), joint_index)} is unavailable."
+                            )
+                        q_float = float(q_val)
+                        arm_positions[int(joint_index)] = q_float
+                        row.append(q_float)
+
+                    t_rel = now - start
+                    timestamps.append(t_rel)
+                    samples.append(row)
+                    writer.writerow([f"{t_rel:.6f}", *[f"{value:.6f}" for value in row]])
+                    handle.flush()
+            except KeyboardInterrupt:
+                pass
+
+        if not timestamps:
+            raise RuntimeError("No samples recorded. Is rt/lowstate publishing?")
+
+        np.savez(
+            out,
+            joints=np.asarray(arm_joints, dtype=np.int32),
+            ts=np.asarray(timestamps, dtype=np.float32),
+            qs=np.asarray(samples, dtype=np.float32),
+            poll_s=np.asarray([sample_period], dtype=np.float32),
+            representation=np.asarray(["joint_space"], dtype="<U16"),
+        )
+        return {
+            "arm": side,
+            "joint_count": len(arm_joints),
+            "sample_count": len(timestamps),
+            "duration_s": float(timestamps[-1]) if timestamps else 0.0,
+            "poll_s": sample_period,
+            "out": os.path.abspath(out),
+            "log_path": os.path.abspath(resolved_log_path),
+            "waist_hold_joints": list(WAIST_JOINTS),
+        }
+
+    def repeat(
+        self,
+        motion_file: str,
+        *,
+        arm: str = "both",
+        speed: float = 1.0,
+        command_rate_hz: float = 50.0,
+        start_ramp_s: float = 0.8,
+        kp: float = 40.0,
+        kd: float = 1.0,
+        waist_kp: float = WAIST_HOLD_KP,
+        waist_kd: float = WAIST_HOLD_KD,
+        timeout: float = 3.0,
+    ) -> dict[str, Any]:
+        side = _normalize_arm_selection(arm)
+        data = _load_pbd_motion_file(motion_file)
+        if "joints" not in data or "ts" not in data or "qs" not in data:
+            raise ValueError("Motion file must contain 'joints', 'ts', and 'qs'.")
+        recorded_joints = [int(joint_index) for joint_index in np.asarray(data["joints"]).astype(int).tolist()]
+        ts = np.asarray(data["ts"], dtype=float)
+        qs = np.asarray(data["qs"], dtype=float)
+        if ts.size == 0 or qs.size == 0:
+            raise ValueError("No samples in motion file.")
+        if qs.shape[0] != ts.shape[0]:
+            raise ValueError("Invalid motion file: ts and qs length mismatch.")
+        if qs.shape[1] != len(recorded_joints):
+            raise ValueError("Invalid motion file: joints and qs width mismatch.")
+
+        requested_joints = list(PBD_ARM_JOINTS[side])
+        joint_to_col = {joint_index: idx for idx, joint_index in enumerate(recorded_joints)}
+        missing = [joint_index for joint_index in requested_joints if joint_index not in joint_to_col]
+        if missing:
+            raise ValueError(f"Motion file missing required joints for arm={side}: {missing}.")
+        active_cols = [joint_to_col[joint_index] for joint_index in requested_joints]
+        active_qs = qs[:, active_cols]
+
+        positions = self._read_joint_positions_or_raise(UPPER_BODY_JOINTS, timeout=timeout)
+        first_targets = {
+            int(joint_index): float(active_qs[0, idx])
+            for idx, joint_index in enumerate(requested_joints)
+        }
+        current_targets = self._with_upper_body_hold(first_targets, positions)
+        steps = max(1, int(max(0.0, float(start_ramp_s)) * max(1.0, float(command_rate_hz))))
+        dt = 1.0 / max(1.0, float(command_rate_hz))
+        if float(start_ramp_s) > 0.0:
+            for step_idx in range(1, steps + 1):
+                alpha = float(step_idx) / float(steps)
+                blended = {}
+                for joint_index, target in current_targets.items():
+                    start_q = float(positions[int(joint_index)])
+                    blended[int(joint_index)] = start_q + (float(target) - start_q) * alpha
+                self._publish_with_upper_body_hold(
+                    {joint_index: blended[joint_index] for joint_index in requested_joints},
+                    blended,
+                    kp=kp,
+                    kd=kd,
+                    waist_kp=waist_kp,
+                    waist_kd=waist_kd,
+                )
+                time.sleep(dt)
+        else:
+            self._publish_with_upper_body_hold(
+                first_targets,
+                positions,
+                kp=kp,
+                kd=kd,
+                waist_kp=waist_kp,
+                waist_kd=waist_kd,
+            )
+
+        replay_ts = ts / max(1e-6, float(speed))
+        t_final = float(replay_ts[-1])
+        start = time.time()
+        while True:
+            elapsed = time.time() - start
+            if elapsed > t_final:
+                break
+            q_row = _interp_motion_row(replay_ts, active_qs, elapsed)
+            joint_targets = {
+                int(joint_index): float(q_row[idx])
+                for idx, joint_index in enumerate(requested_joints)
+            }
+            self._publish_with_upper_body_hold(
+                joint_targets,
+                positions,
+                kp=kp,
+                kd=kd,
+                waist_kp=waist_kp,
+                waist_kd=waist_kd,
+            )
+            time.sleep(dt)
+
+        final_targets = {
+            int(joint_index): float(active_qs[-1, idx])
+            for idx, joint_index in enumerate(requested_joints)
+        }
+        self._publish_with_upper_body_hold(
+            final_targets,
+            positions,
+            kp=kp,
+            kd=kd,
+            waist_kp=waist_kp,
+            waist_kd=waist_kd,
+        )
+        return {
+            "arm": side,
+            "motion_file": os.path.abspath(motion_file),
+            "joint_count": len(requested_joints),
+            "sample_count": int(ts.shape[0]),
+            "command_rate_hz": float(command_rate_hz),
+            "speed": max(1e-6, float(speed)),
+            "duration_s": t_final,
+            "waist_hold_joints": list(WAIST_JOINTS),
+        }
+
     def move_upper_body_joint(
         self,
         joint_index: int,
@@ -1287,18 +1604,6 @@ class Robot:
     def damp(self) -> None:
         self.fsm_1_damp()
 
-    def enter_walking_ready_mode(self) -> None:
-        if hasattr(self._client, "Damp"):
-            self._client.Damp()
-            time.sleep(0.5)
-        if hasattr(self._client, "Squat2StandUp"):
-            self._client.Squat2StandUp()
-            time.sleep(1.0)
-        if hasattr(self._client, "Start"):
-            self._client.Start()
-            return
-        self.balanced_stand()
-
     def _usb_controller_loop(
         self,
         *,
@@ -1354,12 +1659,6 @@ class Robot:
                 if joy.get_numbuttons() > btn_a and joy.get_button(btn_a):
                     self.damp()
                     active = False
-                    time.sleep(0.5)
-                    continue
-
-                if joy.get_numbuttons() > btn_x and joy.get_button(btn_x):
-                    self.enter_walking_ready_mode()
-                    active = True
                     time.sleep(0.5)
                     continue
 
@@ -1467,6 +1766,42 @@ class Robot:
             self._client.SetBalanceMode(3)
             return
         raise AttributeError("Current locomotion client does not support dev mode gait API.")
+
+    def leave_dev_mode(self, restart_wait_s: float = 5.0) -> None:
+        msc = MotionSwitcherClient()
+        msc.SetTimeout(10.0)
+        msc.Init()
+
+        def _result_code(result: Any) -> Any:
+            if isinstance(result, tuple):
+                return result[0]
+            return result
+
+        code = _result_code(msc.CheckMode())
+        if int(code) != 0:
+            raise RuntimeError(f"MotionSwitcherClient.CheckMode() failed with code {code}.")
+
+        code = _result_code(msc.ReleaseMode())
+        if int(code) != 0:
+            raise RuntimeError(f"MotionSwitcherClient.ReleaseMode() failed with code {code}.")
+
+        time.sleep(1.0)
+
+        code = _result_code(msc.SelectMode("ai"))
+        if int(code) != 0:
+            time.sleep(1.0)
+            retry_code = _result_code(msc.SelectMode("ai"))
+            if int(retry_code) != 0:
+                raise RuntimeError(
+                    "MotionSwitcherClient.SelectMode('ai') failed "
+                    f"with code {code} and retry code {retry_code}. "
+                    "The robot motion service likely has not accepted the mode handoff yet."
+                )
+
+        time.sleep(max(0.0, float(restart_wait_s)))
+
+        self._client = create_loco_client(domain_id=self.domain_id, iface=self.iface)
+        force_normal_gait(self._client)
 
     def balanced_stand(self, mode: int = 0) -> None:
         if hasattr(self._client, "BalanceStand"):
@@ -2129,6 +2464,30 @@ class Robot:
                 torques.append(None)
         return positions, velocities, torques
 
+    @staticmethod
+    def _extract_hand_tactile_series(msg: Any) -> dict[str, list[Any]]:
+        pressures: list[list[float]] = []
+        temperatures: list[list[float]] = []
+        lost: list[int] = []
+        for sensor in list(getattr(msg, "press_sensor_state", []) or []):
+            try:
+                pressures.append([float(value) for value in list(getattr(sensor, "pressure", []) or [])])
+            except Exception:
+                pressures.append([])
+            try:
+                temperatures.append([float(value) for value in list(getattr(sensor, "temperature", []) or [])])
+            except Exception:
+                temperatures.append([])
+            try:
+                lost.append(int(getattr(sensor, "lost", 0)))
+            except Exception:
+                lost.append(0)
+        return {
+            "pressures": pressures,
+            "temperatures": temperatures,
+            "lost": lost,
+        }
+
     def _resolve_joint_lookup_key(self, joint_index: int | str) -> str | None:
         if isinstance(joint_index, str):
             key = joint_index.strip()
@@ -2188,6 +2547,40 @@ class Robot:
             "joints": joints,
             "sources": sources,
         }
+
+    def get_hand_state_snapshot(self, hand: str = "right") -> dict[str, Any] | None:
+        side = str(hand).strip().lower()
+        hand_msg, hand_ts = self._get_hand_state_msg(side)
+        if hand_msg is None:
+            return None
+        positions, velocities, torques = self._extract_hand_joint_series(hand_msg)
+        tactile = self._extract_hand_tactile_series(hand_msg)
+        return {
+            "hand": side,
+            "source": HAND_STATE_TOPIC_BY_SIDE.get(side),
+            "timestamp": float(hand_ts),
+            "positions": {
+                HAND_JOINT_NAMES[idx]: positions[idx]
+                for idx in range(min(len(positions), len(HAND_JOINT_NAMES)))
+            },
+            "velocities": {
+                HAND_JOINT_NAMES[idx]: velocities[idx]
+                for idx in range(min(len(velocities), len(HAND_JOINT_NAMES)))
+            },
+            "torques": {
+                HAND_JOINT_NAMES[idx]: torques[idx]
+                for idx in range(min(len(torques), len(HAND_JOINT_NAMES)))
+            },
+            "tactile_pressures": tactile["pressures"],
+            "tactile_temperatures": tactile["temperatures"],
+            "tactile_lost": tactile["lost"],
+        }
+
+    def get_tactile_pressures(self, hand: str = "right") -> list[list[float]] | None:
+        snapshot = self.get_hand_state_snapshot(hand)
+        if snapshot is None:
+            return None
+        return snapshot["tactile_pressures"]
 
     def _recv_rgbd_payload(self, timeout: float = 2.0) -> tuple[bytes, bytes, float, float]:
         try:

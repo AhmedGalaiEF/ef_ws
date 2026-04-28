@@ -1,0 +1,135 @@
+2026-04-26 21:54:57,408 INFO MainThread Dash robot control log path: /home/melodse/ef_ws/g1/scripts/dash_robot_control.log
+2026-04-26 21:55:14,601 INFO MainThread Dash robot control log path: /home/melodse/ef_ws/g1/scripts/dash_robot_control.log
+2026-04-26 21:55:33,798 INFO MainThread Dash robot control log path: /home/melodse/ef_ws/g1/scripts/dash_robot_control.log
+2026-04-26 21:56:34,992 INFO MainThread Dash robot control log path: /home/melodse/ef_ws/g1/scripts/dash_robot_control.log
+2026-04-27 20:52:39,360 INFO MainThread Dash robot control log path: /home/melodse/ef_ws/g1/scripts/dash_robot_control.log
+2026-04-27 20:52:51,251 ERROR Thread-12 (process_request_thread) Exception on /_dash-update-component [POST]
+Traceback (most recent call last):
+  File "/home/melodse/venv/lib/python3.12/site-packages/flask/app.py", line 1511, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/melodse/venv/lib/python3.12/site-packages/flask/app.py", line 919, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/melodse/venv/lib/python3.12/site-packages/flask/app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/melodse/venv/lib/python3.12/site-packages/flask/app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/melodse/venv/lib/python3.12/site-packages/dash/_get_app.py", line 17, in wrap
+    return ctx.run(func, self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/melodse/venv/lib/python3.12/site-packages/dash/dash.py", line 1601, in dispatch
+    response_data = ctx.run(partial_func)
+                    ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/melodse/venv/lib/python3.12/site-packages/dash/_callback.py", line 720, in add_context
+    raise err
+  File "/home/melodse/venv/lib/python3.12/site-packages/dash/_callback.py", line 711, in add_context
+    output_value = _invoke_callback(func, *func_args, **func_kwargs)  # type: ignore[reportArgumentType]
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/melodse/venv/lib/python3.12/site-packages/dash/_callback.py", line 58, in _invoke_callback
+    return func(*args, **kwargs)  # %% callback invoked %%
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/melodse/ef_ws/g1/scripts/dash_robot_control.py", line 2308, in update_slam_tab
+    return empty_slam_cloud_figure("SLAM unavailable"), empty_slam_map_figure("SLAM map unavailable"), msg, dash.no_update, dash.no_update, dash.no_update
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/melodse/ef_ws/g1/scripts/dash_robot_control.py", line 1179, in empty_slam_cloud_figure
+    fig.update_layout(
+  File "/home/melodse/venv/lib/python3.12/site-packages/plotly/graph_objs/_figure.py", line 218, in update_layout
+    return super().update_layout(dict1, overwrite, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/melodse/venv/lib/python3.12/site-packages/plotly/basedatatypes.py", line 1415, in update_layout
+    self.layout.update(dict1, overwrite=overwrite, **kwargs)
+  File "/home/melodse/venv/lib/python3.12/site-packages/plotly/basedatatypes.py", line 5195, in update
+    BaseFigure._perform_update(self, kwargs, overwrite=overwrite)
+  File "/home/melodse/venv/lib/python3.12/site-packages/plotly/basedatatypes.py", line 3939, in _perform_update
+    if key not in plotly_obj and isinstance(plotly_obj, BaseLayoutType):
+       ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/melodse/venv/lib/python3.12/site-packages/plotly/basedatatypes.py", line 5945, in __contains__
+    return super(BaseLayoutHierarchyType, self).__contains__(prop)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/melodse/venv/lib/python3.12/site-packages/plotly/basedatatypes.py", line 4864, in __contains__
+    obj = obj[p]
+          ~~~^^^
+  File "/home/melodse/venv/lib/python3.12/site-packages/plotly/basedatatypes.py", line 5938, in __getitem__
+    return super(BaseLayoutHierarchyType, self).__getitem__(prop)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/melodse/venv/lib/python3.12/site-packages/plotly/basedatatypes.py", line 4810, in __getitem__
+    return validator.present(self._prop_defaults.get(prop, None))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/melodse/venv/lib/python3.12/site-packages/_plotly_utils/basevalidators.py", line 382, in present
+    if is_homogeneous_array(v):
+       ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/melodse/venv/lib/python3.12/site-packages/_plotly_utils/basevalidators.py", line 198, in is_homogeneous_array
+    and isinstance(v, np.ndarray)
+                      ^^^^^^^^^^
+AttributeError: partially initialized module 'numpy' has no attribute 'ndarray' (most likely due to a circular import). Did you mean: 'array'?
+2026-04-27 20:52:51,262 ERROR Thread-19 (process_request_thread) Exception on /_dash-update-component [POST]
+Traceback (most recent call last):
+  File "/home/melodse/venv/lib/python3.12/site-packages/flask/app.py", line 1511, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/melodse/venv/lib/python3.12/site-packages/flask/app.py", line 919, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/melodse/venv/lib/python3.12/site-packages/flask/app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/melodse/venv/lib/python3.12/site-packages/flask/app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/melodse/venv/lib/python3.12/site-packages/dash/_get_app.py", line 17, in wrap
+    return ctx.run(func, self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/melodse/venv/lib/python3.12/site-packages/dash/dash.py", line 1601, in dispatch
+    response_data = ctx.run(partial_func)
+                    ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/melodse/venv/lib/python3.12/site-packages/dash/_callback.py", line 720, in add_context
+    raise err
+  File "/home/melodse/venv/lib/python3.12/site-packages/dash/_callback.py", line 711, in add_context
+    output_value = _invoke_callback(func, *func_args, **func_kwargs)  # type: ignore[reportArgumentType]
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/melodse/venv/lib/python3.12/site-packages/dash/_callback.py", line 58, in _invoke_callback
+    return func(*args, **kwargs)  # %% callback invoked %%
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/melodse/ef_ws/g1/scripts/dash_robot_control.py", line 2672, in update_lidar
+    empty_lidar_figure("LiDAR stream unavailable"),
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/melodse/ef_ws/g1/scripts/dash_robot_control.py", line 1153, in empty_lidar_figure
+    fig.update_layout(
+  File "/home/melodse/venv/lib/python3.12/site-packages/plotly/graph_objs/_figure.py", line 218, in update_layout
+    return super().update_layout(dict1, overwrite, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/melodse/venv/lib/python3.12/site-packages/plotly/basedatatypes.py", line 1415, in update_layout
+    self.layout.update(dict1, overwrite=overwrite, **kwargs)
+  File "/home/melodse/venv/lib/python3.12/site-packages/plotly/basedatatypes.py", line 5195, in update
+    BaseFigure._perform_update(self, kwargs, overwrite=overwrite)
+  File "/home/melodse/venv/lib/python3.12/site-packages/plotly/basedatatypes.py", line 3939, in _perform_update
+    if key not in plotly_obj and isinstance(plotly_obj, BaseLayoutType):
+       ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/melodse/venv/lib/python3.12/site-packages/plotly/basedatatypes.py", line 5945, in __contains__
+    return super(BaseLayoutHierarchyType, self).__contains__(prop)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/melodse/venv/lib/python3.12/site-packages/plotly/basedatatypes.py", line 4864, in __contains__
+    obj = obj[p]
+          ~~~^^^
+  File "/home/melodse/venv/lib/python3.12/site-packages/plotly/basedatatypes.py", line 5938, in __getitem__
+    return super(BaseLayoutHierarchyType, self).__getitem__(prop)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/melodse/venv/lib/python3.12/site-packages/plotly/basedatatypes.py", line 4810, in __getitem__
+    return validator.present(self._prop_defaults.get(prop, None))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/melodse/venv/lib/python3.12/site-packages/_plotly_utils/basevalidators.py", line 382, in present
+    if is_homogeneous_array(v):
+       ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/melodse/venv/lib/python3.12/site-packages/_plotly_utils/basevalidators.py", line 198, in is_homogeneous_array
+    and isinstance(v, np.ndarray)
+                      ^^^^^^^^^^
+AttributeError: partially initialized module 'numpy' has no attribute 'ndarray' (most likely due to a circular import). Did you mean: 'array'?
+2026-04-27 20:54:11,190 INFO MainThread Dash robot control log path: /home/melodse/ef_ws/g1/scripts/dash_robot_control.log
+2026-04-27 20:56:06,371 INFO MainThread Dash robot control log path: /home/melodse/ef_ws/g1/scripts/dash_robot_control.log
+2026-04-27 21:15:07,913 INFO MainThread Dash robot control log path: /home/melodse/ef_ws/g1/scripts/dash_robot_control.log
+2026-04-27 21:44:20,190 INFO MainThread Dash robot control log path: /home/melodse/ef_ws/g1/scripts/dash_robot_control.log
+2026-04-27 21:44:26,847 INFO MainThread Dash robot control log path: /home/melodse/ef_ws/g1/scripts/dash_robot_control.log
+2026-04-27 21:45:29,909 INFO MainThread Dash robot control log path: /home/melodse/ef_ws/g1/scripts/dash_robot_control.log

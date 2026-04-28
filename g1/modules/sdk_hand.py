@@ -227,6 +227,9 @@ class Dex3HandController:
         self._cmd_lock = threading.Lock()
 
         self._state_positions: list[float] | None = None
+        self._state_pressures: list[list[float]] | None = None
+        self._state_temperatures: list[list[float]] | None = None
+        self._state_press_lost: list[int] | None = None
         self._state_ts: float = 0.0
         self._state_lock = threading.Lock()
         self._state_sub: Any | None = None
@@ -237,15 +240,32 @@ class Dex3HandController:
     def _state_cb(self, msg: Any) -> None:
         positions: list[float] = []
         motor_state = list(getattr(msg, "motor_state", []) or [])
+        press_sensor_state = list(getattr(msg, "press_sensor_state", []) or [])
         for idx in range(7):
             motor = motor_state[idx] if idx < len(motor_state) else None
             try:
                 positions.append(float(getattr(motor, "q")))
             except Exception:
                 return
+        pressures: list[list[float]] = []
+        temperatures: list[list[float]] = []
+        lost_flags: list[int] = []
+        for sensor in press_sensor_state:
+            try:
+                pressures.append([float(value) for value in list(getattr(sensor, "pressure", []) or [])])
+                temperatures.append([float(value) for value in list(getattr(sensor, "temperature", []) or [])])
+                lost_flags.append(int(getattr(sensor, "lost", 0)))
+            except Exception:
+                pressures = []
+                temperatures = []
+                lost_flags = []
+                break
         if len(positions) == 7:
             with self._state_lock:
                 self._state_positions = positions
+                self._state_pressures = pressures or None
+                self._state_temperatures = temperatures or None
+                self._state_press_lost = lost_flags or None
                 self._state_ts = time.time()
 
     def _read_actual_positions(self, max_age: float = 1.0) -> list[float] | None:
@@ -255,6 +275,30 @@ class Dex3HandController:
             if (time.time() - self._state_ts) > max_age:
                 return None
             return clamp_hand_targets(self.hand, list(self._state_positions))
+
+    def get_state_snapshot(self, max_age: float = 1.0) -> dict[str, Any] | None:
+        with self._state_lock:
+            if self._state_positions is None:
+                return None
+            age_s = time.time() - self._state_ts
+            if age_s > max_age:
+                return None
+            return {
+                "hand": self.hand,
+                "positions": clamp_hand_targets(self.hand, list(self._state_positions)),
+                "pressures": None if self._state_pressures is None else [list(row) for row in self._state_pressures],
+                "temperatures": None if self._state_temperatures is None else [list(row) for row in self._state_temperatures],
+                "lost": None if self._state_press_lost is None else list(self._state_press_lost),
+                "timestamp": float(self._state_ts),
+                "age_s": float(age_s),
+            }
+
+    def get_tactile_pressures(self, max_age: float = 1.0) -> list[list[float]] | None:
+        snapshot = self.get_state_snapshot(max_age=max_age)
+        if snapshot is None:
+            return None
+        pressures = snapshot.get("pressures")
+        return None if pressures is None else [list(row) for row in pressures]
 
     def _get_start_targets(self) -> list[float]:
         """Return best estimate of current positions for ramp start."""
