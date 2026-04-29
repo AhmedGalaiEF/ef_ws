@@ -63,6 +63,8 @@ WAIST_HOLD_KD = 12.0
 DEFAULT_ARM_KP = 30.0
 DEFAULT_ARM_KD = 1.5
 DEFAULT_POSE_FILE = os.path.join(SCRIPT_DIR, "saved_dual_arm_mirror_poses.json")
+INACTIVE_TRANSITION_KP = 300.0
+TRANSITION_EPSILON_RAD = 1e-4
 
 WAIST_JOINTS = [12, 13, 14]
 LEFT_ARM_JOINTS = [15, 16, 17, 18, 19, 20, 21]
@@ -183,7 +185,9 @@ class UpperBodyPoseController:
         arm_kd: float,
         waist_kp: float,
         waist_kd: float,
+        joint_kp_overrides: dict[int, float] | None = None,
     ) -> None:
+        kp_overrides = joint_kp_overrides or {}
         for joint_index in UPPER_BODY_JOINTS:
             cmd = self._cmd.motor_cmd[joint_index]
             cmd.mode = 1
@@ -191,10 +195,10 @@ class UpperBodyPoseController:
             cmd.dq = 0.0
             cmd.tau = 0.0
             if joint_index in WAIST_JOINTS:
-                cmd.kp = float(waist_kp)
+                cmd.kp = float(kp_overrides.get(joint_index, waist_kp))
                 cmd.kd = float(waist_kd)
             else:
-                cmd.kp = float(arm_kp)
+                cmd.kp = float(kp_overrides.get(joint_index, arm_kp))
                 cmd.kd = float(arm_kd)
         self._cmd.crc = self._crc.Crc(self._cmd)
         self._pub.Write(self._cmd)
@@ -243,6 +247,7 @@ class DualArmMirrorWindow(QWidget):
         self.sequence_running = False
         self.sequence_step_index = 0
         self.sequence_next_time_s = 0.0
+        self.transition_joint_indices: set[int] = set()
 
         self._build_ui()
         self._load_saved_poses()
@@ -328,6 +333,10 @@ class DualArmMirrorWindow(QWidget):
         self.load_pose_button = QPushButton("Load Selected Pose", self)
         self.load_pose_button.clicked.connect(self._load_selected_pose)
         pose_buttons.addWidget(self.load_pose_button)
+
+        self.delete_pose_button = QPushButton("Remove Selected Pose", self)
+        self.delete_pose_button.clicked.connect(self._remove_selected_poses)
+        pose_buttons.addWidget(self.delete_pose_button)
         root.addLayout(pose_buttons)
 
         self.pose_list = QListWidget(self)
@@ -557,6 +566,7 @@ class DualArmMirrorWindow(QWidget):
         return self.saved_poses[row]
 
     def _apply_pose_to_desired_targets(self, pose: dict[str, Any]) -> None:
+        previous_targets = dict(self.desired_targets)
         arm_joints = pose.get("arm_joints")
         waist_joints = pose.get("waist_joints")
         if not isinstance(arm_joints, dict):
@@ -570,6 +580,10 @@ class DualArmMirrorWindow(QWidget):
             key = str(joint)
             if key in arm_joints:
                 self.desired_targets[joint] = float(arm_joints[key])
+        self.transition_joint_indices = {
+            joint for joint in UPPER_BODY_JOINTS
+            if abs(float(self.desired_targets[joint]) - float(previous_targets[joint])) > TRANSITION_EPSILON_RAD
+        }
         self._refresh_joint_selection_widgets()
 
     def _load_selected_pose(self) -> None:
@@ -591,6 +605,37 @@ class DualArmMirrorWindow(QWidget):
     def _selected_pose_rows(self) -> list[int]:
         rows = sorted({index.row() for index in self.pose_list.selectedIndexes()})
         return [row for row in rows if 0 <= row < len(self.saved_poses)]
+
+    def _remove_selected_poses(self) -> None:
+        rows = self._selected_pose_rows()
+        if not rows:
+            QMessageBox.warning(self, "No Pose", "Select one or more saved poses first.")
+            return
+
+        removed_names = [str(self.saved_poses[row].get("name", f"pose_{row}")) for row in rows]
+        removed_set = set(rows)
+
+        new_sequence_pose_indices: list[int] = []
+        for pose_index in self.sequence_pose_indices:
+            if pose_index in removed_set:
+                continue
+            shift = sum(1 for row in rows if row < pose_index)
+            new_sequence_pose_indices.append(pose_index - shift)
+
+        for row in reversed(rows):
+            del self.saved_poses[row]
+
+        self.sequence_pose_indices = new_sequence_pose_indices
+        if self.sequence_running:
+            self._stop_sequence()
+        self._write_saved_poses()
+        self._refresh_pose_list()
+        self._refresh_sequence_list()
+
+        if len(removed_names) == 1:
+            self.status_label.setText(f"Removed pose '{removed_names[0]}' from {self.pose_path}")
+        else:
+            self.status_label.setText(f"Removed {len(removed_names)} poses from {self.pose_path}")
 
     def _refresh_sequence_list(self) -> None:
         selected_row = self.sequence_list.currentRow() if hasattr(self, "sequence_list") else -1
@@ -673,6 +718,11 @@ class DualArmMirrorWindow(QWidget):
             self.sequence_running = False
             self.status_label.setText("Sequence completed")
             return
+        if self.sequence_next_time_s < 0.0:
+            if self.transition_joint_indices:
+                return
+            self.sequence_next_time_s = now_s + max(0.0, float(self.sequence_gap_box.value()))
+            return
         if self.sequence_next_time_s > 0.0 and now_s < self.sequence_next_time_s:
             return
         pose_index = self.sequence_pose_indices[self.sequence_step_index]
@@ -684,7 +734,7 @@ class DualArmMirrorWindow(QWidget):
         self._apply_pose_to_desired_targets(pose)
         self.sequence_list.setCurrentRow(self.sequence_step_index)
         self.sequence_step_index += 1
-        self.sequence_next_time_s = now_s + max(0.0, float(self.sequence_gap_box.value()))
+        self.sequence_next_time_s = -1.0 if self.transition_joint_indices else now_s + max(0.0, float(self.sequence_gap_box.value()))
         name = str(pose.get("name", "<unnamed>"))
         self.status_label.setText(f"Sequence step {self.sequence_step_index}/{len(self.sequence_pose_indices)}: {name}")
 
@@ -717,6 +767,7 @@ class DualArmMirrorWindow(QWidget):
             self.latest_positions = dict(positions)
         self.current_targets = dict(self.latest_positions)
         self.desired_targets = dict(self.latest_positions)
+        self.transition_joint_indices.clear()
         self._refresh_joint_selection_widgets()
         self.status_label.setText("Desired targets synced to current upper-body pose")
 
@@ -758,6 +809,21 @@ class DualArmMirrorWindow(QWidget):
             else:
                 self.current_targets[joint_index] = current + max_step * (1.0 if delta > 0.0 else -1.0)
 
+        if self.transition_joint_indices and all(
+            abs(float(self.current_targets[joint]) - float(self.desired_targets[joint])) <= TRANSITION_EPSILON_RAD
+            for joint in self.transition_joint_indices
+        ):
+            self.transition_joint_indices.clear()
+
+    def _inactive_transition_kp_overrides(self) -> dict[int, float]:
+        if not self.transition_joint_indices:
+            return {}
+        return {
+            joint: max(INACTIVE_TRANSITION_KP, self.waist_kp if joint in WAIST_JOINTS else self.arm_kp)
+            for joint in UPPER_BODY_JOINTS
+            if joint not in self.transition_joint_indices
+        }
+
     def _tick(self) -> None:
         snapshot = self.state_sub.snapshot()
         if snapshot is not None:
@@ -789,6 +855,7 @@ class DualArmMirrorWindow(QWidget):
             arm_kd=self.arm_kd,
             waist_kp=self.waist_kp,
             waist_kd=self.waist_kd,
+            joint_kp_overrides=self._inactive_transition_kp_overrides(),
         )
         self._refresh_labels()
         self.status_label.setText(
