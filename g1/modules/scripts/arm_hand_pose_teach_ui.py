@@ -17,6 +17,10 @@ PARENT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 if PARENT_DIR not in sys.path:
     sys.path.insert(0, PARENT_DIR)
 
+from dds_env import ensure_cyclonedds_environment
+
+ensure_cyclonedds_environment()
+
 try:
     from PyQt5.QtCore import Qt, QTimer
     from PyQt5.QtWidgets import (

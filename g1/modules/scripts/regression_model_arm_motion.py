@@ -19,6 +19,11 @@ PARENT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 if PARENT_DIR not in sys.path:
     sys.path.insert(0, PARENT_DIR)
 
+from dds_env import ensure_cyclonedds_environment
+from sdk_client import Robot
+
+ensure_cyclonedds_environment()
+
 try:
     from PyQt5.QtCore import Qt, QTimer
     from PyQt5.QtWidgets import (
@@ -49,23 +54,23 @@ except ImportError as exc:
         "  pip install -e <path-to-unitree_sdk2_python>"
     ) from exc
 
-from sdk_boot import hanger_boot_sequence
-
-
-LEFT_ARM_IDX = [15, 16, 17, 18, 19, 20, 21]
 RIGHT_ARM_IDX = [22, 23, 24, 25, 26, 27, 28]
+WAIST_IDX = [12, 13, 14]
 NOT_USED_IDX = 29
 
-COMMAND_NAMES = ["forward", "backward", "left", "right", "up", "down"]
+RIGHT_ARM_PINNED_IDX = [22, 23, 24, 25]
+RIGHT_ARM_TEACH_FREE_IDX = [27, 28]
+RIGHT_ARM_TEACH_HOLD_IDX = RIGHT_ARM_PINNED_IDX + [26]
+MODELLED_JOINT_IDX = [27, 28]
+
+COMMAND_NAMES = ["up", "down", "left", "right"]
 COMMAND_TO_INDEX = {name: idx for idx, name in enumerate(COMMAND_NAMES)}
 
 KEY_TO_COMMAND = {
-    Qt.Key_Up: "forward",
-    Qt.Key_Down: "backward",
+    Qt.Key_Up: "up",
+    Qt.Key_Down: "down",
     Qt.Key_Left: "left",
     Qt.Key_Right: "right",
-    Qt.Key_PageUp: "up",
-    Qt.Key_PageDown: "down",
 }
 
 
@@ -81,17 +86,6 @@ def resolve_lowstate_type() -> type | None:
         if hasattr(module, "LowState_"):
             return getattr(module, "LowState_")
     return None
-
-
-def selected_joint_indices(arm: str) -> list[int]:
-    side = str(arm).strip().lower()
-    if side == "left":
-        return list(LEFT_ARM_IDX)
-    if side == "right":
-        return list(RIGHT_ARM_IDX)
-    if side == "both":
-        return list(LEFT_ARM_IDX) + list(RIGHT_ARM_IDX)
-    raise ValueError(f"Unsupported arm selection '{arm}'.")
 
 
 def command_feature(command_name: str) -> np.ndarray:
@@ -132,7 +126,8 @@ class Sample:
     command_name: str
     command_index: int
     feature: np.ndarray
-    joint_positions: np.ndarray
+    input_joint_positions: np.ndarray
+    output_joint_positions: np.ndarray
 
 
 class ArmStateSubscriber:
@@ -164,23 +159,69 @@ class ArmStateSubscriber:
                 return None
             return np.asarray(self._positions, dtype=np.float32), float(self._timestamp)
 
+    def wait_for_snapshot(self, timeout_s: float = 3.0) -> tuple[np.ndarray, float]:
+        deadline = time.time() + max(0.1, float(timeout_s))
+        while time.time() < deadline:
+            snap = self.snapshot()
+            if snap is not None:
+                return snap
+            time.sleep(0.02)
+        raise TimeoutError("Timed out waiting for joint state.")
 
-class ArmTeachController:
-    def __init__(self, joints: list[int], kp: float, kd: float) -> None:
-        self.joints = [int(j) for j in joints]
+
+class RightArmPinnedTeachController:
+    def __init__(
+        self,
+        *,
+        pinned_joints: list[int],
+        free_joints: list[int],
+        pinned_positions: dict[int, float],
+        kp: float,
+        kd: float,
+        free_joint_targets: dict[int, float] | None = None,
+    ) -> None:
+        self.pinned_joints = [int(j) for j in pinned_joints]
+        self.free_joints = [int(j) for j in free_joints]
+        self._pinned_positions = {int(j): float(v) for j, v in pinned_positions.items()}
+        self._free_joint_targets = {
+            int(j): float(v)
+            for j, v in (free_joint_targets or {}).items()
+        }
         self.kp = float(kp)
         self.kd = float(kd)
         self._crc = CRC()
         self._pub = ChannelPublisher("rt/arm_sdk", LowCmd_)
         self._pub.Init()
         self._cmd = unitree_hg_msg_dds__LowCmd_()
+        self._cmd.mode_pr = 0
+        self._cmd.mode_machine = 0
         self._cmd.motor_cmd[NOT_USED_IDX].q = 1.0
-        self._last_pose = {joint: 0.0 for joint in self.joints}
+        for joint in self.pinned_joints + self.free_joints:
+            self._cmd.motor_cmd[joint].mode = 1
 
-    def write_zero_torque(self) -> None:
-        for joint in self.joints:
+    def update_pinned_positions(self, pinned_positions: dict[int, float]) -> None:
+        for joint, value in pinned_positions.items():
+            if int(joint) in self._pinned_positions:
+                self._pinned_positions[int(joint)] = float(value)
+
+    def update_free_targets(self, free_joint_targets: dict[int, float]) -> None:
+        for joint, value in free_joint_targets.items():
+            if int(joint) in self.free_joints:
+                self._free_joint_targets[int(joint)] = float(value)
+
+    def write_teach_mode(self) -> None:
+        for joint in self.pinned_joints:
             mc = self._cmd.motor_cmd[joint]
-            mc.q = self._last_pose.get(joint, 0.0)
+            mc.mode = 1
+            mc.q = self._pinned_positions[joint]
+            mc.dq = 0.0
+            mc.kp = self.kp
+            mc.kd = self.kd
+            mc.tau = 0.0
+        for joint in self.free_joints:
+            mc = self._cmd.motor_cmd[joint]
+            mc.mode = 1
+            mc.q = self._free_joint_targets.get(joint, 0.0)
             mc.dq = 0.0
             mc.kp = 0.0
             mc.kd = 0.0
@@ -188,35 +229,46 @@ class ArmTeachController:
         self._cmd.crc = self._crc.Crc(self._cmd)
         self._pub.Write(self._cmd)
 
-    def seed_pose(self, joint_positions: np.ndarray) -> None:
-        for joint, q_val in zip(self.joints, joint_positions):
-            self._last_pose[joint] = float(q_val)
-
-    def write_pose(self, joint_positions: np.ndarray) -> None:
-        for joint, q_val in zip(self.joints, joint_positions):
+    def write_inference_mode(self, predicted_joint_positions: dict[int, float]) -> None:
+        for joint in self.pinned_joints:
             mc = self._cmd.motor_cmd[joint]
+            mc.mode = 1
+            mc.q = self._pinned_positions[joint]
+            mc.dq = 0.0
+            mc.kp = self.kp
+            mc.kd = self.kd
+            mc.tau = 0.0
+        for joint, q_val in predicted_joint_positions.items():
+            mc = self._cmd.motor_cmd[int(joint)]
+            mc.mode = 1
             mc.q = float(q_val)
             mc.dq = 0.0
             mc.kp = self.kp
             mc.kd = self.kd
             mc.tau = 0.0
-            self._last_pose[joint] = float(q_val)
         self._cmd.crc = self._crc.Crc(self._cmd)
         self._pub.Write(self._cmd)
 
-    def ramp_to_pose(self, target_positions: np.ndarray, duration_s: float, rate_hz: float = 50.0) -> None:
-        target = np.asarray(target_positions, dtype=np.float32)
+    def ramp_to_pose(
+        self,
+        start_positions: dict[int, float],
+        target_positions: dict[int, float],
+        duration_s: float,
+        rate_hz: float = 50.0,
+    ) -> None:
         steps = max(1, int(max(0.0, float(duration_s)) * max(1.0, float(rate_hz))))
         if steps <= 1:
-            self.write_pose(target)
+            self.write_inference_mode(target_positions)
             return
 
-        start = np.asarray([self._last_pose[joint] for joint in self.joints], dtype=np.float32)
         dt = 1.0 / max(1.0, float(rate_hz))
         for step_idx in range(1, steps + 1):
             alpha = float(step_idx) / float(steps)
-            pose = start + (target - start) * alpha
-            self.write_pose(pose)
+            pose = {
+                int(joint): (1.0 - alpha) * float(start_positions[int(joint)]) + alpha * float(target_positions[int(joint)])
+                for joint in target_positions
+            }
+            self.write_inference_mode(pose)
             time.sleep(dt)
 
 
@@ -224,7 +276,8 @@ class RegressionArmMotionWindow(QWidget):
     def __init__(
         self,
         *,
-        arm: str,
+        iface: str,
+        domain_id: int,
         sample_hz: float,
         ridge_lambda: float,
         output_dir: str,
@@ -232,15 +285,22 @@ class RegressionArmMotionWindow(QWidget):
         kd: float,
     ) -> None:
         super().__init__()
-        self.arm = str(arm)
-        self.joints = selected_joint_indices(self.arm)
+        self.iface = str(iface)
+        self.domain_id = int(domain_id)
         self.sample_hz = max(1.0, float(sample_hz))
         self.ridge_lambda = max(0.0, float(ridge_lambda))
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.kp = float(kp)
+        self.kd = float(kd)
 
-        self.state_sub = ArmStateSubscriber(self.joints)
-        self.arm_ctrl = ArmTeachController(self.joints, kp=kp, kd=kd)
+        self.robot: Robot | None = None
+        self.state_sub: ArmStateSubscriber | None = None
+        self.pinned_state_sub: ArmStateSubscriber | None = None
+        self.teach_ctrl: RightArmPinnedTeachController | None = None
+        self.infer_ctrl: RightArmPinnedTeachController | None = None
+        self.session_active = False
+        self._last_dataset_snapshot: tuple[np.ndarray, float] | None = None
 
         self.samples: list[Sample] = []
         self.command_counts = {name: 0 for name in COMMAND_NAMES}
@@ -256,11 +316,10 @@ class RegressionArmMotionWindow(QWidget):
         self._build_ui()
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._on_timer)
-        self._timer.start(max(10, int(round(1000.0 / self.sample_hz))))
         self.setFocusPolicy(Qt.StrongFocus)
         self.setFocus()
         self._append_log(
-            "Manual teaching active. Hold one command button or key while physically moving the selected arm joints."
+            "UI started without robot control. Use 'Start Robot Session' to initialize DDS and begin teaching."
         )
 
     def _build_ui(self) -> None:
@@ -270,9 +329,9 @@ class RegressionArmMotionWindow(QWidget):
         root = QVBoxLayout()
 
         info = QLabel(
-            "Controls: Up/Down/Left/Right/PageUp/PageDown. "
-            "Hold one command while guiding the arm by hand. "
-            "Only the selected arm joints are kept limp via rt/arm_sdk."
+            "Controls: Up/Down/Left/Right. Hold one command while guiding the right wrist. "
+            "During teaching, waist/shoulder/elbow/wrist-roll are held and wrist pitch/yaw are zero torque. "
+            "During inference, waist/shoulder/elbow remain pinned."
         )
         info.setWordWrap(True)
         root.addWidget(info)
@@ -283,12 +342,10 @@ class RegressionArmMotionWindow(QWidget):
         command_group = QGroupBox("Command Inputs")
         command_layout = QGridLayout()
         button_specs = [
-            ("forward", "Forward\n[Up]", 0, 1),
+            ("up", "Up\n[Up]", 0, 1),
             ("left", "Left\n[Left]", 1, 0),
             ("right", "Right\n[Right]", 1, 2),
-            ("backward", "Backward\n[Down]", 2, 1),
-            ("up", "Up\n[PgUp]", 0, 3),
-            ("down", "Down\n[PgDn]", 2, 3),
+            ("down", "Down\n[Down]", 2, 1),
         ]
         for command_name, label, row, col in button_specs:
             button = QPushButton(label)
@@ -303,6 +360,10 @@ class RegressionArmMotionWindow(QWidget):
 
         controls_group = QGroupBox("Training")
         controls_layout = QHBoxLayout()
+
+        self.session_button = QPushButton("Start Robot Session")
+        self.session_button.clicked.connect(self._toggle_session)
+        controls_layout.addWidget(self.session_button)
 
         self.teach_button = QPushButton("Pause Teaching")
         self.teach_button.clicked.connect(self._toggle_teaching)
@@ -383,37 +444,147 @@ class RegressionArmMotionWindow(QWidget):
             rmse_text = "n/a" if self.model_rmse is None else f"{self.model_rmse:.4f}"
             model_state = f"trained (rmse={rmse_text})"
         self.status_label.setText(
-            f"Arm={self.arm}  joints={self.joints}  teaching={'on' if self.teach_enabled else 'off'}  "
-            f"active_command={active}"
+            f"Arm=right  joints={RIGHT_ARM_IDX}  model_joints={MODELLED_JOINT_IDX}  session={'on' if self.session_active else 'off'}  "
+            f"teaching={'on' if self.teach_enabled else 'off'}  active_command={active}"
         )
         self.summary_label.setText(
             f"Samples: {total_samples} | Counts: {counts} | Model: {model_state} | Output dir: {self.output_dir}"
         )
 
+    def _toggle_session(self) -> None:
+        if self.session_active:
+            self.session_active = False
+            self._timer.stop()
+            self.state_sub = None
+            self.pinned_state_sub = None
+            self.teach_ctrl = None
+            self.infer_ctrl = None
+            self.robot = None
+            self._last_dataset_snapshot = None
+            self.session_button.setText("Start Robot Session")
+            self._append_log("Robot session stopped. UI remains open.")
+            self._refresh_summary()
+            return
+
+        try:
+            ChannelFactoryInitialize(self.domain_id, self.iface)
+            self.robot = Robot(
+                iface=self.iface,
+                domain_id=self.domain_id,
+                auto_start_sensors=False,
+            )
+            self.robot.extend_arm_forward(arm="right")
+            self.state_sub = ArmStateSubscriber(RIGHT_ARM_IDX)
+            self.pinned_state_sub = ArmStateSubscriber(WAIST_IDX + RIGHT_ARM_TEACH_HOLD_IDX)
+            right_arm_positions, _ = self.state_sub.wait_for_snapshot()
+            pinned_positions_array, _ = self.pinned_state_sub.wait_for_snapshot()
+            pinned_positions = {
+                joint: float(value)
+                for joint, value in zip(WAIST_IDX + RIGHT_ARM_TEACH_HOLD_IDX, pinned_positions_array)
+            }
+            free_targets = {
+                27: float(right_arm_positions[5]),
+                28: float(right_arm_positions[6]),
+            }
+            self.teach_ctrl = RightArmPinnedTeachController(
+                pinned_joints=WAIST_IDX + RIGHT_ARM_TEACH_HOLD_IDX,
+                free_joints=RIGHT_ARM_TEACH_FREE_IDX,
+                pinned_positions=pinned_positions,
+                free_joint_targets=free_targets,
+                kp=self.kp,
+                kd=self.kd,
+            )
+            inference_pinned = {
+                joint: pinned_positions[joint]
+                for joint in WAIST_IDX + RIGHT_ARM_PINNED_IDX
+            }
+            self.infer_ctrl = RightArmPinnedTeachController(
+                pinned_joints=WAIST_IDX + RIGHT_ARM_PINNED_IDX,
+                free_joints=RIGHT_ARM_TEACH_FREE_IDX,
+                pinned_positions=inference_pinned,
+                kp=self.kp,
+                kd=self.kd,
+            )
+            self._last_dataset_snapshot = None
+        except Exception as exc:
+            self.robot = None
+            self.state_sub = None
+            self.pinned_state_sub = None
+            self.teach_ctrl = None
+            self.infer_ctrl = None
+            QMessageBox.warning(self, "Robot Session Failed", str(exc))
+            self._append_log(f"Failed to start robot session: {exc}")
+            self._refresh_summary()
+            return
+
+        self.session_active = True
+        self.session_started_at = time.time()
+        self._timer.start(max(10, int(round(1000.0 / self.sample_hz))))
+        self.session_button.setText("Stop Robot Session")
+        self._append_log(
+            f"Robot session started on iface={self.iface} domain_id={self.domain_id}. "
+            "Executed Robot.extend_arm_forward() and enabled right-arm wrist teaching."
+        )
+        self._refresh_summary()
+
     def _on_timer(self) -> None:
-        if self.teach_enabled:
-            self.arm_ctrl.write_zero_torque()
+        if (
+            not self.session_active
+            or self.state_sub is None
+            or self.pinned_state_sub is None
+            or self.teach_ctrl is None
+        ):
+            self._refresh_summary()
+            return
 
         snap = self.state_sub.snapshot()
+        pinned_snap = self.pinned_state_sub.snapshot()
         if snap is None:
+            self._refresh_summary()
+            return
+        if pinned_snap is None:
             self._refresh_summary()
             return
 
         joint_positions, snap_ts = snap
-        self.arm_ctrl.seed_pose(joint_positions)
+        pinned_joint_positions, _ = pinned_snap
+        self.teach_ctrl.update_pinned_positions(
+            {
+                joint: float(value)
+                for joint, value in zip(WAIST_IDX + RIGHT_ARM_TEACH_HOLD_IDX, pinned_joint_positions)
+            }
+        )
+        self.teach_ctrl.update_free_targets(
+            {
+                27: float(joint_positions[5]),
+                28: float(joint_positions[6]),
+            }
+        )
+
+        if self.teach_enabled:
+            self.teach_ctrl.write_teach_mode()
 
         if self.teach_enabled and self.active_command is not None:
-            command_name = self.active_command
-            command_idx = COMMAND_TO_INDEX[command_name]
-            sample = Sample(
-                t_s=float(snap_ts - self.session_started_at),
-                command_name=command_name,
-                command_index=command_idx,
-                feature=command_feature(command_name),
-                joint_positions=joint_positions.copy(),
-            )
-            self.samples.append(sample)
-            self.command_counts[command_name] += 1
+            if self._last_dataset_snapshot is not None:
+                prev_positions, prev_ts = self._last_dataset_snapshot
+                command_name = self.active_command
+                command_idx = COMMAND_TO_INDEX[command_name]
+                input_positions = np.asarray([prev_positions[5], prev_positions[6]], dtype=np.float32)
+                output_positions = np.asarray([joint_positions[5], joint_positions[6]], dtype=np.float32)
+                feature = np.concatenate([command_feature(command_name), input_positions], axis=0)
+                sample = Sample(
+                    t_s=float(prev_ts - self.session_started_at),
+                    command_name=command_name,
+                    command_index=command_idx,
+                    feature=feature,
+                    input_joint_positions=input_positions,
+                    output_joint_positions=output_positions,
+                )
+                self.samples.append(sample)
+                self.command_counts[command_name] += 1
+            self._last_dataset_snapshot = (joint_positions.copy(), snap_ts)
+        else:
+            self._last_dataset_snapshot = None
 
         self._refresh_summary()
 
@@ -422,7 +593,7 @@ class RegressionArmMotionWindow(QWidget):
             raise RuntimeError("No samples recorded yet.")
         ts = np.asarray([sample.t_s for sample in self.samples], dtype=np.float32)
         x = np.asarray([sample.feature for sample in self.samples], dtype=np.float32)
-        y = np.asarray([sample.joint_positions for sample in self.samples], dtype=np.float32)
+        y = np.asarray([sample.output_joint_positions for sample in self.samples], dtype=np.float32)
         cmd_idx = np.asarray([sample.command_index for sample in self.samples], dtype=np.int32)
         return ts, x, y, cmd_idx
 
@@ -449,15 +620,35 @@ class RegressionArmMotionWindow(QWidget):
             return
 
         command_name = self.command_selector.currentText()
-        target = predict_pose(self.model_coef, self.model_bias, command_name)
+        if self.state_sub is None or self.pinned_state_sub is None or self.infer_ctrl is None:
+            QMessageBox.warning(self, "Robot Session Missing", "Start a robot session before applying a prediction.")
+            return
         snap = self.state_sub.snapshot()
-        if snap is not None:
-            self.arm_ctrl.seed_pose(snap[0])
+        pinned_snap = self.pinned_state_sub.snapshot()
+        if snap is None or pinned_snap is None:
+            QMessageBox.warning(self, "State Missing", "Joint state is unavailable.")
+            return
+        right_arm_positions, _ = snap
+        pinned_positions, _ = pinned_snap
+        input_positions = np.asarray([right_arm_positions[5], right_arm_positions[6]], dtype=np.float32)
+        feature = np.concatenate([command_feature(command_name), input_positions], axis=0)
+        target = feature @ self.model_coef + self.model_bias
+        self.infer_ctrl.update_pinned_positions(
+            {
+                joint: float(value)
+                for joint, value in zip(WAIST_IDX + RIGHT_ARM_TEACH_HOLD_IDX, pinned_positions)
+                if joint in (WAIST_IDX + RIGHT_ARM_PINNED_IDX)
+            }
+        )
 
         self.teach_enabled = False
         self.teach_button.setText("Resume Teaching")
         self._append_log(f"Applying predicted pose for command '{command_name}'.")
-        self.arm_ctrl.ramp_to_pose(target, duration_s=float(self.ramp_spin.value()))
+        self.infer_ctrl.ramp_to_pose(
+            start_positions={27: float(input_positions[0]), 28: float(input_positions[1])},
+            target_positions={27: float(target[0]), 28: float(target[1])},
+            duration_s=float(self.ramp_spin.value()),
+        )
         self._refresh_summary()
 
     def _save_dataset_and_model(self, show_message: bool = True) -> None:
@@ -479,30 +670,32 @@ class RegressionArmMotionWindow(QWidget):
             commands=np.asarray(COMMAND_NAMES, dtype="<U16"),
             command_indices=cmd_idx,
             features=features,
-            joints=np.asarray(self.joints, dtype=np.int32),
-            joint_positions=targets,
-            arm=np.asarray([self.arm], dtype="<U16"),
+            input_joints=np.asarray(MODELLED_JOINT_IDX, dtype=np.int32),
+            output_joints=np.asarray(MODELLED_JOINT_IDX, dtype=np.int32),
+            resulting_joint_positions=targets,
+            arm=np.asarray(["right"], dtype="<U16"),
         )
 
         with dataset_csv.open("w", encoding="utf-8", newline="") as handle:
             writer = csv.writer(handle)
             writer.writerow(
                 ["t_s", "command_name", "command_index"]
-                + [f"input_{name}" for name in COMMAND_NAMES]
-                + [f"joint_{joint}" for joint in self.joints]
+                + [f"command_{name}" for name in COMMAND_NAMES]
+                + ["input_joint_27", "input_joint_28", "output_joint_27", "output_joint_28"]
             )
             for sample in self.samples:
                 writer.writerow(
                     [f"{sample.t_s:.6f}", sample.command_name, sample.command_index]
                     + [f"{float(value):.6f}" for value in sample.feature]
-                    + [f"{float(value):.6f}" for value in sample.joint_positions]
+                    + [f"{float(value):.6f}" for value in sample.output_joint_positions]
                 )
 
         if self.model_coef is not None and self.model_bias is not None:
             np.savez(
                 model_npz,
                 commands=np.asarray(COMMAND_NAMES, dtype="<U16"),
-                joints=np.asarray(self.joints, dtype=np.int32),
+                input_joints=np.asarray(MODELLED_JOINT_IDX, dtype=np.int32),
+                output_joints=np.asarray(MODELLED_JOINT_IDX, dtype=np.int32),
                 coef=self.model_coef,
                 bias=self.model_bias,
                 ridge_lambda=np.asarray([self.ridge_lambda], dtype=np.float32),
@@ -542,17 +735,17 @@ class RegressionArmMotionWindow(QWidget):
 
     def closeEvent(self, event) -> None:  # type: ignore[override]
         self._timer.stop()
-        self.arm_ctrl.write_zero_torque()
+        if self.teach_ctrl is not None:
+            self.teach_ctrl.write_teach_mode()
         super().closeEvent(event)
 
 
 def parse_args() -> tuple[argparse.Namespace, list[str]]:
     parser = argparse.ArgumentParser(
-        description="Teach arm poses from six discrete input commands and fit a regression model."
+        description="Teach right-wrist motion from four discrete commands and fit a regression model."
     )
     parser.add_argument("--iface", default="eth0", help="network interface for DDS")
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id")
-    parser.add_argument("--arm", choices=["left", "right", "both"], default="both", help="which arm(s) to teach")
     parser.add_argument("--sample-hz", type=float, default=20.0, help="recording rate while a command is held")
     parser.add_argument("--ridge-lambda", type=float, default=1e-3, help="ridge regularization strength")
     parser.add_argument("--kp", type=float, default=25.0, help="arm replay kp for predicted poses")
@@ -562,11 +755,6 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
         default=os.path.join(SCRIPT_DIR, "regression_arm_outputs"),
         help="where recorded datasets and model files are stored",
     )
-    parser.add_argument(
-        "--no-safety-boot",
-        action="store_true",
-        help="skip hanger boot sequence if the robot is already standing safely",
-    )
     args, remaining = parser.parse_known_args()
     return args, [sys.argv[0], *remaining]
 
@@ -574,18 +762,10 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
 def main() -> int:
     args, qt_argv = parse_args()
 
-    if not args.no_safety_boot:
-        try:
-            hanger_boot_sequence(iface=args.iface, domain_id=args.domain_id)
-        except Exception as exc:
-            print(f"Failed during safety boot: {exc}")
-            return 1
-    else:
-        ChannelFactoryInitialize(int(args.domain_id), args.iface)
-
     app = QApplication(qt_argv)
     window = RegressionArmMotionWindow(
-        arm=args.arm,
+        iface=args.iface,
+        domain_id=args.domain_id,
         sample_hz=args.sample_hz,
         ridge_lambda=args.ridge_lambda,
         output_dir=args.output_dir,

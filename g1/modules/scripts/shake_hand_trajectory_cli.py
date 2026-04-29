@@ -19,6 +19,10 @@ PARENT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 if PARENT_DIR not in sys.path:
     sys.path.insert(0, PARENT_DIR)
 
+from dds_env import ensure_cyclonedds_environment
+
+ensure_cyclonedds_environment()
+
 try:
     from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelPublisher, ChannelSubscriber
     from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient

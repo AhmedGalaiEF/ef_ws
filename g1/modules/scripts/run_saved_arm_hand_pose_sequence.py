@@ -18,6 +18,10 @@ if PARENT_DIR not in sys.path:
 
 import numpy as np
 
+from dds_env import ensure_cyclonedds_environment
+
+ensure_cyclonedds_environment()
+
 try:
     from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelPublisher, ChannelSubscriber
     from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
