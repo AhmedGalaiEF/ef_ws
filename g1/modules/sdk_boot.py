@@ -92,7 +92,7 @@ def hanger_boot_sequence(
     iface: str,
     domain_id: int = 0,
     step: float = 0.02,
-    max_height: float = 0.5,
+    max_height: float = 0.22,
     max_attempts: int = 3,
     client_timeout: float = 2.0,
     require_confirmation: bool = True,
