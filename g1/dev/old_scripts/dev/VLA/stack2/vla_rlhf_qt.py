@@ -28,16 +28,21 @@ except ImportError as exc:
     raise SystemExit("PySide6 is required.  Install with: pip install PySide6") from exc
 
 # ---------------------------------------------------------------------------
-# Path setup — makes sdk_client importable
+# Path setup — import the shared G1 SDK stack from ~/ef_ws/g1/modules
 # ---------------------------------------------------------------------------
 
 _THIS = Path(__file__).resolve()
-_DEV_DIR = _THIS.parents[2]          # .../scripts/dev
-_SCRIPTS_ROOT = _DEV_DIR.parent      # .../scripts
+_MODULES_DIR = Path("~/ef_ws/g1/modules").expanduser().resolve()
 
-for _p in (str(_DEV_DIR), str(_SCRIPTS_ROOT)):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
+if not _MODULES_DIR.is_dir():
+    raise SystemExit(
+        f"Required modules directory not found: {_MODULES_DIR}\n"
+        "Expected shared SDK modules such as sdk_client.py under ~/ef_ws/g1/modules."
+    )
+
+_modules_path = str(_MODULES_DIR)
+if _modules_path not in sys.path:
+    sys.path.insert(0, _modules_path)
 
 RLHF_LOG_PATH = _THIS.parent / "rlhf_log.jsonl"
 
@@ -58,16 +63,10 @@ Locomotion
   stop             Stop all motion immediately.
   sleep            Pause execution.
                    Params: {duration_s: float}
-  walk             Continuous walking velocity command.
-                   Params: {vx: float, vy: float, vyaw: float}  (m/s, rad/s)
-  run              Continuous running velocity command.
-                   Params: {vx: float, vy: float, vyaw: float}
-  walk_for         Walk a precise distance with feedback control.
-                   Params: {distance: float (m), max_vx: float, timeout: float}
-  run_for          Run a precise distance with feedback control.
-                   Params: {distance: float (m), max_vx: float, timeout: float}
-  turn_for         Turn in-place by angle (positive = CCW).
-                   Params: {angle_deg: float, max_vyaw: float, timeout: float}
+  move_for         Execute bounded locomotion for a fixed duration.
+                   This is the only locomotion action allowed for movement.
+                   Params: {duration: float (s),
+                            vx: float, vy: float, vyaw: float}  (m/s, rad/s)
 
 Upper Body / Dexterity
 -----------------------
@@ -78,6 +77,24 @@ Upper Body / Dexterity
                    Joint names: shoulder_pitch, shoulder_roll, shoulder_yaw,
                                 elbow, wrist_pitch, wrist_roll, wrist_yaw,
                                 waist_yaw
+  shake_hand       Execute the built-in handshake arm motion.
+                   Params: {}
+  clap             Execute the built-in clap arm motion.
+                   Params: {}
+  high_five        Execute the built-in high-five arm motion.
+                   Params: {}
+  hug              Execute the built-in hug arm motion.
+                   Params: {}
+  heart            Execute the built-in heart arm motion.
+                   Params: {}
+  right_heart      Execute the built-in right-heart arm motion.
+                   Params: {}
+  high_wave        Execute the built-in high-wave arm motion.
+                   Params: {}
+  face_wave        Execute the built-in face-wave arm motion.
+                   Params: {}
+  hands_up         Execute the built-in hands-up arm motion.
+                   Params: {}
 
 Navigation / SLAM
 -----------------
@@ -93,6 +110,8 @@ Navigation / SLAM
 Sensing
 -------
   get_state        Read current IMU, position, gait mode, and sensor timestamps.
+  get_rgbd         Read the RGBD feed after setting robot.rgbd_host to 10.34.0.156.
+                   Params: {timeout: float}
 
 Communication
 -------------
@@ -109,9 +128,10 @@ PLANNING RULES
 3. Add a "description" string key to every step for human readability.
 4. Always begin locomotion plans with {"type": "balanced_stand"}.
 5. Prefer short, safe plans: 2–8 steps unless the task clearly requires more.
-6. Use conservative parameters (slow speeds, short distances, generous timeouts).
+6. Use conservative parameters (slow speeds, short durations, generous timeouts).
 7. If the task calls for acknowledgement, use "say" at the start or end.
 8. If lighting feedback is appropriate, change headlight colour to signal state.
+9. Do not emit walk, run, walk_for, run_for, or turn_for. Use move_for for all executable locomotion.
 
 OUTPUT FORMAT EXAMPLE
 =====================
@@ -120,8 +140,8 @@ OUTPUT FORMAT EXAMPLE
   {"type": "headlight", "args": {"color": "green", "intensity": 80},
    "description": "Signal task start with green light"},
   {"type": "say", "text": "Starting task", "description": "Announce start"},
-  {"type": "walk_for", "distance": 0.5, "timeout": 12,
-   "description": "Walk forward 0.5 m"},
+  {"type": "move_for", "duration": 2.0, "vx": 0.2, "vy": 0.0, "vyaw": 0.0,
+   "description": "Move forward briefly at a slow speed"},
   {"type": "headlight", "args": {"color": "white", "intensity": 60},
    "description": "Restore default lighting"},
   {"type": "stop", "description": "Halt and await feedback"}
@@ -219,36 +239,14 @@ def _dispatch_action(robot: Any, action: dict[str, Any]) -> Any:
         d = max(0.0, float(action.get("duration_s", 0.5)))
         time.sleep(d)
         return {"slept_s": d}
-    if t == "walk":
-        return int(robot.walk(
+    if t == "move_for":
+        rc = int(robot.move_for(
+            duration=float(action["duration"]),
             vx=float(action.get("vx", 0.0)),
             vy=float(action.get("vy", 0.0)),
             vyaw=float(action.get("vyaw", 0.0)),
         ))
-    if t == "run":
-        return int(robot.run(
-            vx=float(action.get("vx", 0.0)),
-            vy=float(action.get("vy", 0.0)),
-            vyaw=float(action.get("vyaw", 0.0)),
-        ))
-    if t == "walk_for":
-        return bool(robot.walk_for(
-            distance=float(action["distance"]),
-            max_vx=float(action.get("max_vx", 0.25)),
-            timeout=float(action.get("timeout", 20.0)),
-        ))
-    if t == "run_for":
-        return bool(robot.run_for(
-            distance=float(action["distance"]),
-            max_vx=float(action.get("max_vx", 0.45)),
-            timeout=float(action.get("timeout", 15.0)),
-        ))
-    if t == "turn_for":
-        return bool(robot.turn_for(
-            angle_deg=float(action["angle_deg"]),
-            max_vyaw=float(action.get("max_vyaw", 0.8)),
-            timeout=float(action.get("timeout", 10.0)),
-        ))
+        return {"rc": rc, "ok": rc == 0}
     if t == "rotate_joint":
         return int(robot.rotate_joint(
             joint_name=str(action["joint_name"]),
@@ -257,6 +255,24 @@ def _dispatch_action(robot: Any, action: dict[str, Any]) -> Any:
             duration=float(action.get("duration", 1.0)),
             hold=float(action.get("hold", 0.0)),
         ))
+    if t == "shake_hand":
+        return {"rc": int(robot.shake_hand())}
+    if t == "clap":
+        return {"rc": int(robot.clap())}
+    if t == "high_five":
+        return {"rc": int(robot.high_five())}
+    if t == "hug":
+        return {"rc": int(robot.hug())}
+    if t == "heart":
+        return {"rc": int(robot.heart())}
+    if t == "right_heart":
+        return {"rc": int(robot.right_heart())}
+    if t == "high_wave":
+        return {"rc": int(robot.high_wave())}
+    if t == "face_wave":
+        return {"rc": int(robot.face_wave())}
+    if t == "hands_up":
+        return {"rc": int(robot.hands_up())}
     if t == "slam_start":
         proc = robot.start_slam(save_folder=str(action.get("save_folder", "./maps")))
         return {"pid": int(proc.pid)}
@@ -288,6 +304,18 @@ def _dispatch_action(robot: Any, action: dict[str, Any]) -> Any:
         return {"rc": rc}
     if t == "get_state":
         return robot.get_robot_state()
+    if t == "get_rgbd":
+        robot.rgbd_host = "10.34.0.156"
+        rgbd = robot.get_rgbd(timeout=float(action.get("timeout", 2.0)))
+        return {
+            "source": rgbd.get("source"),
+            "topic": rgbd.get("topic"),
+            "timestamp": rgbd.get("timestamp"),
+            "rgb_shape": list(rgbd["rgb_bgr"].shape) if "rgb_bgr" in rgbd else None,
+            "depth_shape": list(rgbd["depth_raw"].shape) if "depth_raw" in rgbd else None,
+            "center_depth_m": rgbd.get("center_depth_m"),
+            "near_coverage_1m": rgbd.get("near_coverage_1m"),
+        }
 
     raise ValueError(f"Unsupported action type: {t!r}")
 
@@ -679,9 +707,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.task_edit.setPlaceholderText(
             "Describe what the robot should do…\n\n"
             "Examples:\n"
-            "  • Walk forward 1 meter, then turn right 90 degrees.\n"
-            "  • Wave your right arm and say hello.\n"
-            "  • Flash the headlight blue and walk in a small circle."
+            "  • Move forward briefly, then rotate in place slowly.\n"
+            "  • Shake hands and say hello.\n"
+            "  • Set the headlight blue, capture RGBD, then report what the camera sees."
         )
         self.task_edit.setMaximumHeight(120)
         left.addWidget(self.task_edit)
