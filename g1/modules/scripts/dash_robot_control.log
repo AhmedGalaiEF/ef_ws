@@ -5829,3 +5829,482 @@ KeyError: "Callback function not found for output 'boot-status.children'."
 2026-04-27 10:37:14,303 INFO Thread-167 (process_request_thread) Callback done name=update_info trigger=initial elapsed_s=0.002
 2026-04-27 10:37:14,305 INFO Thread-168 (process_request_thread) Callback start name=update_logs trigger=initial args=2 kwargs=[]
 2026-04-27 10:37:14,307 INFO Thread-168 (process_request_thread) Callback done name=update_logs trigger=initial elapsed_s=0.002
+2026-04-30 12:07:17,197 INFO MainThread Dash robot control log path: /home/unitree/ef_ws/repo/ef_ws/g1/modules/scripts/dash_robot_control.log
+2026-04-30 12:07:42,007 INFO Thread-19 Callback start name=update_minimal_intervals trigger=initial args=8 kwargs=[]
+2026-04-30 12:07:42,012 INFO Thread-20 Callback start name=update_logs trigger=initial args=2 kwargs=[]
+2026-04-30 12:07:42,013 INFO Thread-19 Callback done name=update_minimal_intervals trigger=initial elapsed_s=0.005
+2026-04-30 12:07:42,015 INFO Thread-21 Callback start name=update_info trigger=initial args=2 kwargs=[]
+2026-04-30 12:07:42,016 INFO Thread-20 Callback done name=update_logs trigger=initial elapsed_s=0.005
+2026-04-30 12:07:42,019 INFO Thread-22 Callback start name=on_lowlevel_joint_selected trigger=initial args=1 kwargs=[]
+2026-04-30 12:07:42,023 INFO Thread-21 Callback done name=update_info trigger=initial elapsed_s=0.008
+2026-04-30 12:07:42,028 INFO Thread-22 Callback done name=on_lowlevel_joint_selected trigger=initial elapsed_s=0.009
+2026-04-30 12:08:28,812 INFO Thread-23 Callback start name=on_apply_iface trigger=btn-apply-iface args=2 kwargs=[]
+2026-04-30 12:08:28,815 INFO Thread-23 Callback done name=on_apply_iface trigger=btn-apply-iface elapsed_s=0.002
+2026-04-30 12:08:53,519 INFO Thread-24 Callback start name=on_say trigger=btn-say args=2 kwargs=[]
+2026-04-30 12:08:55,311 INFO Thread-24 Callback done name=on_say trigger=btn-say elapsed_s=1.793
+2026-04-30 12:09:19,343 INFO Thread-25 Callback start name=toggle_joysticks trigger=btn-joystick-toggle args=2 kwargs=[]
+2026-04-30 12:09:19,349 WARNING Thread-25 Joystick control toggled enabled
+2026-04-30 12:09:19,356 INFO Thread-25 Callback done name=toggle_joysticks trigger=btn-joystick-toggle elapsed_s=0.013
+2026-04-30 12:09:19,496 INFO Thread-26 Callback start name=update_minimal_intervals trigger=joystick-enabled args=8 kwargs=[]
+2026-04-30 12:09:19,503 INFO Thread-26 Callback done name=update_minimal_intervals trigger=joystick-enabled elapsed_s=0.006
+2026-04-30 12:09:19,506 INFO Thread-27 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:09:19,521 INFO Thread-27 Callback done name=on_navigation trigger=nav-command elapsed_s=0.015
+2026-04-30 12:09:24,579 INFO Thread-77 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:09:24,590 INFO Thread-77 Callback done name=on_navigation trigger=nav-command elapsed_s=0.010
+2026-04-30 12:09:29,582 INFO Thread-127 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:09:29,588 INFO Thread-127 Callback done name=on_navigation trigger=nav-command elapsed_s=0.006
+2026-04-30 12:09:34,584 INFO Thread-172 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:09:34,590 INFO Thread-172 Callback done name=on_navigation trigger=nav-command elapsed_s=0.006
+2026-04-30 12:09:38,821 INFO Thread-219 Callback start name=on_navigation trigger=btn-arm-action-shake-hand args=28 kwargs=[]
+2026-04-30 12:09:38,831 INFO Thread-219 Callback done name=on_navigation trigger=btn-arm-action-shake-hand elapsed_s=0.010
+2026-04-30 12:09:39,600 INFO Thread-228 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:09:39,605 INFO Thread-228 Callback done name=on_navigation trigger=nav-command elapsed_s=0.005
+2026-04-30 12:09:44,614 INFO Thread-278 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:09:44,623 INFO Thread-278 Callback done name=on_navigation trigger=nav-command elapsed_s=0.009
+2026-04-30 12:09:49,623 INFO Thread-328 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:09:49,627 INFO Thread-328 Callback done name=on_navigation trigger=nav-command elapsed_s=0.004
+2026-04-30 12:09:51,430 INFO Thread-346 Callback start name=on_navigation trigger=btn-arm-sdk-release-arms args=28 kwargs=[]
+2026-04-30 12:09:51,440 INFO Thread-346 Callback done name=on_navigation trigger=btn-arm-sdk-release-arms elapsed_s=0.010
+2026-04-30 12:09:53,059 INFO arm-action-shake-hand High-level arm action completed action=shake hand rc=3104
+2026-04-30 12:09:54,637 INFO Thread-378 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:09:54,646 INFO Thread-378 Callback done name=on_navigation trigger=nav-command elapsed_s=0.009
+2026-04-30 12:09:55,439 INFO arm-sdk-release_arms Arm SDK action completed method=release_arms result={'duration_s': 3.0, 'command_rate_hz': 50.0, 'final_arm_sdk_weight': 0.0, 'joint_count': 17}
+2026-04-30 12:09:56,698 INFO Thread-399 Callback start name=on_navigation trigger=btn-hand-open-right args=28 kwargs=[]
+2026-04-30 12:09:56,710 INFO Thread-399 Callback done name=on_navigation trigger=btn-hand-open-right elapsed_s=0.013
+2026-04-30 12:09:58,180 INFO hand-open-right Hand action completed action=open hand=right
+2026-04-30 12:09:58,757 INFO Thread-421 Callback start name=on_navigation trigger=btn-hand-close-right args=28 kwargs=[]
+2026-04-30 12:09:58,766 INFO Thread-421 Callback done name=on_navigation trigger=btn-hand-close-right elapsed_s=0.009
+2026-04-30 12:09:59,641 INFO Thread-430 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:09:59,653 INFO Thread-430 Callback done name=on_navigation trigger=nav-command elapsed_s=0.012
+2026-04-30 12:10:00,004 INFO hand-close-right Hand action completed action=close hand=right
+2026-04-30 12:10:04,742 INFO Thread-481 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:10:04,753 INFO Thread-481 Callback done name=on_navigation trigger=nav-command elapsed_s=0.012
+2026-04-30 12:10:09,749 INFO Thread-531 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:10:09,754 INFO Thread-531 Callback done name=on_navigation trigger=nav-command elapsed_s=0.005
+2026-04-30 12:10:14,555 INFO Thread-579 Callback start name=toggle_rgb trigger=btn-rgb-toggle args=2 kwargs=[]
+2026-04-30 12:10:14,563 WARNING Thread-579 RGB feed toggled enabled
+2026-04-30 12:10:14,572 INFO Thread-579 Callback done name=toggle_rgb trigger=btn-rgb-toggle elapsed_s=0.016
+2026-04-30 12:10:14,621 INFO Thread-581 Callback start name=update_minimal_intervals trigger=rgb-enabled args=8 kwargs=[]
+2026-04-30 12:10:14,625 INFO Thread-581 Callback done name=update_minimal_intervals trigger=rgb-enabled elapsed_s=0.004
+2026-04-30 12:10:14,768 INFO Thread-583 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:10:14,777 INFO Thread-583 Callback done name=on_navigation trigger=nav-command elapsed_s=0.010
+2026-04-30 12:10:15,181 INFO Thread-588 Callback start name=update_rgb_feed trigger=rgb-interval args=3 kwargs=[]
+2026-04-30 12:10:15,348 INFO Thread-590 Callback start name=toggle_depth trigger=btn-depth-toggle args=2 kwargs=[]
+2026-04-30 12:10:15,362 WARNING Thread-590 Depth feed toggled enabled
+2026-04-30 12:10:15,366 INFO Thread-590 Callback done name=toggle_depth trigger=btn-depth-toggle elapsed_s=0.018
+2026-04-30 12:10:15,433 INFO Thread-593 Callback start name=update_minimal_intervals trigger=depth-enabled args=8 kwargs=[]
+2026-04-30 12:10:15,438 INFO Thread-593 Callback done name=update_minimal_intervals trigger=depth-enabled elapsed_s=0.005
+2026-04-30 12:10:16,075 INFO Thread-602 Callback start name=update_depth_feed trigger=depth-interval args=3 kwargs=[]
+2026-04-30 12:10:16,087 INFO Thread-602 Callback done name=update_depth_feed trigger=depth-interval elapsed_s=0.011
+2026-04-30 12:10:17,968 INFO Thread-588 Callback done name=update_rgb_feed trigger=rgb-interval elapsed_s=2.787
+2026-04-30 12:10:18,207 INFO Thread-604 Callback done name=update_rgb_feed trigger=rgb-interval elapsed_s=2.028
+2026-04-30 12:10:18,420 INFO Thread-597 Callback done name=update_rgb_feed trigger=rgb-interval elapsed_s=2.741
+2026-04-30 12:10:18,707 INFO Thread-611 Callback done name=update_rgb_feed trigger=rgb-interval elapsed_s=2.030
+2026-04-30 12:10:19,200 INFO Thread-618 Callback done name=update_rgb_feed trigger=rgb-interval elapsed_s=2.024
+2026-04-30 12:10:19,758 INFO Thread-625 Callback done name=update_rgb_feed trigger=rgb-interval elapsed_s=2.019
+2026-04-30 12:10:19,770 INFO Thread-654 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:10:19,777 INFO Thread-654 Callback done name=on_navigation trigger=nav-command elapsed_s=0.007
+2026-04-30 12:10:20,182 INFO Thread-660 Callback start name=update_rgb_feed trigger=rgb-interval args=3 kwargs=[]
+2026-04-30 12:10:20,292 INFO Thread-632 Callback done name=update_rgb_feed trigger=rgb-interval elapsed_s=2.016
+2026-04-30 12:10:20,698 INFO Thread-639 Callback done name=update_rgb_feed trigger=rgb-interval elapsed_s=2.019
+2026-04-30 12:10:21,079 INFO Thread-672 Callback start name=update_depth_feed trigger=depth-interval args=3 kwargs=[]
+2026-04-30 12:10:21,088 INFO Thread-672 Callback done name=update_depth_feed trigger=depth-interval elapsed_s=0.009
+2026-04-30 12:10:21,216 INFO Thread-646 Callback done name=update_rgb_feed trigger=rgb-interval elapsed_s=2.033
+2026-04-30 12:10:21,710 INFO Thread-653 Callback done name=update_rgb_feed trigger=rgb-interval elapsed_s=2.024
+2026-04-30 12:10:22,217 INFO Thread-660 Callback done name=update_rgb_feed trigger=rgb-interval elapsed_s=2.035
+2026-04-30 12:10:22,700 INFO Thread-667 Callback done name=update_rgb_feed trigger=rgb-interval elapsed_s=2.025
+2026-04-30 12:10:23,199 INFO Thread-674 Callback done name=update_rgb_feed trigger=rgb-interval elapsed_s=2.019
+2026-04-30 12:10:23,697 INFO Thread-681 Callback done name=update_rgb_feed trigger=rgb-interval elapsed_s=2.016
+2026-04-30 12:10:24,214 INFO Thread-688 Callback done name=update_rgb_feed trigger=rgb-interval elapsed_s=2.021
+2026-04-30 12:10:24,704 INFO Thread-695 Callback done name=update_rgb_feed trigger=rgb-interval elapsed_s=2.019
+2026-04-30 12:10:24,784 INFO Thread-723 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:10:24,792 INFO Thread-723 Callback done name=on_navigation trigger=nav-command elapsed_s=0.007
+2026-04-30 12:10:25,189 INFO Thread-730 Callback start name=update_rgb_feed trigger=rgb-interval args=3 kwargs=[]
+2026-04-30 12:10:25,202 INFO Thread-702 Callback done name=update_rgb_feed trigger=rgb-interval elapsed_s=2.017
+2026-04-30 12:10:32,111 INFO MainThread Dash robot control log path: /home/unitree/ef_ws/repo/ef_ws/g1/modules/scripts/dash_robot_control.log
+2026-04-30 12:10:55,282 INFO MainThread Dash robot control log path: /home/unitree/ef_ws/repo/ef_ws/g1/modules/scripts/dash_robot_control.log
+2026-04-30 12:10:55,940 INFO Thread-1 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:10:55,943 INFO Thread-1 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:10:56,142 INFO Thread-4 Callback start name=update_depth_feed trigger=depth-interval args=3 kwargs=[]
+2026-04-30 12:10:56,145 INFO Thread-4 Callback done name=update_depth_feed trigger=depth-interval elapsed_s=0.003
+2026-04-30 12:10:56,258 INFO Thread-7 Callback start name=update_rgb_feed trigger=rgb-interval args=3 kwargs=[]
+2026-04-30 12:10:56,262 INFO Thread-7 Callback done name=update_rgb_feed trigger=rgb-interval elapsed_s=0.004
+2026-04-30 12:11:00,953 INFO Thread-72 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:11:00,955 INFO Thread-72 Callback done name=on_navigation trigger=nav-command elapsed_s=0.002
+2026-04-30 12:11:01,163 INFO Thread-75 Callback start name=update_depth_feed trigger=depth-interval args=3 kwargs=[]
+2026-04-30 12:11:01,166 INFO Thread-75 Callback done name=update_depth_feed trigger=depth-interval elapsed_s=0.003
+2026-04-30 12:11:01,299 INFO Thread-77 Callback start name=update_rgb_feed trigger=rgb-interval args=3 kwargs=[]
+2026-04-30 12:11:01,302 INFO Thread-77 Callback done name=update_rgb_feed trigger=rgb-interval elapsed_s=0.003
+2026-04-30 12:11:01,596 INFO Thread-81 Callback start name=toggle_lidar trigger=btn-lidar-toggle args=2 kwargs=[]
+2026-04-30 12:11:01,598 WARNING Thread-81 LiDAR feed toggled enabled
+2026-04-30 12:11:01,599 INFO Thread-81 Callback done name=toggle_lidar trigger=btn-lidar-toggle elapsed_s=0.004
+2026-04-30 12:11:01,660 INFO Thread-84 Callback start name=update_minimal_intervals trigger=lidar-enabled args=8 kwargs=[]
+2026-04-30 12:11:01,663 INFO Thread-84 Callback done name=update_minimal_intervals trigger=lidar-enabled elapsed_s=0.003
+2026-04-30 12:11:02,734 INFO Thread-99 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:11:02,749 INFO Thread-99 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.015
+2026-04-30 12:11:05,959 INFO Thread-148 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:11:05,962 INFO Thread-148 Callback done name=on_navigation trigger=nav-command elapsed_s=0.002
+2026-04-30 12:11:06,171 INFO Thread-151 Callback start name=update_depth_feed trigger=depth-interval args=3 kwargs=[]
+2026-04-30 12:11:06,174 INFO Thread-151 Callback done name=update_depth_feed trigger=depth-interval elapsed_s=0.003
+2026-04-30 12:11:06,794 INFO Thread-161 Callback start name=update_rgb_feed trigger=rgb-interval args=3 kwargs=[]
+2026-04-30 12:11:06,798 INFO Thread-161 Callback done name=update_rgb_feed trigger=rgb-interval elapsed_s=0.003
+2026-04-30 12:11:08,711 INFO Thread-189 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:11:08,724 INFO Thread-189 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.014
+2026-04-30 12:11:10,976 INFO Thread-223 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:11:10,979 INFO Thread-223 Callback done name=on_navigation trigger=nav-command elapsed_s=0.002
+2026-04-30 12:11:11,183 INFO Thread-226 Callback start name=update_depth_feed trigger=depth-interval args=3 kwargs=[]
+2026-04-30 12:11:11,185 INFO Thread-226 Callback done name=update_depth_feed trigger=depth-interval elapsed_s=0.002
+2026-04-30 12:11:11,926 INFO Thread-237 Callback start name=update_rgb_feed trigger=rgb-interval args=3 kwargs=[]
+2026-04-30 12:11:11,929 INFO Thread-237 Callback done name=update_rgb_feed trigger=rgb-interval elapsed_s=0.003
+2026-04-30 12:11:13,716 INFO Thread-264 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:11:13,730 INFO Thread-264 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.013
+2026-04-30 12:11:14,729 INFO Thread-280 Callback start name=toggle_rgb trigger=btn-rgb-toggle args=2 kwargs=[]
+2026-04-30 12:11:14,732 WARNING Thread-280 RGB feed toggled disabled
+2026-04-30 12:11:14,733 INFO Thread-280 Callback done name=toggle_rgb trigger=btn-rgb-toggle elapsed_s=0.004
+2026-04-30 12:11:14,815 INFO Thread-282 Callback start name=update_minimal_intervals trigger=rgb-enabled args=8 kwargs=[]
+2026-04-30 12:11:14,817 INFO Thread-282 Callback done name=update_minimal_intervals trigger=rgb-enabled elapsed_s=0.002
+2026-04-30 12:11:15,495 INFO Thread-291 Callback start name=toggle_depth trigger=btn-depth-toggle args=2 kwargs=[]
+2026-04-30 12:11:15,497 WARNING Thread-291 Depth feed toggled disabled
+2026-04-30 12:11:15,499 INFO Thread-291 Callback done name=toggle_depth trigger=btn-depth-toggle elapsed_s=0.004
+2026-04-30 12:11:15,537 INFO Thread-293 Callback start name=update_minimal_intervals trigger=depth-enabled args=8 kwargs=[]
+2026-04-30 12:11:15,540 INFO Thread-293 Callback done name=update_minimal_intervals trigger=depth-enabled elapsed_s=0.002
+2026-04-30 12:11:16,014 INFO Thread-299 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:11:16,017 INFO Thread-299 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:11:18,137 INFO Thread-323 Callback start name=toggle_imu trigger=btn-imu-toggle args=2 kwargs=[]
+2026-04-30 12:11:18,139 WARNING Thread-323 IMU feed toggled enabled
+2026-04-30 12:11:18,141 INFO Thread-323 Callback done name=toggle_imu trigger=btn-imu-toggle elapsed_s=0.004
+2026-04-30 12:11:18,175 INFO Thread-324 Callback start name=update_minimal_intervals trigger=imu-enabled args=8 kwargs=[]
+2026-04-30 12:11:18,177 INFO Thread-324 Callback done name=update_minimal_intervals trigger=imu-enabled elapsed_s=0.002
+2026-04-30 12:11:18,719 INFO Thread-330 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:11:18,733 INFO Thread-330 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.015
+2026-04-30 12:11:21,025 INFO Thread-356 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:11:21,028 INFO Thread-356 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:11:23,734 INFO Thread-385 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:11:23,748 INFO Thread-385 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.013
+2026-04-30 12:11:26,064 INFO Thread-411 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:11:26,067 INFO Thread-411 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:11:28,738 INFO Thread-440 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:11:28,752 INFO Thread-440 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.014
+2026-04-30 12:11:31,085 INFO Thread-466 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:11:31,088 INFO Thread-466 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:11:33,509 INFO Thread-493 Callback start name=update_logs trigger=btn-logs-refresh args=2 kwargs=[]
+2026-04-30 12:11:33,518 INFO Thread-493 Callback done name=update_logs trigger=btn-logs-refresh elapsed_s=0.009
+2026-04-30 12:11:33,777 INFO Thread-496 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:11:33,793 INFO Thread-496 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.016
+2026-04-30 12:11:36,098 INFO Thread-522 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:11:36,101 INFO Thread-522 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:11:38,815 INFO Thread-551 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:11:38,829 INFO Thread-551 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.014
+2026-04-30 12:11:41,149 INFO Thread-577 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:11:41,151 INFO Thread-577 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:11:44,738 INFO Thread-616 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:11:44,752 INFO Thread-616 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.014
+2026-04-30 12:11:46,162 INFO Thread-632 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:11:46,165 INFO Thread-632 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:11:49,744 INFO Thread-671 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:11:49,757 INFO Thread-671 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.014
+2026-04-30 12:11:51,181 INFO Thread-687 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:11:51,183 INFO Thread-687 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:11:54,747 INFO Thread-726 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.011
+2026-04-30 12:11:56,282 INFO Thread-743 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:11:56,285 INFO Thread-743 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:11:59,747 INFO Thread-781 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:11:59,761 INFO Thread-781 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.014
+2026-04-30 12:12:01,288 INFO Thread-798 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:12:01,290 INFO Thread-798 Callback done name=on_navigation trigger=nav-command elapsed_s=0.002
+2026-04-30 12:12:04,748 INFO Thread-836 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.011
+2026-04-30 12:12:06,303 INFO Thread-853 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:12:06,305 INFO Thread-853 Callback done name=on_navigation trigger=nav-command elapsed_s=0.002
+2026-04-30 12:12:10,734 INFO Thread-902 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:12:10,748 INFO Thread-902 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.014
+2026-04-30 12:12:11,339 INFO Thread-908 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:12:11,341 INFO Thread-908 Callback done name=on_navigation trigger=nav-command elapsed_s=0.002
+2026-04-30 12:12:15,761 INFO Thread-957 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:12:15,776 INFO Thread-957 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.015
+2026-04-30 12:12:16,349 INFO Thread-963 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:12:16,352 INFO Thread-963 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:12:20,782 INFO Thread-1011 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:12:20,798 INFO Thread-1011 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.016
+2026-04-30 12:12:21,389 INFO Thread-1018 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:12:21,391 INFO Thread-1018 Callback done name=on_navigation trigger=nav-command elapsed_s=0.002
+2026-04-30 12:12:25,790 INFO Thread-1066 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.011
+2026-04-30 12:12:26,412 INFO Thread-1073 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:12:26,415 INFO Thread-1073 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:12:31,511 INFO Thread-1129 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:12:31,514 INFO Thread-1129 Callback done name=on_navigation trigger=nav-command elapsed_s=0.002
+2026-04-30 12:12:31,777 INFO Thread-1132 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:12:31,790 INFO Thread-1132 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.014
+2026-04-30 12:12:36,520 INFO Thread-1184 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:12:36,522 INFO Thread-1184 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:12:36,880 INFO Thread-1187 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:12:36,897 INFO Thread-1187 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.017
+2026-04-30 12:12:41,532 INFO Thread-1239 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:12:41,534 INFO Thread-1239 Callback done name=on_navigation trigger=nav-command elapsed_s=0.002
+2026-04-30 12:12:42,783 INFO Thread-1253 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:12:42,797 INFO Thread-1253 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.014
+2026-04-30 12:12:46,540 INFO Thread-1294 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:12:46,542 INFO Thread-1294 Callback done name=on_navigation trigger=nav-command elapsed_s=0.002
+2026-04-30 12:12:47,794 INFO Thread-1308 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.013
+2026-04-30 12:12:51,545 INFO Thread-1349 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:12:51,548 INFO Thread-1349 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:12:52,804 INFO Thread-1363 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.011
+2026-04-30 12:12:56,592 INFO Thread-1404 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:12:56,595 INFO Thread-1404 Callback done name=on_navigation trigger=nav-command elapsed_s=0.002
+2026-04-30 12:12:57,814 INFO Thread-1417 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.016
+2026-04-30 12:13:01,621 INFO Thread-1459 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:13:01,623 INFO Thread-1459 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:13:02,818 INFO Thread-1472 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.011
+2026-04-30 12:13:06,626 INFO Thread-1514 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:13:06,628 INFO Thread-1514 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:13:07,818 INFO Thread-1527 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.011
+2026-04-30 12:13:11,703 INFO Thread-1569 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:13:11,706 INFO Thread-1569 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:13:13,937 INFO Thread-1594 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:13:13,952 INFO Thread-1594 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.015
+2026-04-30 12:13:16,745 INFO Thread-1625 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:13:16,748 INFO Thread-1625 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:13:19,798 INFO Thread-1659 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:13:19,811 INFO Thread-1659 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.013
+2026-04-30 12:13:21,754 INFO Thread-1680 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:13:21,757 INFO Thread-1680 Callback done name=on_navigation trigger=nav-command elapsed_s=0.002
+2026-04-30 12:13:24,800 INFO Thread-1714 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:13:24,814 INFO Thread-1714 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.014
+2026-04-30 12:13:26,766 INFO Thread-1735 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:13:26,768 INFO Thread-1735 Callback done name=on_navigation trigger=nav-command elapsed_s=0.002
+2026-04-30 12:13:29,818 INFO Thread-1769 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:13:29,831 INFO Thread-1769 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.013
+2026-04-30 12:13:31,776 INFO Thread-1790 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:13:31,778 INFO Thread-1790 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:13:35,805 INFO Thread-1834 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:13:35,819 INFO Thread-1834 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.014
+2026-04-30 12:13:36,827 INFO Thread-1846 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:13:36,831 INFO Thread-1846 Callback done name=on_navigation trigger=nav-command elapsed_s=0.005
+2026-04-30 12:13:40,822 INFO Thread-1890 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:13:40,836 INFO Thread-1890 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.014
+2026-04-30 12:13:41,930 INFO Thread-1902 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:13:41,933 INFO Thread-1902 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:13:45,928 INFO Thread-1944 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:13:45,948 INFO Thread-1944 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.020
+2026-04-30 12:13:47,003 INFO Thread-1957 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:13:47,006 INFO Thread-1957 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:13:51,862 INFO Thread-2010 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:13:51,889 INFO Thread-2010 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.026
+2026-04-30 12:13:52,063 INFO Thread-2013 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:13:52,066 INFO Thread-2013 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:13:57,071 INFO Thread-2068 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:13:57,073 INFO Thread-2068 Callback done name=on_navigation trigger=nav-command elapsed_s=0.002
+2026-04-30 12:13:57,832 INFO Thread-2076 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:13:57,848 INFO Thread-2076 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.016
+2026-04-30 12:14:02,076 INFO Thread-2123 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:14:02,079 INFO Thread-2123 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:14:02,836 INFO Thread-2131 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.012
+2026-04-30 12:14:07,078 INFO Thread-2178 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:14:07,080 INFO Thread-2178 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:14:07,882 INFO Thread-2186 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:14:07,898 INFO Thread-2186 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.017
+2026-04-30 12:14:12,084 INFO Thread-2233 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:14:12,086 INFO Thread-2233 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:14:13,829 INFO Thread-2252 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:14:13,843 INFO Thread-2252 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.014
+2026-04-30 12:14:17,096 INFO Thread-2288 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:14:17,099 INFO Thread-2288 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:14:18,831 INFO Thread-2307 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:14:18,845 INFO Thread-2307 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.014
+2026-04-30 12:14:22,108 INFO Thread-2343 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:14:22,111 INFO Thread-2343 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:14:23,843 INFO Thread-2362 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.013
+2026-04-30 12:14:27,134 INFO Thread-2398 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:14:27,137 INFO Thread-2398 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:14:28,851 INFO Thread-2417 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.012
+2026-04-30 12:14:32,151 INFO Thread-2453 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:14:32,154 INFO Thread-2453 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:14:33,859 INFO Thread-2471 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:14:33,877 INFO Thread-2471 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.018
+2026-04-30 12:14:37,173 INFO Thread-2508 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:14:37,176 INFO Thread-2508 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:14:38,868 INFO Thread-2526 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.013
+2026-04-30 12:14:42,174 INFO Thread-2563 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:14:42,176 INFO Thread-2563 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:14:44,879 INFO Thread-2591 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:14:44,893 INFO Thread-2591 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.014
+2026-04-30 12:14:47,190 INFO Thread-2618 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:14:47,193 INFO Thread-2618 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:14:50,847 INFO Thread-2658 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:14:50,860 INFO Thread-2658 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.013
+2026-04-30 12:14:52,217 INFO Thread-2673 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:14:52,220 INFO Thread-2673 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:14:55,855 INFO Thread-2713 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:14:55,872 INFO Thread-2713 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.017
+2026-04-30 12:14:57,247 INFO Thread-2728 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:14:57,249 INFO Thread-2728 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:15:00,863 INFO Thread-2767 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:15:00,880 INFO Thread-2767 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.017
+2026-04-30 12:15:02,256 INFO Thread-2783 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:15:02,259 INFO Thread-2783 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:15:05,881 INFO Thread-2822 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:15:05,899 INFO Thread-2822 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.019
+2026-04-30 12:15:07,305 INFO Thread-2838 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:15:07,307 INFO Thread-2838 Callback done name=on_navigation trigger=nav-command elapsed_s=0.002
+2026-04-30 12:15:10,887 INFO Thread-2877 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.011
+2026-04-30 12:15:12,305 INFO Thread-2893 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:15:12,307 INFO Thread-2893 Callback done name=on_navigation trigger=nav-command elapsed_s=0.002
+2026-04-30 12:15:15,889 INFO Thread-2932 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.013
+2026-04-30 12:15:17,312 INFO Thread-2948 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:15:17,315 INFO Thread-2948 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:15:21,871 INFO Thread-2998 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:15:21,886 INFO Thread-2998 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.015
+2026-04-30 12:15:22,320 INFO Thread-3003 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:15:22,323 INFO Thread-3003 Callback done name=on_navigation trigger=nav-command elapsed_s=0.002
+2026-04-30 12:15:26,871 INFO Thread-3053 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:15:26,885 INFO Thread-3053 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.014
+2026-04-30 12:15:27,337 INFO Thread-3058 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:15:27,340 INFO Thread-3058 Callback done name=on_navigation trigger=nav-command elapsed_s=0.002
+2026-04-30 12:15:31,873 INFO Thread-3108 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:15:31,886 INFO Thread-3108 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.013
+2026-04-30 12:15:32,365 INFO Thread-3113 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:15:32,368 INFO Thread-3113 Callback done name=on_navigation trigger=nav-command elapsed_s=0.002
+2026-04-30 12:15:36,882 INFO Thread-3163 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:15:36,896 INFO Thread-3163 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.014
+2026-04-30 12:15:37,382 INFO Thread-3168 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:15:37,385 INFO Thread-3168 Callback done name=on_navigation trigger=nav-command elapsed_s=0.002
+2026-04-30 12:15:41,901 INFO Thread-3218 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:15:41,918 INFO Thread-3218 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.017
+2026-04-30 12:15:42,410 INFO Thread-3223 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:15:42,412 INFO Thread-3223 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:15:46,906 INFO Thread-3272 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.012
+2026-04-30 12:15:47,448 INFO Thread-3278 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:15:47,450 INFO Thread-3278 Callback done name=on_navigation trigger=nav-command elapsed_s=0.002
+2026-04-30 12:15:51,910 INFO Thread-3326 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.013
+2026-04-30 12:15:52,452 INFO Thread-3332 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:15:52,454 INFO Thread-3332 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:15:56,914 INFO Thread-3382 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.012
+2026-04-30 12:15:57,461 INFO Thread-3388 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:15:57,464 INFO Thread-3388 Callback done name=on_navigation trigger=nav-command elapsed_s=0.002
+2026-04-30 12:16:01,916 INFO Thread-3435 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.011
+2026-04-30 12:16:02,497 INFO Thread-3443 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:16:02,500 INFO Thread-3443 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:16:06,916 INFO Thread-3491 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:16:06,930 INFO Thread-3491 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.014
+2026-04-30 12:16:07,529 INFO Thread-3498 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:16:07,531 INFO Thread-3498 Callback done name=on_navigation trigger=nav-command elapsed_s=0.002
+2026-04-30 12:16:11,921 INFO Thread-3546 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:16:11,934 INFO Thread-3546 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.013
+2026-04-30 12:16:12,542 INFO Thread-3553 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:16:12,544 INFO Thread-3553 Callback done name=on_navigation trigger=nav-command elapsed_s=0.002
+2026-04-30 12:16:16,921 INFO Thread-3601 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:16:16,935 INFO Thread-3601 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.014
+2026-04-30 12:16:17,553 INFO Thread-3606 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:16:17,556 INFO Thread-3606 Callback done name=on_navigation trigger=nav-command elapsed_s=0.002
+2026-04-30 12:16:21,933 INFO Thread-3655 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.013
+2026-04-30 12:16:22,569 INFO Thread-3661 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:16:22,572 INFO Thread-3661 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:16:26,975 INFO Thread-3711 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:16:26,990 INFO Thread-3711 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.015
+2026-04-30 12:16:27,579 INFO Thread-3718 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:16:27,581 INFO Thread-3718 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:16:31,986 INFO Thread-3766 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.012
+2026-04-30 12:16:32,585 INFO Thread-3773 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:16:32,587 INFO Thread-3773 Callback done name=on_navigation trigger=nav-command elapsed_s=0.002
+2026-04-30 12:16:37,623 INFO Thread-3826 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:16:37,625 INFO Thread-3826 Callback done name=on_navigation trigger=nav-command elapsed_s=0.002
+2026-04-30 12:16:37,922 INFO Thread-3830 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:16:37,936 INFO Thread-3830 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.014
+2026-04-30 12:16:42,646 INFO Thread-3883 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:16:42,648 INFO Thread-3883 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:16:42,938 INFO Thread-3886 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:16:42,954 INFO Thread-3886 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.016
+2026-04-30 12:16:47,685 INFO Thread-3937 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:16:47,688 INFO Thread-3937 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:16:47,945 INFO Thread-3941 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.011
+2026-04-30 12:16:52,694 INFO Thread-3993 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:16:52,697 INFO Thread-3993 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:16:52,950 INFO Thread-3996 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.012
+2026-04-30 12:16:57,763 INFO Thread-4048 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:16:57,766 INFO Thread-4048 Callback done name=on_navigation trigger=nav-command elapsed_s=0.002
+2026-04-30 12:16:57,954 INFO Thread-4050 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.013
+2026-04-30 12:16:59,553 INFO MainThread Dash robot control log path: /home/unitree/ef_ws/repo/ef_ws/g1/modules/scripts/dash_robot_control.log
+2026-04-30 12:17:02,770 INFO Thread-4103 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:17:02,772 INFO Thread-4103 Callback done name=on_navigation trigger=nav-command elapsed_s=0.002
+2026-04-30 12:17:02,961 INFO Thread-4105 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.011
+2026-04-30 12:17:07,775 INFO Thread-4158 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:17:07,778 INFO Thread-4158 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:17:07,962 INFO Thread-4160 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.011
+2026-04-30 12:17:12,782 INFO Thread-4213 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:17:12,785 INFO Thread-4213 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:17:13,949 INFO Thread-4226 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:17:13,963 INFO Thread-4226 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.014
+2026-04-30 12:17:17,962 INFO Thread-4270 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:17:17,974 INFO Thread-4270 Callback done name=on_navigation trigger=nav-command elapsed_s=0.013
+2026-04-30 12:17:18,956 INFO Thread-4280 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:17:18,974 INFO Thread-4280 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.018
+2026-04-30 12:17:22,982 INFO Thread-4325 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:17:22,985 INFO Thread-4325 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:17:24,950 INFO Thread-4347 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:17:24,964 INFO Thread-4347 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.014
+2026-04-30 12:17:28,003 INFO Thread-4381 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:17:28,006 INFO Thread-4381 Callback done name=on_navigation trigger=nav-command elapsed_s=0.002
+2026-04-30 12:17:29,953 INFO Thread-4402 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.011
+2026-04-30 12:17:38,657 INFO MainThread Dash robot control log path: /home/unitree/ef_ws/repo/ef_ws/g1/modules/scripts/dash_robot_control.log
+2026-04-30 12:17:39,420 INFO Thread-1 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:17:39,423 INFO Thread-1 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:17:39,943 INFO Thread-7 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:17:40,853 INFO Thread-7 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.910
+2026-04-30 12:17:44,493 INFO Thread-56 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:17:44,497 INFO Thread-56 Callback done name=on_navigation trigger=nav-command elapsed_s=0.004
+2026-04-30 12:17:44,983 INFO Thread-61 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:17:45,182 INFO Thread-61 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.198
+2026-04-30 12:17:49,514 INFO Thread-110 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:17:49,520 INFO Thread-110 Callback done name=on_navigation trigger=nav-command elapsed_s=0.007
+2026-04-30 12:17:50,020 INFO Thread-116 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:17:50,255 INFO Thread-116 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.235
+2026-04-30 12:17:54,596 INFO Thread-166 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:17:54,601 INFO Thread-166 Callback done name=on_navigation trigger=nav-command elapsed_s=0.005
+2026-04-30 12:17:55,185 INFO Thread-171 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.182
+2026-04-30 12:17:59,670 INFO Thread-221 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:17:59,676 INFO Thread-221 Callback done name=on_navigation trigger=nav-command elapsed_s=0.006
+2026-04-30 12:18:00,243 INFO Thread-226 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.198
+2026-04-30 12:18:04,722 INFO Thread-276 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:18:04,732 INFO Thread-276 Callback done name=on_navigation trigger=nav-command elapsed_s=0.010
+2026-04-30 12:18:05,275 INFO Thread-280 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:18:05,664 INFO Thread-280 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.389
+2026-04-30 12:18:09,728 INFO Thread-327 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:18:09,767 INFO Thread-327 Callback done name=on_navigation trigger=nav-command elapsed_s=0.039
+2026-04-30 12:18:10,316 INFO Thread-335 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.205
+2026-04-30 12:18:14,812 INFO Thread-386 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:18:14,816 INFO Thread-386 Callback done name=on_navigation trigger=nav-command elapsed_s=0.004
+2026-04-30 12:18:15,365 INFO Thread-389 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.202
+2026-04-30 12:18:19,848 INFO Thread-441 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:18:19,851 INFO Thread-441 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:18:20,518 INFO Thread-444 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.380
+2026-04-30 12:18:36,012 INFO Thread-469 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:18:36,067 INFO Thread-469 Callback done name=on_navigation trigger=nav-command elapsed_s=0.056
+2026-04-30 12:19:03,980 INFO Thread-472 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:19:04,077 INFO Thread-475 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:19:09,081 INFO Thread-474 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.187
+2026-04-30 12:19:11,104 INFO Thread-472 Callback done name=on_navigation trigger=nav-command elapsed_s=7.125
+2026-04-30 12:19:22,612 INFO MainThread Dash robot control log path: /home/unitree/ef_ws/repo/ef_ws/g1/modules/scripts/dash_robot_control.log
+2026-04-30 12:19:23,324 INFO Thread-1 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:19:23,327 INFO Thread-1 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:19:24,103 INFO Thread-9 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:19:24,992 INFO Thread-9 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.889
+2026-04-30 12:19:28,445 INFO Thread-56 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:19:28,451 INFO Thread-56 Callback done name=on_navigation trigger=nav-command elapsed_s=0.006
+2026-04-30 12:19:29,292 INFO Thread-63 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.191
+2026-04-30 12:19:33,458 INFO Thread-112 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:19:33,474 INFO Thread-112 Callback done name=on_navigation trigger=nav-command elapsed_s=0.015
+2026-04-30 12:19:34,322 INFO Thread-118 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.196
+2026-04-30 12:19:38,521 INFO Thread-167 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:19:38,534 INFO Thread-167 Callback done name=on_navigation trigger=nav-command elapsed_s=0.013
+2026-04-30 12:20:00,674 INFO MainThread Dash robot control log path: /home/unitree/ef_ws/repo/ef_ws/g1/modules/scripts/dash_robot_control.log
+2026-04-30 12:20:01,335 INFO Thread-1 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:20:01,338 INFO Thread-1 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:20:53,787 INFO MainThread Dash robot control log path: /home/unitree/ef_ws/repo/ef_ws/g1/modules/scripts/dash_robot_control.log
+2026-04-30 12:20:54,515 INFO Thread-1 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:20:54,518 INFO Thread-1 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:20:55,205 INFO Thread-9 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:20:56,099 INFO Thread-9 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.894
+2026-04-30 12:24:04,688 INFO MainThread Dash robot control log path: /home/unitree/ef_ws/repo/ef_ws/g1/modules/scripts/dash_robot_control.log
+2026-04-30 12:24:05,436 INFO Thread-1 Callback start name=on_navigation trigger=nav-command args=28 kwargs=[]
+2026-04-30 12:24:05,439 INFO Thread-1 Callback done name=on_navigation trigger=nav-command elapsed_s=0.003
+2026-04-30 12:24:05,455 INFO Thread-2 Callback start name=update_lidar trigger=lidar-interval args=3 kwargs=[]
+2026-04-30 12:24:06,344 INFO Thread-2 Callback done name=update_lidar trigger=lidar-interval elapsed_s=0.889

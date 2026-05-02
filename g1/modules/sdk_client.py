@@ -2551,7 +2551,7 @@ class Robot:
     def hanged_boot(
         self,
         step: float = 0.02,
-        max_height: float = 0.5,
+        max_height: float = 0.22,
         max_attempts: int = 3,
         require_confirmation: bool = True,
         interactive_retry: bool | None = None,
