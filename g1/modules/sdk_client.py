@@ -1792,9 +1792,11 @@ class Robot:
         }
 
     def get_odom(self) -> Any | None:
-        if self._odom_sub is None:
-            return None
-        return self._odom_sub.get_latest()[0]
+        if self._odom_sub is not None:
+            msg = self._odom_sub.get_latest()[0]
+            if msg is not None:
+                return msg
+        return self.get_sport_state()
 
     def get_odom_pose(self) -> tuple[float, float, float] | None:
         msg = self.get_odom()
