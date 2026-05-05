@@ -828,8 +828,12 @@ class G1:
             "mode": self._rpc(ROBOT_API_ID_LOCO_GET_FSM_MODE),
         }
 
+    @staticmethod
+    def _status_code(value: Any) -> int:
+        return 0 if value is None else int(value)
+
     def switch_fsm(self, fsm_id: int) -> int:
-        return int(self.loco_client.SetFsmId(int(fsm_id)))
+        return self._status_code(self.loco_client.SetFsmId(int(fsm_id)))
 
     def _hanger_loaded_standup_state(self, fsm_id: int | None, fsm_mode: int | None, current_height: float) -> bool:
         return fsm_mode == 0 and (fsm_id == FSM_ID_PREPARE or fsm_id is None) and float(current_height) > 0.2
@@ -906,6 +910,12 @@ class G1:
     ) -> dict[str, Any]:
         fsm = self.get_fsm()
         current_fsm_id = fsm.get("id")
+        for _ in range(5):
+            if current_fsm_id is not None:
+                break
+            time.sleep(0.05)
+            fsm = self.get_fsm()
+            current_fsm_id = fsm.get("id")
         if current_fsm_id in (FSM_ID_WALK, FSM_ID_RUN, FSM_ID_CLIMB):
             return {"guarded": True, "boot": False, "fsm": fsm}
         if current_fsm_id == FSM_ID_PREPARE:
@@ -925,10 +935,10 @@ class G1:
             toggle_code = self.toggle_service("ai", True)
             if int(toggle_code) != 0:
                 return int(toggle_code)
-        return int(self.loco_client.ZeroTorque()) if hasattr(self.loco_client, "ZeroTorque") else self.switch_fsm(0)
+        return self._status_code(self.loco_client.ZeroTorque()) if hasattr(self.loco_client, "ZeroTorque") else self.switch_fsm(0)
 
     def fsm_damp(self) -> int:
-        return int(self.loco_client.Damp()) if hasattr(self.loco_client, "Damp") else self.switch_fsm(1)
+        return self._status_code(self.loco_client.Damp()) if hasattr(self.loco_client, "Damp") else self.switch_fsm(1)
 
     def fsm_dev(self, on_off: bool) -> int:
         return self.toggle_service("ai", not bool(on_off))
@@ -953,7 +963,7 @@ class G1:
         raise NotImplementedError("fsm_dance is a placeholder.")
 
     def fsm_sit(self) -> int:
-        return int(self.loco_client.Sit()) if hasattr(self.loco_client, "Sit") else self.switch_fsm(2)
+        return self._status_code(self.loco_client.Sit()) if hasattr(self.loco_client, "Sit") else self.switch_fsm(2)
 
     def loco_move(self, vx: float, vy: float, vyaw: float) -> Any:
         return self.loco_client.Move(float(vx), float(vy), float(vyaw), continous_move=True)
@@ -981,6 +991,12 @@ class G1:
         target_x = float(x)
         target_y = float(y)
         target_yaw = float(yaw)
+        start_yaw = float(start_pose[2])
+        start_cos = math.cos(start_yaw)
+        start_sin = math.sin(start_yaw)
+        target_world_x = float(start_pose[0]) + start_cos * target_x - start_sin * target_y
+        target_world_y = float(start_pose[1]) + start_sin * target_x + start_cos * target_y
+        target_world_yaw = _normalize_angle(start_yaw + target_yaw)
         deadline = time.time() + max(0.1, float(timeout_s))
         final_error = {"x": None, "y": None, "yaw": None}
 
@@ -993,11 +1009,8 @@ class G1:
 
                 dx_world = float(pose[0] - start_pose[0])
                 dy_world = float(pose[1] - start_pose[1])
-                start_yaw = float(start_pose[2])
-                cos_yaw = math.cos(start_yaw)
-                sin_yaw = math.sin(start_yaw)
-                dx_body = cos_yaw * dx_world + sin_yaw * dy_world
-                dy_body = -sin_yaw * dx_world + cos_yaw * dy_world
+                dx_body = start_cos * dx_world + start_sin * dy_world
+                dy_body = -start_sin * dx_world + start_cos * dy_world
                 dyaw = _normalize_angle(float(pose[2] - start_pose[2]))
 
                 err_x = target_x - dx_body
@@ -1008,9 +1021,17 @@ class G1:
                 if math.hypot(err_x, err_y) <= float(pos_tolerance) and abs(err_yaw) <= float(yaw_tolerance):
                     break
 
-                cmd_vx = max(-float(max_vx), min(float(max_vx), float(kp_xy) * err_x))
-                cmd_vy = max(-float(max_vy), min(float(max_vy), float(kp_xy) * err_y))
-                cmd_vyaw = max(-float(max_vyaw), min(float(max_vyaw), float(kp_yaw) * err_yaw))
+                world_err_x = target_world_x - float(pose[0])
+                world_err_y = target_world_y - float(pose[1])
+                current_yaw = float(pose[2])
+                current_cos = math.cos(current_yaw)
+                current_sin = math.sin(current_yaw)
+                cmd_body_x = current_cos * world_err_x + current_sin * world_err_y
+                cmd_body_y = -current_sin * world_err_x + current_cos * world_err_y
+                cmd_yaw_err = _normalize_angle(target_world_yaw - current_yaw)
+                cmd_vx = max(-float(max_vx), min(float(max_vx), float(kp_xy) * cmd_body_x))
+                cmd_vy = max(-float(max_vy), min(float(max_vy), float(kp_xy) * cmd_body_y))
+                cmd_vyaw = max(-float(max_vyaw), min(float(max_vyaw), float(kp_yaw) * cmd_yaw_err))
                 self.loco_move(cmd_vx, cmd_vy, cmd_vyaw)
                 time.sleep(0.05)
         finally:
@@ -1022,11 +1043,8 @@ class G1:
             if pose is not None:
                 dx_world = float(pose[0] - start_pose[0])
                 dy_world = float(pose[1] - start_pose[1])
-                start_yaw = float(start_pose[2])
-                cos_yaw = math.cos(start_yaw)
-                sin_yaw = math.sin(start_yaw)
-                dx_body = cos_yaw * dx_world + sin_yaw * dy_world
-                dy_body = -sin_yaw * dx_world + cos_yaw * dy_world
+                dx_body = start_cos * dx_world + start_sin * dy_world
+                dy_body = -start_sin * dx_world + start_cos * dy_world
                 dyaw = _normalize_angle(float(pose[2] - start_pose[2]))
                 final_error = {
                     "x": target_x - dx_body,
@@ -1268,8 +1286,8 @@ class G1:
             qx, qy, qz, qw = float(ori.x), float(ori.y), float(ori.z), float(ori.w)
         except Exception:
             try:
-                pos = msg.position()
-                quat = msg.imu_state().quaternion()
+                pos = msg.position
+                quat = msg.imu_state.quaternion
                 x, y = float(pos[0]), float(pos[1])
                 qw, qx, qy, qz = float(quat[0]), float(quat[1]), float(quat[2]), float(quat[3])
             except Exception:
