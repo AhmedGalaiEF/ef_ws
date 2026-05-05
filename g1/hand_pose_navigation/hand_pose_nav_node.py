@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import sys
 import os
+from typing import Dict, Optional
 
 # ── path setup ─────────────────────────────────────────────────────────────
 _DIR = os.path.dirname(os.path.abspath(__file__))
@@ -34,16 +35,27 @@ if _MODULES not in sys.path:
 import rclpy
 from rclpy.node import Node
 
-from camera_tf_publisher import CameraTFPublisher      # Step 1
-from target_detector import TargetDetector              # Step 2
-from detected_pose_publisher import DetectedPosePublisher  # Step 3
-from arm_fk import ArmFK                               # Step 4
-from tf_utils import TFUtils                           # Step 5
-from grasp_planner import GraspPlanner                 # Step 6
-from arm_ik import ArmIK                               # Step 7
-from reachability_checker import ReachabilityChecker   # Step 8
-from arm_executor import ArmExecutor                   # Step 9
-from tracking_loop import TrackingLoop                 # Step 10
+try:
+    from .camera_tf_publisher import CameraTFPublisher      # Step 1
+    from .target_detector import TargetDetector              # Step 2
+    from .detected_pose_publisher import DetectedPosePublisher  # Step 3
+    from .arm_fk import ArmFK                               # Step 4
+    from .tf_utils import TFUtils                           # Step 5
+    from .grasp_planner import GraspPlanner                 # Step 6
+    from .arm_ik import ArmIK                               # Step 7
+    from .reachability_checker import ReachabilityChecker   # Step 8
+    from .arm_executor import ArmExecutor                   # Step 9
+    from .tracking_loop import TrackingLoop                 # Step 10
+except ImportError:
+    from camera_tf_publisher import CameraTFPublisher      # type: ignore
+    from target_detector import TargetDetector              # type: ignore
+    from detected_pose_publisher import DetectedPosePublisher  # type: ignore
+    from arm_fk import ArmFK                               # type: ignore
+    from tf_utils import TFUtils                           # type: ignore
+    from grasp_planner import GraspPlanner                 # type: ignore
+    from arm_ik import ArmIK                               # type: ignore
+    from reachability_checker import ReachabilityChecker   # type: ignore
+    from tracking_loop import TrackingLoop                 # type: ignore
 
 try:
     from sdk_client import Robot
@@ -63,23 +75,24 @@ class HandPoseNavNode(Node):
     same executor context.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, config: Optional[Dict] = None, robot=None) -> None:
         super().__init__("hand_pose_nav_node")
+        config = config or {}
 
         # ── Declare all parameters ────────────────────────────────────
-        self.declare_parameter("arm", "right")
-        self.declare_parameter("detection_method", "aruco")
-        self.declare_parameter("aruco_id", 0)
-        self.declare_parameter("marker_size_m", 0.05)
-        self.declare_parameter("standoff_m", 0.08)
-        self.declare_parameter("rate_hz", 10.0)
-        self.declare_parameter("timeout_s", 30.0)
-        self.declare_parameter("ik_solver", "dls")
-        self.declare_parameter("camera_frame", "camera_color_optical_frame")
-        self.declare_parameter("base_frame", "base_link")
-        self.declare_parameter("object_frame", "object_visible_pose")
-        self.declare_parameter("iface", "eth0")
-        self.declare_parameter("domain_id", 0)
+        self.declare_parameter("arm", config.get("arm", "right"))
+        self.declare_parameter("detection_method", config.get("detection_method", "aruco"))
+        self.declare_parameter("aruco_id", config.get("aruco_id", 0))
+        self.declare_parameter("marker_size_m", config.get("marker_size_m", 0.05))
+        self.declare_parameter("standoff_m", config.get("standoff_m", 0.08))
+        self.declare_parameter("rate_hz", config.get("rate_hz", 10.0))
+        self.declare_parameter("timeout_s", config.get("timeout_s", 30.0))
+        self.declare_parameter("ik_solver", config.get("ik_solver", "dls"))
+        self.declare_parameter("camera_frame", config.get("camera_frame", "camera_color_optical_frame"))
+        self.declare_parameter("base_frame", config.get("base_frame", "base_link"))
+        self.declare_parameter("object_frame", config.get("object_frame", "object_visible_pose"))
+        self.declare_parameter("iface", config.get("iface", "eth0"))
+        self.declare_parameter("domain_id", config.get("domain_id", 0))
 
         arm               = self.get_parameter("arm").value
         detection_method  = self.get_parameter("detection_method").value
@@ -89,6 +102,20 @@ class HandPoseNavNode(Node):
         rate_hz           = self.get_parameter("rate_hz").value
         timeout_s         = self.get_parameter("timeout_s").value
         ik_solver         = self.get_parameter("ik_solver").value
+        self._config = {
+            "arm": arm,
+            "detection_method": detection_method,
+            "aruco_id": aruco_id,
+            "marker_size_m": marker_size_m,
+            "standoff_m": standoff_m,
+            "rate_hz": rate_hz,
+            "timeout_s": timeout_s,
+            "ik_solver": ik_solver,
+            "iface": self.get_parameter("iface").value,
+            "domain_id": self.get_parameter("domain_id").value,
+            "mock": bool(config.get("mock", False)),
+            "sdk_preinit_error": config.get("sdk_preinit_error", ""),
+        }
 
         self.get_logger().info(f"[HPN] Starting hand_pose_nav — arm={arm}, method={detection_method}")
 
@@ -129,15 +156,35 @@ class HandPoseNavNode(Node):
         self.get_logger().info("[Step 8] ReachabilityChecker created.")
 
         # ── Robot SDK + Step 9 / 10 ───────────────────────────────────
-        if _ROBOT_AVAILABLE:
+        if robot is not None:
+            self._robot = robot
+            self._robot_mode = "sdk"
+            self._sdk_error = ""
+            self.get_logger().info("[SDK] Using pre-connected robot.")
+        elif _ROBOT_AVAILABLE and not config.get("mock", False):
             iface     = self.get_parameter("iface").value
             domain_id = self.get_parameter("domain_id").value
-            self._robot = Robot(iface=iface, domain_id=domain_id)
-            self._robot.start_sensors()
-            self.get_logger().info("[SDK] Robot connected, sensors started.")
+            try:
+                self._robot = Robot(iface=iface, domain_id=domain_id)
+                self._robot.start_sensors()
+                self._robot_mode = "sdk"
+                self._sdk_error = ""
+                self.get_logger().info("[SDK] Robot connected, sensors started.")
+            except Exception as exc:
+                self._robot = _MockRobot()
+                self._robot_mode = "mock"
+                self._sdk_error = repr(exc)
+                self.get_logger().error(
+                    f"[SDK] Robot init failed - using mock robot: {exc!r}"
+                )
         else:
             self._robot = _MockRobot()
-            self.get_logger().warn("[SDK] sdk_client not available — using mock robot.")
+            self._robot_mode = "mock"
+            self._sdk_error = config.get("sdk_preinit_error", "")
+            if config.get("mock", False):
+                self.get_logger().warn("[SDK] mock mode requested - using mock robot.")
+            else:
+                self.get_logger().warn("[SDK] sdk_client not available - using mock robot.")
 
         self._executor_obj = ArmExecutor(self._robot, arm=arm)
         self.get_logger().info("[Step 9] ArmExecutor created.")
@@ -166,6 +213,16 @@ class HandPoseNavNode(Node):
     # ------------------------------------------------------------------
     def _on_converge(self) -> None:
         self.get_logger().info("[HPN] Hand converged to target pose!")
+
+    def status_snapshot(self) -> Dict:
+        status = self._tracking_loop.status.to_dict()
+        status.update({
+            "node": self.get_name(),
+            "robot_mode": self._robot_mode,
+            "sdk_error": self._sdk_error,
+            "config": dict(self._config),
+        })
+        return status
 
     def destroy_node(self) -> None:
         self._tracking_loop.stop()

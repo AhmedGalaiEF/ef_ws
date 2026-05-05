@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import time
 import threading
+import math
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional
 
@@ -55,7 +56,26 @@ class LoopStatus:
         ts = time.strftime("%H:%M:%S")
         entry = f"[{ts}] {msg}"
         self.log.append(entry)
+        if len(self.log) > 200:
+            del self.log[:-200]
         print(entry)
+
+    def to_dict(self) -> Dict:
+        def finite_or_none(value: float):
+            return value if math.isfinite(value) else None
+
+        return {
+            "running": self.running,
+            "converged": self.converged,
+            "iteration": self.iteration,
+            "last_error_pos_m": finite_or_none(self.last_error_pos_m),
+            "last_error_rot_rad": finite_or_none(self.last_error_rot_rad),
+            "total_elapsed_s": finite_or_none(self.total_elapsed_s),
+            "ik_failures": self.ik_failures,
+            "detection_failures": self.detection_failures,
+            "safety_rejections": self.safety_rejections,
+            "log": list(self.log[-80:]),
+        }
 
 
 # ---------------------------------------------------------------------------
