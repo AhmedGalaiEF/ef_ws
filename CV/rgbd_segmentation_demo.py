@@ -494,7 +494,7 @@ def run_realsense(args):
 
 
 def list_berxel_devices() -> list[str]:
-    from berxel_py_warpper import BerxelHawkContext
+    from berxel_py_wrapper import BerxelHawkContext
 
     ctx = BerxelHawkContext()
     ctx.initCamera()
@@ -509,7 +509,7 @@ def list_berxel_devices() -> list[str]:
 
 
 def run_berxel(args):
-    from berxel_py_warpper import (
+    from berxel_py_wrapper import (
         BerxelHawkContext,
         BerxelHawkStreamFlagMode,
         BerxelHawkStreamType,
