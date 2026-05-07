@@ -1,32 +1,32 @@
-- FSM switching
 # hold L2 + B -> Damp
 # hold L2 + up arrow -> preparation (FSM 4)
 # hold R1 + Y -> walk mode (FSM 501)
 # hold R1 + A -> run mode (FSM 802)
 # hold R1 + B -> climb mode (FSM 812)
-# double tap X -> toggle gaittype between 0 and 1
+# double tap R1 -> toggle gaittype between 0 and 1
 # hold L2 + A -> Zero Torque
 # hold L2 + Y -> sitting mode (FSM 3)
 # hold L2 + X -> Dev mode (toggle 'ai' service)
 
+# toggle low level joint control : select / options key
 
-- Locomotion mode (toggle with select/options key)
-# Left joystick -> turning (vyaw)
-# right joystick -> linear, sideways, and diagonal motion (vx, vy)
+# Left joystick -> loco turning (vyaw)
+# right joystick -> loco linear, sideways, and diagonal motion (vx, vy)
 
-
-
-
-
-- Upper body mode (toggle with select/options key)
-# left joystick -> body turning (waist yaw)
-# right joystick -> increase / decrease target joint pose
 # Y -> target shoulder joints (pitch, roll, yaw)
 # B -> target elbow joints
 # X -> target wrist joints (pitch, roll, yaw)
 # A -> target grippers (slider between hand closed and hand open such as in ../modules/scripts/gripping.py) 
-# L1 -> switch targeted joint (pitch -> roll -> yaw -> pitch)
-# left arrow (switch arm control to only target left arm)
-# right arrow (switch arm control to only target right arm)
-# up arrow (switch arm control to target both arms - symmetric)
-# down arrow (switch arm control to target no arms)
+# L1 + Y -> target waist joints (pitch, roll, yaw)
+# L1 + X -> target knee joints
+# L1 + A -> target ankle joints
+# L1 + R2 -> release / reengage arms
+
+
+# left arrow (switch targeted joint: pitch -> roll -> yaw -> pitch)
+# right arrow (switch targeted joint: pitch -> yaw -> roll -> pitch)
+# up arrow (increment joint pose)
+# down arrow (decrement joint pose)
+
+# start / menu key -> toggle main menu ui (has btns for options like save current joint pose, scroll through with arrow keys, confirm with A and use B for 'back'
+
