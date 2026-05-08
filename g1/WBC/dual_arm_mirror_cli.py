@@ -20,6 +20,7 @@ Key bindings (also shown in footer)
   r                     release arms
   e                     reengage arms
   z                     zero-gain send once
+  m                     cycle arm control: both → left → right
   Tab                   cycle focus: joint → poses → sequence
   (poses focus)
     p                   save pose (name prompt)
@@ -89,6 +90,7 @@ WAIST_JOINTS      = [12, 13, 14]
 LEFT_ARM_JOINTS   = [15, 16, 17, 18, 19, 20, 21]
 RIGHT_ARM_JOINTS  = [22, 23, 24, 25, 26, 27, 28]
 UPPER_BODY_JOINTS = WAIST_JOINTS + LEFT_ARM_JOINTS + RIGHT_ARM_JOINTS
+ARM_CONTROL_MODES = ("both", "left", "right")
 
 WAIST_JOINT_NAMES = {12: "waist_yaw", 13: "waist_roll", 14: "waist_pitch"}
 
@@ -279,6 +281,7 @@ class DualArmMirrorCLI:
         self.arm_kd       = float(args.kd)
         self.waist_kp     = float(WAIST_HOLD_KP)
         self.waist_kd     = float(WAIST_HOLD_KD)
+        self.arm_control_mode = str(args.arm_control)
 
         # Joint selection
         self.joint_idx    = 0          # index into JOINT_SELECTIONS
@@ -392,7 +395,13 @@ class DualArmMirrorCLI:
                 k = str(j)
                 if k in (pose.get("waist_joints") or {}):
                     self.desired_targets[j] = float(pose["waist_joints"][k])
-        for j in LEFT_ARM_JOINTS + RIGHT_ARM_JOINTS:
+        if self.arm_control_mode == "left":
+            active_arm_joints = LEFT_ARM_JOINTS
+        elif self.arm_control_mode == "right":
+            active_arm_joints = RIGHT_ARM_JOINTS
+        else:
+            active_arm_joints = LEFT_ARM_JOINTS + RIGHT_ARM_JOINTS
+        for j in active_arm_joints:
             k = str(j)
             if k in arm_j:
                 self.desired_targets[j] = float(arm_j[k])
@@ -407,15 +416,38 @@ class DualArmMirrorCLI:
     def _joint(self) -> JointSelection:
         return JOINT_SELECTIONS[self.joint_idx]
 
+    def _joint_slider_range(self, sel: JointSelection | None = None) -> tuple[float, float]:
+        sel = sel or self._joint
+        if sel.right_index is None or self.arm_control_mode == "both":
+            return sel.slider_min, sel.slider_max
+        if self.arm_control_mode == "left":
+            return sel.left_min, sel.left_max
+        return float(sel.right_min), float(sel.right_max)
+
+    def _cycle_arm_control_mode(self) -> None:
+        idx = ARM_CONTROL_MODES.index(self.arm_control_mode)
+        self.arm_control_mode = ARM_CONTROL_MODES[(idx + 1) % len(ARM_CONTROL_MODES)]
+        self.status = f"Arm control set to {self.arm_control_mode}"
+
     def _set_joint_value(self, value: float) -> None:
         sel = self._joint
-        clamped = max(sel.slider_min, min(sel.slider_max, value))
-        self.desired_targets[sel.left_index] = clamped
-        if sel.right_index is not None:
+        vmin, vmax = self._joint_slider_range(sel)
+        clamped = max(vmin, min(vmax, value))
+        if sel.right_index is None:
+            self.desired_targets[sel.left_index] = clamped
+        elif self.arm_control_mode == "left":
+            self.desired_targets[sel.left_index] = clamped
+        elif self.arm_control_mode == "right":
+            self.desired_targets[sel.right_index] = clamped
+        else:
+            self.desired_targets[sel.left_index] = clamped
             self.desired_targets[sel.right_index] = clamped * sel.right_sign
 
     def _get_joint_value(self) -> float:
-        return float(self.desired_targets[self._joint.left_index])
+        sel = self._joint
+        if sel.right_index is not None and self.arm_control_mode == "right":
+            return float(self.desired_targets[sel.right_index])
+        return float(self.desired_targets[sel.left_index])
 
     # ── Robot tick (same logic as GUI _tick + _step_toward_targets) ───────────
 
@@ -516,7 +548,7 @@ class DualArmMirrorCLI:
         if self.seeded_from_state and self.control_enabled:
             self.status = (
                 f"Publishing {self.rate_hz:.0f} Hz  ramp {self.max_speed:.3f} rad/s  "
-                f"step {self.adjust_step:.3f} rad"
+                f"step {self.adjust_step:.3f} rad  arm:{self.arm_control_mode}"
                 + ("  [SEQUENCE RUNNING]" if self.sequence_running else "")
                 + ("" if self.control_enabled else "  [RELEASED]")
             )
@@ -554,9 +586,14 @@ class DualArmMirrorCLI:
 
     def _draw_header(self, win, h: int, w: int) -> None:
         sel       = self._joint
-        cur_val   = float(self.latest_positions.get(sel.left_index, self.current_targets[sel.left_index]))
-        tgt_val   = float(self.desired_targets[sel.left_index])
-        smin, smax = sel.slider_min, sel.slider_max
+        display_index = (
+            sel.right_index
+            if sel.right_index is not None and self.arm_control_mode == "right"
+            else sel.left_index
+        )
+        cur_val   = float(self.latest_positions.get(display_index, self.current_targets[display_index]))
+        tgt_val   = float(self.desired_targets[display_index])
+        smin, smax = self._joint_slider_range(sel)
 
         # Row 0 — title
         conn_attr = self._cp(C_GREEN if self.seeded_from_state else C_RED) | curses.A_BOLD
@@ -581,9 +618,13 @@ class DualArmMirrorCLI:
         # Row 2 — mirror mapping + speed
         if sel.right_index is None:
             map_txt = f"  Waist: {sel.name} = x"
+        elif self.arm_control_mode == "left":
+            map_txt = f"  Arms [{self.arm_control_mode}]: left {sel.name} = x"
+        elif self.arm_control_mode == "right":
+            map_txt = f"  Arms [{self.arm_control_mode}]: right {sel.name} = x"
         else:
             sign    = "+" if sel.right_sign > 0 else "-"
-            map_txt = f"  Arms: left {sel.name} = x   right {sel.name} = {sign}x"
+            map_txt = f"  Arms [{self.arm_control_mode}]: left {sel.name} = x   right {sel.name} = {sign}x"
         self._safe_addnstr(win, 2, 0, map_txt, w - 30)
         speed_txt = f"Speed: {self.max_speed:.3f} r/s [s]"
         self._safe_addstr(win, 2, max(0, w - len(speed_txt) - 2), speed_txt,
@@ -611,11 +652,14 @@ class DualArmMirrorCLI:
             cr_txt = (f"  Current: {cur_val:+.4f} rad   "
                       f"Target: {tgt_val:+.4f} rad")
         else:
+            cl  = float(self.latest_positions.get(sel.left_index,
+                         self.current_targets[sel.left_index]))
+            clt = float(self.desired_targets[sel.left_index])
             cr  = float(self.latest_positions.get(sel.right_index,
                          self.current_targets[sel.right_index]))
             crt = float(self.desired_targets[sel.right_index])
-            cr_txt = (f"  Current L/R: {cur_val:+.4f} / {cr:+.4f} rad   "
-                      f"Target L/R: {tgt_val:+.4f} / {crt:+.4f} rad")
+            cr_txt = (f"  Current L/R: {cl:+.4f} / {cr:+.4f} rad   "
+                      f"Target L/R: {clt:+.4f} / {crt:+.4f} rad")
         self._safe_addnstr(win, 5, 0, cr_txt, w)
 
         # Row 6 — divider
@@ -696,7 +740,7 @@ class DualArmMirrorCLI:
             self._safe_addstr(win, panel_bot, 0, "─" * w, self._cp(C_CYAN))
 
     def _draw_footer(self, win, h: int, w: int) -> None:
-        hints1 = ("y:sync  r:release  e:reengage  z:zero  Tab:focus  "
+        hints1 = ("y:sync  r:release  e:reengage  z:zero  m:arm mode  Tab:focus  "
                   "a:→seq  x:rem  u:↑  n:↓  R:run  S:stop")
         hints2 = "q:quit  s:speed  g:gap  w:waist  < >:step  ← →:adjust  j k:joint"
         self._safe_addnstr(win, h - 3, 0, hints1[:w], w, self._cp(C_YELLOW))
@@ -755,6 +799,11 @@ class DualArmMirrorCLI:
         # ── Focus cycle ───────────────────────────────────────────────────
         if key == 9:  # Tab
             self.focus = (self.focus + 1) % 3
+            return
+
+        # ── Arm control mode ─────────────────────────────────────────────
+        if key == ord("m"):
+            self._cycle_arm_control_mode()
             return
 
         # ── Joint navigation (always available) ───────────────────────────
@@ -1046,6 +1095,12 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--speed-rad-s", type=float, default=0.1,   help="Initial ramp limit rad/s")
     p.add_argument("--kp",          type=float, default=DEFAULT_ARM_KP)
     p.add_argument("--kd",          type=float, default=DEFAULT_ARM_KD)
+    p.add_argument(
+        "--arm-control",
+        choices=ARM_CONTROL_MODES,
+        default="both",
+        help="Initial arm target mode for manual edits, pose loads, and sequences",
+    )
     return p.parse_args()
 
 
