@@ -81,7 +81,7 @@ from sdk_client import Robot
 from hand_pose_navigation_copy.arm_fk import (
     ArmFK, LEFT_ARM_JOINTS, RIGHT_ARM_JOINTS,
     JOINT_LIMITS,
-    _DH_RIGHT, _dh_matrix,
+    _fk_urdf_partial,
     _LEFT_SHOULDER_IN_BASE, _RIGHT_SHOULDER_IN_BASE,
 )
 from hand_pose_navigation_copy.arm_ik import _pose_error, _numerical_jacobian
@@ -106,6 +106,22 @@ _SHOULDER_ORIGIN: Dict[str, np.ndarray] = {
     "right": _RIGHT_SHOULDER_IN_BASE,
 }
 JOINT_LABELS = ("sh_p", "sh_r", "sh_y", "elbow", "wr_r", "wr_p", "wr_y")
+
+# ── Home EE pose (after reengage) ─────────────────────────────────────────────
+# Arm-centric frame: x=forward, y=outward (right:-y_base, left:+y_base), z=up.
+_HOME_EE_LOCAL = (0.0, 0.0, -0.4, 0.0, -math.pi / 2, 0.0)  # x,y,z,roll,pitch,yaw
+
+
+def _make_home_T(arm: str) -> np.ndarray:
+    """4×4 home EE pose in base_link: 0.4 m below shoulder, hand pointing forward."""
+    x, y, z, roll, pitch, yaw = _HOME_EE_LOCAL
+    y_sign = -1.0 if arm == "right" else 1.0
+    pos = _SHOULDER_ORIGIN[arm] + np.array([x, y_sign * y, z])
+    R = _Rz(yaw) @ _Ry(pitch) @ _Rx(roll)
+    T = np.eye(4, dtype=np.float64)
+    T[:3, :3] = R
+    T[:3, 3] = pos
+    return T
 
 # ── DOF table ─────────────────────────────────────────────────────────────────
 DOF_NAMES = ("x", "y", "z", "roll", "pitch", "yaw")
@@ -167,21 +183,21 @@ def _rpy_from_R(R: np.ndarray) -> Tuple[float, float, float]:
 # ── Sphere collision model ────────────────────────────────────────────────────
 
 def _arm_sphere_centers(q_arm: np.ndarray, arm: str) -> List[np.ndarray]:
-    """Five sphere centres for the arm via partial DH forward kinematics."""
+    """Five sphere centres using URDF partial FK.
+
+    Joints in the URDF chain:
+      0: shoulder_pitch   3: elbow   4: wrist_roll   6: wrist_yaw (hand)
+    """
     shoulder = _SHOULDER_ORIGIN[arm]
-    T = np.eye(4, dtype=np.float64)
-    T[:3, 3] = shoulder.copy()
-    pts: List[np.ndarray] = [shoulder.copy()]   # pts[0] = shoulder
-    for i, (a, d, alpha, theta_off) in enumerate(_DH_RIGHT):
-        T = T @ _dh_matrix(a, d, alpha, q_arm[i] + theta_off)
-        pts.append(T[:3, 3].copy())
-    # pts[0]=shoulder, pts[3]=elbow, pts[5]=wrist, pts[7]=hand
+    elbow    = _fk_urdf_partial(q_arm, arm, 4)[:3, 3]   # after elbow joint
+    wrist    = _fk_urdf_partial(q_arm, arm, 5)[:3, 3]   # after wrist_roll joint
+    hand     = _fk_urdf_partial(q_arm, arm, 7)[:3, 3]   # full FK
     return [
-        pts[0],                         # shoulder
-        (pts[0] + pts[3]) * 0.5,        # upper-arm mid
-        pts[3],                         # elbow
-        (pts[3] + pts[5]) * 0.5,        # forearm mid
-        pts[7],                         # hand
+        shoulder,
+        (shoulder + elbow)  * 0.5,      # upper-arm mid
+        elbow,
+        (elbow    + wrist)  * 0.5,      # forearm mid
+        hand,
     ]
 
 
@@ -276,7 +292,7 @@ class SmartArmIK:
     def __init__(
         self,
         arm: str,
-        max_iter: int = 80,
+        max_iter: int = 10,
         tol_pos_m: float = 0.005,
         tol_rot_rad: float = 0.02,
         damping: float = 0.05,
@@ -290,7 +306,7 @@ class SmartArmIK:
         self.damping    = damping
         self.reg_weight = reg_weight
         self.rep_weight = rep_weight
-        self._fk        = ArmFK(arm, "dh")
+        self._fk        = ArmFK(arm, "urdf")
         lo = np.array([lim[0] for lim in JOINT_LIMITS[arm]])
         hi = np.array([lim[1] for lim in JOINT_LIMITS[arm]])
         self._lo = lo
@@ -327,11 +343,11 @@ class SmartArmIK:
             J_pv = J.T @ Jreg                                 # 7×6  (DLS pseudo-inv)
 
             dq_EE = J_pv @ err
-            scale = min(0.1, 0.05 / (float(np.linalg.norm(dq_EE)) + 1e-8))
-            dq    = scale * dq_EE
 
             # ── Null-space projector  N = I - J⁺J ──────────────────────────
             N = np.eye(7) - J_pv @ J                          # 7×7
+
+            dq = dq_EE.copy()
 
             # ── Secondary 1: rest-pose regularisation ───────────────────────
             if rest_q is not None and self.reg_weight > 0.0:
@@ -346,10 +362,10 @@ class SmartArmIK:
                 if self._last_rep_grad is not None:
                     dq -= N @ (self.rep_weight * self._last_rep_grad)
 
-            # ── Safety cap on total step ────────────────────────────────────
+            # ── Cap total step ──────────────────────────────────────────────
             norm_dq = float(np.linalg.norm(dq))
-            if norm_dq > 0.15:
-                dq *= 0.15 / norm_dq
+            if norm_dq > 0.2:
+                dq *= 0.2 / norm_dq
 
             q = np.clip(q + dq, self._lo, self._hi)
 
@@ -509,6 +525,7 @@ class IKPoseCLISmart:
         self.arm_kd           = float(args.kd)
         self.waist_kp         = float(WAIST_HOLD_KP)
         self.waist_kd         = float(WAIST_HOLD_KD)
+        self.waist_enabled    = True   # False = waist released (kp/kd = 0)
         self.arm_control_mode = str(args.arm_control)
         self.dof_idx          = 0
         self.pos_step         = 0.01
@@ -529,6 +546,9 @@ class IKPoseCLISmart:
             "left":  np.eye(4, dtype=np.float64),
             "right": np.eye(4, dtype=np.float64),
         }
+        self._home_T: Dict[str, np.ndarray] = {
+            arm: _make_home_T(arm) for arm in ("left", "right")
+        }
 
         # ── Smart IK state ────────────────────────────────────────────────
         # rest_pose: captured from live joints on reengage
@@ -545,8 +565,8 @@ class IKPoseCLISmart:
 
         # FK / SmartIK
         self._fk: Dict[str, ArmFK] = {
-            "left":  ArmFK("left",  "dh"),
-            "right": ArmFK("right", "dh"),
+            "left":  ArmFK("left",  "urdf"),
+            "right": ArmFK("right", "urdf"),
         }
         self._ik: Dict[str, SmartArmIK] = {
             "left":  SmartArmIK("left",  reg_weight=args.reg_weight, rep_weight=args.rep_weight),
@@ -633,10 +653,20 @@ class IKPoseCLISmart:
         for arm in self._active_arms():
             T_prev = self.target_T[arm].copy()
             T_new  = T_prev.copy()
+            arm_delta = delta
+            if self.dof_idx == 1:
+                # y: outward = +y for left arm, -y for right arm.
+                arm_delta = delta if arm == "left" else -delta
+            elif self.dof_idx in (3, 5):
+                # roll, yaw: left arm geometry is mirrored → negate for left arm.
+                arm_delta = -delta if arm == "left" else delta
+            elif self.dof_idx == 4:
+                # pitch: both arms use -delta (both pitched the same visual direction).
+                arm_delta = -delta
             if self.dof_idx < 3:
-                T_new[self.dof_idx, 3] += delta
+                T_new[self.dof_idx, 3] += arm_delta
             else:
-                T_new[:3, :3] = _ROT_BY_AXIS[self.dof_idx - 3](delta) @ T_new[:3, :3]
+                T_new[:3, :3] = _ROT_BY_AXIS[self.dof_idx - 3](arm_delta) @ T_new[:3, :3]
             self.target_T[arm] = T_new
             ok = self._solve_and_plan(arm, T_prev)
             if not ok:
@@ -755,7 +785,8 @@ class IKPoseCLISmart:
         self.pub.publish(
             self.current_targets,
             arm_kp=self.arm_kp, arm_kd=self.arm_kd,
-            waist_kp=self.waist_kp, waist_kd=self.waist_kd,
+            waist_kp=self.waist_kp if self.waist_enabled else 0.0,
+            waist_kd=self.waist_kd if self.waist_enabled else 0.0,
         )
         rest_txt = "rest:OK" if self.rest_pose_captured else "rest:—"
         self.status = (
@@ -801,7 +832,8 @@ class IKPoseCLISmart:
         row += 1
 
         # ── Parameter bar ─────────────────────────────────────────────────
-        arm_txt   = f"  Arm: [{self.arm_control_mode.upper()}]  (m)"
+        waist_lbl = "ON" if self.waist_enabled else "OFF"
+        arm_txt   = f"  Arm: [{self.arm_control_mode.upper()}]  (m)  Waist: [{waist_lbl}]  (w)"
         param_txt = (f"ramp {self.max_speed:.3f} r/s (s)  "
                      f"max_dq {self.max_dq:.3f} (d/[/])")
         self._addnstr(win, row, 0, arm_txt, w//2)
@@ -923,7 +955,7 @@ class IKPoseCLISmart:
         # ── Footer ────────────────────────────────────────────────────────
         self._addstr(win, h-6, 0, "─" * w, self._cp(C_CYAN))
         h1 = "  ↑/↓ j/k: DOF   ← →/- +: adjust   < >: EE step   [ ]: max_dq   m: arm"
-        h2 = "  y: sync   r: release   e: reengage+capture   z: zero   s: speed   d: max_dq"
+        h2 = "  y: sync   w: waist   r: release   e: reengage+capture   z: zero   s: speed   d: max_dq"
         h3 = "  o: add obstacle   O: clear obstacles   q: quit"
         self._addnstr(win, h-5, 0, h1, w, self._cp(C_YELLOW))
         self._addnstr(win, h-4, 0, h2, w, self._cp(C_YELLOW))
@@ -999,6 +1031,10 @@ class IKPoseCLISmart:
             self._sync_ee_from_joints()
             self.status = "Resynced EE targets to current hand pose"; return
 
+        if key == ord("w"):
+            self.waist_enabled = not self.waist_enabled
+            self.status = f"Waist {'ENABLED (held)' if self.waist_enabled else 'DISABLED (free)'}"; return
+
         if key == ord("r"):
             try:
                 self.robot.wait_for_low_state(timeout=2.0)
@@ -1017,13 +1053,29 @@ class IKPoseCLISmart:
                 self.armed = True
                 snap = self.state_sub.snapshot()
                 if snap: self.latest_positions = dict(snap[0])
+                # current_targets = physical position, ramp starts from here
                 self.current_targets = dict(self.latest_positions)
                 self.desired_targets = dict(self.latest_positions)
                 self._wq = {"left": [], "right": []}
-                self._sync_ee_from_joints()
                 # Capture the post-reengage pose as the rest pose
                 self._capture_rest_pose()
-                self.status = "Reengaged — rest pose captured, ready for commands"
+                # Solve IK for the home EE pose and set as desired target
+                for arm in ("left", "right"):
+                    self.target_T[arm] = self._home_T[arm].copy()
+                    joints = ARM_JOINTS[arm]
+                    q_init = np.array([self.current_targets[j] for j in joints])
+                    q_sol, info = self._ik[arm].solve(
+                        self._home_T[arm],
+                        q_init,
+                        rest_q=self.rest_pose[arm],
+                        user_obs=self.user_obs,
+                        other_q=None,
+                    )
+                    self.ik_info[arm] = info
+                    if q_sol is not None:
+                        for i, j in enumerate(joints):
+                            self.desired_targets[j] = float(q_sol[i])
+                self.status = "Reengaged — rest pose captured, homing to initial EE pose"
             except Exception as exc:
                 self.status = f"Reengage failed: {exc}"
             return
@@ -1119,10 +1171,10 @@ def _parse_args() -> argparse.Namespace:
     )
     p.add_argument("--iface",        default="eth0")
     p.add_argument("--domain-id",    type=int,   default=0)
-    p.add_argument("--rate-hz",      type=float, default=50.0)
-    p.add_argument("--speed-rad-s",  type=float, default=0.5,
+    p.add_argument("--rate-hz",      type=float, default=25.0)
+    p.add_argument("--speed-rad-s",  type=float, default=0.2,
                    help="Joint ramp speed rad/s")
-    p.add_argument("--max-dq",       type=float, default=0.1,
+    p.add_argument("--max-dq",       type=float, default=0.2,
                    help="Max joint change per IK key-press (rad)")
     p.add_argument("--reg-weight",   type=float, default=0.05,
                    help="Null-space rest-pose regularisation weight (0=off)")

@@ -6,7 +6,7 @@
 # double tap R1 -> toggle gaittype between 0 and 1
 # hold L2 + A -> Zero Torque
 # hold L2 + Y -> sitting mode (FSM 3)
-# hold L2 + X -> Dev mode (toggle 'ai' service)
+# hold L2 + X -> Dev mode (toggle 'ai_sport' service)
 
 # toggle low level joint control : select / options key
 
@@ -29,4 +29,3 @@
 # down arrow (decrement joint pose)
 
 # start / menu key -> toggle main menu ui (has btns for options like save current joint pose, scroll through with arrow keys, confirm with A and use B for 'back'
-

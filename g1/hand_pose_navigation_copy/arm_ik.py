@@ -97,7 +97,7 @@ class ArmIK:
         self.tol_pos_m = tol_pos_m
         self.tol_rot_rad = tol_rot_rad
         self.damping = damping
-        self._fk = ArmFK(arm=arm, backend="dh")
+        self._fk = ArmFK(arm=arm, backend="urdf")
         self._limits = JOINT_LIMITS[arm]
         self._joint_indices = LEFT_ARM_JOINTS if arm == "left" else RIGHT_ARM_JOINTS
 
@@ -160,9 +160,10 @@ class ArmIK:
             JJT = J @ J.T
             dq = J.T @ np.linalg.solve(JJT + lam**2 * np.eye(6), err)
 
-            # Adaptive step size
-            step = min(0.1, 0.05 / (np.linalg.norm(dq) + 1e-8))
-            q = _clamp(q + step * dq, self._limits)
+            norm_dq = float(np.linalg.norm(dq))
+            if norm_dq > 0.3:
+                dq *= 0.3 / norm_dq
+            q = _clamp(q + dq, self._limits)
 
         T_cur = self._fk.compute_arm(q)
         err = _pose_error(T_des, T_cur)

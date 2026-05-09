@@ -9,7 +9,7 @@ IK over the 7 arm DOFs (shoulder pitch/roll/yaw, elbow, wrist roll/pitch/yaw).
 Each key press:
   1. Increments the EE target by the configured step.
   2. Runs warm-started DLS IK from the previous joint solution.
-  3. Clamps each resulting joint delta to ±max_dq (default 0.1 rad).
+  3. Clamps each resulting joint delta to ±max_dq (default 0.2 rad).
   4. Queues the clamped solution as the ramp target.
   5. The control loop ramps current joints smoothly toward the target at
      max_speed r/s with uniform servo gains throughout.
@@ -68,7 +68,10 @@ except ImportError as exc:
 from sdk_client import Robot
 
 # FK/IK package at <ROOT_DIR>/hand_pose_navigation_copy/
-from hand_pose_navigation_copy.arm_fk import ArmFK, LEFT_ARM_JOINTS, RIGHT_ARM_JOINTS
+from hand_pose_navigation_copy.arm_fk import (
+    ArmFK, LEFT_ARM_JOINTS, RIGHT_ARM_JOINTS,
+    _LEFT_SHOULDER_IN_BASE, _RIGHT_SHOULDER_IN_BASE,
+)
 from hand_pose_navigation_copy.arm_ik import ArmIK
 
 # ── Joint indices ─────────────────────────────────────────────────────────────
@@ -87,6 +90,11 @@ ARM_JOINTS: Dict[str, List[int]] = {
     "right": RIGHT_ARM_JOINTS,
 }
 JOINT_LABELS = ("sh_p", "sh_r", "sh_y", "elbow", "wr_r", "wr_p", "wr_y")
+
+_SHOULDER_ORIGIN: Dict[str, np.ndarray] = {
+    "left":  _LEFT_SHOULDER_IN_BASE,
+    "right": _RIGHT_SHOULDER_IN_BASE,
+}
 
 # ── DOF table ─────────────────────────────────────────────────────────────────
 DOF_NAMES = ("x", "y", "z", "roll", "pitch", "yaw")
@@ -131,6 +139,24 @@ def _rpy_from_R(R: np.ndarray) -> Tuple[float, float, float]:
         pitch = math.atan2(-R[2, 0],  sy)
         yaw   = 0.0
     return roll, pitch, yaw
+
+
+# ── Home EE pose (after reengage) ─────────────────────────────────────────────
+# Expressed in the arm-centric frame: x=forward, y=outward, z=up.
+# y=outward maps to -y_base for right arm, +y_base for left arm.
+_HOME_EE_LOCAL = (0.0, 0.0, -0.4, 0.0, -math.pi / 2, 0.0)  # x,y,z,roll,pitch,yaw
+
+
+def _make_home_T(arm: str) -> np.ndarray:
+    """4×4 home EE pose in base_link: 0.4 m below shoulder, hand pointing forward."""
+    x, y, z, roll, pitch, yaw = _HOME_EE_LOCAL
+    y_sign = -1.0 if arm == "right" else 1.0
+    pos = _SHOULDER_ORIGIN[arm] + np.array([x, y_sign * y, z])
+    R = _Rz(yaw) @ _Ry(pitch) @ _Rx(roll)
+    T = np.eye(4, dtype=np.float64)
+    T[:3, :3] = R
+    T[:3, 3] = pos
+    return T
 
 
 # ── Robot infrastructure ──────────────────────────────────────────────────────
@@ -238,6 +264,7 @@ class IKPoseCLI:
         self.arm_kd           = float(args.kd)
         self.waist_kp         = float(WAIST_HOLD_KP)
         self.waist_kd         = float(WAIST_HOLD_KD)
+        self.waist_enabled    = True   # False = waist released (kp/kd = 0)
         self.arm_control_mode = str(args.arm_control)
 
         # EE step sizes (per key-press)
@@ -268,16 +295,19 @@ class IKPoseCLI:
             "left":  np.eye(4, dtype=np.float64),
             "right": np.eye(4, dtype=np.float64),
         }
+        self._home_T: Dict[str, np.ndarray] = {
+            arm: _make_home_T(arm) for arm in ("left", "right")
+        }
 
         # ── FK / IK ───────────────────────────────────────────────────────
         # IK tolerances tuned for fast warm-start solves (~3 ms each)
         self._fk: Dict[str, ArmFK] = {
-            "left":  ArmFK("left",  "dh"),
-            "right": ArmFK("right", "dh"),
+            "left":  ArmFK("left",  "urdf"),
+            "right": ArmFK("right", "urdf"),
         }
         self._ik: Dict[str, ArmIK] = {
-            "left":  ArmIK("left",  "dls", max_iter=50, tol_pos_m=0.005, tol_rot_rad=0.02),
-            "right": ArmIK("right", "dls", max_iter=50, tol_pos_m=0.005, tol_rot_rad=0.02),
+            "left":  ArmIK("left",  "dls", max_iter=10, tol_pos_m=0.005, tol_rot_rad=0.02),
+            "right": ArmIK("right", "dls", max_iter=10, tol_pos_m=0.005, tol_rot_rad=0.02),
         }
         self.ik_info: Dict[str, Dict] = {
             "left":  {"success": None, "error_pos_m": 0.0, "error_rot_rad": 0.0, "iterations": 0},
@@ -348,11 +378,22 @@ class IKPoseCLI:
             T_prev = self.target_T[arm].copy()
             T_new  = T_prev.copy()
 
+            arm_delta = delta
+            if self.dof_idx == 1:
+                # y: outward = +y for left arm, -y for right arm.
+                arm_delta = delta if arm == "left" else -delta
+            elif self.dof_idx in (3, 5):
+                # roll, yaw: left arm geometry is mirrored → negate for left arm.
+                arm_delta = -delta if arm == "left" else delta
+            elif self.dof_idx == 4:
+                # pitch: both arms use -delta (both pitched the same visual direction).
+                arm_delta = -delta
+
             if self.dof_idx < 3:                    # Cartesian position
-                T_new[self.dof_idx, 3] += delta
+                T_new[self.dof_idx, 3] += arm_delta
             else:                                    # world-frame rotation
                 axis = self.dof_idx - 3             # 0=roll, 1=pitch, 2=yaw
-                T_new[:3, :3] = _ROT_BY_AXIS[axis](delta) @ T_new[:3, :3]
+                T_new[:3, :3] = _ROT_BY_AXIS[axis](arm_delta) @ T_new[:3, :3]
 
             self.target_T[arm] = T_new
             ok = self._apply_ik(arm, T_prev)
@@ -421,8 +462,8 @@ class IKPoseCLI:
             self.current_targets,
             arm_kp=self.arm_kp,
             arm_kd=self.arm_kd,
-            waist_kp=self.waist_kp,
-            waist_kd=self.waist_kd,
+            waist_kp=self.waist_kp if self.waist_enabled else 0.0,
+            waist_kd=self.waist_kd if self.waist_enabled else 0.0,
         )
         self.status = (
             f"Publishing {self.rate_hz:.0f} Hz  "
@@ -476,7 +517,8 @@ class IKPoseCLI:
         row += 1
 
         # ── Parameter bar ─────────────────────────────────────────────────
-        arm_txt   = f"  Arm: [{self.arm_control_mode.upper()}]  (m)"
+        waist_lbl = "ON" if self.waist_enabled else "OFF"
+        arm_txt   = f"  Arm: [{self.arm_control_mode.upper()}]  (m)  Waist: [{waist_lbl}]  (w)"
         param_txt = (f"ramp {self.max_speed:.3f} r/s (s)  "
                      f"max_dq {self.max_dq:.3f} rad (d/[/])")
         self._addnstr(win, row, 0, arm_txt, w // 2)
@@ -585,7 +627,7 @@ class IKPoseCLI:
         # ── Footer ────────────────────────────────────────────────────────
         self._addstr(win, h - 5, 0, "─" * w, self._cp(C_CYAN))
         hn1 = "  ↑/↓ j/k: DOF   ← →/- +: adjust   < >: EE step   [ ]: max_dq   m: arm"
-        hn2 = "  y: sync   r: release   e: reengage   z: zero-gain   s: speed   d: max_dq   q: quit"
+        hn2 = "  y: sync   w: waist   r: release   e: reengage   z: zero-gain   s: speed   d: max_dq   q: quit"
         self._addnstr(win, h - 4, 0, hn1, w, self._cp(C_YELLOW))
         self._addnstr(win, h - 3, 0, hn2, w, self._cp(C_YELLOW))
         self._addstr(win, h - 2, 0, "─" * w, self._cp(C_CYAN))
@@ -682,6 +724,12 @@ class IKPoseCLI:
             self.status = "EE targets resynced to current hand pose"
             return
 
+        # ── Waist toggle ──────────────────────────────────────────────────
+        if key == ord("w"):
+            self.waist_enabled = not self.waist_enabled
+            self.status = f"Waist {'ENABLED (held)' if self.waist_enabled else 'DISABLED (free)'}"
+            return
+
         # ── Release arms ──────────────────────────────────────────────────
         if key == ord("r"):
             try:
@@ -699,16 +747,24 @@ class IKPoseCLI:
                 self.robot.wait_for_low_state(timeout=2.0)
                 self.robot.unrelease_arms()
                 self.armed = True
-                # Sync all targets to current physical position so there is
-                # no sudden jump on first tick after reengage
                 snap = self.state_sub.snapshot()
                 if snap:
                     pos, _ = snap
                     self.latest_positions = dict(pos)
+                # current_targets = physical position, ramp starts from here
                 self.current_targets = dict(self.latest_positions)
                 self.desired_targets = dict(self.latest_positions)
-                self._sync_ee_from_joints()
-                self.status = "Arms reengaged — synced to live pose, ready for commands"
+                # Solve IK for the home EE pose and set as desired target
+                for arm in ("left", "right"):
+                    self.target_T[arm] = self._home_T[arm].copy()
+                    joints = ARM_JOINTS[arm]
+                    q_init = np.array([self.current_targets[j] for j in joints])
+                    q_sol, info = self._ik[arm].solve(self._home_T[arm], q_init=q_init)
+                    self.ik_info[arm] = info
+                    if q_sol is not None:
+                        for i, j in enumerate(joints):
+                            self.desired_targets[j] = float(q_sol[i])
+                self.status = "Reengaged — homing to initial EE pose"
             except Exception as exc:
                 self.status = f"Reengage failed: {exc}"
             return
@@ -794,11 +850,11 @@ def _parse_args() -> argparse.Namespace:
     )
     p.add_argument("--iface",        default="eth0",  help="DDS network interface")
     p.add_argument("--domain-id",    type=int,   default=0)
-    p.add_argument("--rate-hz",      type=float, default=50.0,  help="Publish rate Hz")
-    p.add_argument("--speed-rad-s",  type=float, default=0.5,
+    p.add_argument("--rate-hz",      type=float, default=25.0,  help="Publish rate Hz")
+    p.add_argument("--speed-rad-s",  type=float, default=0.2,
                    help="Joint ramp speed rad/s (how fast joints move to new target)")
-    p.add_argument("--max-dq",       type=float, default=0.1,
-                   help="Max joint change applied per IK key-press (rad, default 0.1)")
+    p.add_argument("--max-dq",       type=float, default=0.2,
+                   help="Max joint change applied per IK key-press (rad, default 0.2)")
     p.add_argument("--kp",           type=float, default=DEFAULT_ARM_KP)
     p.add_argument("--kd",           type=float, default=DEFAULT_ARM_KD)
     p.add_argument(

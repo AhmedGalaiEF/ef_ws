@@ -8,9 +8,9 @@ This wraps Unitree's MotionSwitcherClient, which is exposed on ROS2 as:
 
 Examples:
   ./service_toggle.py status
-  ./service_toggle.py on ai
-  ./service_toggle.py off ai
-  ./service_toggle.py toggle ai
+  ./service_toggle.py on ai_sport
+  ./service_toggle.py off ai_sport
+  ./service_toggle.py toggle ai_sport
   ./service_toggle.py on normal --iface eth0
 """
 from __future__ import annotations
@@ -33,6 +33,15 @@ ERROR_HINTS = {
     7009: "custom config set error",
 }
 
+MODE_ALIASES = {
+    "ai": "ai_sport",
+}
+
+MODE_EQUIVALENTS = {
+    canonical: {alias, canonical}
+    for alias, canonical in MODE_ALIASES.items()
+}
+
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -46,7 +55,10 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument(
         "name",
         nargs="?",
-        help="Motion/service mode name, for example ai, normal, advanced, or stand.",
+        help=(
+            "Motion/service mode name, for example ai_sport, normal, advanced, or stand. "
+            "Unknown names are passed through unchanged."
+        ),
     )
     parser.add_argument(
         "--iface",
@@ -119,6 +131,21 @@ def current_name(data: dict[str, Any] | None) -> str:
     return str(name) if name is not None else ""
 
 
+def canonical_mode_name(name: str) -> str:
+    return MODE_ALIASES.get(name, name)
+
+
+def mode_names_match(left: str, right: str) -> bool:
+    left = canonical_mode_name(left)
+    right = canonical_mode_name(right)
+    if left == right:
+        return True
+
+    left_equivalents = MODE_EQUIVALENTS.get(left, {left})
+    right_equivalents = MODE_EQUIVALENTS.get(right, {right})
+    return bool(left_equivalents & right_equivalents)
+
+
 def print_status(prefix: str, code: int, data: dict[str, Any] | None) -> None:
     name = current_name(data)
     form = "" if not data else str(data.get("form", ""))
@@ -145,7 +172,10 @@ def release_mode(client: Any) -> int:
 def require_name(args: argparse.Namespace) -> str:
     if not args.name:
         raise SystemExit(f"error: action '{args.action}' requires NAME")
-    return args.name
+    name = canonical_mode_name(args.name)
+    if name != args.name:
+        print(f"using mode name {name!r} for alias {args.name!r}.")
+    return name
 
 
 def run(args: argparse.Namespace) -> int:
@@ -166,12 +196,12 @@ def run(args: argparse.Namespace) -> int:
     result_code = 0
 
     if action == "on":
-        if before_name == name:
+        if mode_names_match(before_name, name):
             print(f"{name!r} is already active.")
         else:
             result_code = select_mode(client, name)
     elif action == "off":
-        if before_name == name or args.force_release:
+        if mode_names_match(before_name, name) or args.force_release:
             result_code = release_mode(client)
         elif before_name:
             print(
