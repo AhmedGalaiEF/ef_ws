@@ -70,6 +70,111 @@ LEFT_LEG_VISIBLE_LINKS = [
     "left_ankle_roll_link",
 ]
 
+# Right leg: 3 hip (pitch, roll, yaw) + 1 knee + 2 ankle (pitch, roll) = 6 DOF
+RIGHT_LEG_6DOF_JOINTS = [
+    "right_hip_pitch_joint",
+    "right_hip_roll_joint",
+    "right_hip_yaw_joint",
+    "right_knee_joint",
+    "right_ankle_pitch_joint",
+    "right_ankle_roll_joint",
+]
+
+RIGHT_LEG_VISIBLE_LINKS = [
+    "right_hip_pitch_link",
+    "right_hip_roll_link",
+    "right_hip_yaw_link",
+    "right_knee_link",
+    "right_ankle_pitch_link",
+    "right_ankle_roll_link",
+]
+
+RIGHT_ARM_7DOF_JOINTS = [
+    "right_shoulder_pitch_joint",
+    "right_shoulder_roll_joint",
+    "right_shoulder_yaw_joint",
+    "right_elbow_joint",
+    "right_wrist_roll_joint",
+    "right_wrist_pitch_joint",
+    "right_wrist_yaw_joint",
+]
+
+RIGHT_HAND_7DOF_JOINTS = [
+    "right_hand_thumb_0_joint",
+    "right_hand_thumb_1_joint",
+    "right_hand_thumb_2_joint",
+    "right_hand_middle_0_joint",
+    "right_hand_middle_1_joint",
+    "right_hand_index_0_joint",
+    "right_hand_index_1_joint",
+]
+
+RIGHT_ARM_HAND_14DOF_JOINTS = RIGHT_ARM_7DOF_JOINTS + RIGHT_HAND_7DOF_JOINTS
+
+RIGHT_ARM_VISIBLE_LINKS = [
+    "right_shoulder_pitch_link",
+    "right_shoulder_roll_link",
+    "right_shoulder_yaw_link",
+    "right_elbow_link",
+    "right_wrist_roll_link",
+    "right_wrist_pitch_link",
+    "right_wrist_yaw_link",
+    "right_hand_palm_link",
+    "right_hand_thumb_0_link",
+    "right_hand_thumb_1_link",
+    "right_hand_thumb_2_link",
+    "right_hand_middle_0_link",
+    "right_hand_middle_1_link",
+    "right_hand_index_0_link",
+    "right_hand_index_1_link",
+]
+
+WAIST_3DOF_JOINTS = [
+    "waist_yaw_joint",
+    "waist_roll_joint",
+    "waist_pitch_joint",
+]
+
+# Full body: 2×(3 hip + 1 knee + 2 ankle) + 3 waist + 2×7 arm = 29 DOF
+FULL_BODY_29DOF_JOINTS = (
+    LEFT_LEG_6DOF_JOINTS + RIGHT_LEG_6DOF_JOINTS
+    + WAIST_3DOF_JOINTS
+    + LEFT_ARM_7DOF_JOINTS + RIGHT_ARM_7DOF_JOINTS
+)
+
+FULL_BODY_VISIBLE_LINKS = [
+    "pelvis",
+    "left_hip_pitch_link", "left_hip_roll_link", "left_hip_yaw_link",
+    "left_knee_link", "left_ankle_pitch_link", "left_ankle_roll_link",
+    "right_hip_pitch_link", "right_hip_roll_link", "right_hip_yaw_link",
+    "right_knee_link", "right_ankle_pitch_link", "right_ankle_roll_link",
+    "waist_yaw_link", "waist_roll_link", "torso_link",
+    "left_shoulder_pitch_link", "left_shoulder_roll_link", "left_shoulder_yaw_link",
+    "left_elbow_link", "left_wrist_roll_link", "left_wrist_pitch_link",
+    "left_wrist_yaw_link", "left_hand_palm_link",
+    "right_shoulder_pitch_link", "right_shoulder_roll_link", "right_shoulder_yaw_link",
+    "right_elbow_link", "right_wrist_roll_link", "right_wrist_pitch_link",
+    "right_wrist_yaw_link", "right_hand_palm_link",
+]
+
+# Approximate bounding-sphere radii per link (metres) for collision checking
+_LINK_SPHERE_RADII: dict[str, float] = {
+    "pelvis": 0.12, "torso_link": 0.14,
+    "waist_yaw_link": 0.09, "waist_roll_link": 0.09,
+    "left_hip_pitch_link": 0.07, "left_hip_roll_link": 0.07, "left_hip_yaw_link": 0.07,
+    "left_knee_link": 0.065, "left_ankle_pitch_link": 0.05, "left_ankle_roll_link": 0.05,
+    "right_hip_pitch_link": 0.07, "right_hip_roll_link": 0.07, "right_hip_yaw_link": 0.07,
+    "right_knee_link": 0.065, "right_ankle_pitch_link": 0.05, "right_ankle_roll_link": 0.05,
+    "left_shoulder_pitch_link": 0.07, "left_shoulder_roll_link": 0.06,
+    "left_shoulder_yaw_link": 0.06, "left_elbow_link": 0.055,
+    "left_wrist_roll_link": 0.045, "left_wrist_pitch_link": 0.04,
+    "left_wrist_yaw_link": 0.04, "left_hand_palm_link": 0.05,
+    "right_shoulder_pitch_link": 0.07, "right_shoulder_roll_link": 0.06,
+    "right_shoulder_yaw_link": 0.06, "right_elbow_link": 0.055,
+    "right_wrist_roll_link": 0.045, "right_wrist_pitch_link": 0.04,
+    "right_wrist_yaw_link": 0.04, "right_hand_palm_link": 0.05,
+}
+
 
 def find_g1_urdf(search_root: Path | None = None) -> Path:
     search_root = (search_root or Path.cwd()).resolve()
@@ -548,3 +653,107 @@ def solve_left_arm_hand_pose(x: float, y: float, z: float, roll: float, pitch: f
         q = np.clip(q + 0.6 * dq, lower, upper)
 
     return {name: float(value) for name, value in zip(LEFT_ARM_7DOF_JOINTS, q)}
+
+
+def rrt_arm_trajectory(
+    q_start: np.ndarray,
+    q_goal: np.ndarray,
+    joint_names: list[str],
+    obstacles: list[tuple],
+    body_links: list[str],
+    arm_links: list[str],
+    n_iter: int = 3000,
+    step_size: float = 0.12,
+    goal_bias: float = 0.15,
+    seed: int = 42,
+) -> "list[np.ndarray] | None":
+    """RRT planner in joint space with bounding-sphere self-collision and obstacle checks.
+
+    Each link is approximated as a sphere (see _LINK_SPHERE_RADII).  Non-adjacent
+    arm links and arm-vs-body pairs are checked for penetration at every new node.
+    External obstacles are sphere primitives supplied by the caller.
+
+    Returns a list of joint-angle arrays from q_start to q_goal, or None on failure.
+    """
+    rng = np.random.default_rng(seed)
+    limits = actuated_joint_table().set_index("joint_name")[["lower_limit", "upper_limit"]]
+    lower = np.array([float(limits.loc[n, "lower_limit"]) for n in joint_names])
+    upper = np.array([float(limits.loc[n, "upper_limit"]) for n in joint_names])
+
+    obs_centers = [np.asarray(oc, dtype=float) for oc, _ in obstacles]
+    obs_radii   = [float(r)                      for _, r  in obstacles]
+
+    def _valid(q: np.ndarray) -> bool:
+        jp = {n: float(v) for n, v in zip(joint_names, q)}
+        link_T, _, _ = forward_kinematics(jp)
+
+        arm_cr = [
+            (link_T[lk][:3, 3], _LINK_SPHERE_RADII.get(lk, 0.06))
+            for lk in arm_links
+            if lk in link_T
+        ]
+
+        # Arm-vs-body self-collision
+        for bl in body_links:
+            if bl not in link_T:
+                continue
+            bc = link_T[bl][:3, 3]
+            br = _LINK_SPHERE_RADII.get(bl, 0.06)
+            for ac, ar in arm_cr:
+                if float(np.linalg.norm(ac - bc)) < ar + br:
+                    return False
+
+        # Arm-vs-obstacle collision
+        for oc, or_ in zip(obs_centers, obs_radii):
+            for ac, ar in arm_cr:
+                if float(np.linalg.norm(ac - oc)) < ar + or_:
+                    return False
+
+        # Non-adjacent arm-link self-collision (skip 2 neighbours each side)
+        n = len(arm_cr)
+        for i in range(n):
+            for j in range(i + 3, n):
+                ac1, ar1 = arm_cr[i]
+                ac2, ar2 = arm_cr[j]
+                if float(np.linalg.norm(ac1 - ac2)) < ar1 + ar2:
+                    return False
+
+        return True
+
+    if not _valid(q_start):
+        print("rrt_arm_trajectory: start configuration is in collision")
+        return None
+    if not _valid(q_goal):
+        print("rrt_arm_trajectory: goal configuration is in collision")
+        return None
+
+    tree: list[np.ndarray] = [q_start.copy()]
+    parent: dict[int, int]  = {0: -1}
+
+    for _iter in range(n_iter):
+        q_rand = q_goal.copy() if rng.random() < goal_bias else rng.uniform(lower, upper)
+
+        dists   = np.fromiter((float(np.linalg.norm(q_rand - nd)) for nd in tree), float, len(tree))
+        near_i  = int(dists.argmin())
+        q_near  = tree[near_i]
+
+        diff = q_rand - q_near
+        d    = float(np.linalg.norm(diff))
+        if d < 1e-9:
+            continue
+        q_new = np.clip(q_near + step_size * diff / d, lower, upper)
+
+        if _valid(q_new):
+            new_i        = len(tree)
+            tree.append(q_new)
+            parent[new_i] = near_i
+
+            if float(np.linalg.norm(q_new - q_goal)) < step_size:
+                path: list[np.ndarray] = [q_goal.copy()]
+                idx = new_i
+                while idx != -1:
+                    path.append(tree[idx].copy())
+                    idx = parent[idx]
+                return list(reversed(path))
+
+    return None
