@@ -2574,8 +2574,15 @@ class Robot:
     def hanging_boot(self) -> None:
         self.hanging_boot_placeholder()
 
-    def say(self, text: str = "what would you like me to say?", volume: int | None = None) -> int:
-        return self._get_audio().speak(text, volume=volume)
+    def say(
+        self,
+        text: str = "what would you like me to say?",
+        volume: int | None = None,
+        language: str | None = None,
+        voice_model: str | None = None,
+        speaker: int | None = None,
+    ) -> int:
+        return self._get_audio().speak(text, volume=volume, model=voice_model, language=language, speaker=speaker)
 
     def play_wav(self, wav_path: str, volume: int | None = None) -> int:
         return self._get_audio().play_wav(wav_path, volume=volume)
