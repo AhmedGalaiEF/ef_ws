@@ -1,0 +1,618 @@
+
+# VLA Upper Body Control System (VLA_UBC)
+
+Version: 0.1
+Target Platform: Unitree G1
+Scope: Upper body manipulation using VLA + ROS2 + hybrid force control
+Primary Use Case: Ironing task with dexterous hand + arm coordination
+
+============================================================
+1. SYSTEM GOALS
+============================================================
+
+The system combines:
+
+- Vision-Language-Action (VLA) reasoning
+- Classical motion planning
+- Contact-aware impedance/force control
+- Dexterous manipulation
+- Safety supervision
+- Structured logging
+- Web-based debugging and visualization
+
+The architecture is designed so that:
+
+- The VLA model performs semantic reasoning and task sequencing
+- Classical planners handle geometry and collision avoidance
+- Local controllers handle contact physics
+- Safety systems retain final authority over execution
+
+The system must support:
+
+- Object grasping
+- Tool use
+- Contact-rich manipulation
+- Hybrid force-position control
+- Real-time robot supervision
+- Dataset generation for future training
+
+============================================================
+2. HARDWARE
+============================================================
+
+Robot:
+- Unitree G1
+
+Upper Body:
+- 7-DoF arm
+- 7-DoF Dex3 hand
+
+Sensors:
+- RGB camera
+- Depth camera / RGB-D
+- LiDAR
+- Joint encoders
+- Optional wrist force-torque sensor
+- Optional tactile sensors
+
+Compute:
+- Main x86 workstation with GPU
+- Optional onboard compute
+
+Networking:
+- DDS
+- ROS2 middleware
+
+============================================================
+3. SOFTWARE STACK
+============================================================
+
+Base Middleware:
+- ROS2 Humble or Jazzy
+
+Robot Interfaces:
+- Unitree DDS
+- ROS2 bridge
+
+Motion:
+- MoveIt2
+- FCL collision checking
+- OMPL planning
+
+Mapping:
+- Octomap
+- Costmaps
+
+Visualization:
+- Foxglove
+- RViz2
+
+Web Backend:
+- FastAPI
+- Websocket bridge
+
+Frontend:
+- React
+- Three.js
+
+Data:
+- rosbag2
+- MCAP
+
+Machine Learning:
+- Ollama
+- OpenVLA-compatible policies
+- Optional local VLMs
+
+============================================================
+4. CORE ARCHITECTURE
+============================================================
+
+Architecture hierarchy:
+
+Perception
+    ->
+World Model
+    ->
+VLA Orchestrator
+    ->
+Skills Layer
+    ->
+Motion Planner
+    ->
+Local Contact Controller
+    ->
+Robot Interface
+
+Parallel Systems:
+- Safety Supervisor
+- Logging
+- WebUI
+
+============================================================
+5. ROS2 PACKAGE STRUCTURE
+============================================================
+
+g1_upper_body_msgs
+g1_upper_body_bringup
+g1_perception
+g1_world_model
+g1_vla_orchestrator
+g1_skills
+g1_motion_planner
+g1_contact_control
+g1_safety
+g1_logging
+g1_webui
+
+============================================================
+6. PERCEPTION SYSTEM
+============================================================
+
+Inputs:
+- RGB frames
+- Depth frames
+- Point clouds
+- LiDAR scans
+- Joint states
+- TF tree
+
+Outputs:
+- Iron pose
+- Table plane
+- Shirt polygon
+- Human detection
+- Obstacle clouds
+- Free-space occupancy
+
+Tasks:
+- Plane segmentation
+- Object detection
+- Pose estimation
+- Tracking
+- Scene reconstruction
+
+Recommended methods:
+- YOLO / RT-DETR
+- Segment Anything
+- Point cloud clustering
+- ICP refinement
+- RGB-D fusion
+
+Frame conventions:
+world
+base_link
+torso
+shoulder
+wrist
+hand
+iron_handle
+iron_contact
+
+============================================================
+7. WORLD MODEL
+============================================================
+
+Responsibilities:
+- Maintain planning scene
+- Attach/detach collision objects
+- Maintain occupancy map
+- Publish transforms
+- Fuse sensor information
+
+Collision Objects:
+- Table
+- Iron
+- Shirt workspace
+- Human zones
+- Environment obstacles
+
+Important rule:
+The iron becomes part of the robot collision model after grasping.
+
+============================================================
+8. VLA SYSTEM USING OLLAMA
+============================================================
+
+Purpose:
+- Semantic reasoning
+- Task decomposition
+- Skill sequencing
+- Failure recovery
+
+The VLA layer must NEVER directly output:
+- joint torques
+- kp/kd
+- raw motor commands
+
+The VLA layer outputs:
+- skill requests
+- target tool poses
+- semantic plans
+- recovery behaviors
+
+============================================================
+8.1 OLLAMA ARCHITECTURE
+============================================================
+
+Ollama runs local models through REST APIs.
+
+Suggested models:
+- qwen2.5
+- llama3
+- deepseek-coder
+- llava
+- minicpm-v
+
+Roles:
+- VLM reasoning
+- Image interpretation
+- Planning
+- Code generation
+- Debug support
+
+Example architecture:
+
+RGB image
+Depth image
+Robot state
+Current skill
+Task prompt
+    ->
+VLA Prompt Builder
+    ->
+Ollama API
+    ->
+Structured JSON action
+    ->
+Skill Executor
+
+============================================================
+8.2 VLA PROMPT FORMAT
+============================================================
+
+Example prompt:
+
+Task:
+"Iron the visible wrinkles on the shirt."
+
+Inputs:
+- RGB image
+- Depth image
+- Current tool pose
+- Obstacle list
+- Robot status
+- Current force estimate
+
+Required Output:
+JSON only.
+
+Example response:
+
+{
+  "skill": "iron_stroke",
+  "stroke_start": [0.45, -0.12],
+  "stroke_end": [0.68, -0.12],
+  "normal_force": 7.5,
+  "speed": 0.05,
+  "orientation_mode": "flat"
+}
+
+============================================================
+8.3 VLA SAFETY RULES
+============================================================
+
+The VLA cannot:
+- disable safety
+- exceed force limits
+- exceed workspace limits
+- override collision vetoes
+- bypass human detection
+
+The VLA only proposes actions.
+
+The planner and safety layer retain final authority.
+
+============================================================
+9. SKILLS SYSTEM
+============================================================
+
+Skills are reusable robot behaviors.
+
+Examples:
+- move_to_pose
+- open_hand
+- close_hand
+- grasp_iron
+- attach_tool
+- move_to_shirt
+- lower_until_contact
+- iron_stroke
+- lift_tool
+- emergency_retreat
+
+Each skill:
+- accepts parameters
+- validates preconditions
+- publishes progress
+- reports success/failure
+
+============================================================
+10. MOTION PLANNING
+============================================================
+
+Responsibilities:
+- IK
+- trajectory generation
+- collision checking
+- self-collision avoidance
+- attached tool handling
+
+Planning types:
+- free-space planning
+- Cartesian planning
+- constrained planning
+
+Planner outputs:
+- joint trajectories
+- Cartesian paths
+- timing profiles
+
+============================================================
+11. LOCAL CONTACT CONTROL
+============================================================
+
+Contact control is NOT performed by the VLA.
+
+Control modes:
+- Free-space
+- Contact approach
+- Hybrid force-position
+- Retreat
+- Fault
+
+============================================================
+11.1 HYBRID FORCE-POSITION CONTROL
+============================================================
+
+Position-controlled:
+- x
+- y
+- yaw
+
+Force-controlled:
+- z / surface normal
+
+Compliant:
+- roll
+- pitch
+
+Controller:
+
+F_task =
+    Kx(x_des - x)
+    +
+    Dx(dx_des - dx)
+    +
+    F_feedforward
+
+Joint torque mapping:
+
+tau = J^T F_task
+
+============================================================
+11.2 TOOL FRAME CONTROL
+============================================================
+
+The controlled frame is the iron contact frame,
+NOT the wrist frame.
+
+Transform chain:
+
+world
+    ->
+robot_base
+    ->
+wrist
+    ->
+iron_handle
+    ->
+iron_contact
+
+============================================================
+12. SAFETY SYSTEM
+============================================================
+
+Highest-priority runtime system.
+
+Responsibilities:
+- emergency stop
+- collision veto
+- force limiting
+- workspace enforcement
+- human proximity checks
+- torque limiting
+
+Monitored values:
+- joint torques
+- contact force
+- tracking error
+- collision distances
+- thermal limits
+- hand slip
+
+Emergency behaviors:
+- freeze
+- lift tool
+- open hand
+- retract arm
+
+============================================================
+13. LOGGING SYSTEM
+============================================================
+
+Use:
+- rosbag2
+- MCAP
+
+Record:
+- images
+- depth
+- point clouds
+- TF
+- joint states
+- planned trajectories
+- tool poses
+- wrench estimates
+- VLA prompts/responses
+- safety events
+
+Episode metadata:
+- task name
+- operator
+- model version
+- controller gains
+- outcome
+- failure reason
+
+============================================================
+14. WEBUI
+============================================================
+
+Purpose:
+- debugging
+- supervision
+- replay
+- introspection
+
+Main UI panels:
+- camera feed
+- depth visualization
+- robot model
+- collision scene
+- force plots
+- joint plots
+- skill state
+- VLA output
+- safety status
+
+Controls:
+- emergency stop
+- pause
+- retry
+- step execution
+- manual override
+
+============================================================
+15. DATASET GENERATION
+============================================================
+
+The system should generate:
+- imitation learning datasets
+- failure datasets
+- recovery datasets
+- contact interaction datasets
+
+Stored data:
+- observations
+- actions
+- force traces
+- images
+- trajectories
+- prompts
+- VLA outputs
+
+============================================================
+16. DEVELOPMENT ROADMAP
+============================================================
+
+Phase 1:
+- ROS2 bringup
+- DDS integration
+- TF validation
+
+Phase 2:
+- manual arm control
+- MoveIt integration
+
+Phase 3:
+- RGB-D perception
+- collision scene generation
+
+Phase 4:
+- contact controller
+- hybrid force-position control
+
+Phase 5:
+- skill framework
+
+Phase 6:
+- logging infrastructure
+
+Phase 7:
+- WebUI
+
+Phase 8:
+- Ollama VLA integration
+
+Phase 9:
+- recovery behaviors
+
+Phase 10:
+- real ironing experiments
+
+============================================================
+17. TESTING STRATEGY
+============================================================
+
+Initial testing:
+- simulation only
+
+Then:
+- fake tool
+- foam surfaces
+- cold iron
+- cloth without heat
+- supervised real ironing
+
+Never begin with:
+- high force
+- high temperature
+- autonomous operation without supervision
+
+============================================================
+18. FUTURE EXTENSIONS
+============================================================
+
+Potential additions:
+- bimanual coordination
+- active tactile exploration
+- online learning
+- reinforcement learning
+- force-aware VLA
+- multi-agent planning
+- mobile manipulation
+- humanoid locomotion integration
+
+============================================================
+19. DESIGN PRINCIPLES
+============================================================
+
+Core philosophy:
+
+VLA handles semantics.
+Planner handles geometry.
+Controller handles physics.
+Safety handles authority.
+Logging handles memory.
+Human handles supervision.
+
+The system must prioritize:
+- interpretability
+- modularity
+- safety
+- reproducibility
+- debuggability
+- recoverability
+
+End of document.
