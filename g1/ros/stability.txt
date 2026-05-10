@@ -1,0 +1,879 @@
+# Stability ROS Plan
+
+Version: 0.1
+Target Platform: Unitree G1
+Scope: ZMP, support polygon, COM estimation, payload correction, and waist/upper-body balance control
+
+============================================================
+1. SYSTEM GOALS
+============================================================
+
+The stability system estimates and visualizes humanoid balance state in real time.
+
+It must provide:
+
+- Support polygon visualization
+- COM estimation
+- Payload-aware COM correction
+- ZMP estimation
+- Stability margin calculation
+- Waist roll/pitch/yaw correction suggestions
+- Safety triggers for unstable configurations
+- ROS2 topics for RViz/Foxglove debugging
+- Logging for analysis and controller tuning
+
+The system is not a replacement for the robot's internal balance controller.
+It is a supervisory and corrective layer for upper-body manipulation.
+
+============================================================
+2. INPUTS
+============================================================
+
+Required inputs:
+
+- URDF model
+- /joint_states
+- /tf
+- /tf_static
+- Hip / pelvis IMU
+- Foot frame transforms
+- Robot mass and inertial parameters from URDF
+
+Optional inputs:
+
+- Foot force sensors
+- Wrist force-torque sensor
+- Payload mass estimate
+- Payload pose estimate
+- RGB-D perception
+- LiDAR obstacle map
+- Contact state from low-level controller
+
+============================================================
+3. OUTPUTS
+============================================================
+
+Published outputs:
+
+- /stability/com
+- /stability/com_projected
+- /stability/zmp
+- /stability/support_polygon
+- /stability/left_foot_polygon
+- /stability/right_foot_polygon
+- /stability/stability_margin
+- /stability/state
+- /stability/waist_correction
+- /stability/payload_state
+- /stability/debug_markers
+
+Optional control outputs:
+
+- /waist_balance/q_cmd
+- /waist_balance/dq_cmd
+- /waist_balance/kp_cmd
+- /waist_balance/kd_cmd
+- /waist_balance/tau_ff_cmd
+
+============================================================
+4. ROS2 PACKAGE STRUCTURE
+============================================================
+
+Recommended packages:
+
+g1_stability_msgs
+g1_stability_estimator
+g1_support_polygon
+g1_zmp_estimator
+g1_payload_model
+g1_waist_balance
+g1_stability_safety
+g1_stability_viz
+g1_stability_logging
+g1_stability_bringup
+
+============================================================
+5. MESSAGE TYPES
+============================================================
+
+Package: g1_stability_msgs
+
+Suggested messages:
+
+COMState.msg
+PayloadState.msg
+ZMPState.msg
+SupportPolygon.msg
+StabilityState.msg
+WaistCorrection.msg
+
+Example COMState.msg:
+
+std_msgs/Header header
+geometry_msgs/Point com_world
+geometry_msgs/Point com_projected
+geometry_msgs/Vector3 com_velocity
+geometry_msgs/Vector3 com_acceleration
+float64 total_mass
+
+Example PayloadState.msg:
+
+std_msgs/Header header
+bool payload_attached
+string attached_frame
+float64 mass
+geometry_msgs/Pose com_pose
+geometry_msgs/Vector3 com_velocity
+geometry_msgs/Vector3 com_acceleration
+
+Example ZMPState.msg:
+
+std_msgs/Header header
+geometry_msgs/Point zmp_world
+bool valid
+float64 confidence
+
+Example StabilityState.msg:
+
+std_msgs/Header header
+bool stable
+bool zmp_inside_support_polygon
+float64 stability_margin
+float64 normalized_margin
+string support_mode
+string recommended_action
+
+Example WaistCorrection.msg:
+
+std_msgs/Header header
+float64 roll_correction
+float64 pitch_correction
+float64 yaw_correction
+float64 roll_rate_limit
+float64 pitch_rate_limit
+float64 yaw_rate_limit
+bool correction_valid
+
+============================================================
+6. FRAME CONVENTIONS
+============================================================
+
+Required frames:
+
+world or odom
+base_link
+pelvis or hip
+left_foot
+right_foot
+left_sole
+right_sole
+com
+zmp
+payload
+payload_com
+
+Recommended TF tree:
+
+world
+  -> base_link
+      -> pelvis
+      -> torso
+      -> left_foot
+      -> right_foot
+      -> arm
+          -> wrist
+              -> payload
+                  -> payload_com
+
+Ground plane convention:
+
+- world z = 0 for flat terrain
+- zmp.z = ground_z
+- projected COM is COM projected onto the ground plane
+
+============================================================
+7. SUPPORT POLYGON ESTIMATION
+============================================================
+
+The support polygon is the convex hull of active foot contact polygons.
+
+For each foot, define sole contact corners in the foot frame:
+
+front-left
+front-right
+rear-right
+rear-left
+
+Example config:
+
+left_foot_frame: left_sole
+right_foot_frame: right_sole
+
+foot_length: 0.23
+foot_width: 0.10
+
+x_front: 0.14
+x_rear: -0.09
+y_outer: 0.05
+y_inner: -0.05
+
+Transform foot corners into world frame:
+
+p_world = T_world_foot * p_foot
+
+Project to ground:
+
+p_world.z = ground_z
+
+Double support:
+
+support_polygon = convex_hull(left_foot_corners + right_foot_corners)
+
+Single support:
+
+support_polygon = convex_hull(stance_foot_corners)
+
+No contact:
+
+support_polygon invalid
+
+============================================================
+8. FOOT CONTACT ESTIMATION
+============================================================
+
+Preferred contact source:
+
+- Foot force sensors
+
+If force sensors are unavailable, use heuristics:
+
+left_contact =
+    abs(left_foot_z - ground_z) < contact_height_threshold
+    and norm(left_foot_velocity) < contact_velocity_threshold
+
+right_contact =
+    abs(right_foot_z - ground_z) < contact_height_threshold
+    and norm(right_foot_velocity) < contact_velocity_threshold
+
+Example thresholds:
+
+contact_height_threshold: 0.03 m
+contact_velocity_threshold: 0.05 m/s
+
+Support modes:
+
+- DOUBLE_SUPPORT
+- LEFT_SUPPORT
+- RIGHT_SUPPORT
+- FLIGHT_OR_UNKNOWN
+
+============================================================
+9. ROBOT COM ESTIMATION
+============================================================
+
+Simple mode:
+
+COM ~= pelvis position
+
+This is useful for first visualization only.
+
+URDF inertial mode:
+
+For each link:
+
+- get link mass m_i
+- get link inertial origin p_link_com_i
+- get T_world_link_i from TF or kinematics
+
+Then:
+
+p_robot_com =
+    sum(m_i * p_world_link_com_i) / sum(m_i)
+
+Total robot mass:
+
+m_robot = sum(m_i)
+
+Recommended library options:
+
+- Pinocchio
+- RBDL
+- KDL
+- custom URDF parser
+
+============================================================
+10. PAYLOAD-AWARE COM CORRECTION
+============================================================
+
+When the robot picks up an object, the payload must be included in the COM.
+
+Inputs:
+
+- payload mass M
+- payload COM local offset
+- attached frame
+- transform from attached frame to payload COM
+
+Payload pose:
+
+T_world_payload =
+    T_world_attached_frame * T_attached_payload
+
+Payload COM:
+
+p_payload_com =
+    T_world_payload * p_payload_com_local
+
+Corrected total COM:
+
+p_total_com =
+    (m_robot * p_robot_com + M * p_payload_com)
+    /
+    (m_robot + M)
+
+If multiple payloads exist:
+
+p_total_com =
+    sum(m_i * p_i) / sum(m_i)
+
+The same correction should be applied to COM velocity and acceleration.
+
+============================================================
+11. COM VELOCITY AND ACCELERATION
+============================================================
+
+Options:
+
+1. Finite difference COM position
+2. Use centroidal dynamics library
+3. Approximate COM acceleration from hip IMU
+4. Fuse IMU and kinematic estimates
+
+Practical first implementation:
+
+- COM position from URDF inertials
+- COM velocity from filtered finite difference
+- COM acceleration from filtered finite difference or hip IMU
+
+IMU acceleration processing:
+
+a_world_raw = R_world_imu * a_imu
+a_world_linear = a_world_raw - gravity_vector
+
+Then low-pass filter:
+
+cutoff: 2 to 5 Hz
+
+Avoid using raw IMU acceleration directly for ZMP.
+
+============================================================
+12. ZMP ESTIMATION
+============================================================
+
+First implementation: LIPM-style ZMP.
+
+For flat ground:
+
+x_zmp = x_com - z_com / g * xddot_com
+y_zmp = y_com - z_com / g * yddot_com
+z_zmp = ground_z
+
+Where:
+
+- com is payload-corrected COM
+- xddot_com and yddot_com are filtered COM accelerations
+- g = 9.81 m/s^2
+
+More accurate implementation:
+
+If foot force-torque data is available:
+
+x_zmp = -tau_y / F_z
+y_zmp =  tau_x / F_z
+
+Where the net ground reaction wrench is:
+
+W_ground = [F_x, F_y, F_z, tau_x, tau_y, tau_z]
+
+Do not trust ZMP if:
+
+- F_z is too small
+- contact state is unknown
+- IMU acceleration is saturated
+- robot is jumping or falling
+- support polygon is invalid
+
+============================================================
+13. STABILITY MARGIN
+============================================================
+
+The main stability test:
+
+ZMP inside support polygon.
+
+Compute:
+
+- stable = point_inside_polygon(zmp_xy, support_polygon)
+- margin = distance from ZMP to closest polygon edge
+
+Signed margin convention:
+
+- positive: inside support polygon
+- zero: on boundary
+- negative: outside support polygon
+
+Normalized margin:
+
+normalized_margin =
+    signed_margin / characteristic_support_width
+
+Recommended states:
+
+STABLE
+LOW_MARGIN
+CRITICAL
+UNSTABLE
+UNKNOWN
+
+Example thresholds:
+
+stable_margin: > 0.04 m
+low_margin: 0.02 to 0.04 m
+critical_margin: 0.00 to 0.02 m
+unstable: < 0.00 m
+
+============================================================
+14. WAIST BALANCE CONTROL
+============================================================
+
+The waist is used as a COM/ZMP correction mechanism.
+
+It should not fight the robot's internal whole-body balance controller.
+
+Reference point:
+
+p_ref = support_polygon_center + payload_bias
+
+Error:
+
+e = p_ref - p_zmp
+
+Derivative:
+
+de = (e - e_prev) / dt
+
+Waist correction:
+
+pitch_delta = Kp_x * e.x + Kd_x * de.x
+roll_delta  = -Kp_y * e.y - Kd_y * de.y
+yaw_delta   = 0
+
+Command:
+
+waist_pitch_cmd = pitch_nominal + pitch_delta
+waist_roll_cmd  = roll_nominal  + roll_delta
+waist_yaw_cmd   = yaw_nominal   + yaw_delta
+
+Interpretation:
+
+ZMP too far forward:
+    pitch torso backward
+
+ZMP too far backward:
+    pitch torso forward
+
+ZMP too far left:
+    roll torso right
+
+ZMP too far right:
+    roll torso left
+
+Yaw is usually not used for balance correction.
+
+============================================================
+15. PAYLOAD BIAS
+============================================================
+
+When holding a payload, bias the desired ZMP away from the payload direction.
+
+If payload is held forward:
+
+- choose p_ref slightly backward inside the support polygon
+
+If payload is held left:
+
+- choose p_ref slightly right inside the support polygon
+
+Example:
+
+payload_offset_xy = p_payload_com.xy - p_support_center.xy
+
+p_ref =
+    support_center - k_payload_bias * payload_offset_xy
+
+Clamp p_ref to stay safely inside the support polygon.
+
+============================================================
+16. WAIST COMMAND LIMITS
+============================================================
+
+Use smooth bounded corrections.
+
+Recommended limits:
+
+max_roll_correction: 5 to 10 deg
+max_pitch_correction: 5 to 10 deg
+max_yaw_correction: 0 to 5 deg
+
+max_roll_rate: 10 to 30 deg/s
+max_pitch_rate: 10 to 30 deg/s
+max_yaw_rate: 10 to 30 deg/s
+
+Use:
+
+- low-pass filtering
+- rate limiting
+- acceleration limiting
+- joint limit clamping
+
+Do not use high-gain sudden waist corrections while carrying payloads.
+
+============================================================
+17. WHOLE-BODY RECOVERY PRIORITY
+============================================================
+
+If margin becomes small, recovery should happen in this order:
+
+1. Stop arm or payload motion
+2. Bring payload closer to torso
+3. Shift waist roll/pitch
+4. Bend knees or adjust hip posture
+5. Widen stance or step
+6. Retreat or place payload down
+
+The waist controller alone is not enough for heavy or extended payloads.
+
+============================================================
+18. SAFETY SUPERVISOR
+============================================================
+
+Safety triggers:
+
+- ZMP outside support polygon
+- stability margin below critical threshold
+- payload too far from support center
+- torso tilt too large
+- foot contact lost
+- joint torque too high
+- arm tracking error too high
+- waist correction saturated
+- human or obstacle too close
+
+Safety actions:
+
+LOW_MARGIN:
+    slow arm motion
+    reduce payload acceleration
+    bias payload toward torso
+
+CRITICAL:
+    stop arm motion
+    hold payload
+    command waist correction
+    prepare recovery
+
+UNSTABLE:
+    stop task
+    retract arm
+    lower payload if safe
+    request stepping recovery
+    notify operator
+
+UNKNOWN:
+    freeze nonessential motion
+    maintain safe posture
+
+============================================================
+19. VISUALIZATION
+============================================================
+
+Publish MarkerArray:
+
+- COM sphere
+- projected COM sphere
+- ZMP sphere
+- support polygon line strip
+- support polygon fill
+- left foot polygon
+- right foot polygon
+- payload COM sphere
+- stability margin text
+- waist correction arrows
+
+Suggested colors:
+
+- green: stable
+- yellow: low margin
+- orange: critical
+- red: unstable
+- gray: unknown
+
+RViz/Foxglove panels:
+
+- 3D scene
+- robot model
+- support polygon overlay
+- COM/ZMP trajectory
+- stability margin plot
+- waist command plot
+- payload pose plot
+- safety state timeline
+
+============================================================
+20. LOGGING
+============================================================
+
+Use rosbag2 with MCAP.
+
+Record:
+
+/tf
+/tf_static
+/joint_states
+/imu
+/stability/com
+/stability/zmp
+/stability/support_polygon
+/stability/stability_margin
+/stability/state
+/stability/waist_correction
+/stability/payload_state
+/lowstate
+/lowcmd
+/safety/state
+
+Episode metadata:
+
+- payload mass
+- payload dimensions
+- attached frame
+- robot posture
+- task name
+- controller gains
+- stability outcome
+- failure reason
+- operator notes
+
+============================================================
+21. CONFIGURATION FILES
+============================================================
+
+Example config files:
+
+config/frames.yaml
+config/feet.yaml
+config/payload.yaml
+config/zmp.yaml
+config/waist_balance.yaml
+config/safety_limits.yaml
+config/visualization.yaml
+
+Example waist_balance.yaml:
+
+enabled: true
+
+kp_x: 0.8
+kd_x: 0.15
+kp_y: 0.8
+kd_y: 0.15
+
+max_pitch_correction_deg: 8.0
+max_roll_correction_deg: 8.0
+max_yaw_correction_deg: 0.0
+
+max_pitch_rate_deg_s: 20.0
+max_roll_rate_deg_s: 20.0
+
+lowpass_cutoff_hz: 3.0
+
+============================================================
+22. NODE GRAPH
+============================================================
+
+/joint_states
+/tf
+/imu
+/payload_state
+    ->
+g1_stability_estimator
+    ->
+/stability/com
+/stability/zmp
+
+/tf
+/contact_state
+    ->
+g1_support_polygon
+    ->
+/stability/support_polygon
+
+/stability/com
+/stability/zmp
+/stability/support_polygon
+    ->
+g1_stability_safety
+    ->
+/stability/state
+
+/stability/state
+/stability/zmp
+/stability/support_polygon
+    ->
+g1_waist_balance
+    ->
+/stability/waist_correction
+/waist_balance/q_cmd
+
+All topics:
+    ->
+g1_stability_logging
+
+All markers:
+    ->
+g1_stability_viz
+    ->
+/stability/debug_markers
+
+============================================================
+23. IMPLEMENTATION ROADMAP
+============================================================
+
+Phase 1:
+- Parse URDF
+- Publish foot support polygons
+- Visualize in RViz/Foxglove
+
+Phase 2:
+- Compute pelvis-based COM
+- Compute simple projected COM
+- Add support polygon margin
+
+Phase 3:
+- Compute URDF inertial COM
+- Add filtering
+- Validate against known postures
+
+Phase 4:
+- Add IMU-based acceleration
+- Compute LIPM ZMP
+- Visualize ZMP trajectory
+
+Phase 5:
+- Add payload model
+- Correct COM and ZMP for payload mass
+- Validate with known payload positions
+
+Phase 6:
+- Add stability state machine
+- Add safety thresholds
+
+Phase 7:
+- Add waist correction output
+- Test in simulation only
+
+Phase 8:
+- Real robot passive visualization
+- No active waist control
+
+Phase 9:
+- Enable low-gain waist correction
+- Fake payload tests
+
+Phase 10:
+- Real payload tests
+- Full logging and replay
+
+============================================================
+24. VALIDATION TESTS
+============================================================
+
+Static tests:
+
+- robot standing, no payload
+- robot leaning forward
+- robot leaning left/right
+- robot holding known mass near torso
+- robot holding known mass far forward
+
+Dynamic tests:
+
+- slow arm extension
+- slow payload lift
+- slow waist correction
+- small commanded torso tilt
+- support transition if available
+
+Pass criteria:
+
+- COM moves in expected direction
+- ZMP stays within support polygon for stable postures
+- margin decreases when payload is extended
+- margin improves when payload is pulled inward
+- waist correction direction matches expected balance response
+
+============================================================
+25. FAILURE MODES
+============================================================
+
+Known failure cases:
+
+- inaccurate URDF inertials
+- wrong foot frame offsets
+- bad ground height
+- IMU bias
+- unfiltered acceleration
+- false foot contact detection
+- unknown payload mass
+- slipping payload
+- internal robot controller fighting waist corrections
+
+Mitigations:
+
+- calibrate foot sole frames
+- validate masses and inertias
+- low-pass filter acceleration
+- fuse multiple contact signals
+- limit waist corrections
+- keep human override available
+- start in visualization-only mode
+
+============================================================
+26. DESIGN PRINCIPLES
+============================================================
+
+Core rule:
+
+Do not use waist motion to hide unsafe payload configurations.
+
+Preferred strategy:
+
+- keep payload close
+- move slowly
+- monitor ZMP
+- keep margin high
+- use waist correction gently
+- step or replan if needed
+
+Stability authority hierarchy:
+
+Internal robot stabilizer
+    >
+Safety supervisor
+    >
+Waist balance controller
+    >
+Upper-body task controller
+    >
+VLA or skill planner
+
+End of document.
