@@ -19,7 +19,9 @@ If IK fails the EE target is rolled back, joints do not move.
 Orientation stiffness (f):
   ON  — roll/pitch/yaw are locked when adjusting x/y/z (full 6D IK, default).
   OFF — orientation is free during x/y/z moves; target rotation follows current
-        FK so IK only needs to satisfy position.
+        FK and position IK only moves shoulder pitch/roll/yaw + elbow. Near the
+        workspace boundary, the selected position axis may be accepted while the
+        other position axes are clamped back to the nearest reached FK pose.
 
 Key bindings
 ────────────
@@ -37,6 +39,9 @@ Key bindings
   d                    set max joint-delta rad (prompt)
   W                    set waist pitch/roll kp (prompt)
   w                    toggle waist hold on/off
+  H                    cycle Dex3 hand mode: off → right → left → both → follow
+  { / }                open / close Dex3 hand grip by 5%
+  g                    set Dex3 hand grip percent (prompt)
   q / Esc              quit
 """
 from __future__ import annotations
@@ -74,12 +79,14 @@ except ImportError as exc:
     raise SystemExit("unitree_sdk2py not installed.") from exc
 
 from sdk_client import Robot
+from sdk_hand import Dex3HandController, hand_grip_targets
 
 from hand_pose_navigation_copy.arm_fk import (
     ArmFK, LEFT_ARM_JOINTS, RIGHT_ARM_JOINTS,
     _LEFT_SHOULDER_IN_BASE, _RIGHT_SHOULDER_IN_BASE,
 )
 from hand_pose_navigation_copy.arm_ik import ArmIK
+from hand_pose_navigation_copy.arm_fk import JOINT_LIMITS
 
 # ── Joint indices ─────────────────────────────────────────────────────────────
 WAIST_JOINTS      = [12, 13, 14]   # roll, pitch, yaw
@@ -93,11 +100,16 @@ DEFAULT_ARM_KD       = 1.5
 DEFAULT_WAIST_PR_KP  = 200.0   # pitch + roll hold kp
 
 ARM_CONTROL_MODES = ("both", "left", "right")
+HAND_CONTROL_MODES = ("off", "right", "left", "both", "follow-arm")
 ARM_JOINTS: Dict[str, List[int]] = {
     "left":  LEFT_ARM_JOINTS,
     "right": RIGHT_ARM_JOINTS,
 }
 JOINT_LABELS = ("sh_p", "sh_r", "sh_y", "elbow", "wr_r", "wr_p", "wr_y")
+SHOULDER_ELBOW_IDXS = (0, 1, 2, 3)
+POSITION_IK_TOL_M = 0.005
+POSITION_IK_AXIS_TOL_M = 0.006
+POSITION_IK_SOFT_LIMIT_M = 0.040
 
 _SHOULDER_ORIGIN: Dict[str, np.ndarray] = {
     "left":  _LEFT_SHOULDER_IN_BASE,
@@ -147,6 +159,13 @@ def _rpy_from_R(R: np.ndarray) -> Tuple[float, float, float]:
         pitch = math.atan2(-R[2, 0],  sy)
         yaw   = 0.0
     return roll, pitch, yaw
+
+
+def _clamp_q(q: np.ndarray, arm: str) -> np.ndarray:
+    limits = JOINT_LIMITS[arm]
+    lo = np.array([lim[0] for lim in limits], dtype=np.float64)
+    hi = np.array([lim[1] for lim in limits], dtype=np.float64)
+    return np.clip(q, lo, hi)
 
 
 # ── Home EE pose (after reengage) ─────────────────────────────────────────────
@@ -277,6 +296,14 @@ class IKPoseCLI:
         self.waist_kd         = float(WAIST_HOLD_KD)
         self.waist_enabled    = True
         self.arm_control_mode = str(args.arm_control)
+        self.hand_control_mode = str(args.hand_control)
+        self.hand_grip_percent = max(0.0, min(100.0, float(args.hand_grip)))
+        self.hand_kp           = float(args.hand_kp)
+        self.hand_kd           = float(args.hand_kd)
+        self.hand_tau          = float(args.hand_tau)
+        self.hand_rate_hz      = max(0.1, float(args.hand_rate_hz))
+        self.hand_write_timeout_s = max(0.0, float(args.hand_write_timeout_s))
+        self._last_hand_publish_s = 0.0
 
         # EE step sizes (per key-press)
         self.pos_step = 0.01    # metres
@@ -313,18 +340,21 @@ class IKPoseCLI:
             "right": ArmFK("right", "urdf"),
         }
         self._ik: Dict[str, ArmIK] = {
-            "left":  ArmIK("left",  "dls", max_iter=10, tol_pos_m=0.005, tol_rot_rad=0.02),
-            "right": ArmIK("right", "dls", max_iter=10, tol_pos_m=0.005, tol_rot_rad=0.02),
+            "left":  ArmIK("left",  "dls", max_iter=24, tol_pos_m=0.005, tol_rot_rad=0.02),
+            "right": ArmIK("right", "dls", max_iter=24, tol_pos_m=0.005, tol_rot_rad=0.02),
         }
         self.ik_info: Dict[str, Dict] = {
             "left":  {"success": None, "error_pos_m": 0.0, "error_rot_rad": 0.0, "iterations": 0},
             "right": {"success": None, "error_pos_m": 0.0, "error_rot_rad": 0.0, "iterations": 0},
         }
+        self.hand_info: Dict[str, str] = {"left": "off", "right": "off"}
 
         ChannelFactoryInitialize(self.domain_id, self.iface)
         self.state_sub = UpperBodyStateSubscriber(UPPER_BODY_JOINTS)
         self.pub       = ArmSDKPublisher()
         self.robot     = Robot(iface=self.iface, domain_id=self.domain_id, auto_start_sensors=True)
+        self.hand_controllers: Dict[str, Dex3HandController] = {}
+        self._init_hand_controllers()
 
         self._seed_from_state()
 
@@ -351,10 +381,56 @@ class IKPoseCLI:
             q = np.array([self.desired_targets[j] for j in joints])
             self.target_T[arm] = self._fk[arm].compute_arm(q).copy()
 
+    def _sync_targets_to_live(self) -> None:
+        """Use the latest measured joints as both ramp state and EE target."""
+        snap = self.state_sub.snapshot()
+        if snap:
+            pos, _ = snap
+            self.latest_positions = dict(pos)
+        self.current_targets = dict(self.latest_positions)
+        self.desired_targets = dict(self.latest_positions)
+        self._sync_ee_from_joints()
+        for arm in ("left", "right"):
+            self.ik_info[arm] = {
+                "success": None,
+                "error_pos_m": 0.0,
+                "error_rot_rad": 0.0,
+                "iterations": 0,
+            }
+
     # ── Helpers ───────────────────────────────────────────────────────────────
 
     def _active_arms(self) -> List[str]:
         return ["left", "right"] if self.arm_control_mode == "both" else [self.arm_control_mode]
+
+    def _active_hands(self) -> List[str]:
+        if self.hand_control_mode == "off":
+            return []
+        if self.hand_control_mode == "both":
+            return ["left", "right"]
+        if self.hand_control_mode == "follow-arm":
+            return self._active_arms()
+        return [self.hand_control_mode]
+
+    def _init_hand_controllers(self) -> None:
+        needed = set(self._active_hands())
+        for hand in ("left", "right"):
+            if hand in needed and hand not in self.hand_controllers:
+                try:
+                    self.hand_controllers[hand] = Dex3HandController(
+                        hand=hand,
+                        iface=self.iface,
+                        domain_id=self.domain_id,
+                    )
+                    self.hand_info[hand] = "ready"
+                except Exception as exc:
+                    self.hand_info[hand] = f"init failed: {exc}"
+
+    def _ensure_hand_control_for_grip(self) -> None:
+        """Enable intuitive grip control when the hand mode is still off."""
+        if self.hand_control_mode == "off":
+            self.hand_control_mode = "follow-arm"
+            self._init_hand_controllers()
 
     def _display_arm(self) -> str:
         return "right" if self.arm_control_mode == "right" else "left"
@@ -379,13 +455,99 @@ class IKPoseCLI:
         q = np.array([self.desired_targets[j] for j in joints])
         return self._fk[arm].compute_arm(q)
 
+    def _solve_position_shoulder_elbow(
+        self,
+        arm: str,
+        T_des: np.ndarray,
+        q_init: np.ndarray,
+        *,
+        selected_axis: Optional[int] = None,
+    ) -> Tuple[Optional[np.ndarray], Dict]:
+        """Position-only DLS with wrist joints held fixed at q_init[4:7]."""
+        q = _clamp_q(q_init.copy(), arm)
+        lam = 0.05
+        eps = 1e-5
+        max_iter = 64
+        tol = POSITION_IK_TOL_M
+        active = SHOULDER_ELBOW_IDXS
+        best_q = q.copy()
+        best_err_pos = float("inf")
+        best_axis_err = float("inf")
+
+        for iteration in range(max_iter):
+            T_cur = self._fk[arm].compute_arm(q)
+            pos_err = T_des[:3, 3] - T_cur[:3, 3]
+            err_pos = float(np.linalg.norm(pos_err))
+            axis_err = (
+                abs(float(pos_err[selected_axis]))
+                if selected_axis is not None else err_pos
+            )
+            if (err_pos, axis_err) < (best_err_pos, best_axis_err):
+                best_q = q.copy()
+                best_err_pos = err_pos
+                best_axis_err = axis_err
+            if err_pos < tol:
+                return q, {
+                    "success": True,
+                    "error_pos_m": err_pos,
+                    "error_rot_rad": 0.0,
+                    "iterations": iteration,
+                    "mode": "pos_shoulder_elbow",
+                }
+
+            J = np.zeros((3, len(active)), dtype=np.float64)
+            p0 = T_cur[:3, 3]
+            for col, idx in enumerate(active):
+                q1 = q.copy()
+                q1[idx] += eps
+                T1 = self._fk[arm].compute_arm(q1)
+                J[:, col] = (T1[:3, 3] - p0) / eps
+
+            JJT = J @ J.T
+            dq_active = J.T @ np.linalg.solve(JJT + lam**2 * np.eye(3), pos_err)
+            norm_dq = float(np.linalg.norm(dq_active))
+            if norm_dq > 0.3:
+                dq_active *= 0.3 / norm_dq
+
+            q_next = q.copy()
+            for col, idx in enumerate(active):
+                q_next[idx] += dq_active[col]
+            q = _clamp_q(q_next, arm)
+            q[4:] = q_init[4:]
+
+        T_cur = self._fk[arm].compute_arm(best_q)
+        err_pos = float(np.linalg.norm(T_des[:3, 3] - T_cur[:3, 3]))
+        axis_err = (
+            abs(float(T_des[selected_axis, 3] - T_cur[selected_axis, 3]))
+            if selected_axis is not None else err_pos
+        )
+        if (
+            selected_axis is not None
+            and axis_err < POSITION_IK_AXIS_TOL_M
+            and err_pos < POSITION_IK_SOFT_LIMIT_M
+        ):
+            return best_q, {
+                "success": True,
+                "error_pos_m": err_pos,
+                "error_rot_rad": 0.0,
+                "iterations": max_iter,
+                "mode": "pos_axis_clamped",
+                "axis_error_m": axis_err,
+            }
+        return None, {
+            "success": False,
+            "error_pos_m": err_pos,
+            "error_rot_rad": 0.0,
+            "iterations": max_iter,
+            "mode": "pos_shoulder_elbow",
+        }
+
     # ── IK and joint application ──────────────────────────────────────────────
 
     def _adjust_dof(self, delta: float) -> None:
         """Increment the selected DOF on each active arm's EE target, then solve IK."""
         for arm in self._active_arms():
             T_prev = self.target_T[arm].copy()
-            T_new  = T_prev.copy()
 
             arm_delta = delta
             if self.dof_idx == 1:
@@ -395,22 +557,46 @@ class IKPoseCLI:
             elif self.dof_idx == 4:
                 arm_delta = -delta
 
-            if self.dof_idx < 3:
-                # Position move: optionally free the orientation target so IK
-                # only needs to satisfy position (orient_stiff = False).
-                if not self.orient_stiff:
-                    T_new[:3, :3] = self._fk_desired(arm)[:3, :3]
-                T_new[self.dof_idx, 3] += arm_delta
-            else:
-                axis = self.dof_idx - 3
-                T_new[:3, :3] = _ROT_BY_AXIS[axis](arm_delta) @ T_new[:3, :3]
+            shoulder_elbow_only = self.dof_idx < 3 and not self.orient_stiff
+            scales = (1.0, 0.5, 0.25, 0.1)
+            for scale in scales:
+                T_new = T_prev.copy()
+                scaled_delta = arm_delta * scale
 
-            self.target_T[arm] = T_new
-            ok = self._apply_ik(arm, T_prev)
-            if not ok:
+                if self.dof_idx < 3:
+                    # Position move: optionally free the orientation target so IK
+                    # only needs to satisfy position (orient_stiff = False).
+                    if not self.orient_stiff:
+                        T_new[:3, :3] = self._fk_desired(arm)[:3, :3]
+                    T_new[self.dof_idx, 3] += scaled_delta
+                else:
+                    axis = self.dof_idx - 3
+                    T_new[:3, :3] = _ROT_BY_AXIS[axis](scaled_delta) @ T_new[:3, :3]
+
+                self.target_T[arm] = T_new
+                if self._apply_ik(
+                    arm,
+                    T_prev,
+                    shoulder_elbow_only=shoulder_elbow_only,
+                    selected_axis=self.dof_idx if shoulder_elbow_only else None,
+                ):
+                    if scale < 1.0:
+                        self.status = (
+                            f"{arm} IK accepted {scale:.0%} step; "
+                            "near limit or singularity"
+                        )
+                    break
+            else:
                 self.target_T[arm] = T_prev
 
-    def _apply_ik(self, arm: str, T_prev: np.ndarray) -> bool:
+    def _apply_ik(
+        self,
+        arm: str,
+        T_prev: np.ndarray,
+        *,
+        shoulder_elbow_only: bool = False,
+        selected_axis: Optional[int] = None,
+    ) -> bool:
         """
         Solve IK for arm toward self.target_T[arm].
 
@@ -420,7 +606,15 @@ class IKPoseCLI:
         joints = ARM_JOINTS[arm]
         q_init = np.array([self.desired_targets[j] for j in joints])
 
-        q_sol, info = self._ik[arm].solve(self.target_T[arm], q_init=q_init)
+        if shoulder_elbow_only:
+            q_sol, info = self._solve_position_shoulder_elbow(
+                arm,
+                self.target_T[arm],
+                q_init,
+                selected_axis=selected_axis,
+            )
+        else:
+            q_sol, info = self._ik[arm].solve(self.target_T[arm], q_init=q_init)
         self.ik_info[arm] = info
 
         if q_sol is None:
@@ -432,6 +626,7 @@ class IKPoseCLI:
 
         for i, j in enumerate(joints):
             self.desired_targets[j] = float(q_apply[i])
+        self.target_T[arm] = self._fk[arm].compute_arm(q_apply).copy()
         return True
 
     # ── Control loop ──────────────────────────────────────────────────────────
@@ -474,13 +669,43 @@ class IKPoseCLI:
             waist_y_kp=self.waist_y_kp   if self.waist_enabled else 0.0,
             waist_kd=self.waist_kd        if self.waist_enabled else 0.0,
         )
+        if (now - self._last_hand_publish_s) >= (1.0 / self.hand_rate_hz):
+            self._publish_hand_targets_once()
+            self._last_hand_publish_s = now
         stiff_txt = "stiff:ON" if self.orient_stiff else "stiff:OFF"
+        hand_txt = (
+            "hand:OFF"
+            if self.hand_control_mode == "off"
+            else f"hand:{self.hand_control_mode} {self.hand_grip_percent:.0f}%"
+        )
         self.status = (
             f"Publishing {self.rate_hz:.0f} Hz  "
             f"ramp {self.max_speed:.3f} r/s  "
             f"max_dq {self.max_dq:.3f} rad  "
-            f"arm:{self.arm_control_mode}  {stiff_txt}"
+            f"arm:{self.arm_control_mode}  {stiff_txt}  {hand_txt}"
         )
+
+    def _publish_hand_targets_once(self) -> None:
+        self._init_hand_controllers()
+        for hand in self._active_hands():
+            controller = self.hand_controllers.get(hand)
+            if controller is None:
+                continue
+            try:
+                ok = controller.write_targets_once(
+                    hand_grip_targets(hand, self.hand_grip_percent),
+                    kp=self.hand_kp,
+                    kd=self.hand_kd,
+                    tau=self.hand_tau,
+                    first_write_timeout_s=self.hand_write_timeout_s,
+                )
+                self.hand_info[hand] = (
+                    f"{self.hand_grip_percent:.0f}%"
+                    if ok else
+                    "no cmd subscriber"
+                )
+            except Exception as exc:
+                self.hand_info[hand] = f"write failed: {exc}"
 
     # ── Drawing ───────────────────────────────────────────────────────────────
 
@@ -527,9 +752,15 @@ class IKPoseCLI:
         # ── Parameter bar ─────────────────────────────────────────────────
         waist_lbl  = "ON" if self.waist_enabled else "OFF"
         stiff_lbl  = "ON" if self.orient_stiff  else "OFF"
+        hand_lbl   = (
+            "OFF"
+            if self.hand_control_mode == "off"
+            else f"{self.hand_control_mode.upper()} {self.hand_grip_percent:.0f}%"
+        )
         arm_txt    = (f"  Arm:[{self.arm_control_mode.upper()}](m)  "
                       f"Waist:[{waist_lbl}](w)  "
-                      f"OrStiff:[{stiff_lbl}](f)")
+                      f"OrStiff:[{stiff_lbl}](f)  "
+                      f"Hand:[{hand_lbl}](H)")
         param_txt  = (f"ramp {self.max_speed:.3f} r/s (s)  "
                       f"max_dq {self.max_dq:.3f} (d/[/])")
         self._addnstr(win, row, 0, arm_txt, w // 2)
@@ -599,6 +830,10 @@ class IKPoseCLI:
                         f"pos={info['error_pos_m']:.4f}m  "
                         f"rot={info['error_rot_rad']:.4f}rad  "
                         f"{info['iterations']}it")
+                if info.get("mode") == "pos_shoulder_elbow":
+                    txt += "  shoulder+elbow"
+                elif info.get("mode") == "pos_axis_clamped":
+                    txt += f"  axis-clamped ({info.get('axis_error_m', 0.0):.4f}m)"
                 attr = self._cp(C_GREEN)
             else:
                 txt  = (f"  IK {arm:<5}: FAIL — target rolled back  "
@@ -611,6 +846,16 @@ class IKPoseCLI:
         # ── Divider ───────────────────────────────────────────────────────
         if row < h - 6:
             self._addstr(win, row, 0, "─" * w, self._cp(C_CYAN))
+            row += 1
+
+        # ── Hand status ──────────────────────────────────────────────────
+        if row < h - 6 and self.hand_control_mode != "off":
+            hand_status = "  Dex3: " + "  ".join(
+                f"{hand}={self.hand_info.get(hand, 'off')}"
+                for hand in ("left", "right")
+                if hand in self._active_hands()
+            )
+            self._addnstr(win, row, 0, hand_status, w, self._cp(C_YELLOW))
             row += 1
 
         # ── Joint readout ─────────────────────────────────────────────────
@@ -644,7 +889,7 @@ class IKPoseCLI:
         # ── Footer ────────────────────────────────────────────────────────
         self._addstr(win, h - 5, 0, "─" * w, self._cp(C_CYAN))
         hn1 = "  ↑/↓ j/k: DOF   ← →/- +: adjust   < >: EE step   [ ]: max_dq   m: arm   f: orient stiff"
-        hn2 = "  y: sync   w: waist   W: waist pr kp   r: release   e: reengage   z: zero-gain   s: speed   d: max_dq   q: quit"
+        hn2 = "  H: hand mode   { }: grip   g: grip %   y: sync   w/W: waist   r/e: release/reengage   s/d: speed/max_dq   q: quit"
         self._addnstr(win, h - 4, 0, hn1, w, self._cp(C_YELLOW))
         self._addnstr(win, h - 3, 0, hn2, w, self._cp(C_YELLOW))
         self._addstr(win, h - 2, 0, "─" * w, self._cp(C_CYAN))
@@ -654,27 +899,38 @@ class IKPoseCLI:
     # ── Inline prompt ─────────────────────────────────────────────────────────
 
     def _prompt(self, win, h: int, w: int, label: str) -> str:
-        curses.curs_set(1)
-        win.timeout(-1)
-        buf: List[str] = []
-        while True:
-            win.move(h - 1, 0)
-            win.clrtoeol()
-            self._addnstr(win, h - 1, 0, f"{label}: {''.join(buf)}▌"[:w], w, curses.A_BOLD)
-            win.refresh()
-            key = win.getch()
-            if key in (curses.KEY_ENTER, 10, 13):
-                break
-            elif key in (curses.KEY_BACKSPACE, 127, 8):
-                if buf:
-                    buf.pop()
-            elif key == 27:
-                buf = []
-                break
-            elif 32 <= key <= 126:
-                buf.append(chr(key))
-        curses.curs_set(0)
+        try:
+            curses.curs_set(1)
+        except curses.error:
+            pass
         win.timeout(20)
+        buf: List[str] = []
+        try:
+            while True:
+                self.tick()
+                win.move(h - 1, 0)
+                win.clrtoeol()
+                self._addnstr(win, h - 1, 0, f"{label}: {''.join(buf)}▌"[:w], w, curses.A_BOLD)
+                win.refresh()
+                key = win.getch()
+                if key == -1:
+                    continue
+                if key in (curses.KEY_ENTER, 10, 13):
+                    break
+                if key in (curses.KEY_BACKSPACE, 127, 8):
+                    if buf:
+                        buf.pop()
+                elif key == 27:
+                    buf = []
+                    break
+                elif 32 <= key <= 126:
+                    buf.append(chr(key))
+        finally:
+            try:
+                curses.curs_set(0)
+            except curses.error:
+                pass
+            win.timeout(20)
         return "".join(buf).strip()
 
     # ── Key handler ───────────────────────────────────────────────────────────
@@ -729,25 +985,53 @@ class IKPoseCLI:
             self.status = f"Arm mode → {self.arm_control_mode}"
             return
 
+        # ── Dex3 hand mode / grip ────────────────────────────────────────
+        if key == ord("H"):
+            idx = HAND_CONTROL_MODES.index(self.hand_control_mode)
+            self.hand_control_mode = HAND_CONTROL_MODES[(idx + 1) % len(HAND_CONTROL_MODES)]
+            self._init_hand_controllers()
+            self.status = f"Dex3 hand mode → {self.hand_control_mode}"
+            return
+        if key == ord("{"):
+            self._ensure_hand_control_for_grip()
+            self.hand_grip_percent = max(0.0, self.hand_grip_percent - 5.0)
+            self._publish_hand_targets_once()
+            self._last_hand_publish_s = time.monotonic()
+            self.status = f"Dex3 grip → {self.hand_grip_percent:.0f}%"
+            return
+        if key == ord("}"):
+            self._ensure_hand_control_for_grip()
+            self.hand_grip_percent = min(100.0, self.hand_grip_percent + 5.0)
+            self._publish_hand_targets_once()
+            self._last_hand_publish_s = time.monotonic()
+            self.status = f"Dex3 grip → {self.hand_grip_percent:.0f}%"
+            return
+        if key == ord("g"):
+            self._ensure_hand_control_for_grip()
+            val = self._prompt(win, h, w, f"Dex3 grip percent [{self.hand_grip_percent:.0f}]")
+            try:
+                self.hand_grip_percent = max(0.0, min(100.0, float(val)))
+                self._publish_hand_targets_once()
+                self._last_hand_publish_s = time.monotonic()
+                self.status = f"Dex3 grip → {self.hand_grip_percent:.0f}%"
+            except (ValueError, TypeError):
+                if val:
+                    self.status = f"Invalid value: {val!r}"
+            return
+
         # ── Orientation stiffness toggle ──────────────────────────────────
         if key == ord("f"):
             self.orient_stiff = not self.orient_stiff
             self.status = (
                 "Orient stiff ON — rotation locked during x/y/z moves"
                 if self.orient_stiff else
-                "Orient stiff OFF — rotation free during x/y/z moves"
+                "Orient stiff OFF — x/y/z IK uses shoulder+elbow only"
             )
             return
 
         # ── Sync EE targets to current FK pose ────────────────────────────
         if key == ord("y"):
-            snap = self.state_sub.snapshot()
-            if snap:
-                pos, _ = snap
-                self.latest_positions = dict(pos)
-            self.current_targets = dict(self.latest_positions)
-            self.desired_targets = dict(self.latest_positions)
-            self._sync_ee_from_joints()
+            self._sync_targets_to_live()
             self.status = "EE targets resynced to current hand pose"
             return
 
@@ -798,22 +1082,8 @@ class IKPoseCLI:
                 self.robot.wait_for_low_state(timeout=2.0)
                 self.robot.unrelease_arms()
                 self.armed = True
-                snap = self.state_sub.snapshot()
-                if snap:
-                    pos, _ = snap
-                    self.latest_positions = dict(pos)
-                self.current_targets = dict(self.latest_positions)
-                self.desired_targets = dict(self.latest_positions)
-                for arm in ("left", "right"):
-                    self.target_T[arm] = self._home_T[arm].copy()
-                    joints = ARM_JOINTS[arm]
-                    q_init = np.array([self.current_targets[j] for j in joints])
-                    q_sol, info = self._ik[arm].solve(self._home_T[arm], q_init=q_init)
-                    self.ik_info[arm] = info
-                    if q_sol is not None:
-                        for i, j in enumerate(joints):
-                            self.desired_targets[j] = float(q_sol[i])
-                self.status = "Reengaged — homing to initial EE pose"
+                self._sync_targets_to_live()
+                self.status = "Reengaged — synced to live pose"
             except Exception as exc:
                 self.status = f"Reengage failed: {exc}"
             return
@@ -914,6 +1184,24 @@ def _parse_args() -> argparse.Namespace:
         default="right",
         help="Which arm(s) to control (default: right)",
     )
+    p.add_argument(
+        "--hand-control",
+        choices=HAND_CONTROL_MODES,
+        default="off",
+        help="Dex3 hand(s) to control: off, left, right, both, or follow-arm (default: off)",
+    )
+    p.add_argument("--hand-grip", type=float, default=0.0,
+                   help="Initial Dex3 grip percent, 0=open and 100=closed")
+    p.add_argument("--hand-kp", type=float, default=1.2,
+                   help="Dex3 hand position kp")
+    p.add_argument("--hand-kd", type=float, default=0.05,
+                   help="Dex3 hand position kd")
+    p.add_argument("--hand-tau", type=float, default=0.05,
+                   help="Dex3 hand feed-forward tau")
+    p.add_argument("--hand-rate-hz", type=float, default=10.0,
+                   help="Dex3 hand command refresh rate while hand control is active")
+    p.add_argument("--hand-write-timeout-s", type=float, default=0.002,
+                   help="Per-write timeout for Dex3 hand DDS writes")
     return p.parse_args()
 
 

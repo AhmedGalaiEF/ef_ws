@@ -14,6 +14,8 @@ def _is_valid_cyclonedds_home(path: str | None) -> bool:
 def _iter_cyclonedds_home_candidates() -> list[Path]:
     home = Path.home()
     return [
+        home / "cyclonedds_ws" / "install" / "cyclonedds",
+        home / "unitree_ros2" / "cyclonedds_ws" / "install" / "cyclonedds",
         home / "academy_prep" / "academy_content" / "docs" / "repos" / "cyclonedds_0_10" / "install_0_10",
         home / "cyclonedds" / "install",
         home / "Desktop" / "unitree" / "cyclonedds" / "install",
@@ -39,6 +41,8 @@ def _looks_like_xml(value: str | None) -> bool:
 def _iter_cyclonedds_uri_candidates() -> list[Path]:
     home = Path.home()
     return [
+        home / "cyclonedds_ws" / "cyclonedds.xml",
+        home / "unitree_ros2" / "cyclonedds_ws" / "src" / "cyclonedds.xml",
         home / "Desktop" / "unitree" / "unitree_sdk2_python" / "cyclonedds.xml",
         home / "academy_prep" / "academy_content" / "docs" / "repos" / "unitree_sdk2_python" / "cyclonedds.xml",
     ]
