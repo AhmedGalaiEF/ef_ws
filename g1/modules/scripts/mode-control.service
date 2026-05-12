@@ -1,0 +1,21 @@
+[Unit]
+Description=Unitree G1 Mode Control Dash App
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=unitree
+Group=unitree
+WorkingDirectory=/home/unitree/EF/ef_ws/g1/modules
+Environment=HOME=/home/unitree
+Environment=G1_IFACE=eth0
+Environment=G1_DOMAIN_ID=0
+Environment=MODE_CONTROL_HOST=0.0.0.0
+Environment=MODE_CONTROL_PORT=8051
+ExecStart=/usr/bin/python3 /home/unitree/EF/ef_ws/g1/modules/scripts/mode_control.py
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

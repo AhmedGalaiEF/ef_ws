@@ -527,7 +527,10 @@ class IKPoseCLI:
         )
 
     def _pose_payload(self, name: str) -> Dict[str, Any]:
-        src = self.latest_positions if self.seeded else self.current_targets
+        # Save the commanded target, not lowstate feedback. With a payload in the
+        # hand, feedback can sit below the target due to compliance/sag; saving it
+        # would discard any intentional lift compensation taught through IK.
+        src = self.desired_targets if self.seeded else self.current_targets
         return {
             "name": name,
             "saved_at": datetime.now(timezone.utc).isoformat(),
