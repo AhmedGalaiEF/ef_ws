@@ -246,8 +246,8 @@ class ArmController:
             "right": ArmFK("right", "urdf"),
         }
         self._ik: Dict[str, ArmIK] = {
-            "left":  ArmIK("left",  "dls", max_iter=24, tol_pos_m=0.005, tol_rot_rad=0.02),
-            "right": ArmIK("right", "dls", max_iter=24, tol_pos_m=0.005, tol_rot_rad=0.02),
+            "left":  ArmIK("left",  "dls", max_iter=10, tol_pos_m=0.005, tol_rot_rad=0.02),
+            "right": ArmIK("right", "dls", max_iter=10, tol_pos_m=0.005, tol_rot_rad=0.02),
         }
 
         ChannelFactoryInitialize(domain_id, iface)
@@ -464,12 +464,12 @@ class ArmController:
         def _run() -> None:
             with self._lock:
                 self.orient_stiff = False
-                self.status = "Extending: orient lock OFF, x −0.4 m…"
-                self._adjust_dof(0, -0.4)
+                self.status = "Extending: orient lock OFF, y +0.15 m…"
+                self._adjust_dof(1, +0.15)
             _wait_ramp(self)
             with self._lock:
-                self.status = "Extending: z +0.5 m…"
-                self._adjust_dof(2, +0.5)
+                self.status = "Extending: z +1.0 m…"
+                self._adjust_dof(2, +1.0)
             _wait_ramp(self)
             with self._lock:
                 self.status = "Extending: x +0.8 m…"
@@ -483,11 +483,14 @@ class ArmController:
     def release(self) -> str:
         try:
             self.robot.wait_for_low_state(timeout=2.0)
-            self.robot.release_arms()
+            # Disarm the publish loop first so it stops fighting the release ramp.
             with self._lock:
                 self.armed = False
+            self.robot.release_arms()
             return "Arms released — move freely."
         except Exception as exc:
+            with self._lock:
+                self.armed = True  # restore on failure
             return f"Release failed: {exc}"
 
     def unrelease(self) -> str:
