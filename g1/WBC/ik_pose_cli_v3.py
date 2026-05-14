@@ -867,19 +867,22 @@ class IKPoseCLI:
             return
 
         now = time.monotonic()
-        dt  = max(1.0 / self.rate_hz, now - self._last_tick)
+        dt  = min(1.0 / self.rate_hz, now - self._last_tick)
         self._last_tick = now
 
         self._advance_sequence(now)
         self._ramp_step(dt)
-        self.pub.publish(
-            self.current_targets,
-            arm_kp=self.arm_kp,
-            arm_kd=self.arm_kd,
-            waist_pr_kp=self.waist_pr_kp if self.waist_enabled else 0.0,
-            waist_y_kp=self.waist_y_kp   if self.waist_enabled else 0.0,
-            waist_kd=self.waist_kd        if self.waist_enabled else 0.0,
-        )
+        try:
+            self.pub.publish(
+                self.current_targets,
+                arm_kp=self.arm_kp,
+                arm_kd=self.arm_kd,
+                waist_pr_kp=self.waist_pr_kp if self.waist_enabled else 0.0,
+                waist_y_kp=self.waist_y_kp   if self.waist_enabled else 0.0,
+                waist_kd=self.waist_kd        if self.waist_enabled else 0.0,
+            )
+        except Exception as exc:
+            self.status = f"Publish error: {exc}"
         if (now - self._last_hand_publish_s) >= (1.0 / self.hand_rate_hz):
             self._publish_hand_targets_once()
             self._last_hand_publish_s = now
@@ -1187,7 +1190,10 @@ class IKPoseCLI:
         buf: List[str] = []
         try:
             while True:
-                self.tick()
+                try:
+                    self.tick()
+                except Exception as exc:
+                    self.status = f"Tick error: {exc}"
                 win.move(h - 1, 0)
                 win.clrtoeol()
                 self._addnstr(win, h - 1, 0, f"{label}: {''.join(buf)}▌"[:w], w, curses.A_BOLD)
@@ -1585,7 +1591,10 @@ class IKPoseCLI:
 
             now = time.monotonic()
             if now - self._last_tick >= dt_target:
-                self.tick()
+                try:
+                    self.tick()
+                except Exception as exc:
+                    self.status = f"Tick error: {exc}"
 
         try:
             self.robot.release_arms()
