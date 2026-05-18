@@ -37,6 +37,9 @@ LOWERED_OFFSET_M = -0.05
 MIN_HEIGHT_OFFSET_M = -0.10
 MAX_HEIGHT_OFFSET_M = 0.06
 COMMAND_RAMP_RATE = 1.8
+STEP_HEIGHT_STEP = 0.02
+STEP_HEIGHT_SCALE_MIN = 0.4
+STEP_HEIGHT_SCALE_MAX = 1.8
 
 LOWLEVEL_STOP_WAIT = 3.0
 SERVICE_RESTART_WAIT = 2.0
@@ -246,6 +249,7 @@ class Go2CliController:
         self.recorded_gait = recorded_gait
         self.recorded_gait_speed = 1.0
         self.recorded_phase_time = 0.0
+        self.step_height_scale = 1.0
 
         self.sequence = [
             {"pose": list(self.stand_pose), "duration": 1.2, "hold": 0.5},
@@ -389,6 +393,18 @@ class Go2CliController:
             self.move_x = clamp(move_x, -1.0, 1.0)
             self.move_yaw = clamp(move_yaw, -1.0, 1.0)
 
+    def increase_step_height(self):
+        with self.lock:
+            self.step_height_scale = clamp(
+                self.step_height_scale + STEP_HEIGHT_STEP, STEP_HEIGHT_SCALE_MIN, STEP_HEIGHT_SCALE_MAX
+            )
+
+    def decrease_step_height(self):
+        with self.lock:
+            self.step_height_scale = clamp(
+                self.step_height_scale - STEP_HEIGHT_STEP, STEP_HEIGHT_SCALE_MIN, STEP_HEIGHT_SCALE_MAX
+            )
+
     def trigger_recover_mcf(self):
         with self.lock:
             if self.recover_in_progress:
@@ -439,6 +455,7 @@ class Go2CliController:
                 "recorded_gait_loaded": self.recorded_gait is not None and self.recorded_gait.valid,
                 "recorded_gait_path": self.recorded_gait.path if self.recorded_gait is not None else "",
                 "recorded_gait_error": "" if self.recorded_gait is None else self.recorded_gait.error,
+                "step_height_scale": self.step_height_scale,
             }
 
     def _age(self, ts: float) -> Optional[float]:
@@ -545,7 +562,11 @@ class Go2CliController:
         self.phase = (self.phase + CONTROL_DT / cycle_sec) % 1.0
 
         step_length = gait["step_length"] * abs(self.command_move_x)
-        step_height = gait["step_height"] * max(abs(self.command_move_x), 0.45 * abs(self.command_move_yaw))
+        step_height = (
+            gait["step_height"]
+            * self.step_height_scale
+            * max(abs(self.command_move_x), 0.45 * abs(self.command_move_yaw))
+        )
         turn_amount = 0.18 * self.command_move_yaw
         body_roll = gait["body_roll"] * abs(self.command_move_x)
 
@@ -833,9 +854,10 @@ def draw_panel(stdscr, controller: Go2CliController, odom_topic: str, lidar_stat
 
     lines = [
         "Go2 CLI",
-        "Height: +/- or Shift+Up/Shift+Down  Walk: w toggle, arrows drive, g gait, s sit, n stand, r recover, q quit",
+        "Body: +/- or Shift+Up/Shift+Down  Step: h toggle, arrows adjust when active  Walk: w toggle, g gait, s sit, n stand, r recover, q quit",
         "",
         f"Height offset: {snapshot['height_offset_m']:+.3f} m",
+        f"Step height scale: {snapshot['step_height_scale']:.2f}x",
         f"Mode: {'sitting' if snapshot['is_sitting'] else 'standing'}",
         f"Startup sequence: {'manual override' if snapshot['manual_override'] else ('done' if snapshot['sequence_done'] else 'running')}",
         f"Walk mode: {'enabled' if snapshot['walk_enabled'] else 'disabled'}  gait={snapshot['gait_name']}",
@@ -930,9 +952,19 @@ def tui_main(stdscr, controller: Go2CliController, odom_topic: str, lidar_state_
     curses.curs_set(0)
     stdscr.nodelay(True)
     stdscr.timeout(100)
+    adjust_step_height = False
 
     while True:
         draw_panel(stdscr, controller, odom_topic, lidar_state_topic, lidar_cloud_topic)
+        if adjust_step_height:
+            h, w = stdscr.getmaxyx()
+            stdscr.addnstr(
+                min(1, max(0, h - 1)),
+                0,
+                "STEP HEIGHT ADJUST MODE: Up/Down change height, Left/Right also change, h exits mode",
+                max(0, w - 1),
+            )
+            stdscr.refresh()
         key = stdscr.getch()
         move_x = 0.0
         move_yaw = 0.0
@@ -945,14 +977,28 @@ def tui_main(stdscr, controller: Go2CliController, odom_topic: str, lidar_state_
             controller.increase_height()
         elif key in (ord("-"), ord("_")):
             controller.decrease_height()
+        elif key in (ord("h"), ord("H")):
+            adjust_step_height = not adjust_step_height
         elif key == curses.KEY_UP:
-            move_x = 1.0
+            if adjust_step_height:
+                controller.increase_step_height()
+            else:
+                move_x = 1.0
         elif key == curses.KEY_DOWN:
-            move_x = -1.0
+            if adjust_step_height:
+                controller.decrease_step_height()
+            else:
+                move_x = -1.0
         elif key == curses.KEY_LEFT:
-            move_yaw = 1.0
+            if adjust_step_height:
+                controller.decrease_step_height()
+            else:
+                move_yaw = 1.0
         elif key == curses.KEY_RIGHT:
-            move_yaw = -1.0
+            if adjust_step_height:
+                controller.increase_step_height()
+            else:
+                move_yaw = -1.0
         elif key in (ord("s"), ord("S")):
             controller.command_sit()
         elif key in (ord("n"), ord("N")):
