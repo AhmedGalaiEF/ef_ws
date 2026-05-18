@@ -7,7 +7,7 @@ Reads IMU roll/pitch + gyro rates, then:
      waist motion.
   3. Holds all other upper-body joints at their captured neutral pose.
 
-All per-step joint increments are hard-clamped to MAX_JOINT_STEP (0.2 rad).
+All per-step joint increments are hard-clamped to MAX_JOINT_STEP (0.05 rad).
 
 Typical usage::
 
@@ -70,7 +70,7 @@ UPPER_BODY_JOINTS = [
 
 # ── Safety ───────────────────────────────────────────────────────────────────
 # Hard limit: maximum joint change allowed per control step
-MAX_JOINT_STEP = 0.2  # rad
+MAX_JOINT_STEP = 0.05  # rad
 
 # Conservative per-joint position limits [min, max] in radians
 JOINT_LIMITS: Dict[int, Tuple[float, float]] = {
@@ -165,6 +165,8 @@ class WBController:
 
         self._thread:  Optional[threading.Thread] = None
         self._running: bool = False
+        self._output_enabled: bool = False
+        self._arms_released: bool = True
 
         # Last diagnostics (read from any thread)
         self.last_imu_roll:       float = 0.0
@@ -200,9 +202,42 @@ class WBController:
             time.sleep(0.05)
         try:
             self._robot.release_arms()
+            self._arms_released = True
         except Exception:
             pass
         logger.info("WBC stopped")
+
+    def set_output_enabled(self, enabled: bool) -> None:
+        """
+        Enable or disable low-level upper-body output.
+
+        When disabled, the WBC keeps running for locomotion forwarding and state
+        updates but does not publish any arm/waist joint command packet.
+        """
+        enabled = bool(enabled)
+        with self._lock:
+            previous = self._output_enabled
+            self._output_enabled = enabled
+
+        if enabled == previous:
+            return
+
+        if enabled:
+            try:
+                self._robot.unrelease_arms()
+                self._arms_released = False
+            except Exception as exc:
+                logger.warning("WBC: failed to unrelease arms: %s", exc)
+            self._capture_neutral()
+            logger.info("WBC low-level output enabled")
+            return
+
+        try:
+            self._robot.release_arms()
+            self._arms_released = True
+        except Exception as exc:
+            logger.warning("WBC: failed to release arms: %s", exc)
+        logger.info("WBC low-level output disabled")
 
     def set_loco_cmd(self, vx: float, vy: float, vyaw: float) -> None:
         """Set the locomotion command forwarded to loco_move() each tick."""
@@ -300,6 +335,7 @@ class WBController:
             cfg     = self._cfg
             loco    = self._loco_cmd
             neutral = dict(self._neutral) if self._neutral else {}
+            output_enabled = self._output_enabled
 
         if not neutral:
             return
@@ -370,7 +406,7 @@ class WBController:
 
         # All other joints already set to neutral above.
 
-        # ── 5. Enforce per-step increment limit: max 0.2 rad ─────────────────
+        # ── 5. Enforce per-step increment limit: max 0.05 rad ────────────────
         for j in UPPER_BODY_JOINTS:
             desired = targets.get(j, cur[j])
             delta   = desired - cur[j]
@@ -382,14 +418,15 @@ class WBController:
             if j in targets:
                 targets[j] = self._clamp(targets[j], lo, hi)
 
-        # ── 7. Publish via arm_sdk ────────────────────────────────────────────
-        self._robot._get_arm_sdk().publish_targets(
-            targets,
-            kp=ARM_KP,
-            kd=ARM_KD,
-            kp_by_joint=_KP_BY_JOINT,
-            kd_by_joint=_KD_BY_JOINT,
-        )
+        # ── 7. Publish via arm_sdk only when low-level output is enabled ─────
+        if output_enabled:
+            self._robot._get_arm_sdk().publish_targets(
+                targets,
+                kp=ARM_KP,
+                kd=ARM_KD,
+                kp_by_joint=_KP_BY_JOINT,
+                kd_by_joint=_KD_BY_JOINT,
+            )
 
         # ── 8. Forward locomotion command ─────────────────────────────────────
         # Always call loco_move so a (0,0,0) command explicitly stops the robot
