@@ -20,6 +20,7 @@ LEG_NAMES = [
     "RR_0", "RR_1", "RR_2",
     "RL_0", "RL_1", "RL_2",
 ]
+COMMAND_THRESHOLD = 0.20
 
 
 def age_text(ts: float) -> str:
@@ -63,8 +64,40 @@ def decode_remote(data):
     }
 
 
+def derive_command_features(remote):
+    forward = float(remote["ly"])
+    lateral = float(remote["lx"])
+    turn = float(remote["rx"])
+
+    abs_values = {
+        "forward": abs(forward),
+        "lateral": abs(lateral),
+        "turn": abs(turn),
+    }
+    dominant_axis = max(abs_values, key=abs_values.get)
+    dominant_mag = abs_values[dominant_axis]
+
+    if dominant_mag < COMMAND_THRESHOLD:
+        label = "idle"
+    elif dominant_axis == "forward":
+        label = "forward" if forward > 0 else "backward"
+    elif dominant_axis == "lateral":
+        label = "right" if lateral > 0 else "left"
+    else:
+        label = "turn_right" if turn > 0 else "turn_left"
+
+    return {
+        "forward": forward,
+        "lateral": lateral,
+        "turn": turn,
+        "label": label,
+        "dominant_magnitude": dominant_mag,
+    }
+
+
 def build_sample(msg: LowState_):
     remote = decode_remote(msg.wireless_remote)
+    command = derive_command_features(remote)
     joints = []
     for idx in range(12):
         motor = msg.motor_state[idx]
@@ -92,6 +125,7 @@ def build_sample(msg: LowState_):
         "foot_force": [int(v) for v in msg.foot_force],
         "foot_force_est": [int(v) for v in msg.foot_force_est],
         "remote": remote,
+        "command": command,
         "joints": joints,
     }
 
@@ -104,12 +138,13 @@ class RecorderState:
     dropped_writes: int = 0
     recording: bool = False
     output_path: str = ""
+    capture_filter: str = "all"
 
 
 class GaitRecorder:
-    def __init__(self, output_path: str):
+    def __init__(self, output_path: str, capture_filter: str):
         self.lock = threading.Lock()
-        self.state = RecorderState(output_path=output_path)
+        self.state = RecorderState(output_path=output_path, capture_filter=capture_filter)
         self.writer = None
         self.subscriber = None
 
@@ -148,6 +183,7 @@ class GaitRecorder:
                 "recorded_samples": self.state.recorded_samples,
                 "dropped_writes": self.state.dropped_writes,
                 "output_path": self.state.output_path,
+                "capture_filter": self.state.capture_filter,
             }
 
     def _low_state_handler(self, msg: LowState_):
@@ -157,6 +193,9 @@ class GaitRecorder:
             self.state.last_sample = sample
             self.state.last_sample_time = time.time()
             if not self.state.recording or self.writer is None:
+                return
+            current_label = sample["command"]["label"]
+            if self.state.capture_filter != "all" and current_label != self.state.capture_filter:
                 return
             try:
                 self.writer.write(line + "\n")
@@ -182,6 +221,7 @@ def draw(stdscr, recorder: GaitRecorder):
         "r: start/stop recording  q: quit",
         f"Topic: {TOPIC_LOWSTATE}",
         f"Recording: {'ON' if snap['recording'] else 'OFF'}",
+        f"Capture filter: {snap['capture_filter']}",
         f"Output: {snap['output_path']}",
         f"Samples written: {snap['recorded_samples']}  dropped writes: {snap['dropped_writes']}",
         f"Last sample age: {age_text(snap['last_sample_time'])}",
@@ -192,6 +232,7 @@ def draw(stdscr, recorder: GaitRecorder):
         lines.append("Waiting for rt/lowstate ...")
     else:
         remote = sample["remote"]
+        command = sample["command"]
         buttons = remote["buttons"]
         lines.extend(
             [
@@ -203,6 +244,8 @@ def draw(stdscr, recorder: GaitRecorder):
                 "",
                 f"Joystick lx/ly: {remote['lx']:+.2f} {remote['ly']:+.2f}",
                 f"Joystick rx/ry: {remote['rx']:+.2f} {remote['ry']:+.2f}",
+                f"Derived cmd fwd/lat/turn: {command['forward']:+.2f} {command['lateral']:+.2f} {command['turn']:+.2f}",
+                f"Detected motion label: {command['label']}",
                 "Buttons: " + " ".join(name for name, value in buttons.items() if value) if any(buttons.values()) else "Buttons: none",
                 "",
                 "Joints: name q dq tau temp",
@@ -245,6 +288,12 @@ def parse_args():
         default=f"record_gait_{time.strftime('%Y%m%d_%H%M%S')}.jsonl",
         help="JSONL output path",
     )
+    parser.add_argument(
+        "--capture-filter",
+        default="all",
+        choices=["all", "forward", "backward", "left", "right", "turn_left", "turn_right"],
+        help="Only save samples for one detected joystick motion label, or save all",
+    )
     return parser.parse_args()
 
 
@@ -252,7 +301,7 @@ def main():
     args = parse_args()
     ChannelFactoryInitialize(0, args.iface)
 
-    recorder = GaitRecorder(args.output)
+    recorder = GaitRecorder(args.output, args.capture_filter)
     recorder.init()
     try:
         curses.wrapper(tui_main, recorder)
