@@ -45,9 +45,10 @@ MAX_TILT_FOR_WALK_RAD = 0.30
 MOVE_STEP = 0.20
 TURN_STEP = 0.20
 STEP_HEIGHT_STEP = 0.02
-STEP_HEIGHT_SCALE_MIN = 0.4
-STEP_HEIGHT_SCALE_MAX = 1.8
-DEFAULT_LIFT_FOOT_Z = 0.06
+STEP_HEIGHT_SCALE_MIN = 1.0
+STEP_HEIGHT_SCALE_MAX = 2.2
+DEFAULT_LIFT_FOOT_Z = 0.10
+MIN_SWING_CLEARANCE = 0.075
 MAX_BODY_SHIFT_X = 0.025
 MAX_BODY_SHIFT_Y = 0.025
 BODY_SHIFT_GAIN = 0.9
@@ -55,6 +56,8 @@ IMU_PITCH_POS_GAIN = 0.035
 IMU_ROLL_POS_GAIN = 0.03
 IMU_GYRO_GAIN = 0.003
 MAX_IMU_FOOT_Z = 0.025
+LATERAL_WALK_SCALE = 0.20
+YAW_WALK_SCALE = 0.15
 ZMP_ROLL_P = 0.10
 ZMP_ROLL_D = 0.02
 ZMP_PITCH_P = 0.12
@@ -64,6 +67,16 @@ ZMP_EXT_CLAMP = 0.16
 ZMP_THIGH_GAIN = 0.30
 ZMP_CALF_GAIN = -0.45
 REMOTE_DEADBAND = 0.12
+Crawl_CONTACT_FORCE_MIN = 20.0
+CRAWL_SHIFT_HOLD_SEC = 0.18
+CRAWL_LIFT_SEC = 0.22
+CRAWL_SWING_SEC = 0.30
+CRAWL_LOWER_TIMEOUT_SEC = 0.40
+CRAWL_SETTLE_SEC = 0.22
+CRAWL_STEP_X = 0.09
+CRAWL_SHIFT_X = 0.020
+CRAWL_SHIFT_Y = 0.018
+CRAWL_TILT_OK_RAD = 0.12
 LOWLEVEL_STOP_WAIT = 3.0
 SERVICE_TOGGLE_DELAY = 0.5
 SERVICE_RESTART_WAIT = 2.0
@@ -79,6 +92,7 @@ LEG_INDEX = {
     "RL": (9, 10, 11),
 }
 LEG_ORDER = ["FR", "FL", "RR", "RL"]
+CRAWL_ORDER = ["RL", "FL", "RR", "FR"]
 LEG_SIGNS = {
     "FL": {"left": 1.0, "front": 1.0},
     "FR": {"left": -1.0, "front": 1.0},
@@ -101,9 +115,9 @@ GAITS = {
     "Walk": {
         "description": "Four-beat lateral walk: RL -> FL -> RR -> FR",
         "phase_offsets": {"RL": 0.00, "FL": 0.25, "RR": 0.50, "FR": 0.75},
-        "duty": 0.82,
-        "cycle_sec": 2.40,
-        "step_height": 0.04,
+        "duty": 0.72,
+        "cycle_sec": 2.10,
+        "step_height": 0.06,
         "step_length": 0.08,
         "body_roll": 0.015,
     },
@@ -388,10 +402,15 @@ class LowLevelWalkController:
         self.gy = 0.0
         self.foot_force = [0.0, 0.0, 0.0, 0.0]
         self.remote = None
+        self.swing_legs = set()
         self.prev_toggle_combo = False
         self.prev_buttons = {}
         self.prev_height_up = False
         self.prev_height_down = False
+        self.crawl_state = "idle"
+        self.crawl_leg_index = 0
+        self.crawl_state_started = 0.0
+        self.crawl_support_started = 0.0
         self.button_log_path = os.path.abspath("ll_walk_custom_height_buttons.log")
 
         self.sequence = []
@@ -493,6 +512,8 @@ class LowLevelWalkController:
                 self.phase = 0.0
                 self.recorded_phase_time = 0.0
                 self.gait_engage = 0.0
+                self.crawl_leg_index = 0
+                self._begin_crawl_state_locked("idle")
                 self.target_pose = self._compose_base_pose_locked()
 
     def cycle_gait(self):
@@ -505,6 +526,8 @@ class LowLevelWalkController:
             self.phase = 0.0
             self.recorded_phase_time = 0.0
             self.gait_engage = 0.0
+            self.crawl_leg_index = 0
+            self._begin_crawl_state_locked("idle")
 
     def adjust_move_x(self, delta: float):
         with self.lock:
@@ -559,6 +582,8 @@ class LowLevelWalkController:
                 "move_x": self.move_x,
                 "move_y": self.move_y,
                 "move_yaw": self.move_yaw,
+                "crawl_state": self.crawl_state,
+                "crawl_leg": CRAWL_ORDER[self.crawl_leg_index % len(CRAWL_ORDER)],
                 "sequence_done": self.sequence_done,
                 "recorded_gait_loaded": self.recorded_gait is not None and self.recorded_gait.valid,
                 "recorded_gait_path": self.recorded_gait.path if self.recorded_gait is not None else "",
@@ -723,6 +748,123 @@ class LowLevelWalkController:
             return target
         return current + step if target > current else current - step
 
+    def _begin_crawl_state_locked(self, state: str):
+        self.crawl_state = state
+        self.crawl_state_started = time.time()
+        if state == "shift":
+            self.crawl_support_started = 0.0
+
+    def _crawl_active_leg(self):
+        return CRAWL_ORDER[self.crawl_leg_index % len(CRAWL_ORDER)]
+
+    def _leg_force(self, leg_name: str) -> float:
+        index_map = {"FR": 0, "FL": 1, "RR": 2, "RL": 3}
+        return self.foot_force[index_map[leg_name]]
+
+    def _crawl_height_scale(self) -> float:
+        # Higher stance means less stable crawl. Reduce aggressiveness automatically.
+        return clamp(1.0 - max(0.0, self.height_offset_m) * 4.0, 0.45, 1.0)
+
+    def _crawl_targets_locked(self):
+        base_targets = self._height_foot_targets(self.height_offset_m)
+        base_pose = self._foot_targets_to_pose(base_targets)
+        tilt_mag = max(abs(self.roll), abs(self.pitch))
+        self.command_move_x = self._ramp_value(self.command_move_x, self.move_x, COMMAND_RAMP_RATE)
+
+        if not self.walk_enabled or abs(self.command_move_x) < 0.03:
+            self.crawl_state = "idle"
+            self.crawl_support_started = 0.0
+            self.swing_legs = set()
+            self.target_pose = list(base_pose)
+            return base_pose
+
+        if tilt_mag > MAX_TILT_FOR_WALK_RAD:
+            self.walk_enabled = False
+            self.command_move_x = 0.0
+            self.crawl_state = "idle"
+            self.swing_legs = set()
+            self.target_pose = list(base_pose)
+            self.snapshots.service_status = "crawl halted: tilt limit"
+            self.snapshots.service_time = time.time()
+            return base_pose
+
+        if self.crawl_state == "idle":
+            self._begin_crawl_state_locked("shift")
+
+        active_leg = self._crawl_active_leg()
+        support_legs = [leg for leg in CRAWL_ORDER if leg != active_leg]
+        shift_targets = {leg: list(target) for leg, target in base_targets.items()}
+        direction = 1.0 if self.command_move_x >= 0.0 else -1.0
+        height_scale = self._crawl_height_scale()
+        shift_x = CRAWL_SHIFT_X * direction * height_scale
+        shift_y = 0.0
+        if active_leg in ("FL", "RL"):
+            shift_y = -CRAWL_SHIFT_Y * height_scale
+        else:
+            shift_y = CRAWL_SHIFT_Y * height_scale
+        for leg in support_legs:
+            shift_targets[leg][0] -= shift_x
+            shift_targets[leg][1] -= shift_y
+        shift_targets[active_leg][0] -= shift_x * 0.35
+        shift_targets[active_leg][1] -= shift_y * 0.35
+
+        elapsed = time.time() - self.crawl_state_started
+        tilt_ok = tilt_mag <= CRAWL_TILT_OK_RAD
+        force_ok = min(self._leg_force(leg) for leg in support_legs) >= CRAWL_CONTACT_FORCE_MIN
+
+        if self.crawl_state == "shift":
+            if tilt_ok and force_ok:
+                if self.crawl_support_started == 0.0:
+                    self.crawl_support_started = time.time()
+                elif time.time() - self.crawl_support_started >= CRAWL_SHIFT_HOLD_SEC:
+                    self._begin_crawl_state_locked("lift")
+            else:
+                self.crawl_support_started = 0.0
+            self.swing_legs = set()
+            self.target_pose = self._foot_targets_to_pose(shift_targets)
+            return self.target_pose
+
+        self.swing_legs = {active_leg}
+        swing_targets = {leg: list(target) for leg, target in shift_targets.items()}
+        progress = 0.0
+        if self.crawl_state == "lift":
+            progress = clamp(elapsed / CRAWL_LIFT_SEC, 0.0, 1.0)
+            swing_targets[active_leg][2] += DEFAULT_LIFT_FOOT_Z * height_scale * smoothstep(progress)
+            if progress >= 1.0:
+                self._begin_crawl_state_locked("swing")
+        elif self.crawl_state == "swing":
+            progress = clamp(elapsed / CRAWL_SWING_SEC, 0.0, 1.0)
+            swing_targets[active_leg][2] += DEFAULT_LIFT_FOOT_Z * height_scale
+            swing_targets[active_leg][0] += CRAWL_STEP_X * direction * height_scale * smoothstep(progress)
+            if progress >= 1.0:
+                self._begin_crawl_state_locked("lower")
+        elif self.crawl_state == "lower":
+            progress = clamp(elapsed / CRAWL_LOWER_TIMEOUT_SEC, 0.0, 1.0)
+            swing_targets[active_leg][2] += DEFAULT_LIFT_FOOT_Z * height_scale * (1.0 - smoothstep(progress))
+            swing_targets[active_leg][0] += CRAWL_STEP_X * direction * height_scale
+            if self._leg_force(active_leg) >= CRAWL_CONTACT_FORCE_MIN or progress >= 1.0:
+                self._begin_crawl_state_locked("settle")
+                self.crawl_support_started = 0.0
+        elif self.crawl_state == "settle":
+            swing_targets[active_leg][0] += CRAWL_STEP_X * direction * height_scale
+            if tilt_ok and force_ok and self._leg_force(active_leg) >= CRAWL_CONTACT_FORCE_MIN:
+                if self.crawl_support_started == 0.0:
+                    self.crawl_support_started = time.time()
+                elif time.time() - self.crawl_support_started >= CRAWL_SETTLE_SEC:
+                    self.crawl_leg_index = (self.crawl_leg_index + 1) % len(CRAWL_ORDER)
+                    self._begin_crawl_state_locked("shift")
+            else:
+                self.crawl_support_started = 0.0
+
+        imu_balance = self._imu_balance_offsets()
+        for leg in support_legs:
+            swing_targets[leg][2] += imu_balance[leg]
+        pose = self._foot_targets_to_pose(swing_targets)
+        self.target_pose = list(pose)
+        self.snapshots.service_status = f"crawl {self.crawl_state}:{active_leg}"
+        self.snapshots.service_time = time.time()
+        return pose
+
     def _stance_swing_value(self, leg_phase: float, duty: float):
         if leg_phase < duty:
             stance_phase = leg_phase / duty
@@ -737,9 +879,9 @@ class LowLevelWalkController:
             return
         buttons = self.remote["buttons"]
         self.move_x = normalize_axis(float(self.remote["ly"]), REMOTE_DEADBAND)
-        self.move_y = normalize_axis(float(self.remote["lx"]), REMOTE_DEADBAND)
-        self.move_yaw = normalize_axis(float(self.remote["rx"]), REMOTE_DEADBAND)
-        self.walk_enabled = max(abs(self.move_x), abs(self.move_y), abs(self.move_yaw)) >= 0.05
+        self.move_y = 0.0
+        self.move_yaw = 0.0
+        self.walk_enabled = abs(self.move_x) >= 0.05
         up_pressed = bool(buttons.get("Up"))
         down_pressed = bool(buttons.get("Down"))
         if up_pressed and not self.prev_height_up:
@@ -787,84 +929,7 @@ class LowLevelWalkController:
             self.snapshots.last_button_time = ts
 
     def _gait_target_locked(self):
-        if self.gait_name == "Recorded":
-            return self._recorded_gait_target_locked()
-
-        gait = GAITS[self.gait_name]
-        self.command_move_x = self._ramp_value(self.command_move_x, self.move_x, COMMAND_RAMP_RATE)
-        self.command_move_y = self._ramp_value(self.command_move_y, self.move_y, COMMAND_RAMP_RATE)
-        self.command_move_yaw = self._ramp_value(
-            self.command_move_yaw, self.move_yaw, COMMAND_RAMP_RATE * 1.4
-        )
-
-        base_targets = self._height_foot_targets(self.height_offset_m)
-        base = self._foot_targets_to_pose(base_targets)
-        move_mag = max(abs(self.command_move_x), abs(self.command_move_y), abs(self.command_move_yaw))
-        tilt_mag = max(abs(self.roll), abs(self.pitch))
-        if tilt_mag > MAX_TILT_FOR_WALK_RAD:
-            self.walk_enabled = False
-            self.gait_engage = 0.0
-            self.command_move_x = 0.0
-            self.command_move_y = 0.0
-            self.command_move_yaw = 0.0
-            self.target_pose = list(base)
-            self.snapshots.service_status = "walk halted: tilt limit"
-            self.snapshots.service_time = time.time()
-            return base
-        if not self.walk_enabled or move_mag < 0.03:
-            self.phase = 0.0
-            self.gait_engage = self._ramp_value(self.gait_engage, 0.0, GAIT_ENGAGE_RATE)
-            self.target_pose = list(base)
-            return base
-
-        self.gait_engage = self._ramp_value(self.gait_engage, 1.0, GAIT_ENGAGE_RATE)
-        self.phase = (self.phase + CONTROL_DT / gait["cycle_sec"]) % 1.0
-        drive_x = max(abs(self.command_move_x), 0.30)
-        drive_y = max(abs(self.command_move_y), 0.30) if abs(self.command_move_y) > 0.01 else 0.0
-        drive_yaw = max(abs(self.command_move_yaw), 0.30) if abs(self.command_move_yaw) > 0.01 else 0.0
-        engage = self.gait_engage
-        step_length = gait["step_length"] * drive_x * engage
-        side_length = 0.18 * drive_y * engage
-        step_height = (
-            min(gait["step_height"], DEFAULT_LIFT_FOOT_Z)
-            * self.step_height_scale
-            * max(drive_x, drive_y, 0.45 * drive_yaw)
-            * engage
-        )
-        turn_amount = (
-            0.18 * math.copysign(drive_yaw, self.command_move_yaw) * engage
-            if abs(self.command_move_yaw) > 0.01
-            else 0.0
-        )
-        body_roll = gait["body_roll"] * max(drive_x, drive_y, 0.5 * drive_yaw) * engage
-
-        foot_targets = {leg: list(target) for leg, target in base_targets.items()}
-        imu_balance = self._imu_balance_offsets()
-        support_legs = []
-        for leg in LEG_ORDER:
-            leg_phase = (self.phase + gait["phase_offsets"][leg]) % 1.0
-            sweep, lift = self._stance_swing_value(leg_phase, gait["duty"])
-            if lift < 0.05:
-                support_legs.append(leg)
-
-            side_sign = 1.0 if leg in ("FL", "RL") else -1.0
-            front_sign = 1.0 if leg in ("FR", "FL") else -1.0
-
-            foot_targets[leg][0] += sweep * step_length * self.command_move_x
-            foot_targets[leg][1] += sweep * side_length * self.command_move_y
-            foot_targets[leg][1] += side_sign * turn_amount * (0.7 if front_sign > 0 else 1.0)
-            foot_targets[leg][2] += step_height * lift
-            if lift < 0.05:
-                foot_targets[leg][2] += imu_balance[leg]
-                foot_targets[leg][1] += side_sign * body_roll * 0.04
-
-        shift_x, shift_y = self._support_body_shift(support_legs, foot_targets)
-        for leg in LEG_ORDER:
-            foot_targets[leg][0] -= shift_x
-            foot_targets[leg][1] -= shift_y
-
-        self.target_pose = list(base)
-        return self._foot_targets_to_pose(foot_targets)
+        return self._crawl_targets_locked()
 
     def _recorded_gait_target_locked(self):
         base_targets = self._height_foot_targets(self.height_offset_m)
@@ -938,6 +1003,8 @@ class LowLevelWalkController:
         u_roll = clamp(u_roll, -ZMP_EXT_CLAMP, ZMP_EXT_CLAMP)
 
         def apply_extension(leg, ext):
+            if leg in self.swing_legs:
+                ext *= 0.15
             _, thigh_idx, calf_idx = LEG_INDEX[leg]
             q[thigh_idx] += ZMP_THIGH_GAIN * ext
             q[calf_idx] += ZMP_CALF_GAIN * ext
@@ -1059,6 +1126,8 @@ class LowLevelWalkController:
                 self.command_move_y = 0.0
                 self.command_move_yaw = 0.0
                 self.gait_engage = 0.0
+                self.crawl_leg_index = 0
+                self._begin_crawl_state_locked("idle")
                 self.phase = 0.0
                 self.recorded_phase_time = 0.0
                 self.height_offset_m = NORMAL_HEIGHT_M
@@ -1090,6 +1159,8 @@ class LowLevelWalkController:
                 self.move_y = 0.0
                 self.move_yaw = 0.0
                 self.gait_engage = 0.0
+                self.crawl_leg_index = 0
+                self._begin_crawl_state_locked("idle")
                 self._begin_transition_locked(self._compose_base_pose_locked(), EXIT_SIT_BLEND_TIME)
             time.sleep(EXIT_SIT_BLEND_TIME + 0.6)
 
@@ -1235,7 +1306,7 @@ def draw_panel(stdscr, controller: LowLevelWalkController, odom_topic: str, lida
 
     lines = [
         "Low-Level Walk Custom Height",
-        "Remote: L2+Y toggles LL mode. Left stick: forward/back + sideways. Right stick X: turn. D-pad Up/Down: height. q: quit",
+        "Remote: L2+Y toggles LL mode. Left stick Y: forward/back closed-loop crawl. D-pad Up/Down: height. q: quit",
         "",
         f"Control owner: {'low-level' if snapshot['low_level_mode_active'] else 'high-level MCF'}",
         f"Handoff: {snapshot['service_status']} (age {age_text(snapshot['service_age'])})",
@@ -1243,6 +1314,7 @@ def draw_panel(stdscr, controller: LowLevelWalkController, odom_topic: str, lida
         f"Height offset: {snapshot['height_offset_m']:+.3f} m",
         f"Step height scale: {snapshot['step_height_scale']:.2f}",
         f"Walk: {'on' if snapshot['walk_enabled'] else 'off'}",
+        f"Crawl: {snapshot['crawl_state']}  leg={snapshot['crawl_leg']}",
         f"Gait: {snapshot['gait_name']}  {snapshot['gait_description']}",
         f"Command x/y/yaw: {snapshot['move_x']:+.2f} / {snapshot['move_y']:+.2f} / {snapshot['move_yaw']:+.2f}",
         f"Remote lx/ly/rx: {snapshot['remote_lx']:+.2f} / {snapshot['remote_ly']:+.2f} / {snapshot['remote_rx']:+.2f}",
