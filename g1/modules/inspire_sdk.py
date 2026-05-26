@@ -111,12 +111,12 @@ class ModbusTcp:
         return b"".join(chunks)
 
 
-def hand_open(hand: str = "right", *, speed: int = 200, force: int = 200, hold: float = 0.0) -> None:
+def open_hand(hand: str = "right", *, speed: int = 200, force: int = 200, hold: float = 0.0) -> None:
     """Open an Inspire hand by side: 'right' or 'left'."""
     _move_hand(hand, HAND_OPEN_TARGET, speed=speed, force=force, hold=hold)
 
 
-def hand_close(hand: str = "right", *, speed: int = 200, force: int = 200, hold: float = 0.0) -> None:
+def close_hand(hand: str = "right", *, speed: int = 200, force: int = 200, hold: float = 0.0) -> None:
     """Close an Inspire hand by side: 'right' or 'left'."""
     _move_hand(hand, HAND_CLOSE_TARGET, speed=speed, force=force, hold=hold)
 
