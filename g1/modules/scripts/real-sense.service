@@ -1,0 +1,22 @@
+[Unit]
+Description=RealSense RGBD streamer
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=10min
+StartLimitBurst=6
+
+[Service]
+Type=simple
+User=unitree
+Group=unitree
+SupplementaryGroups=video plugdev
+WorkingDirectory=/home/unitree/EF/ef_ws/g1/modules
+Environment=PYTHONUNBUFFERED=1
+Environment="REAL_SENSE_ARGS=--display off"
+EnvironmentFile=-/etc/default/real-sense
+ExecStart=/usr/bin/python3 /home/unitree/EF/ef_ws/g1/modules/scripts/real_sense.py --reset $REAL_SENSE_ARGS
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
