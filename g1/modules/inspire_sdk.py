@@ -11,6 +11,7 @@ Side = Literal["left", "right"]
 
 
 ANGLE_SET_REGISTER = 1486
+POS_SET_REGISTER = 1474
 FORCE_SET_REGISTER = 1498
 SPEED_SET_REGISTER = 1522
 CLEAR_ERROR_REGISTER = 1004
@@ -28,9 +29,10 @@ HAND_CONFIGS: dict[str, InspireHandConfig] = {
     "left": InspireHandConfig(ip="192.168.124.211"),
 }
 
-# Register values are six angle targets in the order used by the Inspire SDK.
-HAND_OPEN_TARGET = [700, 700, 700, 700, 300, 300]
-HAND_CLOSE_TARGET = [0, 0, 0, 0, 1000, 1000]
+# Register values are six angle targets in the Inspire RH56DFTP DOF order:
+# little, ring, middle, index, thumb bending, thumb rotation.
+HAND_OPEN_TARGET = [700, 700, 700, 700, 800, 0]
+HAND_CLOSE_TARGET = [0, 0, 0, 0, 1000, 600]
 
 # ModbusTcp is a simple Modbus TCP client implementation that supports writing single registers and multiple registers. It handles the Modbus TCP framing, transaction IDs, and basic error checking. The client can be used in a context manager to ensure proper connection management.
 class ModbusTcp:
