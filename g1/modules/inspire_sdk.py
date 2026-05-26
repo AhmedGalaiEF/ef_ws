@@ -143,6 +143,7 @@ def _normalize_side(hand: str) -> Side:
 
 
 if __name__ == "__main__":
-    hand_open("right", hold=1.0)
-    hand_close("right", hold=1.0)
-    hand_open("right", hold=1.0)
+    open_hand("right", hold=1.0)
+    close_hand("right", hold=1.0)
+    open_hand("right", hold=1.0)
+    close_hand("right", hold=1.0)
