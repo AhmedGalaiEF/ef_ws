@@ -24,15 +24,13 @@ class InspireHandConfig:
 
 
 HAND_CONFIGS: dict[str, InspireHandConfig] = {
-    "right": InspireHandConfig(ip="192.168.124.211"),
-    "left": InspireHandConfig(ip="192.168.124.210"),
+    "right": InspireHandConfig(ip="192.168.124.210"),
+    "left": InspireHandConfig(ip="192.168.124.211"),
 }
 
 # Register values are six angle targets in the order used by the Inspire SDK.
-# The open target follows the repo's dds_publish.py example. The close target is
-# the conservative target already tested successfully on this right hand.
-HAND_OPEN_TARGET = [0, 0, 0, 0, 1000, 1000]
-HAND_CLOSE_TARGET = [700, 700, 700, 700, 300, 300]
+HAND_OPEN_TARGET = [700, 700, 700, 700, 300, 300]
+HAND_CLOSE_TARGET = [0, 0, 0, 0, 1000, 1000]
 
 # ModbusTcp is a simple Modbus TCP client implementation that supports writing single registers and multiple registers. It handles the Modbus TCP framing, transaction IDs, and basic error checking. The client can be used in a context manager to ensure proper connection management.
 class ModbusTcp:
