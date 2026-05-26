@@ -34,7 +34,7 @@ HAND_CONFIGS: dict[str, InspireHandConfig] = {
 HAND_OPEN_TARGET = [0, 0, 0, 0, 1000, 1000]
 HAND_CLOSE_TARGET = [700, 700, 700, 700, 300, 300]
 
-
+# ModbusTcp is a simple Modbus TCP client implementation that supports writing single registers and multiple registers. It handles the Modbus TCP framing, transaction IDs, and basic error checking. The client can be used in a context manager to ensure proper connection management.
 class ModbusTcp:
     def __init__(self, host: str, port: int = 6000, unit_id: int = 1, timeout: float = 2.0):
         self.host = host
@@ -110,17 +110,17 @@ class ModbusTcp:
             remaining -= len(chunk)
         return b"".join(chunks)
 
-
+# function to open the hand by side, with optional speed, force, and hold time parameters. The close_hand function is similar but uses the close target angles. Both functions use the _move_hand helper to send the appropriate Modbus commands to the hand's controller.
 def open_hand(hand: str = "right", *, speed: int = 200, force: int = 200, hold: float = 0.0) -> None:
     """Open an Inspire hand by side: 'right' or 'left'."""
     _move_hand(hand, HAND_OPEN_TARGET, speed=speed, force=force, hold=hold)
 
-
+# function to close the hand by side, with optional speed, force, and hold time parameters. The _move_hand helper is used to send the appropriate Modbus commands to the hand's controller.
 def close_hand(hand: str = "right", *, speed: int = 200, force: int = 200, hold: float = 0.0) -> None:
     """Close an Inspire hand by side: 'right' or 'left'."""
     _move_hand(hand, HAND_CLOSE_TARGET, speed=speed, force=force, hold=hold)
 
-
+# function to move the hand to a target position by side, with specified speed, force, and hold time. It normalizes the hand side, retrieves the corresponding configuration, and sends Modbus commands to clear errors, set speed and force, and set the target angles. If a hold time is specified, it waits for that duration after sending the commands.
 def _move_hand(hand: str, target: list[int], *, speed: int, force: int, hold: float) -> None:
     side = _normalize_side(hand)
     config = HAND_CONFIGS[side]
@@ -141,7 +141,7 @@ def _normalize_side(hand: str) -> Side:
         return "left"
     raise ValueError("hand must be 'right' or 'left'")
 
-
+# main block to demonstrate the usage of the open_hand and close_hand functions. It opens and closes the right hand with a hold time of 1 second between each action.
 if __name__ == "__main__":
     open_hand("right", hold=1.0)
     close_hand("right", hold=1.0)
