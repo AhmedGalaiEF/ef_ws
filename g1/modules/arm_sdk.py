@@ -28,6 +28,19 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
+_NUMPY_COMPAT_ALIASES = {
+    "bool": bool,
+    "complex": complex,
+    "float": float,
+    "int": int,
+    "object": object,
+    "str": str,
+    "typeDict": np.sctypeDict,
+}
+for _name, _value in _NUMPY_COMPAT_ALIASES.items():
+    if _name not in np.__dict__:
+        setattr(np, _name, _value)
+
 # ── Path bootstrap ────────────────────────────────────────────────────────────
 _MODULES_DIR = os.path.dirname(os.path.abspath(__file__))
 _ROOT_DIR    = os.path.abspath(os.path.join(_MODULES_DIR, ".."))
@@ -72,6 +85,10 @@ DEFAULT_WAIST_KD = 12.0
 # Outer joints (wrist) are cheap; inner joints (shoulder) are expensive.
 # shoulder_p/r/y, elbow, wrist_r/p/y
 _DEFAULT_ARM_IK_WEIGHTS = np.array([4.0, 4.0, 4.0, 2.0, 1.0, 1.0, 1.0], dtype=np.float64)
+_POSITION_IK_TOL_M = 0.005
+_POSITION_IK_AXIS_TOL_M = 0.006
+_POSITION_IK_SOFT_LIMIT_M = 0.040
+_POSITION_IK_ACTIVE_IDXS = (0, 1, 2, 3)
 
 
 # ── Rotation helpers ──────────────────────────────────────────────────────────
@@ -187,6 +204,85 @@ def _solve_dls(
         "error_pos_m":   float(np.linalg.norm(err[:3])),
         "error_rot_rad": float(np.linalg.norm(err[3:])),
         "iterations": max_iter,
+    }
+
+
+def _solve_position_shoulder_elbow(
+    fk_fn,
+    T_des: np.ndarray,
+    q_init: np.ndarray,
+    limits,
+    *,
+    selected_axis: Optional[int] = None,
+    max_iter: int = 64,
+    damping: float = 0.05,
+) -> Tuple[Optional[np.ndarray], Dict]:
+    """Position-only DLS matching ik_pose_cli_v3's free-orientation mode."""
+    q = _clamp_q(q_init.copy(), limits)
+    eps = 1e-5
+    best_q = q.copy()
+    best_err_pos = float("inf")
+    best_axis_err = float("inf")
+
+    for iteration in range(max_iter):
+        T_cur = fk_fn(q)
+        pos_err = T_des[:3, 3] - T_cur[:3, 3]
+        err_pos = float(np.linalg.norm(pos_err))
+        axis_err = abs(float(pos_err[selected_axis])) if selected_axis is not None else err_pos
+        if (err_pos, axis_err) < (best_err_pos, best_axis_err):
+            best_q = q.copy()
+            best_err_pos = err_pos
+            best_axis_err = axis_err
+        if err_pos < _POSITION_IK_TOL_M:
+            return q, {
+                "success": True,
+                "error_pos_m": err_pos,
+                "error_rot_rad": 0.0,
+                "iterations": iteration,
+                "mode": "pos_shoulder_elbow",
+            }
+
+        J = np.zeros((3, len(_POSITION_IK_ACTIVE_IDXS)), dtype=np.float64)
+        p0 = T_cur[:3, 3]
+        for col, idx in enumerate(_POSITION_IK_ACTIVE_IDXS):
+            q1 = q.copy()
+            q1[idx] += eps
+            T1 = fk_fn(q1)
+            J[:, col] = (T1[:3, 3] - p0) / eps
+
+        dq_active = J.T @ np.linalg.solve(J @ J.T + damping**2 * np.eye(3), pos_err)
+        norm_dq = float(np.linalg.norm(dq_active))
+        if norm_dq > 0.3:
+            dq_active *= 0.3 / norm_dq
+
+        q_next = q.copy()
+        for col, idx in enumerate(_POSITION_IK_ACTIVE_IDXS):
+            q_next[idx] += dq_active[col]
+        q = _clamp_q(q_next, limits)
+        q[4:] = q_init[4:]
+
+    T_cur = fk_fn(best_q)
+    err_pos = float(np.linalg.norm(T_des[:3, 3] - T_cur[:3, 3]))
+    axis_err = abs(float(T_des[selected_axis, 3] - T_cur[selected_axis, 3])) if selected_axis is not None else err_pos
+    if (
+        selected_axis is not None
+        and axis_err < _POSITION_IK_AXIS_TOL_M
+        and err_pos < _POSITION_IK_SOFT_LIMIT_M
+    ):
+        return best_q, {
+            "success": True,
+            "error_pos_m": err_pos,
+            "error_rot_rad": 0.0,
+            "iterations": max_iter,
+            "mode": "pos_axis_clamped",
+            "axis_error_m": axis_err,
+        }
+    return None, {
+        "success": False,
+        "error_pos_m": err_pos,
+        "error_rot_rad": 0.0,
+        "iterations": max_iter,
+        "mode": "pos_shoulder_elbow",
     }
 
 
@@ -373,6 +469,8 @@ class ArmSdk:
         mirror: bool = True,
         fixed_joints: "Optional[List[int]]" = None,
         joint_weights: "Optional[np.ndarray]" = None,
+        position_only: bool = False,
+        selected_axis: "Optional[int]" = None,
         max_dq: float = 0.2,
         timeout: float = 3.0,
     ) -> Dict:
@@ -396,6 +494,12 @@ class ArmSdk:
             Per-joint cost weights.  Higher weight → joint moves less.
             Default: [4,4,4,2,1,1,1] — shoulder/hip costly, wrist/ankle cheap.
             Pass np.ones(7) for uniform (classic DLS) behaviour.
+        position_only : bool
+            If true, solve position with wrist joints held fixed and do not
+            constrain end-effector orientation. This matches ik_pose_cli_v3's
+            orientation-free x/y/z move mode.
+        selected_axis : int, optional
+            Position axis index used for soft axis-clamped success near limits.
         max_dq : float
             Per-joint safety clamp on the IK step (rad).
 
@@ -429,14 +533,25 @@ class ArmSdk:
             solved = False
             for scale in scales:
                 T_scaled = _apply_pose_increment(T_cur, arm_inc * scale)
-                q_sol, info = _solve_dls(
-                    self._fk[a].compute_arm, T_scaled, q_arm, limits,
-                    fixed=fixed, weights=w,
-                    max_iter=self._ik[a].max_iter,
-                    damping=self._ik[a].damping,
-                    tol_pos=self._ik[a].tol_pos_m,
-                    tol_rot=self._ik[a].tol_rot_rad,
-                )
+                if position_only:
+                    q_sol, info = _solve_position_shoulder_elbow(
+                        self._fk[a].compute_arm,
+                        T_scaled,
+                        q_arm,
+                        limits,
+                        selected_axis=selected_axis,
+                        max_iter=self._ik[a].max_iter,
+                        damping=self._ik[a].damping,
+                    )
+                else:
+                    q_sol, info = _solve_dls(
+                        self._fk[a].compute_arm, T_scaled, q_arm, limits,
+                        fixed=fixed, weights=w,
+                        max_iter=self._ik[a].max_iter,
+                        damping=self._ik[a].damping,
+                        tol_pos=self._ik[a].tol_pos_m,
+                        tol_rot=self._ik[a].tol_rot_rad,
+                    )
                 if q_sol is None:
                     continue
 

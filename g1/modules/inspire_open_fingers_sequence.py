@@ -8,6 +8,7 @@ import socket
 import struct
 import time
 from collections.abc import Iterable, Sequence
+from contextlib import ExitStack
 from dataclasses import dataclass
 
 # Modbus register addresses for the Inspire hand
@@ -141,6 +142,13 @@ def normalize_hand(value: str) -> str:
     raise ValueError("hand must be 'left' or 'right'")
 
 
+def normalize_hands(value: str) -> tuple[str, ...]:
+    hand = str(value).strip().lower()
+    if hand in {"b", "both", "both_hands", "both-hands"}:
+        return ("left", "right")
+    return (normalize_hand(hand),)
+
+
 def parse_order(value: str) -> tuple[str, ...]:
     fingers = tuple(part.strip().lower().replace("-", "_") for part in value.split(",") if part.strip())
     if not fingers:
@@ -228,43 +236,53 @@ def run_sequence(
     force: int,
     dry_run: bool,
 ) -> None:
-    side = normalize_hand(hand)
-    config = HAND_CONFIGS[side]
+    sides = normalize_hands(hand)
     cycle = 1
 
-    with (ModbusTcp(config.ip, config.port, config.unit_id) if not dry_run else null_client()) as client:
-        if client is not None:
-            client.write_single_register(CLEAR_ERROR_REGISTER, 1)
-
-        current = list(HAND_CLOSE_TARGET)
-        while True:
-            print(f"{side}: cycle {cycle} closing all fingers")
-            current = ramp_to_target(
-                client,
-                current,
-                HAND_CLOSE_TARGET,
-                duration_s=reset_duration_s,
-                rate_hz=rate_hz,
-                speed=speed,
-                force=force,
-                dry_run=dry_run,
+    with ExitStack() as stack:
+        clients: dict[str, ModbusTcp | None] = {}
+        for side in sides:
+            config = HAND_CONFIGS[side]
+            client = (
+                stack.enter_context(ModbusTcp(config.ip, config.port, config.unit_id))
+                if not dry_run
+                else stack.enter_context(null_client())
             )
-            if closed_hold_s > 0:
-                time.sleep(float(closed_hold_s))
+            clients[side] = client
+            if client is not None:
+                client.write_single_register(CLEAR_ERROR_REGISTER, 1)
 
-            for finger in order:
-                print(f"{side}: opening {finger}")
-                target = open_next_finger(current, finger)
-                current = ramp_to_target(
-                    client,
-                    current,
-                    target,
-                    duration_s=open_duration_s,
+        current = {side: list(HAND_CLOSE_TARGET) for side in sides}
+        while True:
+            for side in sides:
+                print(f"{side}: cycle {cycle} closing all fingers")
+                current[side] = ramp_to_target(
+                    clients[side],
+                    current[side],
+                    HAND_CLOSE_TARGET,
+                    duration_s=reset_duration_s,
                     rate_hz=rate_hz,
                     speed=speed,
                     force=force,
                     dry_run=dry_run,
                 )
+            if closed_hold_s > 0:
+                time.sleep(float(closed_hold_s))
+
+            for finger in order:
+                for side in sides:
+                    print(f"{side}: opening {finger}")
+                    target = open_next_finger(current[side], finger)
+                    current[side] = ramp_to_target(
+                        clients[side],
+                        current[side],
+                        target,
+                        duration_s=open_duration_s,
+                        rate_hz=rate_hz,
+                        speed=speed,
+                        force=force,
+                        dry_run=dry_run,
+                    )
                 if between_fingers_s > 0:
                     time.sleep(float(between_fingers_s))
 
@@ -290,7 +308,8 @@ def parse_args() -> argparse.Namespace:
             "one after another."
         )
     )
-    parser.add_argument("--hand", choices=("left", "right"), default="right")
+    parser.add_argument("--hand", choices=("left", "right", "both"), default="right")
+    parser.add_argument("--both-hands", action="store_true", help="Run the sequence on both hands.")
     parser.add_argument(
         "--order",
         type=parse_order,
@@ -313,7 +332,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     run_sequence(
-        args.hand,
+        "both" if args.both_hands else args.hand,
         order=args.order,
         open_duration_s=args.open_duration_s,
         reset_duration_s=args.reset_duration_s,

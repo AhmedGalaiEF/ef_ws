@@ -6,6 +6,7 @@ import base64
 import html
 import json
 import os
+import re
 import shlex
 import struct
 import subprocess
@@ -58,6 +59,54 @@ DIAGNOSTIC_COMMANDS: dict[str, list[str]] = {
 }
 
 DIAGNOSTIC_PATH_COMMANDS = {"du"}
+SYSTEM_DIAGNOSTIC_COMMANDS = (
+    "date",
+    "hostname",
+    "uptime",
+    "uname",
+    "free",
+    "df",
+    "ip_addr",
+    "ip_route",
+    "ss_listen",
+    "lsusb",
+    "systemctl_failed",
+    "journal_errors",
+)
+
+FILLER_TEXTS = {
+    "ah",
+    "eh",
+    "er",
+    "hmm",
+    "hm",
+    "mm",
+    "uh",
+    "um",
+    "ok",
+    "okay",
+    "yes",
+    "yeah",
+    "what",
+    "and",
+    "i",
+    "嗯",
+    "嗯嗯",
+    "呃",
+    "啊",
+    "う",
+}
+SPEECH_ECHO_PHRASES = (
+    "i heard you",
+    "i do not know how",
+    "do not know how",
+    "opened right hand",
+    "opened left hand",
+    "closed right hand",
+    "closed left hand",
+    "moved right end effector",
+    "moved left end effector",
+)
 
 
 def clamp(value: float, low: float, high: float) -> float:
@@ -66,6 +115,28 @@ def clamp(value: float, low: float, high: float) -> float:
 
 def json_dumps(data: Any) -> bytes:
     return json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+
+
+def decode_audio_payload(raw: str) -> dict[str, Any]:
+    try:
+        payload = json.loads(raw)
+        if isinstance(payload, dict):
+            return payload
+    except json.JSONDecodeError:
+        pass
+    return {"raw": raw, "text": raw}
+
+
+def normalize_prompt(text: str) -> str:
+    return " ".join(str(text).strip().lower().split())
+
+
+def strip_prompt_punctuation(text: str) -> str:
+    return str(text).strip(" \t\r\n.,!?;:，。！？；：、\"'")
+
+
+def robot_say_once_script() -> str:
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "robot_say_once.py")
 
 
 @dataclass
@@ -266,6 +337,10 @@ class NaiveVLA:
         system_prompt: str = DEFAULT_SYSTEM_PROMPT,
         allow_diagnostics: bool = True,
         allow_web_search: bool = True,
+        speak_answers: bool = False,
+        speech_volume: int | None = None,
+        speech_language: str | None = None,
+        hand_type: str = "dex3",
     ) -> None:
         self.receiver = receiver
         self.iface = str(iface)
@@ -277,6 +352,10 @@ class NaiveVLA:
         self.system_prompt = str(system_prompt)
         self.allow_diagnostics = bool(allow_diagnostics)
         self.allow_web_search = bool(allow_web_search)
+        self.speak_answers = bool(speak_answers)
+        self.speech_volume = None if speech_volume is None else int(clamp(speech_volume, 0, 100))
+        self.speech_language = speech_language
+        self.hand_type = self._normalize_hand_type(hand_type)
         self._robot: Robot | None = None
         self._arm_sdk: Any = None
         self._lock = threading.Lock()
@@ -285,6 +364,13 @@ class NaiveVLA:
         return {
             "get_visual_context": self.get_visual_context,
             "describe_visual_context": self.describe_visual_context,
+            "speak": self.speak,
+            "say": self.speak,
+            "run_prompt": self.run_prompt,
+            "set_hand_type": self.set_hand_type,
+            "get_hand_type": self.get_hand_type,
+            "hand_open": self.hand_open,
+            "hand_close": self.hand_close,
             "loco_move": self.loco_move,
             "move_for": self.move_for,
             "stop": self.stop,
@@ -293,8 +379,86 @@ class NaiveVLA:
             "release_arms": self.release_arms,
             "ik_move_ee_pose": self.ik_move_ee_pose,
             "run_diagnostic_command": self.run_diagnostic_command,
+            "diagnose_system": self.diagnose_system,
             "web_search": self.web_search,
         }
+
+    def run_prompt(self, prompt: str, *, speak: bool = True) -> dict[str, Any]:
+        text = " ".join(str(prompt).split())
+        if not text:
+            raise ValueError("prompt is required")
+        normalized = normalize_prompt(text)
+        result: dict[str, Any] = {"ok": True, "prompt": text, "matched": None}
+
+        if self._prompt_requests_visual_description(normalized):
+            desc = self.describe_visual_context(prompt=text, speak=bool(speak))
+            result.update({"matched": "describe_visual_context", "result": desc})
+            return result
+
+        if self._prompt_requests_system_diagnosis(normalized):
+            diag = self.diagnose_system(speak=bool(speak))
+            result.update({"matched": "diagnose_system", "result": diag, "speech": diag.get("speech")})
+            return result
+
+        hand_match = re.search(r"\b(open|upen|close|clothes|those)\s+(?:the\s+)?(left|right|both)\s+hands?\b", normalized)
+        if hand_match is None:
+            hand_match = re.search(r"\b(left|right|both)\s+hands?\s+(open|upen|close|clothes|those)\b", normalized)
+            if hand_match is not None:
+                hand = hand_match.group(1)
+                action = hand_match.group(2)
+            else:
+                hand = action = ""
+        else:
+            action = hand_match.group(1)
+            hand = hand_match.group(2)
+        if action == "upen":
+            action = "open"
+        if action in {"clothes", "those"}:
+            action = "close"
+        if action in {"open", "close"} and hand:
+            tool_result = self.hand_open(hand) if action == "open" else self.hand_close(hand)
+            reply = f"{action.capitalize()}ed {hand} hand."
+            speech = self._speak_feedback(reply, speak)
+            result.update({"matched": f"hand_{action}", "result": tool_result, "speech": speech})
+            return result
+
+        if "shake" in normalized or "takeake" in normalized:
+            tool_result = self.hand_shake()
+            speech = self._speak_feedback("Shaking hand.", speak)
+            result.update({"matched": "hand_shake", "result": tool_result, "speech": speech})
+            return result
+
+        ee = self._parse_ee_prompt(normalized)
+        if ee is not None:
+            tool_result = self.ik_move_ee_pose(**ee)
+            axis = next((key[1:] for key in ("dx", "dy", "dz") if abs(float(ee[key])) > 0), "pose")
+            reply = f"Moved {ee['arm']} end effector {axis} by {abs(next(float(ee[k]) for k in ('dx', 'dy', 'dz') if abs(float(ee[k])) > 0)):.2f} meters."
+            speech = self._speak_feedback(reply, speak)
+            result.update({"matched": "ik_move_ee_pose", "args": ee, "result": tool_result, "speech": speech})
+            return result
+
+        loco = self._parse_loco_prompt(normalized)
+        if loco is not None:
+            tool_result = self.move_for(**loco)
+            speech = self._speak_feedback("Moving.", speak)
+            result.update({"matched": "move_for", "args": loco, "result": tool_result, "speech": speech})
+            return result
+
+        if "release arm" in normalized or "release arms" in normalized:
+            tool_result = self.release_arms()
+            speech = self._speak_feedback("Released arms.", speak)
+            result.update({"matched": "release_arms", "result": tool_result, "speech": speech})
+            return result
+
+        if "stop" in normalized:
+            tool_result = self.stop()
+            speech = self._speak_feedback("Stopped.", speak)
+            result.update({"matched": "stop", "result": tool_result, "speech": speech})
+            return result
+
+        message = "I heard you, but I do not know how to run that command yet."
+        result.update({"ok": False, "matched": None, "error": message, "speech": None})
+        return result
 
     def _get_robot(self) -> Robot:
         if self.dry_run:
@@ -319,24 +483,139 @@ class NaiveVLA:
         snap = self.receiver.snapshot()
         ctx = snap.to_context()
         ctx["source"] = self.receiver.endpoint
+        ctx["hand_type"] = self.hand_type
         ctx["summary"] = self._heuristic_description(ctx)
         return ctx
 
-    def describe_visual_context(self, prompt: str | None = None, *, use_ollama: bool = True) -> dict[str, Any]:
+    def describe_visual_context(
+        self,
+        prompt: str | None = None,
+        *,
+        use_ollama: bool = True,
+        speak: bool | None = None,
+    ) -> dict[str, Any]:
         ctx = self.get_visual_context()
         snap = self.receiver.snapshot()
         heuristic = str(ctx["summary"])
+        should_speak = self.speak_answers if speak is None else bool(speak)
         if not use_ollama or snap.rgb_jpeg is None:
-            return {"description": heuristic, "context": ctx, "model": None}
+            return self._description_result(heuristic, ctx, None, should_speak)
         user_prompt = prompt or (
             "Describe the visible scene for a humanoid robot. Include nearby obstacles, "
             "reachable objects, people, floor space, and anything unsafe."
         )
         try:
             description = self._ask_ollama_vision(user_prompt, snap.rgb_jpeg, ctx)
-            return {"description": description, "context": ctx, "model": self.vision_model}
+            return self._description_result(description, ctx, self.vision_model, should_speak)
         except Exception as exc:
-            return {"description": heuristic, "context": ctx, "model": None, "error": str(exc)}
+            result = self._description_result(heuristic, ctx, None, should_speak)
+            result["error"] = str(exc)
+            return result
+
+    def speak(
+        self,
+        text: str,
+        volume: int | None = None,
+        language: str | None = None,
+    ) -> dict[str, Any]:
+        message = " ".join(str(text).split())
+        if not message:
+            raise ValueError("text is required")
+        if len(message) > 500:
+            message = message[:500].rsplit(" ", 1)[0] + "..."
+        use_volume = self.speech_volume if volume is None else int(clamp(volume, 0, 100))
+        use_language = self.speech_language if language is None else language
+        if self.dry_run:
+            return {
+                "ok": True,
+                "dry_run": True,
+                "command": "speak",
+                "text": message,
+                "volume": use_volume,
+                "language": use_language,
+            }
+        command = [
+            sys.executable,
+            robot_say_once_script(),
+            message,
+            "--iface",
+            self.iface,
+            "--domain-id",
+            str(self.domain_id),
+        ]
+        if use_volume is not None:
+            command.extend(["--volume", str(use_volume)])
+        if use_language:
+            command.extend(["--language", str(use_language)])
+        env = os.environ.copy()
+        env.setdefault("CYCLONEDDS_HOME", "/home/unitree/cyclonedds_ws/install/cyclonedds")
+        env.setdefault("CYCLONEDDS_URI", "/home/unitree/cyclonedds_ws/cyclonedds.xml")
+        completed = subprocess.run(
+            command,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=45.0,
+            check=False,
+        )
+        output = (completed.stdout or "").strip()
+        return {
+            "ok": completed.returncode == 0,
+            "code": completed.returncode,
+            "text": message,
+            "volume": use_volume,
+            "language": use_language,
+            "output": output[-4000:],
+        }
+
+    def set_hand_type(self, hand_type: str) -> dict[str, Any]:
+        selected = self._normalize_hand_type(hand_type)
+        self.hand_type = selected
+        return {"ok": True, "hand_type": self.hand_type}
+
+    def get_hand_type(self) -> dict[str, Any]:
+        return {"ok": True, "hand_type": self.hand_type, "available": ["dummy", "dex3", "inspire"]}
+
+    def hand_open(
+        self,
+        hand: str = "right",
+        hold_s: float = 0.6,
+        rate_hz: float = 50.0,
+        ramp_s: float | None = None,
+        speed: int = 200,
+        force: int = 200,
+    ) -> dict[str, Any]:
+        hands = self._normalize_hand_selection(hand)
+        return self._dispatch_hand_motion(
+            "open",
+            hands,
+            hold_s=hold_s,
+            rate_hz=rate_hz,
+            ramp_s=ramp_s,
+            speed=speed,
+            force=force,
+        )
+
+    def hand_close(
+        self,
+        hand: str = "right",
+        hold_s: float = 0.6,
+        rate_hz: float = 50.0,
+        ramp_s: float | None = None,
+        speed: int = 200,
+        force: int = 200,
+    ) -> dict[str, Any]:
+        hands = self._normalize_hand_selection(hand)
+        return self._dispatch_hand_motion(
+            "close",
+            hands,
+            hold_s=hold_s,
+            rate_hz=rate_hz,
+            ramp_s=ramp_s,
+            speed=speed,
+            force=force,
+        )
 
     def loco_move(self, vx: float = 0.0, vy: float = 0.0, vyaw: float = 0.0) -> dict[str, Any]:
         vx = clamp(vx, -0.6, 0.6)
@@ -411,6 +690,7 @@ class NaiveVLA:
         dyaw: float = 0.0,
         arm: str = "right",
         mirror: bool = True,
+        lock_orientation: bool = False,
     ) -> dict[str, Any]:
         side = str(arm).strip().lower()
         if side not in {"left", "right", "both"}:
@@ -423,10 +703,33 @@ class NaiveVLA:
             clamp(dpitch, -0.5, 0.5),
             clamp(dyaw, -0.5, 0.5),
         ]
+        position_only = not bool(lock_orientation) and not any(abs(v) > 1e-9 for v in inc[3:])
+        selected_axis = next((idx for idx, value in enumerate(inc[:3]) if abs(value) > 1e-9), None)
         if self.dry_run:
-            return {"ok": True, "dry_run": True, "command": "ik_move_ee_pose", "increment": inc, "arm": side}
-        info = self._get_arm_sdk().ik_move_EE(inc, arm=side, mirror=bool(mirror))
-        return {"ok": bool(info.get("success")), "arm": side, "increment": inc, "result": info}
+            return {
+                "ok": True,
+                "dry_run": True,
+                "command": "ik_move_ee_pose",
+                "increment": inc,
+                "arm": side,
+                "position_only": position_only,
+                "selected_axis": selected_axis,
+            }
+        info = self._get_arm_sdk().ik_move_EE(
+            inc,
+            arm=side,
+            mirror=bool(mirror),
+            position_only=position_only,
+            selected_axis=selected_axis,
+        )
+        return {
+            "ok": bool(info.get("success")),
+            "arm": side,
+            "increment": inc,
+            "position_only": position_only,
+            "selected_axis": selected_axis,
+            "result": info,
+        }
 
     def run_diagnostic_command(
         self,
@@ -489,6 +792,26 @@ class NaiveVLA:
             "output": output,
         }
 
+    def diagnose_system(
+        self,
+        *,
+        speak: bool = False,
+        timeout_s: float = 4.0,
+        max_output_chars: int = 8000,
+    ) -> dict[str, Any]:
+        if not self.allow_diagnostics:
+            raise RuntimeError("Diagnostic shell tools are disabled.")
+        results: dict[str, Any] = {}
+        for command in SYSTEM_DIAGNOSTIC_COMMANDS:
+            results[command] = self.run_diagnostic_command(
+                command,
+                timeout_s=timeout_s,
+                max_output_chars=max_output_chars,
+            )
+        summary = self._summarize_system_diagnostics(results)
+        speech = self._speak_feedback(summary, speak)
+        return {"ok": True, "summary": summary, "results": results, "speech": speech}
+
     def web_search(self, query: str, max_results: int = 5, timeout_s: float = 8.0) -> dict[str, Any]:
         if not self.allow_web_search:
             raise RuntimeError("Web search tool is disabled.")
@@ -514,6 +837,250 @@ class NaiveVLA:
             "elapsed_s": round(time.time() - started, 3),
             "results": self._parse_duckduckgo_results(raw, max_results),
         }
+
+    def _description_result(
+        self,
+        description: str,
+        context: dict[str, Any],
+        model: str | None,
+        speak: bool,
+    ) -> dict[str, Any]:
+        result: dict[str, Any] = {"description": description, "context": context, "model": model}
+        if speak:
+            try:
+                result["speech"] = self.speak(description)
+            except Exception as exc:
+                result["speech"] = {"ok": False, "error": str(exc)}
+        return result
+
+    @staticmethod
+    def _prompt_requests_visual_description(normalized: str) -> bool:
+        visual_words = ("camera", "visible", "see", "seeing", "objects", "object", "scene", "visual")
+        describe_words = ("describe", "what", "tell me", "look")
+        return any(word in normalized for word in visual_words) and any(word in normalized for word in describe_words)
+
+    @staticmethod
+    def _prompt_requests_system_diagnosis(normalized: str) -> bool:
+        return (
+            "diagnose" in normalized
+            or "diagnostic" in normalized
+            or "check system" in normalized
+            or "check the system" in normalized
+        ) and any(word in normalized for word in ("system", "jetson", "board", "computer", "robot"))
+
+    @staticmethod
+    def _parse_loco_prompt(normalized: str) -> dict[str, Any] | None:
+        if not any(word in normalized for word in ("walk", "go", "move", "step", "turn")):
+            return None
+        args = {"duration_s": 1.0, "vx": 0.0, "vy": 0.0, "vyaw": 0.0}
+        if "forward" in normalized or "ahead" in normalized:
+            args["vx"] = 0.2
+        elif "backward" in normalized or re.search(r"\bback\b", normalized):
+            args["vx"] = -0.15
+        elif "left" in normalized:
+            args["vyaw"] = 0.4 if "turn" in normalized else 0.0
+            args["vy"] = 0.15 if "turn" not in normalized else 0.0
+        elif "right" in normalized:
+            args["vyaw"] = -0.4 if "turn" in normalized else 0.0
+            args["vy"] = -0.15 if "turn" not in normalized else 0.0
+        else:
+            return None
+        return args
+
+    def _parse_ee_prompt(self, normalized: str) -> dict[str, Any] | None:
+        if not any(token in normalized for token in ("end effector", "ee", "arm", "hand", "hands", "wrist", "extend", "reach")):
+            return None
+        arm = "both" if "both" in normalized or "hands" in normalized else "left" if "left" in normalized else "right"
+        axis = None
+        sign = 1.0
+        for candidate in ("x", "y", "z"):
+            if re.search(rf"\b{candidate}\b", normalized):
+                axis = candidate
+                break
+        if axis is None:
+            if "up" in normalized or "higher" in normalized or "raise" in normalized or "lift" in normalized:
+                axis = "z"
+            elif "down" in normalized or "lower" in normalized:
+                axis = "z"
+                sign = -1.0
+            elif "forward" in normalized or "extend" in normalized or "reach" in normalized or "ahead" in normalized:
+                axis = "x"
+            elif "backward" in normalized or re.search(r"\bback\b", normalized):
+                axis = "x"
+                sign = -1.0
+            elif (
+                "away from body" in normalized
+                or "away from me" in normalized
+                or "away from bud" in normalized
+                or "away from bot" in normalized
+                or "away from butt" in normalized
+                or "away from bod" in normalized
+                or "outward" in normalized
+                or "to the side" in normalized
+            ):
+                axis = "y"
+                sign = self._outward_y_sign(arm)
+            elif "toward body" in normalized or "towards body" in normalized or "toward me" in normalized or "inward" in normalized:
+                axis = "y"
+                sign = -self._outward_y_sign(arm)
+            elif "left" in normalized or "right" in normalized:
+                axis = "y"
+                sign = 1.0 if "left" in normalized else -1.0
+        if axis is None:
+            return None
+
+        magnitude = 0.03
+        number_match = re.search(r"([-+]?\d+(?:\.\d+)?)\s*(cm|centimeter|centimeters|m|meter|meters)?", normalized)
+        if number_match:
+            raw = abs(float(number_match.group(1)))
+            unit = number_match.group(2) or "m"
+            magnitude = raw / 100.0 if unit.startswith("cm") or unit.startswith("centimeter") else raw
+        magnitude = clamp(magnitude, 0.005, 0.10)
+
+        negative_words = ("decrease", "reduce", "minus", "negative")
+        if any(word in normalized for word in negative_words):
+            sign *= -1.0
+
+        args = {
+            "arm": arm,
+            "dx": 0.0,
+            "dy": 0.0,
+            "dz": 0.0,
+            "droll": 0.0,
+            "dpitch": 0.0,
+            "dyaw": 0.0,
+            "lock_orientation": False,
+        }
+        args[f"d{axis}"] = sign * magnitude
+        return args
+
+    @staticmethod
+    def _outward_y_sign(arm: str) -> float:
+        if arm == "right":
+            return -1.0
+        return 1.0
+
+    @staticmethod
+    def _summarize_system_diagnostics(results: dict[str, Any]) -> str:
+        failed = [name for name, result in results.items() if not result.get("ok")]
+        parts: list[str] = []
+
+        uptime = str(results.get("uptime", {}).get("output", "")).strip()
+        if uptime:
+            parts.append("Uptime: " + " ".join(uptime.split()))
+
+        free = str(results.get("free", {}).get("output", "")).splitlines()
+        mem_line = next((line for line in free if line.lower().startswith("mem:")), "")
+        if mem_line:
+            fields = mem_line.split()
+            if len(fields) >= 7:
+                parts.append(f"Memory: {fields[2]} used, {fields[6]} available of {fields[1]}.")
+
+        df = str(results.get("df", {}).get("output", "")).splitlines()
+        root_line = next((line for line in df if line.rstrip().endswith(" /")), "")
+        if root_line:
+            fields = root_line.split()
+            if len(fields) >= 5:
+                parts.append(f"Root disk: {fields[4]} used, {fields[3]} free.")
+
+        services = str(results.get("systemctl_failed", {}).get("output", "")).strip()
+        if services and "0 loaded units listed" not in services.lower():
+            parts.append("There are failed systemd units.")
+        else:
+            parts.append("No failed systemd units reported.")
+
+        journal = str(results.get("journal_errors", {}).get("output", "")).strip()
+        if journal and "-- no entries --" not in journal.lower():
+            parts.append("Recent journal errors are present.")
+        else:
+            parts.append("No recent journal priority errors reported.")
+
+        if failed:
+            parts.append("Some diagnostic commands failed: " + ", ".join(failed) + ".")
+
+        return " ".join(parts) if parts else "System diagnostics completed, but no summary data was available."
+
+    def _speak_feedback(self, text: str, speak: bool) -> dict[str, Any] | None:
+        if not speak:
+            return None
+        try:
+            return self.speak(text)
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @staticmethod
+    def _normalize_hand_type(hand_type: str) -> str:
+        selected = str(hand_type).strip().lower()
+        if selected not in {"dummy", "dex3", "inspire"}:
+            raise ValueError("hand_type must be one of: dummy, dex3, inspire")
+        return selected
+
+    @staticmethod
+    def _normalize_hand_selection(hand: str) -> tuple[str, ...]:
+        side = str(hand).strip().lower()
+        if side in {"both", "all"}:
+            return ("left", "right")
+        if side in {"l", "left"}:
+            return ("left",)
+        if side in {"r", "right"}:
+            return ("right",)
+        raise ValueError("hand must be left, right, or both")
+
+    def _dispatch_hand_motion(
+        self,
+        action: str,
+        hands: tuple[str, ...],
+        *,
+        hold_s: float,
+        rate_hz: float,
+        ramp_s: float | None,
+        speed: int,
+        force: int,
+    ) -> dict[str, Any]:
+        hold_s = clamp(hold_s, 0.0, 5.0)
+        rate_hz = clamp(rate_hz, 5.0, 100.0)
+        speed = int(clamp(speed, 0, 1000))
+        force = int(clamp(force, 0, 1000))
+        selected = self.hand_type
+
+        if selected == "dummy" or self.dry_run:
+            return {
+                "ok": True,
+                "dry_run": self.dry_run,
+                "hand_type": selected,
+                "action": action,
+                "hands": list(hands),
+                "note": "dummy/no-op hand motion" if selected == "dummy" else "dry-run hand motion",
+            }
+
+        if selected == "dex3":
+            robot = self._get_robot()
+            for side in hands:
+                if action == "open":
+                    robot.hand_open(side, hold_s=hold_s, rate_hz=rate_hz, ramp_s=ramp_s)
+                else:
+                    robot.hand_close(side, hold_s=hold_s, rate_hz=rate_hz, ramp_s=ramp_s)
+            return {"ok": True, "hand_type": selected, "action": action, "hands": list(hands)}
+
+        if selected == "inspire":
+            from inspire_sdk import close_hand as inspire_close_hand
+            from inspire_sdk import open_hand as inspire_open_hand
+
+            for side in hands:
+                if action == "open":
+                    inspire_open_hand(side, speed=speed, force=force, hold=hold_s)
+                else:
+                    inspire_close_hand(side, speed=speed, force=force, hold=hold_s)
+            return {
+                "ok": True,
+                "hand_type": selected,
+                "action": action,
+                "hands": list(hands),
+                "speed": speed,
+                "force": force,
+            }
+
+        raise RuntimeError(f"Unhandled hand_type: {selected}")
 
     @staticmethod
     def _safe_diagnostic_path(path: str) -> str:
@@ -611,12 +1178,151 @@ class NaiveVLA:
         return " ".join(text.split()) or self._heuristic_description(context)
 
 
+class MicrophonePromptListener:
+    def __init__(
+        self,
+        vla: NaiveVLA,
+        *,
+        topic: str = "/audio_msg",
+        min_confidence: float = 0.0,
+        speak: bool = True,
+    ) -> None:
+        self.vla = vla
+        self.topic = str(topic)
+        self.min_confidence = float(min_confidence)
+        self.speak = bool(speak)
+        self._thread: threading.Thread | None = None
+        self._node: Any = None
+        self._rclpy: Any = None
+        self._running = False
+        self._last_index: int | None = None
+        self._last_text: str | None = None
+        self._last_ts = 0.0
+        self.last_event: dict[str, Any] | None = None
+
+    def start(self) -> bool:
+        try:
+            import rclpy
+            from rclpy.node import Node
+            from std_msgs.msg import String
+        except Exception as exc:
+            print(f"Microphone prompts disabled: ROS 2 Python imports failed: {exc}", file=sys.stderr)
+            return False
+
+        self._rclpy = rclpy
+        if not rclpy.ok():
+            rclpy.init(args=None)
+
+        listener = self
+
+        class PromptNode(Node):
+            def __init__(self) -> None:
+                super().__init__("naive_vla_microphone_prompts")
+                self.create_subscription(String, listener.topic, self.on_audio_msg, 10)
+                self.get_logger().info(f"Listening for microphone prompts on {listener.topic}")
+
+            def on_audio_msg(self, msg: Any) -> None:
+                listener._on_audio_msg(str(msg.data))
+
+        try:
+            self._node = PromptNode()
+        except Exception as exc:
+            print(f"Microphone prompts disabled: ROS 2 node creation failed: {exc}", file=sys.stderr)
+            try:
+                if rclpy.ok():
+                    rclpy.shutdown()
+            except Exception:
+                pass
+            return False
+
+        self._running = True
+        self._thread = threading.Thread(target=self._spin, name="mic-prompt-listener", daemon=True)
+        self._thread.start()
+        return True
+
+    def stop(self) -> None:
+        self._running = False
+        try:
+            if self._node is not None:
+                self._node.destroy_node()
+        except Exception:
+            pass
+        if self._thread is not None:
+            self._thread.join(timeout=1.0)
+        try:
+            if self._rclpy is not None and self._rclpy.ok():
+                self._rclpy.shutdown()
+        except Exception:
+            pass
+
+    def _spin(self) -> None:
+        assert self._rclpy is not None
+        while self._running:
+            try:
+                self._rclpy.spin_once(self._node, timeout_sec=0.1)
+            except Exception as exc:
+                print(f"Microphone prompt listener error: {exc}", file=sys.stderr)
+                time.sleep(0.2)
+
+    def _on_audio_msg(self, raw: str) -> None:
+        payload = decode_audio_payload(raw)
+        text = str(payload.get("text") or payload.get("raw") or "").strip()
+        confidence = float(payload.get("confidence", 0.0) or 0.0)
+        index = self._payload_index(payload)
+        now = time.time()
+        if not self._should_run(text, confidence, index, now):
+            return
+        print(f'[mic] prompt="{text}" confidence={confidence:.2f} index={index}', file=sys.stderr)
+        try:
+            result = self.vla.run_prompt(text, speak=self.speak)
+        except Exception as exc:
+            result = {"ok": False, "prompt": text, "error": str(exc)}
+            self.vla._speak_feedback("I could not run that command.", self.speak)
+        self.last_event = {"received_at": now, "payload": payload, "result": result}
+        print(f"[mic] result={json.dumps(result, ensure_ascii=False)}", file=sys.stderr)
+        self._last_index = index
+        self._last_text = text
+        self._last_ts = now
+
+    def _should_run(self, text: str, confidence: float, index: int | None, now: float) -> bool:
+        if not text or confidence < self.min_confidence:
+            return False
+        normalized = strip_prompt_punctuation(normalize_prompt(text))
+        if normalized in FILLER_TEXTS:
+            return False
+        if any(phrase in normalized for phrase in SPEECH_ECHO_PHRASES):
+            return False
+        if len(normalized) <= 2 and normalized not in {"up"}:
+            return False
+        if not any(char.isalnum() for char in text):
+            return False
+        if index is not None and index == self._last_index:
+            return False
+        if index is None and text == self._last_text and now - self._last_ts < 2.0:
+            return False
+        return True
+
+    @staticmethod
+    def _payload_index(payload: dict[str, Any]) -> int | None:
+        try:
+            value = payload.get("index")
+            return int(value) if value is not None else None
+        except Exception:
+            return None
+
+
 def make_handler(vla: NaiveVLA) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
         server_version = "NaiveVLA/0.1"
 
         def log_message(self, fmt: str, *args: Any) -> None:
-            print(f"[web] {self.address_string()} {fmt % args}", file=sys.stderr)
+            message = fmt % args
+            if (
+                ('"GET /rgb.jpg' in message or '"GET /depth.jpg' in message or '"GET /api/context' in message)
+                and ('" 200 ' in message or '" 204 ' in message)
+            ):
+                return
+            print(f"[web] {self.address_string()} {message}", file=sys.stderr)
 
         def do_GET(self) -> None:
             path = urllib.parse.urlparse(self.path).path
@@ -637,6 +1343,9 @@ def make_handler(vla: NaiveVLA) -> type[BaseHTTPRequestHandler]:
                         "diagnostics_enabled": vla.allow_diagnostics,
                         "diagnostic_commands": sorted(DIAGNOSTIC_COMMANDS),
                         "web_search_enabled": vla.allow_web_search,
+                        "speak_answers": vla.speak_answers,
+                        "hand_type": vla.hand_type,
+                        "hand_types": ["dummy", "dex3", "inspire"],
                     }
                 )
             elif path == "/favicon.ico":
@@ -672,7 +1381,7 @@ def make_handler(vla: NaiveVLA) -> type[BaseHTTPRequestHandler]:
             self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
-            self.wfile.write(body)
+            self._write_body(body)
 
         def _send_image(self, which: str) -> None:
             snap = vla.receiver.snapshot()
@@ -684,7 +1393,13 @@ def make_handler(vla: NaiveVLA) -> type[BaseHTTPRequestHandler]:
             self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
-            self.wfile.write(data)
+            self._write_body(data)
+
+        def _write_body(self, body: bytes) -> None:
+            try:
+                self.wfile.write(body)
+            except (BrokenPipeError, ConnectionResetError):
+                return
 
         def _placeholder_jpeg(self, which: str, message: str) -> bytes:
             img = np.zeros((360, 640, 3), dtype=np.uint8)
@@ -714,7 +1429,7 @@ def make_handler(vla: NaiveVLA) -> type[BaseHTTPRequestHandler]:
             self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
-            self.wfile.write(body)
+            self._write_body(body)
 
     return Handler
 
@@ -741,6 +1456,9 @@ INDEX_HTML = """<!doctype html>
     button { border: 1px solid #3f4a48; background: #25302d; color: #f4f7f3; border-radius: 6px; padding: 9px 8px; font: inherit; cursor: pointer; }
     button:hover { background: #32403c; }
     input { grid-column: span 2; min-width: 0; border: 1px solid #3f4a48; background: #0f1313; color: #eef1ed; border-radius: 6px; padding: 9px 8px; font: inherit; }
+    .radio-row { grid-column: span 3; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .radio-row label { border: 1px solid #3f4a48; background: #0f1313; border-radius: 6px; padding: 8px; font-size: 13px; display: flex; gap: 6px; align-items: center; justify-content: center; }
+    .radio-row input { grid-column: auto; min-width: auto; }
     .wide { grid-column: span 3; }
     .status { color: #adc0b8; font-size: 13px; padding-right: 4px; }
     @media (max-width: 900px) { main { grid-template-columns: 1fr; } .feeds { grid-template-columns: 1fr; } }
@@ -760,6 +1478,17 @@ INDEX_HTML = """<!doctype html>
       <div class="panel"><h2>Visual Context</h2><pre id="context">{}</pre></div>
       <div class="panel"><h2>Actions</h2>
         <div class="controls">
+          <div class="radio-row" id="handTypeRadios">
+            <label><input type="radio" name="handType" value="dummy"> Dummy</label>
+            <label><input type="radio" name="handType" value="dex3" checked> Dex3</label>
+            <label><input type="radio" name="handType" value="inspire"> Inspire</label>
+          </div>
+          <button onclick="act('hand_open',{hand:'left'})">Open L</button>
+          <button onclick="act('hand_open',{hand:'both'})">Open Both</button>
+          <button onclick="act('hand_open',{hand:'right'})">Open R</button>
+          <button onclick="act('hand_close',{hand:'left'})">Close L</button>
+          <button onclick="act('hand_close',{hand:'both'})">Close Both</button>
+          <button onclick="act('hand_close',{hand:'right'})">Close R</button>
           <button onclick="act('move_for',{duration_s:1.0,vx:0.2})">Forward</button>
           <button onclick="act('stop',{})">Stop</button>
           <button onclick="act('move_for',{duration_s:1.0,vx:-0.15})">Back</button>
@@ -769,6 +1498,11 @@ INDEX_HTML = """<!doctype html>
           <button class="wide" onclick="act('ik_move_ee_pose',{arm:'right',dx:0.04})">Right EE +X</button>
           <button class="wide" onclick="act('release_arms',{duration_s:3.0})">Release Arms</button>
           <button class="wide" onclick="describe()">Describe Visual Context</button>
+          <button class="wide" onclick="describe(true)">Describe + Speak</button>
+          <input id="prompttext" placeholder="test a spoken prompt">
+          <button onclick="runPrompt()">Run Prompt</button>
+          <input id="saytext" placeholder="text for robot to say">
+          <button onclick="say()">Say</button>
           <button onclick="act('run_diagnostic_command',{command:'free'})">free</button>
           <button onclick="act('run_diagnostic_command',{command:'df'})">df</button>
           <button onclick="act('run_diagnostic_command',{command:'du',path:'.'})">du</button>
@@ -790,21 +1524,42 @@ INDEX_HTML = """<!doctype html>
       const j = await r.json();
       document.getElementById('context').textContent = JSON.stringify(j, null, 2);
       document.getElementById('status').textContent = j.error || ('age ' + (j.age_s ?? 0).toFixed(2) + 's');
+      if (j.hand_type) {
+        const radio = document.querySelector(`input[name="handType"][value="${j.hand_type}"]`);
+        if (radio) radio.checked = true;
+      }
     }
     async function act(tool, args) {
       const r = await fetch('/api/action', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({tool, args})});
       document.getElementById('result').textContent = JSON.stringify(await r.json(), null, 2);
       refreshContext();
     }
-    async function describe() {
+    async function describe(speak=false) {
+      if (speak) {
+        await act('describe_visual_context', {speak: true});
+        return;
+      }
       const r = await fetch('/api/describe', {cache:'no-store'});
       document.getElementById('result').textContent = JSON.stringify(await r.json(), null, 2);
+    }
+    async function say() {
+      const text = document.getElementById('saytext').value;
+      await act('speak', {text});
+    }
+    async function runPrompt() {
+      const prompt = document.getElementById('prompttext').value;
+      await act('run_prompt', {prompt, speak: true});
     }
     async function search() {
       const query = document.getElementById('searchq').value;
       await act('web_search', {query, max_results: 5});
     }
-    setInterval(refreshImages, 250);
+    document.querySelectorAll('input[name="handType"]').forEach((radio) => {
+      radio.addEventListener('change', () => {
+        if (radio.checked) act('set_hand_type', {hand_type: radio.value});
+      });
+    });
+    setInterval(refreshImages, 500);
     setInterval(refreshContext, 1000);
     refreshImages();
     refreshContext();
@@ -833,6 +1588,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dry-run", action="store_true", help="Expose tools without sending robot SDK commands.")
     parser.add_argument("--no-diagnostics", action="store_true", help="Disable allowlisted diagnostic shell tools.")
     parser.add_argument("--no-web-search", action="store_true", help="Disable web_search tool.")
+    parser.add_argument("--speak-answers", action="store_true", help="Speak visual descriptions by default.")
+    parser.add_argument("--speech-volume", type=int, default=None, help="Optional robot speech volume 0-100.")
+    parser.add_argument("--speech-language", default=None, help="Optional TTS language, for example en or de.")
+    parser.add_argument("--hand-type", choices=("dummy", "dex3", "inspire"), default="dex3", help="Default hand hardware mode.")
+    parser.add_argument("--mic-topic", default="/audio_msg", help="ROS 2 ASR topic for spoken user prompts.")
+    parser.add_argument("--mic-min-confidence", type=float, default=0.0, help="Ignore ASR prompts below this confidence.")
+    parser.add_argument("--no-mic", action="store_true", help="Disable microphone prompt listener.")
+    parser.add_argument("--no-mic-speech", action="store_true", help="Do not speak feedback for microphone commands.")
     parser.add_argument("--describe-once", action="store_true", help="Print one visual description, then exit.")
     return parser.parse_args()
 
@@ -857,6 +1620,10 @@ def main() -> int:
         text_model=args.text_model,
         allow_diagnostics=not args.no_diagnostics,
         allow_web_search=not args.no_web_search,
+        speak_answers=args.speak_answers,
+        speech_volume=args.speech_volume,
+        speech_language=args.speech_language,
+        hand_type=args.hand_type,
     )
 
     if args.describe_once:
@@ -865,18 +1632,34 @@ def main() -> int:
         receiver.stop()
         return 0
 
+    mic_listener: MicrophonePromptListener | None = None
+    mic_started = False
+    if not args.no_mic:
+        mic_listener = MicrophonePromptListener(
+            vla,
+            topic=args.mic_topic,
+            min_confidence=args.mic_min_confidence,
+            speak=not args.no_mic_speech,
+        )
+        mic_started = mic_listener.start()
+
     server = ThreadingHTTPServer((str(args.web_host), int(args.web_port)), make_handler(vla))
     print(f"Naive VLA web UI: http://{args.web_host}:{args.web_port}")
     print(f"RGBD source: {receiver.endpoint}")
     print(f"Robot commands: {'disabled (--dry-run)' if args.dry_run else 'enabled'}")
     print(f"Diagnostics: {'disabled' if args.no_diagnostics else 'enabled (allowlisted)'}")
     print(f"Web search: {'disabled' if args.no_web_search else 'enabled'}")
+    print(f"Speech: {'answers enabled' if args.speak_answers else 'available as speak tool'}")
+    print(f"Hand type: {vla.hand_type}")
+    print(f"Microphone prompts: {'enabled on ' + args.mic_topic if mic_started else 'disabled'}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
         server.shutdown()
+        if mic_listener is not None:
+            mic_listener.stop()
         receiver.stop()
     return 0
 
