@@ -31,8 +31,10 @@ HAND_CONFIGS: dict[str, InspireHandConfig] = {
 
 # Register values are six angle targets in the Inspire RH56DFTP DOF order:
 # little, ring, middle, index, thumb bending, thumb rotation.
-HAND_OPEN_TARGET = [700, 700, 700, 700, 800, 0]
-HAND_CLOSE_TARGET = [0, 0, 0, 0, 1000, 600]
+#HAND_OPEN_TARGET = [700, 700, 700, 700, 700, 250]
+HAND_OPEN_TARGET = [1000, 1000, 1000, 1000, 1000, 250]
+#HAND_CLOSE_TARGET = [0, 0, 0, 0, 250, 1000]
+HAND_CLOSE_TARGET = [500, 500, 500, 500, 500, 250]
 
 # ModbusTcp is a simple Modbus TCP client implementation that supports writing single registers and multiple registers. It handles the Modbus TCP framing, transaction IDs, and basic error checking. The client can be used in a context manager to ensure proper connection management.
 class ModbusTcp:
