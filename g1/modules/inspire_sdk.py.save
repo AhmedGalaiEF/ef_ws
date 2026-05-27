@@ -143,7 +143,7 @@ def _normalize_side(hand: str) -> Side:
 
 # main block to demonstrate the usage of the open_hand and close_hand functions. It opens and closes the right hand with a hold time of 1 second between each action.
 if __name__ == "__main__":
-  while True:
+    while:
     open_hand("right", hold=1.0)
     close_hand("right", hold=1.0)
     open_hand("left", hold=1.0)
