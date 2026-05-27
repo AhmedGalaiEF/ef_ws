@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+
+# importing time and socket modules for handling timing and network communication
 from __future__ import annotations
 
 import argparse
@@ -8,7 +10,7 @@ import time
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
-
+# Modbus register addresses for the Inspire hand
 ANGLE_SET_REGISTER = 1486
 FORCE_SET_REGISTER = 1498
 SPEED_SET_REGISTER = 1522
@@ -21,6 +23,7 @@ class InspireHandConfig:
     port: int = 6000
     unit_id: int = 1
 
+# Configuration for the left and right Inspire hands. Update the IP addresses as needed.
 
 HAND_CONFIGS: dict[str, InspireHandConfig] = {
     "right": InspireHandConfig(ip="192.168.124.210"),
@@ -44,9 +47,11 @@ FINGER_TO_IDXS: dict[str, tuple[int, ...]] = {
     "thumb_rot": (5,),
 }
 
+# Default opening order for the fingers. Can be overridden with the --order argument.
 DEFAULT_OPEN_ORDER = ("thumb", "index", "middle", "ring", "little")
 
 
+# Modbus TCP client for communicating with the Inspire hand. Supports writing single and multiple registers.
 class ModbusTcp:
     def __init__(self, host: str, port: int = 6000, unit_id: int = 1, timeout: float = 2.0):
         self.host = host
