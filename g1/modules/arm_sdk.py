@@ -48,12 +48,12 @@ for _p in (_ROOT_DIR, _MODULES_DIR):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from dds_env import ensure_cyclonedds_environment
+from dds_env import ensure_channel_factory_initialized, ensure_cyclonedds_environment
 ensure_cyclonedds_environment()
 
 try:
     from unitree_sdk2py.core.channel import (
-        ChannelFactoryInitialize, ChannelPublisher, ChannelSubscriber,
+        ChannelPublisher, ChannelSubscriber,
     )
     from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
     from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_
@@ -389,7 +389,7 @@ class ArmSdk:
         self.waist_kp = float(waist_kp)
         self.waist_kd = float(waist_kd)
 
-        ChannelFactoryInitialize(int(domain_id), str(iface))
+        ensure_channel_factory_initialized(int(domain_id), str(iface))
 
         self._state = _UpperBodyStateReader()
         self._pub   = _ArmSdkPublisher()

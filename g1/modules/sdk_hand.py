@@ -5,12 +5,12 @@ import time
 import threading
 from typing import Any, Dict
 
-from dds_env import ensure_cyclonedds_environment
+from dds_env import ensure_channel_factory_initialized, ensure_cyclonedds_environment
 
 ensure_cyclonedds_environment()
 
 from unitree_sdk2py.core import channel as channel_module
-from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelPublisher, ChannelSubscriber
+from unitree_sdk2py.core.channel import ChannelPublisher, ChannelSubscriber
 from unitree_sdk2py.idl.default import unitree_hg_msg_dds__HandCmd_
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import HandCmd_
 
@@ -218,7 +218,7 @@ class Dex3HandController:
         self.hand = side
         self.iface = str(iface)
         self.domain_id = int(domain_id)
-        ChannelFactoryInitialize(self.domain_id, self.iface)
+        ensure_channel_factory_initialized(self.domain_id, self.iface)
         self._pub = ChannelPublisher(TOPIC_HAND_BY_SIDE[self.hand], HandCmd_)
         self._pub.Init()
         self._last_targets: list[float] | None = None

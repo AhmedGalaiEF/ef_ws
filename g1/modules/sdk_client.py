@@ -22,7 +22,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from dds_env import ensure_cyclonedds_environment
+from dds_env import ensure_channel_factory_initialized, ensure_cyclonedds_environment
 from sdk_audio import RobotAudio
 from sdk_boot import create_loco_client, rpc_get_int
 from sdk_hand import Dex3HandController
@@ -257,12 +257,12 @@ class ImuData:
 
 class _ArmSdkPublisher:
     def __init__(self, iface: str, domain_id: int) -> None:
-        from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelPublisher
+        from unitree_sdk2py.core.channel import ChannelPublisher
         from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
         from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_
         from unitree_sdk2py.utils.crc import CRC
 
-        ChannelFactoryInitialize(int(domain_id), str(iface))
+        ensure_channel_factory_initialized(int(domain_id), str(iface))
         self._pub = ChannelPublisher("rt/arm_sdk", LowCmd_)
         self._pub.Init()
         self._crc = CRC()

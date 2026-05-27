@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import difflib
 import html
 import json
 import os
@@ -343,8 +344,8 @@ class NaiveVLA:
         hand_type: str = "dex3",
     ) -> None:
         self.receiver = receiver
-        self.iface = str(iface)
-        self.domain_id = int(domain_id)
+        self.iface = "eth0"
+        self.domain_id = 0
         self.dry_run = bool(dry_run)
         self.ollama_url = str(ollama_url).rstrip("/")
         self.vision_model = str(vision_model)
@@ -359,6 +360,26 @@ class NaiveVLA:
         self._robot: Robot | None = None
         self._arm_sdk: Any = None
         self._lock = threading.Lock()
+
+    def preinitialize_robot_sdk(self, *, arm: bool = True) -> dict[str, Any]:
+        status: dict[str, Any] = {"ok": True, "iface": self.iface, "domain_id": self.domain_id}
+        if self.dry_run:
+            status["dry_run"] = True
+            return status
+        try:
+            self._get_robot()
+            status["robot"] = {"ok": True}
+        except Exception as exc:
+            status["ok"] = False
+            status["robot"] = {"ok": False, "error": str(exc)}
+        if arm:
+            try:
+                self._get_arm_sdk()
+                status["arm_sdk"] = {"ok": True}
+            except Exception as exc:
+                status["ok"] = False
+                status["arm_sdk"] = {"ok": False, "error": str(exc)}
+        return status
 
     def tools(self) -> dict[str, Callable[..., Any]]:
         return {
@@ -399,6 +420,10 @@ class NaiveVLA:
             diag = self.diagnose_system(speak=bool(speak))
             result.update({"matched": "diagnose_system", "result": diag, "speech": diag.get("speech")})
             return result
+
+        fuzzy_intent = self._fuzzy_builtin_intent(normalized)
+        if fuzzy_intent is not None:
+            return self._run_intent(text, fuzzy_intent, speak=bool(speak), source="fuzzy")
 
         hand_match = re.search(r"\b(open|upen|close|clothes|those)\s+(?:the\s+)?(left|right|both)\s+hands?\b", normalized)
         if hand_match is None:
@@ -455,6 +480,10 @@ class NaiveVLA:
             speech = self._speak_feedback("Stopped.", speak)
             result.update({"matched": "stop", "result": tool_result, "speech": speech})
             return result
+
+        ollama_intent = self._interpret_prompt_with_ollama(text)
+        if ollama_intent is not None:
+            return self._run_intent(text, ollama_intent, speak=bool(speak), source="ollama")
 
         message = "I heard you, but I do not know how to run that command yet."
         result.update({"ok": False, "matched": None, "error": message, "speech": None})
@@ -534,39 +563,14 @@ class NaiveVLA:
                 "volume": use_volume,
                 "language": use_language,
             }
-        command = [
-            sys.executable,
-            robot_say_once_script(),
-            message,
-            "--iface",
-            self.iface,
-            "--domain-id",
-            str(self.domain_id),
-        ]
-        if use_volume is not None:
-            command.extend(["--volume", str(use_volume)])
-        if use_language:
-            command.extend(["--language", str(use_language)])
-        env = os.environ.copy()
-        env.setdefault("CYCLONEDDS_HOME", "/home/unitree/cyclonedds_ws/install/cyclonedds")
-        env.setdefault("CYCLONEDDS_URI", "/home/unitree/cyclonedds_ws/cyclonedds.xml")
-        completed = subprocess.run(
-            command,
-            env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            timeout=45.0,
-            check=False,
-        )
-        output = (completed.stdout or "").strip()
+        code = int(self._get_robot().say(message, volume=use_volume, language=use_language))
         return {
-            "ok": completed.returncode == 0,
-            "code": completed.returncode,
+            "ok": code == 0,
+            "code": code,
             "text": message,
             "volume": use_volume,
             "language": use_language,
-            "output": output[-4000:],
+            "output": f"Robot.say returned {code}",
         }
 
     def set_hand_type(self, hand_type: str) -> dict[str, Any]:
@@ -863,10 +867,162 @@ class NaiveVLA:
     def _prompt_requests_system_diagnosis(normalized: str) -> bool:
         return (
             "diagnose" in normalized
+            or "dgnognose" in normalized
+            or "diagnognose" in normalized
+            or "diagno" in normalized
             or "diagnostic" in normalized
             or "check system" in normalized
             or "check the system" in normalized
         ) and any(word in normalized for word in ("system", "jetson", "board", "computer", "robot"))
+
+    def _fuzzy_builtin_intent(self, normalized: str) -> dict[str, Any] | None:
+        words = re.findall(r"[a-z]+", normalized)
+        best_diagnose = max((difflib.SequenceMatcher(None, word, "diagnose").ratio() for word in words), default=0.0)
+        if best_diagnose >= 0.58 and any(word in normalized for word in ("system", "jetson", "board", "computer", "robot")):
+            return {"intent": "diagnose_system", "confidence": best_diagnose}
+        best_shake = max((difflib.SequenceMatcher(None, word, "shake").ratio() for word in words), default=0.0)
+        if best_shake >= 0.72 and ("hand" in normalized or "hands" in normalized):
+            return {"intent": "hand_shake", "confidence": best_shake}
+        return None
+
+    def _run_intent(
+        self,
+        prompt: str,
+        intent: dict[str, Any],
+        *,
+        speak: bool,
+        source: str,
+    ) -> dict[str, Any]:
+        name = str(intent.get("intent") or intent.get("tool") or "").strip()
+        result: dict[str, Any] = {
+            "ok": True,
+            "prompt": prompt,
+            "matched": name or None,
+            "source": source,
+            "intent": intent,
+        }
+        if name == "diagnose_system":
+            diag = self.diagnose_system(speak=speak)
+            result.update({"result": diag, "speech": diag.get("speech")})
+            return result
+        if name == "describe_visual_context":
+            desc = self.describe_visual_context(prompt=prompt, speak=speak)
+            result.update({"result": desc})
+            return result
+        if name == "hand_open":
+            hand = str(intent.get("hand") or "right")
+            tool_result = self.hand_open(hand)
+            speech = self._speak_feedback(f"Opened {hand} hand.", speak)
+            result.update({"result": tool_result, "speech": speech})
+            return result
+        if name == "hand_close":
+            hand = str(intent.get("hand") or "right")
+            tool_result = self.hand_close(hand)
+            speech = self._speak_feedback(f"Closed {hand} hand.", speak)
+            result.update({"result": tool_result, "speech": speech})
+            return result
+        if name == "hand_shake":
+            tool_result = self.hand_shake()
+            speech = self._speak_feedback("Shaking hand.", speak)
+            result.update({"result": tool_result, "speech": speech})
+            return result
+        if name == "ik_move_ee_pose":
+            args = {
+                "arm": str(intent.get("arm") or "right"),
+                "dx": float(intent.get("dx") or 0.0),
+                "dy": float(intent.get("dy") or 0.0),
+                "dz": float(intent.get("dz") or 0.0),
+                "lock_orientation": False,
+            }
+            tool_result = self.ik_move_ee_pose(**args)
+            speech = self._speak_feedback("Moved end effector.", speak)
+            result.update({"args": args, "result": tool_result, "speech": speech})
+            return result
+        if name == "move_for":
+            args = {
+                "duration_s": float(intent.get("duration_s") or 1.0),
+                "vx": float(intent.get("vx") or 0.0),
+                "vy": float(intent.get("vy") or 0.0),
+                "vyaw": float(intent.get("vyaw") or 0.0),
+            }
+            tool_result = self.move_for(**args)
+            speech = self._speak_feedback("Moving.", speak)
+            result.update({"args": args, "result": tool_result, "speech": speech})
+            return result
+        if name == "release_arms":
+            tool_result = self.release_arms()
+            speech = self._speak_feedback("Released arms.", speak)
+            result.update({"result": tool_result, "speech": speech})
+            return result
+        if name == "stop":
+            tool_result = self.stop()
+            speech = self._speak_feedback("Stopped.", speak)
+            result.update({"result": tool_result, "speech": speech})
+            return result
+        return {"ok": False, "prompt": prompt, "matched": None, "error": "No safe command intent matched.", "speech": None}
+
+    def _interpret_prompt_with_ollama(self, prompt: str) -> dict[str, Any] | None:
+        body = {
+            "model": self.text_model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "Map noisy speech transcripts to one safe robot command. "
+                        "Return only compact JSON. Allowed intents: diagnose_system, describe_visual_context, "
+                        "hand_open, hand_close, hand_shake, ik_move_ee_pose, move_for, release_arms, stop, none. "
+                        "Use iface eth0 and DDS domain 0 implicitly. For ik_move_ee_pose, use arm left/right/both, "
+                        "dx/dy/dz meters, no orientation lock. forward/extend means dx positive; up means dz positive; "
+                        "away from body means dy outward, use dy 0.03 for both/left and -0.03 for right. "
+                        "For unclear unrelated speech, intent must be none."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        "Transcript: "
+                        + json.dumps(prompt, ensure_ascii=False)
+                        + "\nJSON schema: {\"intent\":\"...\",\"confidence\":0.0,\"hand\":\"right|left|both\","
+                        + "\"arm\":\"right|left|both\",\"dx\":0,\"dy\":0,\"dz\":0,\"duration_s\":1,\"vx\":0,\"vy\":0,\"vyaw\":0}"
+                    ),
+                },
+            ],
+            "stream": False,
+            "think": False,
+            "format": "json",
+            "options": {"temperature": 0.0, "num_predict": 120},
+        }
+        request = urllib.request.Request(
+            f"{self.ollama_url}/api/chat",
+            data=json_dumps(body),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=3.0) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            content = str(payload.get("message", {}).get("content", "")).strip()
+            intent = json.loads(content)
+        except Exception:
+            return None
+        if not isinstance(intent, dict):
+            return None
+        name = str(intent.get("intent") or "").strip()
+        confidence = float(intent.get("confidence") or 0.0)
+        allowed = {
+            "diagnose_system",
+            "describe_visual_context",
+            "hand_open",
+            "hand_close",
+            "hand_shake",
+            "ik_move_ee_pose",
+            "move_for",
+            "release_arms",
+            "stop",
+        }
+        if name not in allowed or confidence < 0.55:
+            return None
+        return intent
 
     @staticmethod
     def _parse_loco_prompt(normalized: str) -> dict[str, Any] | None:
@@ -890,7 +1046,12 @@ class NaiveVLA:
     def _parse_ee_prompt(self, normalized: str) -> dict[str, Any] | None:
         if not any(token in normalized for token in ("end effector", "ee", "arm", "hand", "hands", "wrist", "extend", "reach")):
             return None
-        arm = "both" if "both" in normalized or "hands" in normalized else "left" if "left" in normalized else "right"
+        if "both" in normalized or ("hands" in normalized and "left" not in normalized and "right" not in normalized):
+            arm = "both"
+        elif "left" in normalized:
+            arm = "left"
+        else:
+            arm = "right"
         axis = None
         sign = 1.0
         for candidate in ("x", "y", "z"):
@@ -1573,8 +1734,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Naive RGBD vision-language-action tools with a small web UI."
     )
-    parser.add_argument("--iface", default="eth0", help="DDS interface for robot SDK commands.")
-    parser.add_argument("--domain-id", type=int, default=0, help="DDS domain ID.")
+    parser.add_argument("--iface", default="eth0", help="DDS interface for robot SDK commands; forced to eth0.")
+    parser.add_argument("--domain-id", type=int, default=0, help="DDS domain ID; forced to 0.")
     parser.add_argument("--rgbd-host", "--robot-ip", dest="rgbd_host", default=os.environ.get("G1_RGBD_HOST", "10.34.0.83"))
     parser.add_argument("--rgbd-port", type=int, default=int(os.environ.get("G1_RGBD_PORT", "5555")))
     parser.add_argument("--rgbd-topic", default=os.environ.get("G1_RGBD_TOPIC", ""))
@@ -1602,6 +1763,8 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    args.iface = "eth0"
+    args.domain_id = 0
     receiver = RgbdReceiver(
         args.rgbd_host,
         args.rgbd_port,
@@ -1625,6 +1788,7 @@ def main() -> int:
         speech_language=args.speech_language,
         hand_type=args.hand_type,
     )
+    sdk_startup = vla.preinitialize_robot_sdk(arm=not args.dry_run)
 
     if args.describe_once:
         time.sleep(0.5)
@@ -1647,6 +1811,7 @@ def main() -> int:
     print(f"Naive VLA web UI: http://{args.web_host}:{args.web_port}")
     print(f"RGBD source: {receiver.endpoint}")
     print(f"Robot commands: {'disabled (--dry-run)' if args.dry_run else 'enabled'}")
+    print(f"Robot SDK preinit: {json.dumps(sdk_startup, ensure_ascii=False)}")
     print(f"Diagnostics: {'disabled' if args.no_diagnostics else 'enabled (allowlisted)'}")
     print(f"Web search: {'disabled' if args.no_web_search else 'enabled'}")
     print(f"Speech: {'answers enabled' if args.speak_answers else 'available as speak tool'}")

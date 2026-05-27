@@ -6,11 +6,10 @@ import sys
 import time
 from typing import Callable, Optional
 
-from dds_env import ensure_cyclonedds_environment
+from dds_env import ensure_channel_factory_initialized, ensure_cyclonedds_environment
 
 ensure_cyclonedds_environment()
 
-from unitree_sdk2py.core.channel import ChannelFactoryInitialize
 from unitree_sdk2py.g1.loco.g1_loco_api import (
     ROBOT_API_ID_LOCO_GET_FSM_ID,
     ROBOT_API_ID_LOCO_GET_FSM_MODE,
@@ -22,7 +21,7 @@ BALANCED_STAND_FSM_IDS = frozenset((BALANCED_STAND_FSM_ID,))
 
 
 def create_loco_client(domain_id: int, iface: str, timeout: float = 10.0) -> LocoClient:
-    ChannelFactoryInitialize(int(domain_id), iface)
+    ensure_channel_factory_initialized(int(domain_id), iface)
     client = LocoClient()
     client.SetTimeout(float(timeout))
     client.Init()
