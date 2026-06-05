@@ -21,36 +21,35 @@ TOPIC_LOWSTATE = "rt/lowstate"
 
 CONTROL_DT = 0.002
 POSTURE_BLEND_DT = 0.02
-NORMAL_HEIGHT_M = 0.0
+NORMAL_HEIGHT_M = -0.04
 HEIGHT_STEP_M = 0.01
 MIN_HEIGHT_OFFSET_M = -0.10
 MAX_HEIGHT_OFFSET_M = 0.06
 
-DEFAULT_STEP_X = 0.055
-DEFAULT_STEP_Y = 0.045
-DEFAULT_TURN_STEP = 0.040
-DEFAULT_LIFT_FOOT_Z = 0.085
-MIN_SWING_CLEARANCE = 0.075
+DEFAULT_STEP_X = 0.030
+DEFAULT_STEP_Y = 0.025
+DEFAULT_TURN_STEP = 0.022
+DEFAULT_LIFT_FOOT_Z = 0.065
+DEFAULT_STANCE_FRACTION = 0.40
+MIN_SWING_CLEARANCE = 0.060
 MAX_FOOT_OFFSET_X = 0.090
 MAX_FOOT_OFFSET_Y = 0.080
 
-MAX_BODY_SHIFT_X = 0.055
-MAX_BODY_SHIFT_Y = 0.045
-BODY_SHIFT_GAIN = 0.9
+MAX_BODY_SHIFT_X = 0.025
+MAX_BODY_SHIFT_Y = 0.025
+BODY_SHIFT_GAIN = 0.55
 IMU_PITCH_POS_GAIN = 0.035
 IMU_ROLL_POS_GAIN = 0.03
 IMU_GYRO_GAIN = 0.003
 MAX_IMU_FOOT_Z = 0.025
-MAX_TILT_FOR_STEP_RAD = 0.22
+MAX_TILT_FOR_STEP_RAD = 0.16
 
 CONTACT_FORCE_MIN = 20.0
-SHIFT_HOLD_SEC = 0.22
-SHIFT_SEC = 0.35
+SHIFT_HOLD_SEC = 0.30
+SHIFT_SEC = 0.60
 SHIFT_TIMEOUT_SEC = 1.20
-LIFT_SEC = 0.25
-SWING_SEC = 0.35
-LOWER_TIMEOUT_SEC = 0.55
-SETTLE_SEC = 0.28
+SWING_SEC = 1.10
+SETTLE_SEC = 0.35
 SETTLE_TIMEOUT_SEC = 1.20
 
 IDLE_KP = 60.0
@@ -70,6 +69,7 @@ LEG_SIGNS = {
     "RR": {"left": -1.0, "front": -1.0},
 }
 FOOT_FORCE_INDEX = {"FR": 0, "FL": 1, "RR": 2, "RL": 3}
+DIAGONAL_LEG = {"FR": "RL", "FL": "RR", "RR": "FL", "RL": "FR"}
 
 HIP_ORIGIN = {
     "FL": (0.1934, 0.0465, 0.0),
@@ -106,6 +106,18 @@ def lerp_pose(src, dst, alpha: float):
 def smoothstep(alpha: float) -> float:
     alpha = clamp(alpha, 0.0, 1.0)
     return alpha * alpha * (3.0 - 2.0 * alpha)
+
+
+def interp_profile(alpha: float, points):
+    alpha = clamp(alpha, 0.0, 1.0)
+    for idx in range(1, len(points)):
+        x0, y0 = points[idx - 1]
+        x1, y1 = points[idx]
+        if alpha <= x1:
+            span = max(x1 - x0, 1e-6)
+            local = smoothstep((alpha - x0) / span)
+            return (1.0 - local) * y0 + local * y1
+    return points[-1][1]
 
 
 def vec3(values):
@@ -168,7 +180,16 @@ class TopicSnapshot:
 
 
 class OneStepController:
-    def __init__(self):
+    def __init__(
+        self,
+        step_x: float,
+        step_y: float,
+        turn_step: float,
+        lift_z: float,
+        shift_scale: float,
+        stance_fraction: float,
+        require_contact: bool,
+    ):
         self.Kp = IDLE_KP
         self.Kd = IDLE_KD
         self.low_cmd = unitree_go_msg_dds__LowCmd_()
@@ -201,6 +222,13 @@ class OneStepController:
         self.height_offset_m = NORMAL_HEIGHT_M
         self.selected_leg = "FR"
         self.selected_action = "forward"
+        self.step_x = clamp(step_x, 0.005, MAX_FOOT_OFFSET_X)
+        self.step_y = clamp(step_y, 0.005, MAX_FOOT_OFFSET_Y)
+        self.turn_step = clamp(turn_step, 0.005, max(MAX_FOOT_OFFSET_X, MAX_FOOT_OFFSET_Y))
+        self.lift_z = clamp(lift_z, MIN_SWING_CLEARANCE, 0.10)
+        self.shift_scale = clamp(shift_scale, 0.0, 1.0)
+        self.stance_fraction = clamp(stance_fraction, 0.0, 0.8)
+        self.require_contact = require_contact
 
         self.roll = 0.0
         self.pitch = 0.0
@@ -216,6 +244,7 @@ class OneStepController:
         self.step_action = "forward"
         self.step_delta = (0.0, 0.0)
         self.step_start_offsets = {leg: [0.0, 0.0] for leg in LEG_ORDER}
+        self.step_support_deltas = {leg: [0.0, 0.0] for leg in LEG_ORDER}
 
         self.transition_start_pose = list(self.sit_pose)
         self.transition_target_pose = list(self.sit_pose)
@@ -310,6 +339,7 @@ class OneStepController:
             self.step_action = self.selected_action
             self.step_delta = self._action_delta(self.step_leg, self.step_action)
             self.step_start_offsets = {leg: list(value) for leg, value in self.foot_offsets.items()}
+            self.step_support_deltas = self._support_stance_deltas(self.step_leg, self.step_delta)
             self.step_active = True
             self.step_state = "shift"
             self.step_state_started = time.time()
@@ -339,6 +369,13 @@ class OneStepController:
                 "pitch": self.pitch,
                 "foot_force": list(self.foot_force),
                 "foot_offsets": {leg: list(offset) for leg, offset in self.foot_offsets.items()},
+                "step_x": self.step_x,
+                "step_y": self.step_y,
+                "turn_step": self.turn_step,
+                "lift_z": self.lift_z,
+                "shift_scale": self.shift_scale,
+                "stance_fraction": self.stance_fraction,
+                "require_contact": self.require_contact,
             }
 
     def _age(self, ts: float) -> Optional[float]:
@@ -352,21 +389,37 @@ class OneStepController:
 
     def _action_delta(self, leg_name: str, action: str):
         if action == "forward":
-            return (DEFAULT_STEP_X, 0.0)
+            return (self.step_x, 0.0)
         if action == "backward":
-            return (-DEFAULT_STEP_X, 0.0)
+            return (-self.step_x, 0.0)
         if action == "left":
-            return (0.0, DEFAULT_STEP_Y)
+            return (0.0, self.step_y)
         if action == "right":
-            return (0.0, -DEFAULT_STEP_Y)
+            return (0.0, -self.step_y)
 
         front_sign = LEG_SIGNS[leg_name]["front"]
         left_sign = LEG_SIGNS[leg_name]["left"]
         yaw_sign = -1.0 if action == "turn_right_step" else 1.0
         return (
-            -yaw_sign * left_sign * DEFAULT_TURN_STEP,
-            yaw_sign * front_sign * DEFAULT_TURN_STEP,
+            -yaw_sign * left_sign * self.turn_step,
+            yaw_sign * front_sign * self.turn_step,
         )
+
+    def _support_stance_deltas(self, swing_leg: str, swing_delta):
+        deltas = {leg: [0.0, 0.0] for leg in LEG_ORDER}
+        diagonal = DIAGONAL_LEG[swing_leg]
+        for leg in LEG_ORDER:
+            if leg == swing_leg:
+                continue
+            if leg == diagonal:
+                weight = 1.00
+            elif LEG_SIGNS[leg]["front"] == LEG_SIGNS[swing_leg]["front"]:
+                weight = 0.45
+            else:
+                weight = 0.65
+            deltas[leg][0] = -swing_delta[0] * self.stance_fraction * weight
+            deltas[leg][1] = -swing_delta[1] * self.stance_fraction * weight
+        return deltas
 
     def _build_foot_targets(self, pose):
         foot_targets = {}
@@ -419,8 +472,8 @@ class OneStepController:
             return (0.0, 0.0)
         centroid_x = sum(foot_targets[leg][0] for leg in support_legs) / len(support_legs)
         centroid_y = sum(foot_targets[leg][1] for leg in support_legs) / len(support_legs)
-        shift_x = clamp_abs(BODY_SHIFT_GAIN * centroid_x, MAX_BODY_SHIFT_X)
-        shift_y = clamp_abs(BODY_SHIFT_GAIN * centroid_y, MAX_BODY_SHIFT_Y)
+        shift_x = clamp_abs(BODY_SHIFT_GAIN * centroid_x, MAX_BODY_SHIFT_X) * self.shift_scale
+        shift_y = clamp_abs(BODY_SHIFT_GAIN * centroid_y, MAX_BODY_SHIFT_Y) * self.shift_scale
         return (shift_x, shift_y)
 
     def _foot_targets_to_pose(self, foot_targets):
@@ -461,38 +514,44 @@ class OneStepController:
             return self._compose_pose_locked()
 
         shift_alpha = 1.0
-        lift_alpha = 0.0
         swing_alpha = 0.0
-        lower_alpha = 0.0
+        lift_alpha = 0.0
         if self.step_state == "shift":
             shift_alpha = smoothstep(elapsed / SHIFT_SEC)
-            if (force_ok or elapsed >= SHIFT_TIMEOUT_SEC) and shift_alpha >= 1.0:
+            contact_ready = force_ok or not self.require_contact
+            if contact_ready and shift_alpha >= 1.0:
                 if self.support_started == 0.0:
                     self.support_started = time.time()
                 elif time.time() - self.support_started >= SHIFT_HOLD_SEC:
-                    self._begin_step_state_locked("lift")
+                    self._begin_step_state_locked("swing")
+            elif self.require_contact and elapsed >= SHIFT_TIMEOUT_SEC:
+                self.step_active = False
+                self.step_state = "idle"
+                self._set_status_locked("step refused: support contact")
+                return self._compose_pose_locked()
             else:
                 self.support_started = 0.0
-        elif self.step_state == "lift":
-            lift_alpha = smoothstep(elapsed / LIFT_SEC)
-            if lift_alpha >= 1.0:
-                self._begin_step_state_locked("swing")
         elif self.step_state == "swing":
-            lift_alpha = 1.0
-            swing_alpha = smoothstep(elapsed / SWING_SEC)
+            swing_alpha = clamp(elapsed / SWING_SEC, 0.0, 1.0)
+            lift_alpha = interp_profile(
+                swing_alpha,
+                (
+                    (0.00, 0.00),
+                    (0.15, 0.75),
+                    (0.50, 1.00),
+                    (0.85, 0.75),
+                    (1.00, 0.00),
+                ),
+            )
             if swing_alpha >= 1.0:
                 self._commit_swing_offsets_locked()
-                self._begin_step_state_locked("lower")
-        elif self.step_state == "lower":
-            lower_alpha = smoothstep(elapsed / LOWER_TIMEOUT_SEC)
-            lift_alpha = 1.0 - lower_alpha
-            swing_alpha = 1.0
-            if self.foot_force[FOOT_FORCE_INDEX[self.step_leg]] >= CONTACT_FORCE_MIN or lower_alpha >= 1.0:
+                base_targets = self._height_foot_targets_locked()
                 self._begin_step_state_locked("settle")
         elif self.step_state == "settle":
             swing_alpha = 1.0
             contact_ok = self.foot_force[FOOT_FORCE_INDEX[self.step_leg]] >= CONTACT_FORCE_MIN
-            if (force_ok and contact_ok) or elapsed >= SETTLE_TIMEOUT_SEC:
+            contact_ready = (force_ok and contact_ok) or not self.require_contact
+            if contact_ready:
                 if self.support_started == 0.0:
                     self.support_started = time.time()
                 elif time.time() - self.support_started >= SETTLE_SEC:
@@ -503,22 +562,31 @@ class OneStepController:
                     neutral_pose = self._compose_pose_locked()
                     self._begin_transition_locked(neutral_pose, 0.35)
                     return neutral_pose
+            elif self.require_contact and elapsed >= SETTLE_TIMEOUT_SEC:
+                self.step_active = False
+                self.step_state = "idle"
+                self._set_status_locked("step halted: landing contact")
+                return self._compose_pose_locked()
             else:
                 self.support_started = 0.0
 
-        targets = self._height_foot_targets_for_offsets_locked(self.step_start_offsets)
+        if self.step_state == "settle":
+            targets = self._height_foot_targets_locked()
+        else:
+            targets = self._height_foot_targets_for_offsets_locked(self.step_start_offsets)
         for leg in LEG_ORDER:
             targets[leg][0] -= shift_x * shift_alpha
             targets[leg][1] -= shift_y * shift_alpha
 
-        if self.step_state in ("lower", "settle"):
-            targets[self.step_leg][0] = base_targets[self.step_leg][0]
-            targets[self.step_leg][1] = base_targets[self.step_leg][1]
-        else:
+        stance_alpha = smoothstep(swing_alpha)
+        if self.step_state != "settle":
+            for leg in support_legs:
+                targets[leg][0] += self.step_support_deltas[leg][0] * stance_alpha
+                targets[leg][1] += self.step_support_deltas[leg][1] * stance_alpha
             targets[self.step_leg][0] += self.step_delta[0] * swing_alpha
             targets[self.step_leg][1] += self.step_delta[1] * swing_alpha
 
-        clearance = max(DEFAULT_LIFT_FOOT_Z, MIN_SWING_CLEARANCE)
+        clearance = max(self.lift_z, MIN_SWING_CLEARANCE)
         targets[self.step_leg][2] += clearance * lift_alpha
 
         imu_balance = self._imu_balance_offsets_locked()
@@ -551,6 +619,13 @@ class OneStepController:
         y = self.step_start_offsets[self.step_leg][1] + self.step_delta[1]
         self.foot_offsets[self.step_leg][0] = clamp_abs(x, MAX_FOOT_OFFSET_X)
         self.foot_offsets[self.step_leg][1] = clamp_abs(y, MAX_FOOT_OFFSET_Y)
+        for leg in LEG_ORDER:
+            if leg == self.step_leg:
+                continue
+            x = self.step_start_offsets[leg][0] + self.step_support_deltas[leg][0]
+            y = self.step_start_offsets[leg][1] + self.step_support_deltas[leg][1]
+            self.foot_offsets[leg][0] = clamp_abs(x, MAX_FOOT_OFFSET_X)
+            self.foot_offsets[leg][1] = clamp_abs(y, MAX_FOOT_OFFSET_Y)
 
     def _begin_step_state_locked(self, state: str):
         self.step_state = state
@@ -673,6 +748,9 @@ def draw_panel(stdscr, controller: OneStepController):
         "",
         f"Height offset: {snapshot['height_offset_m']:+.3f} m",
         f"Selected: {snapshot['selected_leg']} / {snapshot['selected_action']}",
+        f"Tuning: step_x={snapshot['step_x']:.3f} step_y={snapshot['step_y']:.3f} "
+        f"turn={snapshot['turn_step']:.3f} lift={snapshot['lift_z']:.3f} shift={snapshot['shift_scale']:.2f} "
+        f"stance={snapshot['stance_fraction']:.2f} contact={'on' if snapshot['require_contact'] else 'off'}",
         f"Step: {'active' if snapshot['step_active'] else 'ready'}  state={snapshot['step_state']}  "
         f"last={snapshot['step_leg']}:{snapshot['step_action']}",
         f"Status: {snapshot['service_status']}  age={age_text(snapshot['service_age'])}",
@@ -771,6 +849,27 @@ def parse_args():
         description="Interactive Go2 low-level single-step controller."
     )
     parser.add_argument("iface", nargs="?", default=None, help="Robot network interface")
+    parser.add_argument("--step-x", type=float, default=DEFAULT_STEP_X, help="Forward/back foot step in meters")
+    parser.add_argument("--step-y", type=float, default=DEFAULT_STEP_Y, help="Left/right foot step in meters")
+    parser.add_argument("--turn-step", type=float, default=DEFAULT_TURN_STEP, help="Per-foot turn step in meters")
+    parser.add_argument("--lift-z", type=float, default=DEFAULT_LIFT_FOOT_Z, help="Swing foot lift in meters")
+    parser.add_argument(
+        "--shift-scale",
+        type=float,
+        default=1.0,
+        help="Support-centroid body shift scale from 0.0 to 1.0",
+    )
+    parser.add_argument(
+        "--stance-fraction",
+        type=float,
+        default=DEFAULT_STANCE_FRACTION,
+        help="Fraction of selected-foot step applied oppositely to support feet",
+    )
+    parser.add_argument(
+        "--ignore-contact",
+        action="store_true",
+        help="Do not require foot-force confirmation before lifting/finishing a step",
+    )
     return parser.parse_args()
 
 
@@ -785,7 +884,15 @@ def main():
     else:
         ChannelFactoryInitialize(0)
 
-    controller = OneStepController()
+    controller = OneStepController(
+        step_x=args.step_x,
+        step_y=args.step_y,
+        turn_step=args.turn_step,
+        lift_z=args.lift_z,
+        shift_scale=args.shift_scale,
+        stance_fraction=args.stance_fraction,
+        require_contact=not args.ignore_contact,
+    )
     controller.init()
     controller.start()
     try:
