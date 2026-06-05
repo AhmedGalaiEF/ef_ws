@@ -1,0 +1,1 @@
+/usr/bin/c++     CMakeFiles/test.dir/test.cpp.o CMakeFiles/test.dir/hand_api.c.o  -o test  libhand_api.a -lpthread 

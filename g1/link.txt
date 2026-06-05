@@ -1,0 +1,4 @@
+/home/cindy/try_ws/src/serial_hand/build/CMakeFiles/rebuild_cache.dir
+/home/cindy/try_ws/src/serial_hand/build/CMakeFiles/edit_cache.dir
+/home/cindy/try_ws/src/serial_hand/build/CMakeFiles/test.dir
+/home/cindy/try_ws/src/serial_hand/build/CMakeFiles/hand_api.dir

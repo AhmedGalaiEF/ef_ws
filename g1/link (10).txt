@@ -1,0 +1,2 @@
+/usr/bin/ar qc libhand_api.a  CMakeFiles/hand_api.dir/hand_api.c.o
+/usr/bin/ranlib libhand_api.a
