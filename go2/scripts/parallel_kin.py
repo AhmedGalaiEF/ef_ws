@@ -710,8 +710,14 @@ def _tripod_incenter(pts3: List[np.ndarray]) -> np.ndarray:
 # ── webapp ────────────────────────────────────────────────────────────────────
 
 import json
+import os
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+_URDF_VIZ_DIR = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    '../sim/unitree_description-master/model/go2/assets/visuals',
+)
 
 _M_FRAME = np.array([[1, 0, 0], [0, 0, 1], [0, -1, 0]], dtype=float)
 
@@ -887,7 +893,7 @@ class AppState:
         dphi : direction offset from body heading in radians.
         """
         with self._lock:
-            self._step_dr   = float(np.clip(dr,   0.02, 0.30))
+            self._step_dr   = float(np.clip(dr,   0.02, 0.15))  # max 0.15 m swing reach
             self._step_dphi = float(np.clip(dphi, -math.pi, math.pi))
 
     def step_foot(self, leg=None):
@@ -1012,6 +1018,10 @@ td:not(:first-child){color:#79c0ff;text-align:right}
   }
 }
 </script>
+<style>
+#urdf-status{font-size:9px;color:#6e7681;margin-top:2px}
+button.active{background:#1f4d24;border-color:#3fb950;color:#3fb950}
+</style>
 </head>
 <body>
 <div id="cw"><canvas id="c"></canvas></div>
@@ -1051,6 +1061,10 @@ td:not(:first-child){color:#79c0ff;text-align:right}
     <button id="b-FR" onclick="stepFoot('FR')">FR ↑</button>
     <button onclick="doReset()">Reset</button>
   </div>
+  <div class="brow" style="margin-top:4px">
+    <button id="b-urdf" class="active" onclick="toggleURDF()">URDF Model</button>
+    <span id="urdf-status">loading…</span>
+  </div>
   <div class="kinfo">
     next:&nbsp;<span id="step-next" style="color:#79c0ff">--</span>
     &nbsp;<span id="step-phase" style="color:#8b949e"></span>
@@ -1059,7 +1073,7 @@ td:not(:first-child){color:#79c0ff;text-align:right}
     <input type="range" id="s-ch" min="0.20" max="0.38" step="0.005" value="0.28">
     <span class="val" id="v-ch">0.280</span></div>
   <div class="row"><label>step dr</label>
-    <input type="range" id="s-dr" min="0.04" max="0.25" step="0.005" value="0.12">
+    <input type="range" id="s-dr" min="0.02" max="0.15" step="0.005" value="0.12">
     <span class="val" id="v-dr">0.120</span></div>
   <div class="row"><label>step φ°</label>
     <input type="range" id="s-dphi" min="-90" max="90" step="1" value="0">
@@ -1095,7 +1109,8 @@ td:not(:first-child){color:#79c0ff;text-align:right}
 
 <script type="module">
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { OrbitControls }  from 'three/addons/controls/OrbitControls.js';
+import { ColladaLoader }  from 'three/addons/loaders/ColladaLoader.js';
 
 const wrap = document.getElementById('cw');
 const W = () => wrap.clientWidth, H = () => wrap.clientHeight;
@@ -1127,6 +1142,118 @@ scene.add(grid);
 const zmpMat = new THREE.MeshLambertMaterial({color:0x00ff88, transparent:true, opacity:0.90});
 const zmpSphere = new THREE.Mesh(new THREE.SphereGeometry(0.022, 12, 8), zmpMat);
 scene.add(zmpSphere);
+
+// ── URDF mesh hierarchy ────────────────────────────────────────────────────
+// Joint offsets (robot → Three.js via _r2v: [x,y,z]→[x,z,-y])
+// hip_joint in body frame; thigh_joint in hip frame after q_hip rotation
+const LEG_JOINT = {
+  FL: { hipOff:[0.1934,0,-0.0465], thighOff:[0,0,-0.0955],
+        thighFile:'thigh',        calfFile:'calf',
+        hipVisQ: new THREE.Quaternion() },                         // rpy=[0,0,0]
+  FR: { hipOff:[0.1934,0, 0.0465], thighOff:[0,0, 0.0955],
+        thighFile:'thigh_mirror', calfFile:'calf_mirror',
+        hipVisQ: new THREE.Quaternion()                            // rpy=[π,0,0] → Rx(π)
+                   .setFromAxisAngle(new THREE.Vector3(1,0,0), Math.PI) },
+  RL: { hipOff:[-0.1934,0,-0.0465], thighOff:[0,0,-0.0955],
+        thighFile:'thigh',        calfFile:'calf',
+        hipVisQ: new THREE.Quaternion()                            // rpy=[0,π,0] → Rz(-π)
+                   .setFromAxisAngle(new THREE.Vector3(0,0,1), -Math.PI) },
+  RR: { hipOff:[-0.1934,0, 0.0465], thighOff:[0,0, 0.0955],
+        thighFile:'thigh_mirror', calfFile:'calf_mirror',
+        hipVisQ: (() => {                                          // rpy=[π,π,0] → Rx(π)·Rz(-π)
+          const q = new THREE.Quaternion()
+            .setFromAxisAngle(new THREE.Vector3(1,0,0), Math.PI);
+          q.premultiply(new THREE.Quaternion()
+            .setFromAxisAngle(new THREE.Vector3(0,0,1), -Math.PI));
+          return q;
+        })() },
+};
+
+const bodyGrp = new THREE.Group();
+scene.add(bodyGrp);
+const legGrps = {};
+
+for (const [leg, cfg] of Object.entries(LEG_JOINT)) {
+  const hipGrp   = new THREE.Group();
+  hipGrp.position.set(...cfg.hipOff);
+  bodyGrp.add(hipGrp);
+
+  const thighGrp = new THREE.Group();
+  thighGrp.position.set(...cfg.thighOff);
+  hipGrp.add(thighGrp);
+
+  const calfGrp  = new THREE.Group();
+  calfGrp.position.set(0, -0.213, 0);   // _r2v([0,0,-0.213])
+  thighGrp.add(calfGrp);
+
+  const footGrp  = new THREE.Group();
+  footGrp.position.set(0, -0.213, 0);
+  calfGrp.add(footGrp);
+
+  legGrps[leg] = { hipGrp, thighGrp, calfGrp, footGrp, cfg };
+}
+
+// Async mesh loader with deduplication cache
+const _daeCache   = {};   // name → THREE.Group (first-loaded scene)
+const _daeCbs     = {};   // name → [pending callbacks]
+const _daeLoader  = new ColladaLoader();
+
+function getMesh(name, onReady) {
+  if (_daeCache[name]) { onReady(_daeCache[name].clone()); return; }
+  if (_daeCbs[name])   { _daeCbs[name].push(onReady); return; }
+  _daeCbs[name] = [onReady];
+  _daeLoader.load('/assets/go2/' + name + '.dae', col => {
+    _daeCache[name] = col.scene;
+    for (const cb of _daeCbs[name]) cb(col.scene.clone());
+    _daeCbs[name] = null;
+    _checkLoaded();
+  }, undefined, () => { _daeCbs[name] = null; _checkLoaded(); });
+}
+
+let _loadPending = 1 + 4 * 4;  // base + 4 legs × (hip thigh calf foot)
+function _checkLoaded() {
+  _loadPending--;
+  if (_loadPending <= 0)
+    document.getElementById('urdf-status').textContent = 'loaded ✓';
+}
+
+// Attach base mesh
+getMesh('base', m => { bodyGrp.add(m); });
+
+// Attach per-leg meshes
+for (const [leg, cfg] of Object.entries(LEG_JOINT)) {
+  const { hipGrp, thighGrp, calfGrp, footGrp } = legGrps[leg];
+
+  getMesh('hip', m => {
+    const w = new THREE.Group();
+    w.quaternion.copy(cfg.hipVisQ);
+    w.add(m);
+    hipGrp.add(w);
+  });
+  getMesh(cfg.thighFile, m => thighGrp.add(m));
+  getMesh(cfg.calfFile,  m => calfGrp.add(m));
+  getMesh('foot',        m => footGrp.add(m));
+}
+
+// URDF show/hide (starts visible; procedural objects toggled inversely)
+let _urdfOn = true;
+function _setURDF(on) {
+  _urdfOn = on;
+  bodyGrp.visible = on;
+  document.getElementById('b-urdf').className = on ? 'active' : '';
+  // toggle procedural body + leg geometry
+  bodyMesh.visible = !on;
+  for (const leg of LEGS) {
+    const o = lo[leg];
+    o.hipS.visible   = !on;
+    o.kneeS.visible  = !on;
+    o.footS.visible  = !on;
+    o.thighL.visible = !on;
+    o.calfL.visible  = !on;
+    o.anchorL.visible= !on;
+  }
+}
+window.toggleURDF = () => _setURDF(!_urdfOn);
 
 // ── materials ──────────────────────────────────────────────────────────────
 // shared
@@ -1227,6 +1354,19 @@ function applyState(s) {
   const bp = v3(s.body_pos), bq = s.body_quat;
   bodyMesh.position.copy(bp);
   bodyMesh.quaternion.set(bq[0], bq[1], bq[2], bq[3]);
+
+  // URDF kinematic hierarchy
+  bodyGrp.position.copy(bp);
+  bodyGrp.quaternion.set(bq[0], bq[1], bq[2], bq[3]);
+  for (const leg of LEGS) {
+    const [qh, qt, qc] = s.joint_angles[leg];
+    const { hipGrp, thighGrp, calfGrp } = legGrps[leg];
+    hipGrp.rotation.x   =  qh;   // hip revolves about robot X → Three.js X
+    thighGrp.rotation.z = -qt;   // thigh revolves about robot Y → Three.js -Z
+    calfGrp.rotation.z  = -qc;   // calf revolves about robot Y → Three.js -Z
+  }
+  // init procedural visibility after first state
+  if (_urdfOn && bodyMesh.visible) _setURDF(true);
 
   for (const leg of LEGS) {
     const d  = s.legs[leg], o = lo[leg];
@@ -1376,8 +1516,8 @@ window.stepFoot = function(leg) {
 window.doReset = function() {
   fetch('/reset', {method:'POST'}).then(() => {
     for (const [, cfg] of Object.entries(SL))
-      document.getElementById(cfg.sid).value = cfg.sid === 's-height' ? '0.34' : '0';
-    document.getElementById('v-height').textContent = '0.340';
+      document.getElementById(cfg.sid).value = cfg.sid === 's-height' ? '0.28' : '0';
+    document.getElementById('v-height').textContent = '0.280';
     ['roll','pitch','yaw','x','y'].forEach(k =>
       document.getElementById('v-'+k).textContent = '0.000');
   });
@@ -1412,6 +1552,19 @@ class _Handler(BaseHTTPRequestHandler):
         elif self.path == '/state':
             self._send(200, 'application/json',
                        json.dumps(_app.render_state()).encode())
+        elif self.path.startswith('/assets/go2/'):
+            fname = self.path[len('/assets/go2/'):]
+            if '/' in fname or '.' not in fname:   # no traversal, must have extension
+                self.send_error(403); return
+            fpath = os.path.join(_URDF_VIZ_DIR, fname)
+            try:
+                with open(fpath, 'rb') as f:
+                    data = f.read()
+                ctype = ('model/vnd.collada+xml' if fname.endswith('.dae')
+                         else 'application/octet-stream')
+                self._send(200, ctype, data)
+            except FileNotFoundError:
+                self.send_error(404)
         else:
             self.send_error(404)
 
