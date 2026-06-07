@@ -656,6 +656,57 @@ class ParallelKinBody:
         return {leg: f[3*i: 3*i+3] for i, leg in enumerate(self.stance_legs)}
 
 
+# ── ZMP and support polygon utilities ────────────────────────────────────────
+
+def _polygon_contains_2d(
+    point: np.ndarray,
+    pts: List[np.ndarray],
+    margin: float = 0.0,
+) -> bool:
+    """
+    Test if a 2D point lies inside a convex polygon with inward safety margin.
+
+    pts    : polygon vertices (any order; only x/y used).
+    margin : required inward clearance from each edge in metres (>0 = strict interior).
+    """
+    n = len(pts)
+    if n < 3:
+        return False
+    cx = sum(float(p[0]) for p in pts) / n
+    cy = sum(float(p[1]) for p in pts) / n
+    ordered = sorted(pts, key=lambda p: math.atan2(float(p[1]) - cy, float(p[0]) - cx))
+    px, py = float(point[0]), float(point[1])
+    for i in range(n):
+        ax, ay = float(ordered[i][0]),        float(ordered[i][1])
+        bx, by = float(ordered[(i+1)%n][0]),  float(ordered[(i+1)%n][1])
+        ex, ey = bx - ax, by - ay
+        elen   = math.sqrt(ex*ex + ey*ey)
+        if elen < 1e-9:
+            continue
+        # CCW polygon: interior ↔ cross product > 0 for every edge.
+        # Signed distance (positive = interior side) = cross / elen.
+        cross = ex * (py - ay) - ey * (px - ax)
+        if cross / elen < margin:
+            return False
+    return True
+
+
+def _tripod_incenter(pts3: List[np.ndarray]) -> np.ndarray:
+    """
+    Incenter of a triangle: the point equidistant from all three edges.
+
+    Returns a 2D array (x, y).  Placing the CoM here before a foot lift
+    maximises ZMP distance from every edge of the remaining tripod polygon.
+    """
+    a = np.asarray(pts3, dtype=float)[:, :2]   # (3, 2)
+    sides = [
+        np.linalg.norm(a[1] - a[2]),   # opposite vertex 0
+        np.linalg.norm(a[0] - a[2]),   # opposite vertex 1
+        np.linalg.norm(a[0] - a[1]),   # opposite vertex 2
+    ]
+    return (sides[0]*a[0] + sides[1]*a[1] + sides[2]*a[2]) / sum(sides)
+
+
 # ── webapp ────────────────────────────────────────────────────────────────────
 
 import json
@@ -692,14 +743,15 @@ def _mat_to_quat(R):
 
 class AppState:
     _STAND_Q  = [0.0, 0.67, -1.3] * 4
-    _STAND_H  = 0.34
-    _STEP_D   = 0.09
     _STEP_ORD = ["RL", "FL", "RR", "FR"]
-    # Joint angles for the raised (swing) leg: knee tucked, foot clearly above ground
-    _LIFT_Q   = [0.0, 0.9, -1.8]   # (hip, thigh, calf)
+    _LIFT_Q   = [0.0, 0.9, -1.8]   # raised swing leg: knee tucked, foot above ground
 
     def __init__(self):
-        self._lock = threading.Lock()
+        self._lock         = threading.Lock()
+        self._crawl_height = 0.28    # body height used during crawl stepping (m)
+        self._step_dr      = 0.12    # foot reach: placed dr ahead of hip projection
+        self._step_dphi    = 0.0     # step direction offset from body heading (rad)
+        self._zmp_margin   = 0.02    # required ZMP clearance from polygon edge (m)
         self._reset_locked()
 
     def _reset_locked(self):
@@ -707,7 +759,7 @@ class AppState:
         self._q    = list(self._STAND_Q)
         self._sidx = 0
         self._pk.init_contacts_from_pose(
-            np.array([0.0, 0.0, self._STAND_H]), np.zeros(3), self._q)
+            np.array([0.0, 0.0, self._crawl_height]), np.zeros(3), self._q)
 
     def _knee_in_hip(self, leg, qh, qt):
         s      = LEG_SIGNS[leg]["left"]
@@ -718,6 +770,28 @@ class AppState:
              s * HIP_LATERAL_OFFSET * ch + THIGH_LENGTH * ct * sh,
              s * HIP_LATERAL_OFFSET * sh - THIGH_LENGTH * ct * ch,
         ])
+
+    def _prepare_body_for_lift(self, leg: str) -> None:
+        """
+        Shift body CoM to the incenter of the remaining 3-foot support
+        triangle before lifting `leg`.  Guarantees the ZMP stays strictly
+        inside the tripod polygon throughout and after the stance transition.
+        """
+        remaining = [l for l in self._pk.stance_legs if l != leg]
+        if len(remaining) < 3:
+            return
+        pts    = [self._pk.foot_contacts[l] for l in remaining]
+        inc_xy = _tripod_incenter(pts)
+        target = np.array([inc_xy[0], inc_xy[1], self._crawl_height])
+        rpy    = self._pk.body_rpy.copy()
+        try:
+            q = self._pk.body_ik(target, rpy, support_legs=remaining)
+            for sl in remaining:
+                for idx in LEG_INDEX[sl]:
+                    if math.isfinite(q[idx]):
+                        self._q[idx] = q[idx]
+        except Exception:
+            pass
 
     def _state(self):
         pos  = self._pk.body_pos
@@ -754,6 +828,14 @@ class AppState:
         if not math.isfinite(cond):
             cond = 9999.0
 
+        # ZMP: quasi-static approximation for slow crawling (CoM → ground)
+        zmp_world = np.array([pos[0], pos[1], 0.0])
+        stance_xy = [self._pk.foot_contacts[l][:2] for l in stance]
+        zmp_ok = (
+            _polygon_contains_2d(zmp_world[:2], stance_xy, margin=self._zmp_margin)
+            if len(stance) >= 3 else bool(len(stance) >= 1)
+        )
+
         next_leg   = self._STEP_ORD[self._sidx % 4]
         next_phase = "land" if next_leg in swing else "lift"
 
@@ -764,13 +846,17 @@ class AppState:
             "legs":            legs,
             "stance_legs":     stance,
             "swing_legs":      swing,
-            # Support polygon: only grounded contacts are structural
             "support_polygon": [_r2v(self._pk.foot_contacts[l]) for l in stance],
             "cond_num":        round(cond, 2),
             "joint_angles":    {l: [round(float(v), 4) for v in self._pk._q_leg(l, self._q)]
                                 for l in LEG_ORDER},
             "step_next":       next_leg,
             "step_phase":      next_phase,
+            "zmp":             _r2v(zmp_world),
+            "zmp_ok":          bool(zmp_ok),
+            "crawl_height":    round(float(self._crawl_height), 3),
+            "step_dr":         round(float(self._step_dr), 3),
+            "step_dphi":       round(float(self._step_dphi), 4),
         }
 
     def render_state(self):
@@ -780,7 +866,6 @@ class AppState:
     def set_pose(self, pos, rpy):
         with self._lock:
             try:
-                # Parallel IK runs only on stance legs; swing leg joints unchanged
                 q = self._pk.body_ik(np.asarray(pos, float), np.asarray(rpy, float))
                 for sl in self._pk.stance_legs:
                     for idx in LEG_INDEX[sl]:
@@ -789,37 +874,59 @@ class AppState:
             except Exception:
                 pass
 
+    def set_crawl_height(self, height: float) -> None:
+        """Update the body height used during automated crawl stepping."""
+        with self._lock:
+            self._crawl_height = float(np.clip(height, 0.18, 0.42))
+
+    def set_step_params(self, dr: float, dphi: float) -> None:
+        """
+        Set foot placement parameters for the swing leg.
+
+        dr   : radial reach — foot placed dr metres from the hip projection.
+        dphi : direction offset from body heading in radians.
+        """
+        with self._lock:
+            self._step_dr   = float(np.clip(dr,   0.02, 0.30))
+            self._step_dphi = float(np.clip(dphi, -math.pi, math.pi))
+
     def step_foot(self, leg=None):
         """
-        Two-phase stepping (matching the reconfigurable PKM model):
+        ZMP-stable two-phase crawl step (3 feet always on ground).
 
-          Phase 1 – LIFT   : leg was in stance → lift_leg(), raise joint angles.
-                              The PKM now has n−1 stance chains.
-          Phase 2 – LAND   : leg was in swing  → land_leg() at new contact,
-                              run parallel IK, advance sequence counter.
+        LIFT phase
+        ----------
+        1. Shift body CoM to the incenter of the remaining 3-foot tripod
+           → ZMP guaranteed inside the triangle before and after lift.
+        2. Remove leg from PKM stance set; raise swing joints.
+        3. Re-solve stance leg joints via parallel IK at new body pose.
 
-        This makes the topology change visible: after phase 1 the support
-        polygon shrinks; after phase 2 it grows back and the contact updates.
+        LAND phase
+        ----------
+        1. Compute new contact: hip_world_XY + dr·[cos(yaw+dphi), sin(yaw+dphi)].
+        2. Add leg to PKM stance set.
+        3. Parallel IK over all four legs.
         """
         with self._lock:
             if leg is None:
                 leg = self._STEP_ORD[self._sidx % 4]
 
-            in_stance = leg in self._pk.stance_legs
-
-            if in_stance:
+            if leg in self._pk.stance_legs:
                 # ── LIFT ──────────────────────────────────────────────────────
+                # 1. Shift CoM to incenter of remaining 3-foot polygon
+                self._prepare_body_for_lift(leg)
+                # 2. Remove from PKM topology
                 self._pk.lift_leg(leg)
-                # Set raised joint angles for the swing leg
+                # 3. Raise swing leg
                 hi, ti, ci = LEG_INDEX[leg]
                 self._q[hi] = self._LIFT_Q[0]
                 self._q[ti] = self._LIFT_Q[1]
                 self._q[ci] = self._LIFT_Q[2]
-                # Recompute stance legs via parallel IK (body pose unchanged)
+                # 4. Recompute remaining stance joints at shifted body pose
                 try:
-                    pos  = self._pk.body_pos.copy()
-                    rpy  = self._pk.body_rpy.copy()
-                    q_st = self._pk.body_ik(pos, rpy)
+                    q_st = self._pk.body_ik(
+                        self._pk.body_pos.copy(), self._pk.body_rpy.copy()
+                    )
                     for sl in self._pk.stance_legs:
                         for idx in LEG_INDEX[sl]:
                             if math.isfinite(q_st[idx]):
@@ -829,22 +936,24 @@ class AppState:
 
             else:
                 # ── LAND ──────────────────────────────────────────────────────
-                # Place contact STEP_D ahead of where the swing foot currently is
-                pos = self._pk.body_pos.copy()
                 rpy = self._pk.body_rpy.copy()
-                fwd = rpy_to_rot(*rpy)[:, 0]
-                swing_foot = self._pk.swing_foot_world(leg, self._q)
-                new_contact       = swing_foot.copy()
-                new_contact      += fwd * self._STEP_D
-                new_contact[2]    = 0.0
+                yaw = rpy[2]
+                R   = rpy_to_rot(*rpy)
+                ho  = np.array(HIP_ORIGIN[leg])
+                # Target contact: below hip + (dr, dphi) displacement
+                hip_world   = self._pk.body_pos + R @ ho
+                new_contact = np.array([
+                    hip_world[0] + self._step_dr * math.cos(yaw + self._step_dphi),
+                    hip_world[1] + self._step_dr * math.sin(yaw + self._step_dphi),
+                    0.0,
+                ])
                 self._pk.land_leg(leg, new_contact)
                 try:
-                    q = self._pk.body_ik(pos, rpy)
+                    q = self._pk.body_ik(self._pk.body_pos.copy(), rpy)
                     if all(math.isfinite(v) for v in q):
                         self._q = q
                 except Exception:
                     pass
-                # Advance sequence only after landing
                 if leg == self._STEP_ORD[self._sidx % 4]:
                     self._sidx += 1
 
@@ -918,8 +1027,8 @@ td:not(:first-child){color:#79c0ff;text-align:right}
     <input type="range" id="s-yaw"    min="-1.0" max="1.0"  step="0.01"  value="0">
     <span class="val" id="v-yaw">0.000</span></div>
   <div class="row"><label>height</label>
-    <input type="range" id="s-height" min="0.18" max="0.44" step="0.005" value="0.34">
-    <span class="val" id="v-height">0.340</span></div>
+    <input type="range" id="s-height" min="0.18" max="0.44" step="0.005" value="0.28">
+    <span class="val" id="v-height">0.280</span></div>
   <div class="row"><label>x fwd</label>
     <input type="range" id="s-x"      min="-0.15" max="0.15" step="0.005" value="0">
     <span class="val" id="v-x">0.000</span></div>
@@ -946,13 +1055,24 @@ td:not(:first-child){color:#79c0ff;text-align:right}
     next:&nbsp;<span id="step-next" style="color:#79c0ff">--</span>
     &nbsp;<span id="step-phase" style="color:#8b949e"></span>
   </div>
+  <div class="row"><label>crawl h</label>
+    <input type="range" id="s-ch" min="0.20" max="0.38" step="0.005" value="0.28">
+    <span class="val" id="v-ch">0.280</span></div>
+  <div class="row"><label>step dr</label>
+    <input type="range" id="s-dr" min="0.04" max="0.25" step="0.005" value="0.12">
+    <span class="val" id="v-dr">0.120</span></div>
+  <div class="row"><label>step φ°</label>
+    <input type="range" id="s-dphi" min="-90" max="90" step="1" value="0">
+    <span class="val" id="v-dphi">0°</span></div>
 
   <h2>KINEMATICS</h2>
   <div class="kinfo">
     <div>cond(A):&nbsp;<span id="cond-val" class="ok">--</span></div>
+    <div>ZMP:&nbsp;<span id="zmp-ok" class="ok">--</span></div>
     <div style="font-size:9px;color:#6e7681;margin-top:2px">
       A = stance support Jacobian (3n&times;6)<br>
-      rank drop when foot at singular config
+      ZMP = quasi-static CoM projection<br>
+      margin = 2 cm from polygon edge
     </div>
   </div>
 
@@ -1002,6 +1122,11 @@ scene.add(dl);
 
 const grid = new THREE.GridHelper(3, 30, 0x21262d, 0x161b22);
 scene.add(grid);
+
+// ZMP indicator: flat sphere on ground, green=inside, red=outside
+const zmpMat = new THREE.MeshLambertMaterial({color:0x00ff88, transparent:true, opacity:0.90});
+const zmpSphere = new THREE.Mesh(new THREE.SphereGeometry(0.022, 12, 8), zmpMat);
+scene.add(zmpSphere);
 
 // ── materials ──────────────────────────────────────────────────────────────
 // shared
@@ -1129,6 +1254,14 @@ function applyState(s) {
   // support polygon from stance contacts only
   updatePolygon(s.support_polygon.map(v3));
 
+  // ZMP sphere
+  const zp = v3(s.zmp);
+  zmpSphere.position.set(zp.x, 0.006, zp.z);
+  zmpMat.color.setHex(s.zmp_ok ? 0x00ff88 : 0xff2222);
+  const zmEl = document.getElementById('zmp-ok');
+  zmEl.textContent = s.zmp_ok ? 'inside ✓' : 'OUTSIDE ✗';
+  zmEl.className   = s.zmp_ok ? 'ok' : 'bad';
+
   // kinematics panel
   const cel = document.getElementById('cond-val');
   const cn  = s.cond_num;
@@ -1144,6 +1277,13 @@ function applyState(s) {
   // step info
   document.getElementById('step-next').textContent  = s.step_next;
   document.getElementById('step-phase').textContent = '[' + s.step_phase + ']';
+
+  // sync step param display from server state
+  const chEl = document.getElementById('s-ch');
+  if (Math.abs(+chEl.value - s.crawl_height) > 0.001) {
+    chEl.value = s.crawl_height;
+    document.getElementById('v-ch').textContent = s.crawl_height.toFixed(3);
+  }
 
   // joint angle table with S/W badge
   const tbl = document.getElementById('jt');
@@ -1200,6 +1340,34 @@ for (const [, cfg] of Object.entries(SL)) {
   });
 }
 
+// Sync height slider → crawl height so stepping matches manual pose
+document.getElementById('s-height').addEventListener('input', function() {
+  fetch('/set_crawl_height', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({height: +this.value})});
+});
+
+// Step parameter sliders
+document.getElementById('s-ch').addEventListener('input', function() {
+  document.getElementById('v-ch').textContent = (+this.value).toFixed(3);
+  fetch('/set_crawl_height', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({height: +this.value})});
+});
+document.getElementById('s-dr').addEventListener('input', function() {
+  document.getElementById('v-dr').textContent = (+this.value).toFixed(3);
+  _sendStepParams();
+});
+document.getElementById('s-dphi').addEventListener('input', function() {
+  document.getElementById('v-dphi').textContent = (+this.value).toFixed(0) + '°';
+  _sendStepParams();
+});
+function _sendStepParams() {
+  fetch('/set_step_params', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      dr:   +document.getElementById('s-dr').value,
+      dphi: +document.getElementById('s-dphi').value * Math.PI / 180,
+    })});
+}
+
 window.stepFoot = function(leg) {
   const body = leg ? JSON.stringify({leg}) : '{}';
   fetch('/step_foot', {method:'POST', headers:{'Content-Type':'application/json'}, body});
@@ -1251,10 +1419,14 @@ class _Handler(BaseHTTPRequestHandler):
         n    = int(self.headers.get('Content-Length', 0))
         body = json.loads(self.rfile.read(n)) if n else {}
         if self.path == '/set_pose':
-            _app.set_pose(body.get('pos', [0, 0, 0.34]),
+            _app.set_pose(body.get('pos', [0, 0, 0.28]),
                           body.get('rpy', [0, 0, 0]))
         elif self.path == '/step_foot':
             _app.step_foot(body.get('leg'))
+        elif self.path == '/set_crawl_height':
+            _app.set_crawl_height(body.get('height', 0.28))
+        elif self.path == '/set_step_params':
+            _app.set_step_params(body.get('dr', 0.12), body.get('dphi', 0.0))
         elif self.path == '/reset':
             _app.reset()
         else:
