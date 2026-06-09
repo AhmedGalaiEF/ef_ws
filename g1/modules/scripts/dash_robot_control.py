@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+from sdk_client import Robot
 
 import argparse
 from collections import deque
@@ -46,7 +47,8 @@ if not LOGGER.handlers:
         _stream_handler.setFormatter(logging.Formatter("%(message)s"))
     except Exception:
         _stream_handler = logging.StreamHandler()
-        _stream_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(threadName)s %(message)s"))
+        _stream_handler.setFormatter(logging.Formatter(
+            "%(asctime)s %(levelname)s %(threadName)s %(message)s"))
     LOGGER.addHandler(_stream_handler)
     try:
         _file_handler = logging.FileHandler(LOG_PATH)
@@ -58,8 +60,6 @@ if not LOGGER.handlers:
     LOGGER.info("Dash robot control log path: %s", LOG_PATH)
 
 logging.getLogger("werkzeug").setLevel(logging.WARNING)
-
-from sdk_client import Robot
 
 
 CALLBACK_LOG_INTERVAL_S = float(os.environ.get("DASH_CALLBACK_LOG_INTERVAL_S", "5.0"))
@@ -102,12 +102,14 @@ def _trace_dash_callback(func: Any) -> Any:
         start = time.perf_counter()
         log_start = _should_log_callback(name, trigger)
         if log_start:
-            LOGGER.info("Callback start name=%s trigger=%s args=%s kwargs=%s", name, trigger, len(args), sorted(kwargs))
+            LOGGER.info("Callback start name=%s trigger=%s args=%s kwargs=%s",
+                        name, trigger, len(args), sorted(kwargs))
         try:
             result = func(*args, **kwargs)
         except Exception:
             elapsed = time.perf_counter() - start
-            LOGGER.exception("Callback failed name=%s trigger=%s elapsed_s=%.3f", name, trigger, elapsed)
+            LOGGER.exception("Callback failed name=%s trigger=%s elapsed_s=%.3f",
+                             name, trigger, elapsed)
             raise
         elapsed = time.perf_counter() - start
         if log_start or _should_log_callback(name, trigger, elapsed):
@@ -148,7 +150,8 @@ ROBOT_INIT_ERR: str | None = None
 ROBOT_IFACE = _default_iface()
 ROBOT_LIDAR_CLOUD_TOPIC = "rt/utlidar/cloud_livox_mid360"
 REPO_ROOT = Path(__file__).resolve().parents[2]
-LIVOX_WRAPPER_DIR = Path(os.environ.get("LIVOX_WRAPPER_DIR", REPO_ROOT / "dev" / "old_scripts" / "navigation" / "slam"))
+LIVOX_WRAPPER_DIR = Path(os.environ.get("LIVOX_WRAPPER_DIR", REPO_ROOT /
+                         "dev" / "old_scripts" / "navigation" / "slam"))
 LIVOX_CONFIG = Path(os.environ.get("LIVOX_CONFIG", LIVOX_WRAPPER_DIR / "mid360_config.json"))
 LIVOX_HOST_IP = os.environ.get("HOST_IP", "192.168.123.222")
 RGBD_HOST = os.environ.get("G1_RGBD_HOST", "10.34.0.83")
@@ -471,7 +474,8 @@ class _GripController:
                 return self._status
             self._status = f"Moving {side} grip to {target:.1f}%."
             self._error = None
-            self._thread = threading.Thread(target=self._run, args=(side, str(iface), int(domain_id)), daemon=True)
+            self._thread = threading.Thread(target=self._run, args=(
+                side, str(iface), int(domain_id)), daemon=True)
             self._thread.start()
             return self._status
 
@@ -528,6 +532,7 @@ class _GripController:
 
 
 GRIP_CONTROLLER = _GripController()
+
 
 class _RgbPreviewReceiver:
     def __init__(self, rgb_port: int, width: int, height: int, fps: int) -> None:
@@ -683,7 +688,8 @@ class _DepthPreviewReceiver:
                 raise RuntimeError("appsink not found")
             pipeline.set_state(Gst.State.PLAYING)
 
-            cmap = cv2.applyColorMap(np.arange(256, dtype=np.uint8).reshape(256, 1), cv2.COLORMAP_PLASMA)
+            cmap = cv2.applyColorMap(
+                np.arange(256, dtype=np.uint8).reshape(256, 1), cv2.COLORMAP_PLASMA)
             cmap = cmap.reshape(256, 3).astype(np.int16)
             wait_ns = int(Gst.SECOND // self.fps)
 
@@ -712,7 +718,8 @@ class _DepthPreviewReceiver:
                 y0 = max(0, cy - center_size)
                 y1 = min(self.height, cy + center_size)
                 center = depth_bgr[y0:y1, x0:x1]
-                roi = depth_bgr[int(self.height * 0.25) : int(self.height * 0.70), int(self.width * 0.30) : int(self.width * 0.70)]
+                roi = depth_bgr[int(self.height * 0.25): int(self.height * 0.70),
+                                int(self.width * 0.30): int(self.width * 0.70)]
                 center_depth_m: float | None = None
                 near_cov: float | None = None
                 if center.size > 0 and roi.size > 0:
@@ -837,7 +844,8 @@ class _ZmqRgbdPreviewReceiver:
                     except Exception:
                         depth_scale = 0.001
 
-                depth_raw = cv2.imdecode(np.frombuffer(depth_png, dtype=np.uint8), cv2.IMREAD_UNCHANGED)
+                depth_raw = cv2.imdecode(np.frombuffer(
+                    depth_png, dtype=np.uint8), cv2.IMREAD_UNCHANGED)
                 if depth_raw is None:
                     continue
                 if depth_raw.ndim == 3:
@@ -847,7 +855,8 @@ class _ZmqRgbdPreviewReceiver:
                 max_depth_m = 4.0
                 depth_m = depth_raw.astype(np.float32) * float(depth_scale)
                 depth_norm = np.zeros(depth_raw.shape, dtype=np.uint8)
-                depth_norm[valid] = np.clip((depth_m[valid] / max_depth_m) * 255.0, 0, 255).astype(np.uint8)
+                depth_norm[valid] = np.clip((depth_m[valid] / max_depth_m)
+                                            * 255.0, 0, 255).astype(np.uint8)
                 depth_vis = cv2.applyColorMap(depth_norm, cv2.COLORMAP_PLASMA)
                 depth_vis[~valid] = (0, 0, 0)
 
@@ -856,10 +865,10 @@ class _ZmqRgbdPreviewReceiver:
                 cx = w // 2
                 cy = h // 2
                 center = depth_m[
-                    max(0, cy - center_size) : min(h, cy + center_size),
-                    max(0, cx - center_size) : min(w, cx + center_size),
+                    max(0, cy - center_size): min(h, cy + center_size),
+                    max(0, cx - center_size): min(w, cx + center_size),
                 ]
-                roi = depth_m[int(h * 0.25) : int(h * 0.70), int(w * 0.30) : int(w * 0.70)]
+                roi = depth_m[int(h * 0.25): int(h * 0.70), int(w * 0.30): int(w * 0.70)]
                 center_valid = center[center > 0]
                 center_depth_m = float(np.median(center_valid)) if center_valid.size else None
                 near_cov = float(np.mean((roi > 0) & (roi <= 1.0))) if roi.size else None
@@ -1229,7 +1238,8 @@ class _BootSequenceController:
             self._state = "running"
             self._message = "Starting secure boot sequence."
             self._error = None
-            self._thread = threading.Thread(target=self._run, args=(iface, int(domain_id)), daemon=True)
+            self._thread = threading.Thread(
+                target=self._run, args=(iface, int(domain_id)), daemon=True)
             self._thread.start()
             LOGGER.info("Boot thread started name=%s", self._thread.name)
             return self._message
@@ -1313,7 +1323,8 @@ class _BootSequenceController:
                 with ROBOT_LOCK:
                     ROBOT_INSTANCE = None
                     ROBOT_INIT_ERR = None
-                self._set("done", f"Robot is already in balanced stand (FSM {cur_id}, mode {cur_mode}).")
+                self._set(
+                    "done", f"Robot is already in balanced stand (FSM {cur_id}, mode {cur_mode}).")
                 return
 
             self._set("running", "Switching to stand-up FSM.")
@@ -1373,7 +1384,8 @@ class _BootSequenceController:
             else:
                 raise TimeoutError("Hanger boot did not reach a loaded stand state.")
 
-            self._wait_for_confirm("Robot appears loaded. Press Confirm balanced stand to command BalanceStand.")
+            self._wait_for_confirm(
+                "Robot appears loaded. Press Confirm balanced stand to command BalanceStand.")
             LOGGER.info("Boot calling SetFsmId(501) after dashboard confirmation")
             force_balanced_stand_fsm(bot)
             cur_id, mode = read_fsm_state(bot, retries=2, retry_delay=0.05)
@@ -1640,9 +1652,12 @@ def build_altegro_info() -> dict[str, Any]:
 
     device_id = str(fingerprint.get("device_id") or "G1_Robot_001")
     battery_level = fingerprint.get("battery_level", fingerprint.get("battery_capacity"))
-    skill_settings = runtime_defaults.get("skills", {}) if isinstance(runtime_defaults.get("skills"), dict) else {}
-    updates = runtime_defaults.get("updates", {}) if isinstance(runtime_defaults.get("updates"), dict) else {}
-    network = runtime_defaults.get("network", {}) if isinstance(runtime_defaults.get("network"), dict) else {}
+    skill_settings = runtime_defaults.get("skills", {}) if isinstance(
+        runtime_defaults.get("skills"), dict) else {}
+    updates = runtime_defaults.get("updates", {}) if isinstance(
+        runtime_defaults.get("updates"), dict) else {}
+    network = runtime_defaults.get("network", {}) if isinstance(
+        runtime_defaults.get("network"), dict) else {}
     domain_id = getattr(robot, "domain_id", 0) if robot is not None else 0
 
     hardware = dict(fingerprint)
@@ -1979,9 +1994,12 @@ app.layout = dbc.Container(
                     children=[
                         dbc.Row(
                             [
-                                dbc.Col(dbc.Button("Damp", id="btn-damp", color="warning", className="w-100"), md=4),
-                                dbc.Col(dbc.Button("Zero Torque", id="btn-zero", color="danger", className="w-100"), md=4),
-                                dbc.Col(dbc.Button("Stop", id="btn-stop", color="secondary", className="w-100"), md=4),
+                                dbc.Col(dbc.Button("Damp", id="btn-damp",
+                                        color="warning", className="w-100"), md=4),
+                                dbc.Col(dbc.Button("Zero Torque", id="btn-zero",
+                                        color="danger", className="w-100"), md=4),
+                                dbc.Col(dbc.Button("Stop", id="btn-stop",
+                                        color="secondary", className="w-100"), md=4),
                             ],
                             className="g-2 mt-2",
                         ),
@@ -2031,7 +2049,8 @@ app.layout = dbc.Container(
                         ),
                         dbc.InputGroup(
                             [
-                                dbc.Input(id="say-text", placeholder="Type text to speak", type="text"),
+                                dbc.Input(id="say-text",
+                                          placeholder="Type text to speak", type="text"),
                                 dbc.Button("Say", id="btn-say", color="success"),
                             ],
                             className="mt-3",
@@ -2039,10 +2058,14 @@ app.layout = dbc.Container(
                         html.Div(id="say-result", className="mt-2"),
                         dbc.Row(
                             [
-                                dbc.Col([html.Div("Headlight color", className="mt-3 mb-1"), dbc.Input(id="headlight-color", type="text", value="white")], md=3),
-                                dbc.Col([html.Div("Intensity", className="mt-3 mb-1"), dbc.Input(id="headlight-intensity", type="number", value=80, min=0, max=100, step=1)], md=3),
-                                dbc.Col([html.Div("Duration (s)", className="mt-3 mb-1"), dbc.Input(id="headlight-duration", type="number", value=2.0, min=0, step=0.1)], md=3),
-                                dbc.Col(dbc.Button("Apply Headlight", id="btn-headlight", color="primary", className="w-100 mt-4"), md=3),
+                                dbc.Col([html.Div("Headlight color", className="mt-3 mb-1"),
+                                        dbc.Input(id="headlight-color", type="text", value="white")], md=3),
+                                dbc.Col([html.Div("Intensity", className="mt-3 mb-1"), dbc.Input(
+                                    id="headlight-intensity", type="number", value=80, min=0, max=100, step=1)], md=3),
+                                dbc.Col([html.Div("Duration (s)", className="mt-3 mb-1"), dbc.Input(
+                                    id="headlight-duration", type="number", value=2.0, min=0, step=0.1)], md=3),
+                                dbc.Col(dbc.Button("Apply Headlight", id="btn-headlight",
+                                        color="primary", className="w-100 mt-4"), md=3),
                             ],
                             className="g-2",
                         ),
@@ -2075,12 +2098,14 @@ app.layout = dbc.Container(
                                 dbc.Col(
                                     [
                                         html.Div("Max increment (rad)", className="mt-3 mb-1"),
-                                        dbc.Input(id="lowlevel-max-inc", type="number", value=0.01, step=0.001, min=0.0005),
+                                        dbc.Input(id="lowlevel-max-inc", type="number",
+                                                  value=0.01, step=0.001, min=0.0005),
                                     ],
                                     md=3,
                                 ),
                                 dbc.Col(
-                                    dbc.Button("Enable LowLevel", id="btn-lowlevel-toggle", color="danger", className="w-100 mt-4"),
+                                    dbc.Button("Enable LowLevel", id="btn-lowlevel-toggle",
+                                               color="danger", className="w-100 mt-4"),
                                     md=3,
                                 ),
                             ],
@@ -2099,10 +2124,14 @@ app.layout = dbc.Container(
                         ),
                         dbc.Row(
                             [
-                                dbc.Col([html.Div("dq", className="mt-3 mb-1"), dbc.Input(id="lowlevel-dq", type="number", value=0.0, step=0.01)], md=3),
-                                dbc.Col([html.Div("tau", className="mt-3 mb-1"), dbc.Input(id="lowlevel-tau", type="number", value=0.0, step=0.01)], md=3),
-                                dbc.Col([html.Div("pk", className="mt-3 mb-1"), dbc.Input(id="lowlevel-pk", type="number", value=30.0, step=0.5)], md=3),
-                                dbc.Col([html.Div("pd", className="mt-3 mb-1"), dbc.Input(id="lowlevel-pd", type="number", value=1.5, step=0.1)], md=3),
+                                dbc.Col([html.Div("dq", className="mt-3 mb-1"),
+                                        dbc.Input(id="lowlevel-dq", type="number", value=0.0, step=0.01)], md=3),
+                                dbc.Col([html.Div("tau", className="mt-3 mb-1"),
+                                        dbc.Input(id="lowlevel-tau", type="number", value=0.0, step=0.01)], md=3),
+                                dbc.Col([html.Div("pk", className="mt-3 mb-1"),
+                                        dbc.Input(id="lowlevel-pk", type="number", value=30.0, step=0.5)], md=3),
+                                dbc.Col([html.Div("pd", className="mt-3 mb-1"),
+                                        dbc.Input(id="lowlevel-pd", type="number", value=1.5, step=0.1)], md=3),
                             ],
                             className="g-2",
                         ),
@@ -2128,12 +2157,14 @@ app.layout = dbc.Container(
                                 dbc.Col(
                                     [
                                         html.Div("Grip max increment (%)", className="mt-3 mb-1"),
-                                        dbc.Input(id="grip-max-inc", type="number", value=2.0, step=0.5, min=0.1),
+                                        dbc.Input(id="grip-max-inc", type="number",
+                                                  value=2.0, step=0.5, min=0.1),
                                     ],
                                     md=3,
                                 ),
                                 dbc.Col(
-                                    dbc.Button("Enable Gripper", id="btn-grip-toggle", color="danger", className="w-100 mt-4"),
+                                    dbc.Button("Enable Gripper", id="btn-grip-toggle",
+                                               color="danger", className="w-100 mt-4"),
                                     md=3,
                                 ),
                             ],
@@ -2160,30 +2191,35 @@ app.layout = dbc.Container(
                     label_style=TAB_LABEL_STYLE,
                     active_label_style=ACTIVE_TAB_LABEL_STYLE,
                     children=[
-                        dbc.Button("Enable Joysticks", id="btn-joystick-toggle", color="danger", className="mt-3"),
+                        dbc.Button("Enable Joysticks", id="btn-joystick-toggle",
+                                   color="danger", className="mt-3"),
                         dbc.Row(
                             [
                                 dbc.Col(
                                     [
-                                        html.Div("Left joystick linear velocity", className="mt-3 mb-2"),
+                                        html.Div("Left joystick linear velocity",
+                                                 className="mt-3 mb-2"),
                                         html.Div(
                                             [html.Div(className="joystick-knob")],
                                             id="linear-joystick",
                                             className="joystick-pad",
                                         ),
-                                        html.Div("vx 0.00 m/s | vy 0.00 m/s", id="linear-joystick-readout", className="mt-2"),
+                                        html.Div("vx 0.00 m/s | vy 0.00 m/s",
+                                                 id="linear-joystick-readout", className="mt-2"),
                                     ],
                                     md=6,
                                 ),
                                 dbc.Col(
                                     [
-                                        html.Div("Right joystick angular velocity", className="mt-3 mb-2"),
+                                        html.Div("Right joystick angular velocity",
+                                                 className="mt-3 mb-2"),
                                         html.Div(
                                             [html.Div(className="joystick-knob")],
                                             id="angular-joystick",
                                             className="joystick-pad",
                                         ),
-                                        html.Div("vyaw 0.00 rad/s", id="angular-joystick-readout", className="mt-2"),
+                                        html.Div("vyaw 0.00 rad/s",
+                                                 id="angular-joystick-readout", className="mt-2"),
                                     ],
                                     md=6,
                                 ),
@@ -2196,11 +2232,13 @@ app.layout = dbc.Container(
                         dbc.Row(
                             [
                                 dbc.Col(
-                                    dbc.Button("Handshake", id="btn-handshake", color="primary", className="w-100 mt-3"),
+                                    dbc.Button("Handshake", id="btn-handshake",
+                                               color="primary", className="w-100 mt-3"),
                                     md=6,
                                 ),
                                 dbc.Col(
-                                    dbc.Button("Stop Move", id="btn-nav-stop", color="secondary", className="w-100 mt-3"),
+                                    dbc.Button("Stop Move", id="btn-nav-stop",
+                                               color="secondary", className="w-100 mt-3"),
                                     md=6,
                                 ),
                             ],
@@ -2211,7 +2249,8 @@ app.layout = dbc.Container(
                         dbc.Row(
                             [
                                 dbc.Col(
-                                    dbc.Button(label, id=button_id, color="primary", outline=True, className="w-100 mt-2"),
+                                    dbc.Button(label, id=button_id, color="primary",
+                                               outline=True, className="w-100 mt-2"),
                                     md=3,
                                     sm=6,
                                 )
@@ -2223,7 +2262,8 @@ app.layout = dbc.Container(
                         dbc.Row(
                             [
                                 dbc.Col(
-                                    dbc.Button(label, id=button_id, color="warning", className="w-100 mt-2"),
+                                    dbc.Button(label, id=button_id, color="warning",
+                                               className="w-100 mt-2"),
                                     md=3,
                                     sm=6,
                                 )
@@ -2260,29 +2300,39 @@ app.layout = dbc.Container(
                     label_style=TAB_LABEL_STYLE,
                     active_label_style=ACTIVE_TAB_LABEL_STYLE,
                     children=[
-                        dbc.Button("Enable SLAM", id="btn-slam-toggle", color="danger", className="mt-3"),
+                        dbc.Button("Enable SLAM", id="btn-slam-toggle",
+                                   color="danger", className="mt-3"),
                         dbc.Row(
                             [
-                                dbc.Col(dbc.Button("Start Mapping", id="btn-slam-start", color="primary", className="w-100 mt-3"), md=3),
-                                dbc.Col(dbc.Button("Finish Mapping", id="btn-slam-stop", color="secondary", className="w-100 mt-3"), md=3),
-                                dbc.Col(dbc.Button("Navigate Target", id="btn-slam-nav", color="success", className="w-100 mt-3"), md=3),
-                                dbc.Col(dbc.Button("Clear Target", id="btn-slam-clear-target", color="warning", className="w-100 mt-3"), md=3),
+                                dbc.Col(dbc.Button("Start Mapping", id="btn-slam-start",
+                                        color="primary", className="w-100 mt-3"), md=3),
+                                dbc.Col(dbc.Button("Finish Mapping", id="btn-slam-stop",
+                                        color="secondary", className="w-100 mt-3"), md=3),
+                                dbc.Col(dbc.Button("Navigate Target", id="btn-slam-nav",
+                                        color="success", className="w-100 mt-3"), md=3),
+                                dbc.Col(dbc.Button("Clear Target", id="btn-slam-clear-target",
+                                        color="warning", className="w-100 mt-3"), md=3),
                             ],
                             className="g-2",
                         ),
                         dbc.Row(
                             [
-                                dbc.Col([html.Div("Target X (m)", className="mt-3 mb-1"), dbc.Input(id="slam-target-x", type="number", value=0.0, step=0.05)], md=4),
-                                dbc.Col([html.Div("Target Y (m)", className="mt-3 mb-1"), dbc.Input(id="slam-target-y", type="number", value=0.0, step=0.05)], md=4),
-                                dbc.Col([html.Div("Target yaw (rad)", className="mt-3 mb-1"), dbc.Input(id="slam-target-yaw", type="number", value=0.0, step=0.05)], md=4),
+                                dbc.Col([html.Div("Target X (m)", className="mt-3 mb-1"),
+                                        dbc.Input(id="slam-target-x", type="number", value=0.0, step=0.05)], md=4),
+                                dbc.Col([html.Div("Target Y (m)", className="mt-3 mb-1"),
+                                        dbc.Input(id="slam-target-y", type="number", value=0.0, step=0.05)], md=4),
+                                dbc.Col([html.Div("Target yaw (rad)", className="mt-3 mb-1"),
+                                        dbc.Input(id="slam-target-yaw", type="number", value=0.0, step=0.05)], md=4),
                             ],
                             className="g-2",
                         ),
                         html.Div(id="slam-status", className="mt-3"),
                         dbc.Row(
                             [
-                                dbc.Col([dcc.Graph(id="slam-cloud-graph", figure=empty_slam_cloud_figure())], md=6),
-                                dbc.Col([dcc.Graph(id="slam-map-graph", figure=empty_slam_map_figure())], md=6),
+                                dbc.Col([dcc.Graph(id="slam-cloud-graph",
+                                        figure=empty_slam_cloud_figure())], md=6),
+                                dbc.Col(
+                                    [dcc.Graph(id="slam-map-graph", figure=empty_slam_map_figure())], md=6),
                             ],
                             className="g-2",
                         ),
@@ -2296,7 +2346,8 @@ app.layout = dbc.Container(
                     label_style=TAB_LABEL_STYLE,
                     active_label_style=ACTIVE_TAB_LABEL_STYLE,
                     children=[
-                        dbc.Button("Refresh Info", id="btn-info-refresh", color="primary", className="mt-3 mb-2"),
+                        dbc.Button("Refresh Info", id="btn-info-refresh",
+                                   color="primary", className="mt-3 mb-2"),
                         html.Pre(id="info-content", children=""),
                     ],
                 ),
@@ -2312,7 +2363,8 @@ app.layout = dbc.Container(
                             dbc.CardBody(
                                 [
                                     html.H4("ALTEGRO store", className="card-title"),
-                                    html.Div("Skill marketplace placeholder.", className="text-muted"),
+                                    html.Div("Skill marketplace placeholder.",
+                                             className="text-muted"),
                                 ]
                             ),
                             className="mt-3",
@@ -2328,7 +2380,8 @@ app.layout = dbc.Container(
                     active_label_style=ACTIVE_TAB_LABEL_STYLE,
                     children=[
                         html.Div(f"Log file: {LOG_PATH}", className="mt-3 mb-2"),
-                        dbc.Button("Refresh Logs", id="btn-logs-refresh", color="primary", className="mb-2"),
+                        dbc.Button("Refresh Logs", id="btn-logs-refresh",
+                                   color="primary", className="mb-2"),
                         html.Pre(id="logs-content", children=""),
                     ],
                 ),
@@ -2345,7 +2398,8 @@ app.layout = dbc.Container(
                                 dbc.Col(
                                     [
                                         html.Div("RGB camera feed", className="mt-3 mb-2"),
-                                        dbc.Button("Enable RGB", id="btn-rgb-toggle", color="danger", className="mb-2"),
+                                        dbc.Button("Enable RGB", id="btn-rgb-toggle",
+                                                   color="danger", className="mb-2"),
                                         html.Img(
                                             id="rgb-feed",
                                             style={
@@ -2360,8 +2414,10 @@ app.layout = dbc.Container(
                                 ),
                                 dbc.Col(
                                     [
-                                        html.Div("Depth camera feed (RealSense, PLASMA)", className="mt-3 mb-2"),
-                                        dbc.Button("Enable Depth", id="btn-depth-toggle", color="danger", className="mb-2"),
+                                        html.Div("Depth camera feed (RealSense, PLASMA)",
+                                                 className="mt-3 mb-2"),
+                                        dbc.Button("Enable Depth", id="btn-depth-toggle",
+                                                   color="danger", className="mb-2"),
                                         html.Img(
                                             id="depth-feed",
                                             style={
@@ -2378,13 +2434,16 @@ app.layout = dbc.Container(
                             className="g-2",
                         ),
                         html.Hr(),
-                        html.Div("LiDAR stream (XY scatter from PointCloud2)", className="mt-3 mb-2"),
-                        dbc.Button("Enable LiDAR", id="btn-lidar-toggle", color="danger", className="mb-2"),
+                        html.Div("LiDAR stream (XY scatter from PointCloud2)",
+                                 className="mt-3 mb-2"),
+                        dbc.Button("Enable LiDAR", id="btn-lidar-toggle",
+                                   color="danger", className="mb-2"),
                         dcc.Graph(id="lidar-graph", figure=empty_lidar_figure()),
                         html.Div(id="lidar-status", className="mb-3"),
                         html.Hr(),
                         html.Div("IMU orientation (roll/pitch/yaw)", className="mt-3 mb-2"),
-                        dbc.Button("Enable IMU", id="btn-imu-toggle", color="danger", className="mb-2"),
+                        dbc.Button("Enable IMU", id="btn-imu-toggle",
+                                   color="danger", className="mb-2"),
                         dcc.Graph(id="imu-graph", figure=empty_imu_figure()),
                         html.Div(id="imu-status", className="mb-3"),
                     ],
@@ -2401,7 +2460,8 @@ app.layout = dbc.Container(
                         dbc.Badge(ROBOT_IFACE, id="iface-current", color="secondary"),
                         dbc.InputGroup(
                             [
-                                dbc.Input(id="iface-input", placeholder="e.g. eth0, enp3s0, wlan0", type="text", value=ROBOT_IFACE),
+                                dbc.Input(id="iface-input", placeholder="e.g. eth0, enp3s0, wlan0",
+                                          type="text", value=ROBOT_IFACE),
                                 dbc.Button("Apply iface", id="btn-apply-iface", color="primary"),
                             ],
                             className="mt-3",
@@ -2650,7 +2710,8 @@ def update_boot_status(
 
     state, message, err, running = BOOT_SEQUENCE.snapshot()
     if trigger in {"btn-hanged-boot", "btn-boot-enter"}:
-        LOGGER.info("Boot callback snapshot state=%s running=%s err=%s message=%s", state, running, err, message)
+        LOGGER.info("Boot callback snapshot state=%s running=%s err=%s message=%s",
+                    state, running, err, message)
     if err:
         status = f"Boot: error | {message} | log={LOG_PATH}"
     elif running or state != "idle":
@@ -3003,10 +3064,12 @@ def update_slam_tab(
             if selected_target is None:
                 status_parts.append("No target selected.")
             elif hasattr(robot, "slam_nav_pose"):
-                rc = int(robot.slam_nav_pose(float(selected_target[0]), float(selected_target[1]), float(target_yaw or 0.0), obs_avoid=False))
+                rc = int(robot.slam_nav_pose(float(selected_target[0]), float(
+                    selected_target[1]), float(target_yaw or 0.0), obs_avoid=False))
                 status_parts.append(f"slam_nav_pose rc={rc}")
             elif hasattr(robot, "_run_pose_nav"):
-                rc = int(getattr(robot, "_run_pose_nav")(float(selected_target[0]), float(selected_target[1]), float(target_yaw or 0.0)))
+                rc = int(getattr(robot, "_run_pose_nav")(
+                    float(selected_target[0]), float(selected_target[1]), float(target_yaw or 0.0)))
                 status_parts.append(f"pose_nav rc={rc}")
             else:
                 status_parts.append("Robot wrapper has no SLAM navigation method.")
@@ -3056,7 +3119,8 @@ def update_slam_tab(
 
     try:
         height_map = robot.get_lidar_map()
-        map_fig = _make_slam_map_figure(height_map, selected_target, pose) if height_map is not None else empty_slam_map_figure("SLAM map unavailable")
+        map_fig = _make_slam_map_figure(
+            height_map, selected_target, pose) if height_map is not None else empty_slam_map_figure("SLAM map unavailable")
     except Exception as exc:
         LOGGER.exception("SLAM map render failed")
         map_fig = empty_slam_map_figure("SLAM map error")
@@ -3068,10 +3132,12 @@ def update_slam_tab(
     except Exception:
         ts = {}
     map_age = max(0.0, time.time() - ts.get("lidar_map", 0.0)) if ts.get("lidar_map", 0.0) else -1.0
-    cloud_age = max(0.0, time.time() - ts.get("lidar_cloud", 0.0)) if ts.get("lidar_cloud", 0.0) else -1.0
+    cloud_age = max(0.0, time.time() - ts.get("lidar_cloud", 0.0)
+                    ) if ts.get("lidar_cloud", 0.0) else -1.0
     pose_txt = "pose unavailable" if pose is None else f"pose=({pose[0]:.2f}, {pose[1]:.2f}, {pose[2]:.2f})"
     target_txt = "target unset" if selected_target is None else f"target=({selected_target[0]:.2f}, {selected_target[1]:.2f}, yaw={float(target_yaw or 0.0):.2f})"
-    status = " | ".join([*status_parts, pose_txt, target_txt, f"map_age={map_age:.2f}s", f"cloud_age={cloud_age:.2f}s"])
+    status = " | ".join([*status_parts, pose_txt, target_txt,
+                        f"map_age={map_age:.2f}s", f"cloud_age={cloud_age:.2f}s"])
     return cloud_fig, map_fig, status, out_x, out_y, out_store
 
 
@@ -3275,9 +3341,11 @@ def on_headlight(_n: int | None, color: str | None, intensity: int | float | Non
     duration_value = None if duration is None or float(duration) <= 0 else float(duration)
     try:
         try:
-            rc = int(robot.headlight(color=color_value, intensity=intensity_value, duration=duration_value))
+            rc = int(robot.headlight(color=color_value,
+                     intensity=intensity_value, duration=duration_value))
         except TypeError:
-            rc = int(robot.headlight({"color": color_value, "intensity": intensity_value}, duration=duration_value))
+            rc = int(robot.headlight(
+                {"color": color_value, "intensity": intensity_value}, duration=duration_value))
         return f"Headlight applied: color={color_value}, intensity={intensity_value}, duration={duration_value}, rc={rc}"
     except Exception as exc:
         LOGGER.exception("Headlight command failed")
@@ -3430,7 +3498,8 @@ def update_lidar(_tick: int, lidar_enabled: bool, imu_enabled: bool) -> tuple[go
                                 x=xs,
                                 y=ys,
                                 mode="markers",
-                                marker={"size": 3, "color": zs, "colorscale": "Viridis", "showscale": True},
+                                marker={"size": 3, "color": zs,
+                                        "colorscale": "Viridis", "showscale": True},
                                 name="LiDAR",
                             )
                         ]
@@ -3463,7 +3532,8 @@ def update_lidar(_tick: int, lidar_enabled: bool, imu_enabled: bool) -> tuple[go
                             x=xs,
                             y=ys,
                             mode="markers",
-                            marker={"size": 3, "color": zs, "colorscale": "Viridis", "showscale": True},
+                            marker={"size": 3, "color": zs,
+                                    "colorscale": "Viridis", "showscale": True},
                             name="LiDAR",
                         )
                     ]
@@ -3478,7 +3548,8 @@ def update_lidar(_tick: int, lidar_enabled: bool, imu_enabled: bool) -> tuple[go
                 )
 
                 ts = robot.get_sensor_timestamps()
-                age = max(0.0, time.time() - ts.get("lidar_cloud", 0.0)) if ts.get("lidar_cloud", 0.0) > 0 else -1.0
+                age = max(0.0, time.time() - ts.get("lidar_cloud", 0.0)
+                          ) if ts.get("lidar_cloud", 0.0) > 0 else -1.0
                 lidar_status = (
                     f"Points: {len(xyz)} | topic: {ROBOT_LIDAR_CLOUD_TOPIC} | "
                     f"lidar_cloud_age_s: {age:.2f}"

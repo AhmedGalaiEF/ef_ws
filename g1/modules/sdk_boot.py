@@ -1,4 +1,9 @@
 from __future__ import annotations
+from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
+from unitree_sdk2py.g1.loco.g1_loco_api import (
+    ROBOT_API_ID_LOCO_GET_FSM_ID,
+    ROBOT_API_ID_LOCO_GET_FSM_MODE,
+)
 
 import json
 import logging
@@ -10,11 +15,6 @@ from dds_env import ensure_channel_factory_initialized, ensure_cyclonedds_enviro
 
 ensure_cyclonedds_environment()
 
-from unitree_sdk2py.g1.loco.g1_loco_api import (
-    ROBOT_API_ID_LOCO_GET_FSM_ID,
-    ROBOT_API_ID_LOCO_GET_FSM_MODE,
-)
-from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
 
 BALANCED_STAND_FSM_ID = 501
 BALANCED_STAND_FSM_IDS = frozenset((BALANCED_STAND_FSM_ID,))
@@ -214,7 +214,8 @@ def hanger_boot_sequence(
             try:
                 input()
             except EOFError as exc:
-                raise TimeoutError("Boot retry needs operator confirmation, but input is unavailable.") from exc
+                raise TimeoutError(
+                    "Boot retry needs operator confirmation, but input is unavailable.") from exc
             continue
         logger.warning(
             "Retrying stand-height sweep automatically (%d/%d).",

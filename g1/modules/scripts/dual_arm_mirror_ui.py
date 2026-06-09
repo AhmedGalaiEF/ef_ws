@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+from sdk_client import Robot
+from dds_env import ensure_cyclonedds_environment
 
 import argparse
 import json
@@ -17,7 +19,6 @@ PARENT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 if PARENT_DIR not in sys.path:
     sys.path.insert(0, PARENT_DIR)
 
-from dds_env import ensure_cyclonedds_environment
 
 ensure_cyclonedds_environment()
 
@@ -52,8 +53,6 @@ except ImportError as exc:
         "unitree_sdk2py is not installed. Install it with:\n"
         "  pip install -e <path-to-unitree_sdk2_python>"
     ) from exc
-
-from sdk_client import Robot
 
 
 SLIDER_SCALE = 1000
@@ -111,12 +110,14 @@ JOINT_SPEC_BY_NAME = {spec.name: spec for spec in JOINT_SPECS}
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Mirror both G1 arms from a single joint slider UI.")
+    parser = argparse.ArgumentParser(
+        description="Mirror both G1 arms from a single joint slider UI.")
     parser.add_argument("--iface", default="eth0", help="Network interface for DDS traffic.")
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id.")
     parser.add_argument("--file", default=DEFAULT_POSE_FILE, help="Saved pose JSON file.")
     parser.add_argument("--rate-hz", type=float, default=50.0, help="Command publish rate.")
-    parser.add_argument("--speed-rad-s", type=float, default=0.1, help="Initial max ramp increment in rad/s.")
+    parser.add_argument("--speed-rad-s", type=float, default=0.1,
+                        help="Initial max ramp increment in rad/s.")
     parser.add_argument("--kp", type=float, default=DEFAULT_ARM_KP, help="Arm proportional gain.")
     parser.add_argument("--kd", type=float, default=DEFAULT_ARM_KD, help="Arm derivative gain.")
     return parser.parse_args()
@@ -439,7 +440,8 @@ class DualArmMirrorWindow(QWidget):
         try:
             self.slider.setMinimum(int(round(spec.slider_min * SLIDER_SCALE)))
             self.slider.setMaximum(int(round(spec.slider_max * SLIDER_SCALE)))
-            self.slider.setTickInterval(max(1, int(round((spec.slider_max - spec.slider_min) * SLIDER_SCALE / 10.0))))
+            self.slider.setTickInterval(
+                max(1, int(round((spec.slider_max - spec.slider_min) * SLIDER_SCALE / 10.0))))
             self.slider.setValue(int(round(slider_value * SLIDER_SCALE)))
             self.slider_value_box.setRange(spec.slider_min, spec.slider_max)
             self.slider_value_box.setValue(slider_value)
@@ -456,8 +458,10 @@ class DualArmMirrorWindow(QWidget):
 
     def _refresh_labels(self) -> None:
         spec = self._selected_spec()
-        left_current = float(self.latest_positions.get(spec.left_index, self.current_targets[spec.left_index]))
-        right_current = float(self.latest_positions.get(spec.right_index, self.current_targets[spec.right_index]))
+        left_current = float(self.latest_positions.get(
+            spec.left_index, self.current_targets[spec.left_index]))
+        right_current = float(self.latest_positions.get(
+            spec.right_index, self.current_targets[spec.right_index]))
         left_target = float(self.desired_targets[spec.left_index])
         right_target = float(self.desired_targets[spec.right_index])
         self.current_label.setText(
@@ -514,7 +518,8 @@ class DualArmMirrorWindow(QWidget):
     def _write_saved_poses(self) -> None:
         payload = {"poses": self.saved_poses}
         self.pose_path.parent.mkdir(parents=True, exist_ok=True)
-        self.pose_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        self.pose_path.write_text(json.dumps(
+            payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
     def _refresh_pose_list(self) -> None:
         selected_row = self.pose_list.currentRow() if hasattr(self, "pose_list") else -1
@@ -541,7 +546,8 @@ class DualArmMirrorWindow(QWidget):
         return suffix.isdigit()
 
     def _on_pose_file_changed(self) -> None:
-        self.pose_path = Path(os.path.abspath(os.path.expanduser(self.pose_file_edit.text().strip() or str(self.pose_path))))
+        self.pose_path = Path(os.path.abspath(os.path.expanduser(
+            self.pose_file_edit.text().strip() or str(self.pose_path))))
         self._load_saved_poses()
         self.status_label.setText(f"Pose file set to {self.pose_path}")
 
@@ -600,7 +606,8 @@ class DualArmMirrorWindow(QWidget):
         if self.control_enabled:
             self.status_label.setText(f"Loaded pose '{name}' into desired targets for live ramping")
         else:
-            self.status_label.setText(f"Loaded pose '{name}' into desired targets; publishing is still disabled")
+            self.status_label.setText(
+                f"Loaded pose '{name}' into desired targets; publishing is still disabled")
 
     def _selected_pose_rows(self) -> list[int]:
         rows = sorted({index.row() for index in self.pose_list.selectedIndexes()})
@@ -649,7 +656,8 @@ class DualArmMirrorWindow(QWidget):
             name = str(pose.get("name", f"pose_{pose_index}"))
             self.sequence_list.addItem(f"{order}: {name}")
         if self.sequence_pose_indices:
-            self.sequence_list.setCurrentRow(min(max(selected_row, 0), len(self.sequence_pose_indices) - 1))
+            self.sequence_list.setCurrentRow(
+                min(max(selected_row, 0), len(self.sequence_pose_indices) - 1))
 
     def _add_selected_poses_to_sequence(self) -> None:
         rows = self._selected_pose_rows()
@@ -663,7 +671,8 @@ class DualArmMirrorWindow(QWidget):
     def _remove_selected_sequence_steps(self) -> None:
         rows = sorted({index.row() for index in self.sequence_list.selectedIndexes()}, reverse=True)
         if not rows:
-            QMessageBox.warning(self, "No Sequence Step", "Select one or more sequence steps first.")
+            QMessageBox.warning(self, "No Sequence Step",
+                                "Select one or more sequence steps first.")
             return
         for row in rows:
             if 0 <= row < len(self.sequence_pose_indices):
@@ -695,10 +704,12 @@ class DualArmMirrorWindow(QWidget):
 
     def _start_sequence(self) -> None:
         if not self.control_enabled:
-            QMessageBox.warning(self, "Slider Control Disabled", "Reengage arms before running a sequence.")
+            QMessageBox.warning(self, "Slider Control Disabled",
+                                "Reengage arms before running a sequence.")
             return
         if not self.sequence_pose_indices:
-            QMessageBox.warning(self, "Empty Sequence", "Add one or more poses to the sequence first.")
+            QMessageBox.warning(self, "Empty Sequence",
+                                "Add one or more poses to the sequence first.")
             return
         self.sequence_running = True
         self.sequence_step_index = 0
@@ -734,9 +745,11 @@ class DualArmMirrorWindow(QWidget):
         self._apply_pose_to_desired_targets(pose)
         self.sequence_list.setCurrentRow(self.sequence_step_index)
         self.sequence_step_index += 1
-        self.sequence_next_time_s = -1.0 if self.transition_joint_indices else now_s + max(0.0, float(self.sequence_gap_box.value()))
+        self.sequence_next_time_s = -1.0 if self.transition_joint_indices else now_s + \
+            max(0.0, float(self.sequence_gap_box.value()))
         name = str(pose.get("name", "<unnamed>"))
-        self.status_label.setText(f"Sequence step {self.sequence_step_index}/{len(self.sequence_pose_indices)}: {name}")
+        self.status_label.setText(
+            f"Sequence step {self.sequence_step_index}/{len(self.sequence_pose_indices)}: {name}")
 
     def _on_joint_selected(self, index: int) -> None:
         name = self.joint_combo.itemData(index)
@@ -780,7 +793,8 @@ class DualArmMirrorWindow(QWidget):
             self.status_label.setText(f"Release arms failed: {exc}")
             return
         self.control_enabled = False
-        self.status_label.setText("Arms released through sdk_client.Robot.release_arms(); slider publishing disabled")
+        self.status_label.setText(
+            "Arms released through sdk_client.Robot.release_arms(); slider publishing disabled")
 
     def _reengage_arms(self) -> None:
         try:
@@ -792,7 +806,8 @@ class DualArmMirrorWindow(QWidget):
             return
         self.control_enabled = True
         self._sync_desired_to_current()
-        self.status_label.setText("Arms reengaged through sdk_client.Robot.unrelease_arms(); publishing resumed from live pose")
+        self.status_label.setText(
+            "Arms reengaged through sdk_client.Robot.unrelease_arms(); publishing resumed from live pose")
 
     def _zero_gains_once(self) -> None:
         self.controller.write_zero_gains(self.current_targets)
@@ -807,10 +822,12 @@ class DualArmMirrorWindow(QWidget):
             if abs(delta) <= max_step:
                 self.current_targets[joint_index] = desired
             else:
-                self.current_targets[joint_index] = current + max_step * (1.0 if delta > 0.0 else -1.0)
+                self.current_targets[joint_index] = current + \
+                    max_step * (1.0 if delta > 0.0 else -1.0)
 
         if self.transition_joint_indices and all(
-            abs(float(self.current_targets[joint]) - float(self.desired_targets[joint])) <= TRANSITION_EPSILON_RAD
+            abs(float(self.current_targets[joint]) -
+                float(self.desired_targets[joint])) <= TRANSITION_EPSILON_RAD
             for joint in self.transition_joint_indices
         ):
             self.transition_joint_indices.clear()
@@ -819,7 +836,8 @@ class DualArmMirrorWindow(QWidget):
         if not self.transition_joint_indices:
             return {}
         return {
-            joint: max(INACTIVE_TRANSITION_KP, self.waist_kp if joint in WAIST_JOINTS else self.arm_kp)
+            joint: max(INACTIVE_TRANSITION_KP,
+                       self.waist_kp if joint in WAIST_JOINTS else self.arm_kp)
             for joint in UPPER_BODY_JOINTS
             if joint not in self.transition_joint_indices
         }

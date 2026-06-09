@@ -49,16 +49,16 @@ else:
 
 PROVIDERS = {
     "anthropic": {
-        "base":      "https://api.anthropic.com/v1",
-        "model":     "claude-sonnet-4-6",
-        "env_var":   "ANTHROPIC_API_KEY",
-        "key_hint":  "sk-ant-...",
+        "base": "https://api.anthropic.com/v1",
+        "model": "claude-sonnet-4-6",
+        "env_var": "ANTHROPIC_API_KEY",
+        "key_hint": "sk-ant-...",
     },
     "openai": {
-        "base":      "https://api.openai.com/v1",
-        "model":     "gpt-4o-mini",
-        "env_var":   "OPENAI_API_KEY",
-        "key_hint":  "sk-...",
+        "base": "https://api.openai.com/v1",
+        "model": "gpt-4o-mini",
+        "env_var": "OPENAI_API_KEY",
+        "key_hint": "sk-...",
     },
 }
 DEFAULT_PROVIDER = "anthropic"
@@ -228,7 +228,8 @@ def handle_slash(line: str, state: Dict[str, Any]) -> bool:
 # ----------------------------------------------------------------------
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="LLM REPL with full robot tool access (Anthropic or OpenAI).")
+    parser = argparse.ArgumentParser(
+        description="LLM REPL with full robot tool access (Anthropic or OpenAI).")
     parser.add_argument("--provider", choices=list(PROVIDERS), default=DEFAULT_PROVIDER,
                         help="LLM provider: anthropic (default) or openai")
     parser.add_argument("--model", default=None,

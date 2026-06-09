@@ -10,6 +10,14 @@ Wraps the 6D EE IK control in a web UI with:
   - +/- nudge buttons for x, y, z, roll, pitch, yaw
 """
 from __future__ import annotations
+from hand_pose_navigation_copy.arm_fk import JOINT_LIMITS
+from hand_pose_navigation_copy.arm_ik import ArmIK
+from hand_pose_navigation_copy.arm_fk import (
+    ArmFK, LEFT_ARM_JOINTS, RIGHT_ARM_JOINTS,
+    _LEFT_SHOULDER_IN_BASE, _RIGHT_SHOULDER_IN_BASE,
+)
+from sdk_client import Robot
+from dds_env import ensure_cyclonedds_environment
 
 import argparse
 import math
@@ -32,15 +40,14 @@ except ImportError as exc:
     ) from exc
 
 # ── Path setup ────────────────────────────────────────────────────────────────
-SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 MODULES_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
-ROOT_DIR    = os.path.abspath(os.path.join(MODULES_DIR, ".."))
-WBC_DIR     = os.path.join(ROOT_DIR, "WBC")
+ROOT_DIR = os.path.abspath(os.path.join(MODULES_DIR, ".."))
+WBC_DIR = os.path.join(ROOT_DIR, "WBC")
 for _p in (ROOT_DIR, MODULES_DIR, WBC_DIR):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from dds_env import ensure_cyclonedds_environment
 ensure_cyclonedds_environment()
 
 try:
@@ -53,60 +60,60 @@ try:
 except ImportError as exc:
     raise SystemExit("unitree_sdk2py not installed.") from exc
 
-from sdk_client import Robot
-from hand_pose_navigation_copy.arm_fk import (
-    ArmFK, LEFT_ARM_JOINTS, RIGHT_ARM_JOINTS,
-    _LEFT_SHOULDER_IN_BASE, _RIGHT_SHOULDER_IN_BASE,
-)
-from hand_pose_navigation_copy.arm_ik import ArmIK
-from hand_pose_navigation_copy.arm_fk import JOINT_LIMITS
 
 # ── Constants ─────────────────────────────────────────────────────────────────
-WAIST_JOINTS      = [12, 13, 14]
+WAIST_JOINTS = [12, 13, 14]
 UPPER_BODY_JOINTS = WAIST_JOINTS + LEFT_ARM_JOINTS + RIGHT_ARM_JOINTS
 ARM_SDK_WEIGHT_INDEX = 29
-WAIST_HOLD_KP     = 480.0
-WAIST_HOLD_KD     = 12.0
-DEFAULT_ARM_KP    = 30.0
-DEFAULT_ARM_KD    = 1.5
+WAIST_HOLD_KP = 480.0
+WAIST_HOLD_KD = 12.0
+DEFAULT_ARM_KP = 30.0
+DEFAULT_ARM_KD = 1.5
 DEFAULT_WAIST_PR_KP = 200.0
 
 ARM_JOINTS: Dict[str, List[int]] = {"left": LEFT_ARM_JOINTS, "right": RIGHT_ARM_JOINTS}
-DOF_NAMES  = ("x", "y", "z", "roll", "pitch", "yaw")
-DOF_UNITS  = ("m",  "m", "m", "rad",  "rad",   "rad")
-N_DOFS     = 6
+DOF_NAMES = ("x", "y", "z", "roll", "pitch", "yaw")
+DOF_UNITS = ("m", "m", "m", "rad", "rad", "rad")
+N_DOFS = 6
 
-SHOULDER_ELBOW_IDXS   = (0, 1, 2, 3)
-POSITION_IK_TOL_M     = 0.005
-POSITION_IK_AXIS_TOL_M   = 0.006
+SHOULDER_ELBOW_IDXS = (0, 1, 2, 3)
+POSITION_IK_TOL_M = 0.005
+POSITION_IK_AXIS_TOL_M = 0.006
 POSITION_IK_SOFT_LIMIT_M = 0.040
 
 # ── Rotation helpers ──────────────────────────────────────────────────────────
+
+
 def _Rx(a: float) -> np.ndarray:
     c, s = math.cos(a), math.sin(a)
     return np.array([[1, 0, 0], [0, c, -s], [0, s, c]], dtype=np.float64)
+
 
 def _Ry(a: float) -> np.ndarray:
     c, s = math.cos(a), math.sin(a)
     return np.array([[c, 0, s], [0, 1, 0], [-s, 0, c]], dtype=np.float64)
 
+
 def _Rz(a: float) -> np.ndarray:
     c, s = math.cos(a), math.sin(a)
     return np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]], dtype=np.float64)
 
+
 _ROT_BY_AXIS = (_Rx, _Ry, _Rz)
+
 
 def _rpy_from_R(R: np.ndarray) -> Tuple[float, float, float]:
     sy = math.sqrt(R[0, 0] ** 2 + R[1, 0] ** 2)
     if sy > 1e-6:
-        roll  = math.atan2( R[2, 1],  R[2, 2])
-        pitch = math.atan2(-R[2, 0],  sy)
-        yaw   = math.atan2( R[1, 0],  R[0, 0])
+        roll = math.atan2(R[2, 1], R[2, 2])
+        pitch = math.atan2(-R[2, 0], sy)
+        yaw = math.atan2(R[1, 0], R[0, 0])
     else:
-        roll  = math.atan2(-R[1, 2],  R[1, 1])
-        pitch = math.atan2(-R[2, 0],  sy)
-        yaw   = 0.0
+        roll = math.atan2(-R[1, 2], R[1, 1])
+        pitch = math.atan2(-R[2, 0], sy)
+        yaw = 0.0
     return roll, pitch, yaw
+
 
 def _clamp_q(q: np.ndarray, arm: str) -> np.ndarray:
     limits = JOINT_LIMITS[arm]
@@ -115,6 +122,8 @@ def _clamp_q(q: np.ndarray, arm: str) -> np.ndarray:
     return np.clip(q, lo, hi)
 
 # ── DDS subscriber (mirrors ik_pose_cli_v3) ───────────────────────────────────
+
+
 def _resolve_lowstate_type():
     for path in (
         "unitree_sdk2py.idl.unitree_hg.msg.dds_",
@@ -132,7 +141,7 @@ def _resolve_lowstate_type():
 class UpperBodyStateSubscriber:
     def __init__(self, joints: List[int]) -> None:
         self._joints = [int(j) for j in joints]
-        self._lock   = threading.Lock()
+        self._lock = threading.Lock()
         self._pos: Dict[int, float] = {}
         t = _resolve_lowstate_type()
         if t is None:
@@ -176,9 +185,9 @@ class ArmSDKPublisher:
         for j in UPPER_BODY_JOINTS:
             c = self._cmd.motor_cmd[j]
             c.mode = 1
-            c.q    = float(targets[j])
-            c.dq   = 0.0
-            c.tau  = 0.0
+            c.q = float(targets[j])
+            c.dq = 0.0
+            c.tau = 0.0
             if j in (12, 13):
                 c.kp = float(waist_pr_kp)
                 c.kd = float(waist_kd)
@@ -209,51 +218,51 @@ class ArmController:
         rot_step: float = 0.05,
         max_dq: float = 0.2,
     ) -> None:
-        self.iface       = iface
-        self.rate_hz     = rate_hz
-        self.max_speed   = max_speed
-        self.arm_kp      = arm_kp
-        self.arm_kd      = arm_kd
+        self.iface = iface
+        self.rate_hz = rate_hz
+        self.max_speed = max_speed
+        self.arm_kp = arm_kp
+        self.arm_kd = arm_kd
         self.waist_pr_kp = waist_pr_kp
-        self.waist_y_kp  = WAIST_HOLD_KP
-        self.waist_kd    = WAIST_HOLD_KD
-        self.pos_step    = pos_step
-        self.rot_step    = rot_step
-        self.max_dq      = max_dq
+        self.waist_y_kp = WAIST_HOLD_KP
+        self.waist_kd = WAIST_HOLD_KD
+        self.pos_step = pos_step
+        self.rot_step = rot_step
+        self.max_dq = max_dq
 
         self._lock = threading.RLock()
         self.arm_control_mode = "right"
         self.orient_stiff = True
-        self.armed  = True
+        self.armed = True
         self.seeded = False
         self.status = "Waiting for rt/lowstate…"
 
         self.latest_positions: Dict[int, float] = {j: 0.0 for j in UPPER_BODY_JOINTS}
-        self.current_targets:  Dict[int, float] = {j: 0.0 for j in UPPER_BODY_JOINTS}
-        self.desired_targets:  Dict[int, float] = {j: 0.0 for j in UPPER_BODY_JOINTS}
+        self.current_targets: Dict[int, float] = {j: 0.0 for j in UPPER_BODY_JOINTS}
+        self.desired_targets: Dict[int, float] = {j: 0.0 for j in UPPER_BODY_JOINTS}
 
         self.target_T: Dict[str, np.ndarray] = {
-            "left":  np.eye(4, dtype=np.float64),
+            "left": np.eye(4, dtype=np.float64),
             "right": np.eye(4, dtype=np.float64),
         }
         self.ik_info: Dict[str, Dict] = {
-            "left":  {"success": None, "error_pos_m": 0.0, "iterations": 0},
+            "left": {"success": None, "error_pos_m": 0.0, "iterations": 0},
             "right": {"success": None, "error_pos_m": 0.0, "iterations": 0},
         }
 
         self._fk: Dict[str, ArmFK] = {
-            "left":  ArmFK("left",  "urdf"),
+            "left": ArmFK("left", "urdf"),
             "right": ArmFK("right", "urdf"),
         }
         self._ik: Dict[str, ArmIK] = {
-            "left":  ArmIK("left",  "dls", max_iter=10, tol_pos_m=0.005, tol_rot_rad=0.02),
+            "left": ArmIK("left", "dls", max_iter=10, tol_pos_m=0.005, tol_rot_rad=0.02),
             "right": ArmIK("right", "dls", max_iter=10, tol_pos_m=0.005, tol_rot_rad=0.02),
         }
 
         ChannelFactoryInitialize(domain_id, iface)
         self._state_sub = UpperBodyStateSubscriber(UPPER_BODY_JOINTS)
-        self._pub       = ArmSDKPublisher()
-        self.robot      = Robot(iface=iface, domain_id=domain_id, auto_start_sensors=True)
+        self._pub = ArmSDKPublisher()
+        self.robot = Robot(iface=iface, domain_id=domain_id, auto_start_sensors=True)
 
         # Seed from live state before starting loop
         deadline = time.monotonic() + 3.0
@@ -261,8 +270,8 @@ class ArmController:
             pos = self._state_sub.snapshot()
             if pos:
                 self.latest_positions = pos
-                self.current_targets  = dict(pos)
-                self.desired_targets  = dict(pos)
+                self.current_targets = dict(pos)
+                self.desired_targets = dict(pos)
                 self.seeded = True
                 self._sync_ee_from_joints()
                 self.status = f"Connected on {iface}"
@@ -291,7 +300,7 @@ class ArmController:
         for j in UPPER_BODY_JOINTS:
             cur = float(self.current_targets[j])
             des = float(self.desired_targets[j])
-            d   = des - cur
+            d = des - cur
             if abs(d) <= step:
                 self.current_targets[j] = des
             else:
@@ -368,7 +377,8 @@ class ArmController:
             J = np.zeros((3, len(SHOULDER_ELBOW_IDXS)), dtype=np.float64)
             p0 = T_cur[:3, 3]
             for col, idx in enumerate(SHOULDER_ELBOW_IDXS):
-                q1 = q.copy(); q1[idx] += eps_fd
+                q1 = q.copy()
+                q1[idx] += eps_fd
                 J[:, col] = (self._fk[arm].compute_arm(q1)[:3, 3] - p0) / eps_fd
             dq = J.T @ np.linalg.solve(J @ J.T + lam**2 * np.eye(3), pos_err)
             norm = float(np.linalg.norm(dq))
@@ -380,7 +390,7 @@ class ArmController:
             q = _clamp_q(q_next, arm)
             q[4:] = q_init[4:]
 
-        T_cur   = self._fk[arm].compute_arm(best_q)
+        T_cur = self._fk[arm].compute_arm(best_q)
         err_pos = float(np.linalg.norm(T_des[:3, 3] - T_cur[:3, 3]))
         axis_err = (
             abs(float(T_des[selected_axis, 3] - T_cur[selected_axis, 3]))
@@ -401,7 +411,8 @@ class ArmController:
         joints = ARM_JOINTS[arm]
         q_init = np.array([self.desired_targets[j] for j in joints])
         if shoulder_elbow_only:
-            q_sol, info = self._solve_position_shoulder_elbow(arm, self.target_T[arm], q_init, selected_axis=selected_axis)
+            q_sol, info = self._solve_position_shoulder_elbow(
+                arm, self.target_T[arm], q_init, selected_axis=selected_axis)
         else:
             q_sol, info = self._ik[arm].solve(self.target_T[arm], q_init=q_init)
         self.ik_info[arm] = info
@@ -520,18 +531,18 @@ class ArmController:
             T = self.target_T[disp]
             rpy = _rpy_from_R(T[:3, :3])
             return {
-                "seeded":       self.seeded,
-                "armed":        self.armed,
-                "arm_mode":     self.arm_control_mode,
+                "seeded": self.seeded,
+                "armed": self.armed,
+                "arm_mode": self.arm_control_mode,
                 "orient_stiff": self.orient_stiff,
-                "status":       self.status,
+                "status": self.status,
                 "ee": {
-                    "x":     float(T[0, 3]),
-                    "y":     float(T[1, 3]),
-                    "z":     float(T[2, 3]),
-                    "roll":  float(rpy[0]),
+                    "x": float(T[0, 3]),
+                    "y": float(T[1, 3]),
+                    "z": float(T[2, 3]),
+                    "roll": float(rpy[0]),
                     "pitch": float(rpy[1]),
-                    "yaw":   float(rpy[2]),
+                    "yaw": float(rpy[2]),
                 },
                 "ik_info": dict(self.ik_info),
             }
@@ -598,7 +609,8 @@ def make_app(ctrl: ArmController) -> dash.Dash:
                             html.H4("G1 Upper Body IK Control", className="text-center mb-3 mt-4"),
 
                             # ── Connection status ─────────────────────────
-                            html.Div(id="status-display", className="text-center text-muted mb-3 small"),
+                            html.Div(id="status-display",
+                                     className="text-center text-muted mb-3 small"),
 
                             # ── Release / Arm selection ───────────────────
                             dbc.Row(
@@ -616,13 +628,14 @@ def make_app(ctrl: ArmController) -> dash.Dash:
                                     ),
                                     dbc.Col(
                                         [
-                                            html.Span("Arm:", className="fw-semibold me-2 text-muted"),
+                                            html.Span(
+                                                "Arm:", className="fw-semibold me-2 text-muted"),
                                             dbc.RadioItems(
                                                 id="radio-arm-mode",
                                                 options=[
                                                     {"label": " Right", "value": "right"},
-                                                    {"label": " Left",  "value": "left"},
-                                                    {"label": " Both",  "value": "both"},
+                                                    {"label": " Left", "value": "left"},
+                                                    {"label": " Both", "value": "both"},
                                                 ],
                                                 value="right",
                                                 inline=True,
@@ -668,10 +681,14 @@ def make_app(ctrl: ArmController) -> dash.Dash:
                             # ── DOF header ────────────────────────────────
                             dbc.Row(
                                 [
-                                    dbc.Col(html.Small("DOF",   className="text-muted fw-bold"), width=2, className="text-center"),
-                                    dbc.Col(html.Small("Target", className="text-muted fw-bold"), width=4, className="text-center"),
-                                    dbc.Col(html.Small("−",      className="text-muted fw-bold"), width=3, className="text-center"),
-                                    dbc.Col(html.Small("+",      className="text-muted fw-bold"), width=3, className="text-center"),
+                                    dbc.Col(html.Small("DOF", className="text-muted fw-bold"),
+                                            width=2, className="text-center"),
+                                    dbc.Col(html.Small("Target", className="text-muted fw-bold"),
+                                            width=4, className="text-center"),
+                                    dbc.Col(html.Small("−", className="text-muted fw-bold"),
+                                            width=3, className="text-center"),
+                                    dbc.Col(html.Small("+", className="text-muted fw-bold"),
+                                            width=3, className="text-center"),
                                 ],
                                 className="mb-1",
                             ),
@@ -732,15 +749,15 @@ def make_app(ctrl: ArmController) -> dash.Dash:
 
     # ── Outputs ───────────────────────────────────────────────────────────────
     _outputs = [
-        Output("status-display",       "children"),
-        Output("command-result",        "children"),
-        Output("event-log",             "children"),
-        Output("event-log-store",       "data"),
-        Output("btn-arm-release",       "children"),
-        Output("btn-arm-release",       "color"),
-        Output("btn-orient-lock",       "children"),
-        Output("btn-orient-lock",       "color"),
-        Output("btn-extend-forward",    "disabled"),
+        Output("status-display", "children"),
+        Output("command-result", "children"),
+        Output("event-log", "children"),
+        Output("event-log-store", "data"),
+        Output("btn-arm-release", "children"),
+        Output("btn-arm-release", "color"),
+        Output("btn-orient-lock", "children"),
+        Output("btn-orient-lock", "color"),
+        Output("btn-extend-forward", "disabled"),
     ]
     for _dof in DOF_NAMES:
         _outputs.append(Output(f"val-{_dof}", "children"))
@@ -750,11 +767,11 @@ def make_app(ctrl: ArmController) -> dash.Dash:
 
     # ── Inputs ────────────────────────────────────────────────────────────────
     _inputs = [
-        Input("state-interval",      "n_intervals"),
-        Input("btn-arm-release",     "n_clicks"),
-        Input("radio-arm-mode",      "value"),
-        Input("btn-orient-lock",     "n_clicks"),
-        Input("btn-extend-forward",  "n_clicks"),
+        Input("state-interval", "n_intervals"),
+        Input("btn-arm-release", "n_clicks"),
+        Input("radio-arm-mode", "value"),
+        Input("btn-orient-lock", "n_clicks"),
+        Input("btn-extend-forward", "n_clicks"),
     ]
     for _dof in DOF_NAMES:
         _inputs.append(Input(f"btn-dof-{_dof}-dec", "n_clicks"))
@@ -763,7 +780,7 @@ def make_app(ctrl: ArmController) -> dash.Dash:
     @app.callback(
         _outputs,
         _inputs,
-        State("command-result",  "children"),
+        State("command-result", "children"),
         State("event-log-store", "data"),
         prevent_initial_call=False,
     )
@@ -807,16 +824,16 @@ def make_app(ctrl: ArmController) -> dash.Dash:
         # ── Collect display state ─────────────────────────────────────────
         st = ctrl.get_state()
 
-        conn_tag  = "[CONNECTED]" if st["seeded"] else "[WAITING]"
-        arm_tag   = "[ARMED]" if st["armed"] else "[RELEASED]"
+        conn_tag = "[CONNECTED]" if st["seeded"] else "[WAITING]"
+        arm_tag = "[ARMED]" if st["armed"] else "[RELEASED]"
         orient_tag = "orient:locked" if st["orient_stiff"] else "orient:free"
         status_line = f"{conn_tag}  {arm_tag}  arm:{st['arm_mode']}  {orient_tag}  {st['status']}"
 
         release_label = "Reengage Arms" if not st["armed"] else "Release Arms"
-        release_color = "success"      if not st["armed"] else "danger"
+        release_color = "success" if not st["armed"] else "danger"
 
         orient_label = f"Orient Lock: {'ON' if st['orient_stiff'] else 'OFF'}"
-        orient_color = "info"    if st["orient_stiff"] else "warning"
+        orient_color = "info" if st["orient_stiff"] else "warning"
 
         not_ready = not st["seeded"] or not st["armed"]
 
@@ -850,16 +867,18 @@ def make_app(ctrl: ArmController) -> dash.Dash:
 # ── CLI ───────────────────────────────────────────────────────────────────────
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Dash upper-body IK control panel for the Unitree G1.")
-    p.add_argument("--iface",      default=os.environ.get("G1_IFACE", "eth0"))
-    p.add_argument("--domain-id",  type=int,   default=int(os.environ.get("G1_DOMAIN_ID", "0")))
-    p.add_argument("--host",       default=os.environ.get("UB_CONTROL_HOST", "0.0.0.0"))
-    p.add_argument("--port",       type=int,   default=int(os.environ.get("UB_CONTROL_PORT", "8052")))
-    p.add_argument("--rate-hz",    type=float, default=25.0, help="Control loop publish rate")
-    p.add_argument("--speed",      type=float, default=0.2,  help="Joint ramp speed rad/s")
-    p.add_argument("--pos-step",   type=float, default=0.02, help="Position nudge step (m)")
-    p.add_argument("--rot-step",   type=float, default=0.05, help="Rotation nudge step (rad)")
-    p.add_argument("--max-dq",     type=float, default=0.2,  help="Max joint delta per IK solve (rad)")
-    p.add_argument("--debug",      action="store_true")
+    p.add_argument("--iface", default=os.environ.get("G1_IFACE", "eth0"))
+    p.add_argument("--domain-id", type=int, default=int(os.environ.get("G1_DOMAIN_ID", "0")))
+    p.add_argument("--host", default=os.environ.get("UB_CONTROL_HOST", "0.0.0.0"))
+    p.add_argument("--port", type=int,
+                   default=int(os.environ.get("UB_CONTROL_PORT", "8052")))
+    p.add_argument("--rate-hz", type=float, default=25.0, help="Control loop publish rate")
+    p.add_argument("--speed", type=float, default=0.2, help="Joint ramp speed rad/s")
+    p.add_argument("--pos-step", type=float, default=0.02, help="Position nudge step (m)")
+    p.add_argument("--rot-step", type=float, default=0.05, help="Rotation nudge step (rad)")
+    p.add_argument("--max-dq", type=float, default=0.2,
+                   help="Max joint delta per IK solve (rad)")
+    p.add_argument("--debug", action="store_true")
     return p.parse_args()
 
 

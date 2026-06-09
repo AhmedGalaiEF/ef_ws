@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+from sdk_client import Robot
 
 import argparse
 import colorsys
@@ -12,11 +13,10 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from sdk_client import Robot
-
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Cycle the robot headlight around the HSV hue wheel.")
+    parser = argparse.ArgumentParser(
+        description="Cycle the robot headlight around the HSV hue wheel.")
     parser.add_argument("--intensity", type=int, default=100, help="Headlight intensity 0-100.")
     parser.add_argument(
         "--interval",
@@ -38,7 +38,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--iface", default="eth0", help="DDS network interface.")
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain ID.")
-    parser.add_argument("--turn-off", action="store_true", help="Turn the headlight off before exiting.")
+    parser.add_argument("--turn-off", action="store_true",
+                        help="Turn the headlight off before exiting.")
     return parser.parse_args()
 
 

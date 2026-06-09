@@ -19,6 +19,7 @@ TOPICS = {
 
 seen = {topic: False for topics in TOPICS.values() for topic in topics}
 
+
 def cb(topic):
     def inner(msg):
         seen[topic] = True
@@ -27,6 +28,7 @@ def cb(topic):
             f"motors={len(msg.motor_state)}, press={len(msg.press_sensor_state)}"
         )
     return inner
+
 
 ChannelFactoryInitialize(0, "eth0")
 

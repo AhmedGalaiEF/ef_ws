@@ -49,7 +49,8 @@ class DecreaseBothElbows:
             raise ValueError("--max-delta-rad must be greater than 0")
 
         print("This script uses true low-level body control on rt/lowcmd.")
-        print(f"Requested elbow decrease: {decrease_rad:.4f} rad ({math.degrees(decrease_rad):.1f} deg)")
+        print(
+            f"Requested elbow decrease: {decrease_rad:.4f} rad ({math.degrees(decrease_rad):.1f} deg)")
         print(
             f"Requested shoulder-yaw inward move: {shoulder_yaw_rad:.4f} rad "
             f"({math.degrees(shoulder_yaw_rad):.1f} deg)"
@@ -102,12 +103,14 @@ class DecreaseBothElbows:
         min_safe_steps = max(1, math.ceil(max_distance / max_delta))
         steps = max(requested_steps, min_safe_steps)
         ramp_seconds = steps / self.rate_hz
-        print(f"Ramping elbows and shoulder yaw over {steps} publish steps at {self.rate_hz:.1f} Hz ({ramp_seconds:.1f}s)")
+        print(
+            f"Ramping elbows and shoulder yaw over {steps} publish steps at {self.rate_hz:.1f} Hz ({ramp_seconds:.1f}s)")
         try:
             for step_idx in range(1, steps + 1):
                 ratio = float(step_idx) / float(steps)
                 for local_idx in targets:
-                    body_targets[local_idx] = starts[local_idx] + (targets[local_idx] - starts[local_idx]) * ratio
+                    body_targets[local_idx] = starts[local_idx] + \
+                        (targets[local_idx] - starts[local_idx]) * ratio
                 self.controller.write_body(body_targets, mode_machine)
                 time.sleep(self.dt)
 
@@ -131,7 +134,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--iface", default="eth0", help="DDS network interface.")
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain ID.")
-    parser.add_argument("--timeout", type=float, default=5.0, help="Seconds to wait for SDK RPC/state.")
+    parser.add_argument("--timeout", type=float, default=5.0,
+                        help="Seconds to wait for SDK RPC/state.")
     parser.add_argument(
         "--decrease-rad",
         type=float,
@@ -150,16 +154,23 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_MAX_DELTA_RAD,
         help="Maximum commanded position change per publish step. Values above 0.1 are capped.",
     )
-    parser.add_argument("--ramp-duration-s", type=float, default=DEFAULT_RAMP_DURATION_S, help="Requested ramp duration in seconds.")
-    parser.add_argument("--initial-hold-s", type=float, default=1.0, help="Hold current pose before moving.")
-    parser.add_argument("--final-hold-s", type=float, default=30.0, help="Hold final pose before exit if --no-hold-forever is set.")
+    parser.add_argument("--ramp-duration-s", type=float,
+                        default=DEFAULT_RAMP_DURATION_S, help="Requested ramp duration in seconds.")
+    parser.add_argument("--initial-hold-s", type=float, default=1.0,
+                        help="Hold current pose before moving.")
+    parser.add_argument("--final-hold-s", type=float, default=30.0,
+                        help="Hold final pose before exit if --no-hold-forever is set.")
     hold_group = parser.add_mutually_exclusive_group()
-    hold_group.add_argument("--hold-forever", dest="hold_forever", action="store_true", help="Keep publishing the final pose until interrupted.")
-    hold_group.add_argument("--no-hold-forever", dest="hold_forever", action="store_false", help="Hold for --final-hold-s, then exit.")
+    hold_group.add_argument("--hold-forever", dest="hold_forever", action="store_true",
+                            help="Keep publishing the final pose until interrupted.")
+    hold_group.add_argument("--no-hold-forever", dest="hold_forever",
+                            action="store_false", help="Hold for --final-hold-s, then exit.")
     parser.set_defaults(hold_forever=True)
     parser.add_argument("--rate-hz", type=float, default=50.0, help="Low-level publish rate.")
-    parser.add_argument("--zero-gains-on-exit", action="store_true", help="Send one zero-gain command on exit.")
-    parser.add_argument("--yes", action="store_true", help="Actually release motion switcher and send low-level commands.")
+    parser.add_argument("--zero-gains-on-exit", action="store_true",
+                        help="Send one zero-gain command on exit.")
+    parser.add_argument("--yes", action="store_true",
+                        help="Actually release motion switcher and send low-level commands.")
 
     args = parser.parse_args()
     args.hands = "none"

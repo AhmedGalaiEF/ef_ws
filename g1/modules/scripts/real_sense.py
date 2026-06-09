@@ -183,7 +183,8 @@ def start_pipeline_with_fallback(
 
                 is_busy = "Device or resource busy" in err_text or "errno=16" in err_text
                 if is_busy and attempt < busy_retries:
-                    print(f"RealSense device busy; waiting {busy_retry_delay_s:.1f}s before retrying.")
+                    print(
+                        f"RealSense device busy; waiting {busy_retry_delay_s:.1f}s before retrying.")
                     time.sleep(busy_retry_delay_s)
                     continue
                 break
@@ -219,7 +220,8 @@ def hardware_reset_if_rate_limited(device: rs.device, interval_s: float = 120.0)
 
     if now - last_reset < interval_s:
         remaining_s = int(interval_s - (now - last_reset))
-        print(f"Skipping RealSense hardware reset; last reset was too recent ({remaining_s}s remaining).")
+        print(
+            f"Skipping RealSense hardware reset; last reset was too recent ({remaining_s}s remaining).")
         return False
 
     with open(marker_path, "w", encoding="utf-8") as marker_file:
@@ -296,7 +298,8 @@ def run(
     except RuntimeError as err:
         if not reset and is_busy_realsense_error(str(err)) and hardware_reset_if_rate_limited(device):
             time.sleep(5.0)
-            raise RuntimeError("RealSense hardware reset requested after busy UVC errors; service restart will retry.") from err
+            raise RuntimeError(
+                "RealSense hardware reset requested after busy UVC errors; service restart will retry.") from err
         raise
     rgb_width, rgb_height, fps = active_profile
     print(f"Active streams : {rgb_width}x{rgb_height}@{fps}")
@@ -323,7 +326,8 @@ def run(
             print("Publish limit  : camera FPS")
 
     print("Camera intrinsics (colour stream):")
-    colour_intr: rs.video_stream_profile = profile.get_stream(rs.stream.color).as_video_stream_profile()
+    colour_intr: rs.video_stream_profile = profile.get_stream(
+        rs.stream.color).as_video_stream_profile()
     intr = colour_intr.get_intrinsics()
     print(f"  Resolution    : {intr.width} × {intr.height}")
     print(f"  Focal length  : fx={intr.fx:.1f}  fy={intr.fy:.1f}")
@@ -421,7 +425,8 @@ def run(
 
                 cv2.imshow("RealSense RGB + Depth", combined)
             else:
-                centre_depth_mm = int(depth_image[depth_image.shape[0] // 2, depth_image.shape[1] // 2])
+                centre_depth_mm = int(
+                    depth_image[depth_image.shape[0] // 2, depth_image.shape[1] // 2])
                 print(
                     f"FPS: {fps_calc:5.1f} | centre depth: {centre_depth_mm:5d} mm"
                     f" | dropped pub: {dropped_publish_frames}",

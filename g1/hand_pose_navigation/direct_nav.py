@@ -6,6 +6,13 @@ web monitor usable when ROS 2 DDS cannot coexist with the Unitree SDK DDS in
 one Python process. TF is replaced by a local static T_base_camera transform.
 """
 from __future__ import annotations
+from .tracking_loop import TrackingLoop
+from .target_detector import DetectionResult, TargetDetector
+from .reachability_checker import ReachabilityChecker
+from .grasp_planner import GraspPlanner
+from .arm_ik import ArmIK
+from .arm_fk import ArmFK
+from .arm_executor import ArmExecutor
 
 import math
 import os
@@ -25,14 +32,6 @@ try:
 except ImportError:
     Robot = None
     _ROBOT_AVAILABLE = False
-
-from .arm_executor import ArmExecutor
-from .arm_fk import ArmFK
-from .arm_ik import ArmIK
-from .grasp_planner import GraspPlanner
-from .reachability_checker import ReachabilityChecker
-from .target_detector import DetectionResult, TargetDetector
-from .tracking_loop import TrackingLoop
 
 
 class DirectPosePublisher:

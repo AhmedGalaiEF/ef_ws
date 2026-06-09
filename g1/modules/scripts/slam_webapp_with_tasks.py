@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+from unitree_sdk2py.idl.sensor_msgs.msg.dds_ import PointCloud2_
+from unitree_sdk2py.g1.arm.g1_arm_action_client import G1ArmActionClient
+from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelSubscriber
+from sdk_slam import SlamInfoSubscriber, SlamOdomSubscriber, SlamOperateClient
+from sdk_client import HL_ARM_ACTIONS, HL_ARM_ACTION_ALIASES, HL_ARM_ACTION_DEFAULT_RELEASE_DELAY_S, HL_ARM_ACTION_RELEASE
 
 import argparse
 import json
@@ -22,11 +27,6 @@ MODULES_DIR = SCRIPT_DIR.parent
 if str(MODULES_DIR) not in sys.path:
     sys.path.insert(0, str(MODULES_DIR))
 
-from sdk_client import HL_ARM_ACTIONS, HL_ARM_ACTION_ALIASES, HL_ARM_ACTION_DEFAULT_RELEASE_DELAY_S, HL_ARM_ACTION_RELEASE
-from sdk_slam import SlamInfoSubscriber, SlamOdomSubscriber, SlamOperateClient
-from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelSubscriber
-from unitree_sdk2py.g1.arm.g1_arm_action_client import G1ArmActionClient
-from unitree_sdk2py.idl.sensor_msgs.msg.dds_ import PointCloud2_
 
 try:
     from kiss_icp.config import KISSConfig
@@ -90,7 +90,8 @@ class TaskStep:
     def as_dict(self) -> dict[str, Any]:
         data: dict[str, Any] = {"kind": self.kind, "label": self.label}
         if self.pose is not None:
-            data["pose"] = {"x": self.pose.x, "y": self.pose.y, "z": self.pose.z, "yaw": self.pose.yaw}
+            data["pose"] = {"x": self.pose.x, "y": self.pose.y,
+                            "z": self.pose.z, "yaw": self.pose.yaw}
         if self.action is not None:
             data["action"] = self.action
         return data
@@ -192,7 +193,8 @@ def decode_xyz(
         )
         raw = np.frombuffer(data, dtype=dtype, count=len(data) // point_step)
         step = max(1, int(stride))
-        pts = np.stack([raw["x"][::step], raw["y"][::step], raw["z"][::step]], axis=1).astype(np.float32)
+        pts = np.stack([raw["x"][::step], raw["y"][::step], raw["z"]
+                       [::step]], axis=1).astype(np.float32)
         mask = np.isfinite(pts).all(axis=1)
         if z_min is not None:
             mask &= pts[:, 2] >= float(z_min)
@@ -241,7 +243,8 @@ class OccupancyAccumulator:
             for gx, gy in cells:
                 self._cells[(int(gx), int(gy))] = now
             if len(self._cells) > self.max_cells:
-                keep = sorted(self._cells.items(), key=lambda item: item[1], reverse=True)[: self.max_cells]
+                keep = sorted(self._cells.items(), key=lambda item: item[1], reverse=True)[
+                    : self.max_cells]
                 self._cells = dict(keep)
 
     def points(self, max_points: int = 12000) -> np.ndarray:
@@ -363,7 +366,8 @@ class SlamWebState:
         self.kiss = KissIcpLayer()
         self._seen_counts: dict[str, int] = {}
         self._worker_stop = threading.Event()
-        self._worker = threading.Thread(target=self._mapping_worker, name="slam-web-map-worker", daemon=True)
+        self._worker = threading.Thread(target=self._mapping_worker,
+                                        name="slam-web-map-worker", daemon=True)
         self._worker.start()
 
     def current_pose(self) -> Optional[PoseTarget]:
@@ -390,7 +394,8 @@ class SlamWebState:
         release_code = None
         if action_name in {"shake hand", "high five", "hug", "heart", "right heart", "hands up", "x-ray", "right hand up", "reject"}:
             time.sleep(HL_ARM_ACTION_DEFAULT_RELEASE_DELAY_S)
-            release_code = int(self._get_arm_client().ExecuteAction(HL_ARM_ACTIONS[HL_ARM_ACTION_RELEASE]))
+            release_code = int(self._get_arm_client().ExecuteAction(
+                HL_ARM_ACTIONS[HL_ARM_ACTION_RELEASE]))
         return {
             "code": release_code if code == 0 and release_code is not None else code,
             "ok": code == 0 and (release_code in (None, 0)),
@@ -440,11 +445,13 @@ class SlamWebState:
 
     def add_task(self, x: float, y: float, yaw: Optional[float] = None) -> PoseTarget:
         pose = self.current_pose()
-        target = PoseTarget(float(x), float(y), float(pose.yaw if yaw is None and pose else yaw or 0.0))
+        target = PoseTarget(float(x), float(y), float(
+            pose.yaw if yaw is None and pose else yaw or 0.0))
         self.tasks.append(target)
         self.selected_pose = target
         self.sequence.append(TaskStep("nav", f"Go to point {len(self.tasks)}", pose=target))
-        self.last_action = {"label": "add_nav_task", "ok": True, "code": 0, "raw": {"x": target.x, "y": target.y, "yaw": target.yaw, "sequence_count": len(self.sequence)}, "stamp": time.time()}
+        self.last_action = {"label": "add_nav_task", "ok": True, "code": 0, "raw": {
+            "x": target.x, "y": target.y, "yaw": target.yaw, "sequence_count": len(self.sequence)}, "stamp": time.time()}
         return target
 
     def add_current_pose(self) -> dict[str, Any]:
@@ -477,7 +484,8 @@ class SlamWebState:
         if not self.relocation_ready:
             return self._record("go_to_selected_pose", {"code": 1, "ok": False, "raw": "Relocation is not active."})
         qx, qy, qz, qw = target.quaternion()
-        result = response_dict(self.client.pose_nav(target.x, target.y, target.z, qx, qy, qz, qw, mode=1))
+        result = response_dict(self.client.pose_nav(
+            target.x, target.y, target.z, qx, qy, qz, qw, mode=1))
         result["target"] = {"x": target.x, "y": target.y, "z": target.z, "yaw": target.yaw}
         return self._record("go_to_selected_pose", result)
 
@@ -498,7 +506,8 @@ class SlamWebState:
             if step.kind == "nav" and step.pose is not None:
                 target = step.pose
                 qx, qy, qz, qw = target.quaternion()
-                result = response_dict(self.client.pose_nav(target.x, target.y, target.z, qx, qy, qz, qw, mode=1))
+                result = response_dict(self.client.pose_nav(
+                    target.x, target.y, target.z, qx, qy, qz, qw, mode=1))
                 result["target"] = {"x": target.x, "y": target.y, "yaw": target.yaw}
             elif step.kind == "action" and step.action is not None:
                 result = self.execute_high_level_action(step.action)
@@ -523,7 +532,8 @@ class SlamWebState:
                 if msg is None or self._seen_counts.get(name) == count:
                     continue
                 self._seen_counts[name] = count
-                pts = decode_xyz(msg, stride=3 if name in ("deskewed", "livox") else 1, max_points=18000, z_min=-0.35, z_max=1.7)
+                pts = decode_xyz(msg, stride=3 if name in ("deskewed", "livox")
+                                 else 1, max_points=18000, z_min=-0.35, z_max=1.7)
                 if pts.size == 0:
                     continue
                 if name in ("slam_mapping", "slam_relocation", "slam_global_map", "slam_web_points"):
@@ -610,7 +620,8 @@ def make_figure(state: SlamWebState, selected_layers: list[str], max_points: int
             sample = occ[:: max(1, int(occ.shape[0] / 1000) + 1)]
             extent_points.extend((float(x), float(y)) for x, y in sample[:, :2])
             label, color, size, opacity = LAYER_STYLE["occupancy"]
-            fig.add_trace(go.Scattergl(x=occ[:, 0], y=occ[:, 1], mode="markers", name=label, marker={"size": size, "color": color, "opacity": opacity}))
+            fig.add_trace(go.Scattergl(x=occ[:, 0], y=occ[:, 1], mode="markers", name=label, marker={
+                          "size": size, "color": color, "opacity": opacity}))
 
     if "kiss_map" in selected_layers:
         kiss_cloud, kiss_pose, kiss_meta = state.kiss.snapshot()
@@ -623,7 +634,8 @@ def make_figure(state: SlamWebState, selected_layers: list[str], max_points: int
             if xy.size:
                 sample = xy[:: max(1, int(xy.shape[0] / 1000) + 1)]
                 extent_points.extend((float(x), float(y)) for x, y in sample[:, :2])
-            fig.add_trace(go.Scattergl(x=xy[:, 0], y=xy[:, 1], mode="markers", name=f"{label} ({kiss_meta['frames']} frames)", marker={"size": size, "color": color, "opacity": opacity}))
+            fig.add_trace(go.Scattergl(x=xy[:, 0], y=xy[:, 1], mode="markers", name=f"{label} ({kiss_meta['frames']} frames)", marker={
+                          "size": size, "color": color, "opacity": opacity}))
             fig.add_trace(
                 go.Scattergl(
                     x=[float(kiss_pose[0, 3])],
@@ -744,7 +756,8 @@ def app_layout(state: SlamWebState) -> html.Div:
             "grid",
         ]
     ]
-    default_layers = ["slam_mapping", "slam_relocation", "slam_global_map", "slam_web_points", "deskewed", "kiss_map", "occupancy", "collision", "warning"]
+    default_layers = ["slam_mapping", "slam_relocation", "slam_global_map",
+                      "slam_web_points", "deskewed", "kiss_map", "occupancy", "collision", "warning"]
     action_options = [
         {"label": name.title(), "value": name}
         for name in sorted(HL_ARM_ACTIONS)
@@ -785,24 +798,31 @@ def app_layout(state: SlamWebState) -> html.Div:
                     html.Div(
                         [
                             html.Label("Map path"),
-                            dcc.Input(id="map-path", value=state.map_path, type="text", debounce=True),
+                            dcc.Input(id="map-path", value=state.map_path,
+                                      type="text", debounce=True),
                             html.Label("SLAM type"),
-                            dcc.Dropdown(id="slam-type", options=[{"label": "indoor", "value": "indoor"}, {"label": "outdoor", "value": "outdoor"}], value="indoor", clearable=False),
+                            dcc.Dropdown(id="slam-type", options=[{"label": "indoor", "value": "indoor"}, {
+                                         "label": "outdoor", "value": "outdoor"}], value="indoor", clearable=False),
                             html.Label("View"),
                             dcc.RadioItems(
                                 id="view-mode",
-                                options=[{"label": "World/map frame", "value": "world"}, {"label": "Sensor frame", "value": "sensor"}],
+                                options=[{"label": "World/map frame", "value": "world"},
+                                         {"label": "Sensor frame", "value": "sensor"}],
                                 value="world",
                                 inline=False,
                             ),
                             html.Label("Layers"),
-                            dcc.Checklist(id="layers", options=layer_options, value=default_layers, className="layers"),
+                            dcc.Checklist(id="layers", options=layer_options,
+                                          value=default_layers, className="layers"),
                             html.Label("High-level action"),
-                            dcc.Dropdown(id="hl-action", options=action_options, value="high wave", clearable=False),
+                            dcc.Dropdown(id="hl-action", options=action_options,
+                                         value="high wave", clearable=False),
                             html.Label("Insert high-level action after sequence step"),
-                            dcc.Input(id="insert-after", value="", type="number", min=0, step=1, placeholder="blank = append"),
+                            dcc.Input(id="insert-after", value="", type="number",
+                                      min=0, step=1, placeholder="blank = append"),
                             html.Label("Max points per layer"),
-                            dcc.Slider(id="max-points", min=1000, max=60000, step=1000, value=22000, marks=None, tooltip={"placement": "bottom", "always_visible": True}),
+                            dcc.Slider(id="max-points", min=1000, max=60000, step=1000, value=22000,
+                                       marks=None, tooltip={"placement": "bottom", "always_visible": True}),
                             html.Div(id="action-output", className="action-output"),
                             html.Pre(id="sequence-output", className="topic-output"),
                             html.Pre(id="topic-output", className="topic-output"),
@@ -811,8 +831,10 @@ def app_layout(state: SlamWebState) -> html.Div:
                     ),
                     html.Div(
                         [
-                            dcc.Graph(id="map-graph", config={"displayModeBar": True, "scrollZoom": True}, clear_on_unhover=True),
-                            html.Div("Click on the map to append a navigation step. Use Add High-Level Task to insert actions between navigation steps.", className="hint"),
+                            dcc.Graph(
+                                id="map-graph", config={"displayModeBar": True, "scrollZoom": True}, clear_on_unhover=True),
+                            html.Div(
+                                "Click on the map to append a navigation step. Use Add High-Level Task to insert actions between navigation steps.", className="hint"),
                         ],
                         className="map-pane",
                     ),
@@ -887,7 +909,8 @@ def create_dash_app(state: SlamWebState) -> dash.Dash:
             f"KISS frames={kiss['frames']} {'err=' + kiss['error'] if kiss.get('error') else ''}"
         )
         sequence = json.dumps(status["sequence"], indent=2, sort_keys=True)
-        topics = json.dumps({"topics": status["topics"], "last_action": status["last_action"]}, indent=2, sort_keys=True)
+        topics = json.dumps(
+            {"topics": status["topics"], "last_action": status["last_action"]}, indent=2, sort_keys=True)
         return fig, line, sequence, topics
 
     @app.callback(
@@ -961,7 +984,8 @@ def create_dash_app(state: SlamWebState) -> dash.Dash:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="G1 SLAM mapping web app with interleaved navigation and high-level action tasks.")
+    parser = argparse.ArgumentParser(
+        description="G1 SLAM mapping web app with interleaved navigation and high-level action tasks.")
     parser.add_argument("--iface", default=os.environ.get("G1_IFACE", "eth0"))
     parser.add_argument("--domain-id", type=int, default=int(os.environ.get("G1_DOMAIN_ID", "0")))
     parser.add_argument("--host", default="0.0.0.0")
@@ -974,7 +998,8 @@ def main() -> None:
     args = parse_args()
     state = SlamWebState(args.iface, args.domain_id, DEFAULT_TOPICS, args.map_path)
     app = create_dash_app(state)
-    print(f"SLAM task sequencer web app: http://{args.host}:{args.port} iface={args.iface} domain={args.domain_id}")
+    print(
+        f"SLAM task sequencer web app: http://{args.host}:{args.port} iface={args.iface} domain={args.domain_id}")
     app.run(host=args.host, port=args.port, debug=False)
 
 

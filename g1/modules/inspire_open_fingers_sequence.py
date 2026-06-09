@@ -26,6 +26,7 @@ class InspireHandConfig:
 
 # Configuration for the left and right Inspire hands. Update the IP addresses as needed.
 
+
 HAND_CONFIGS: dict[str, InspireHandConfig] = {
     "right": InspireHandConfig(ip="192.168.124.210"),
     "left": InspireHandConfig(ip="192.168.124.211"),
@@ -150,14 +151,16 @@ def normalize_hands(value: str) -> tuple[str, ...]:
 
 
 def parse_order(value: str) -> tuple[str, ...]:
-    fingers = tuple(part.strip().lower().replace("-", "_") for part in value.split(",") if part.strip())
+    fingers = tuple(part.strip().lower().replace("-", "_")
+                    for part in value.split(",") if part.strip())
     if not fingers:
         raise argparse.ArgumentTypeError("at least one finger is required")
 
     unknown = [finger for finger in fingers if finger not in FINGER_TO_IDXS]
     if unknown:
         allowed = ", ".join(DEFAULT_OPEN_ORDER)
-        raise argparse.ArgumentTypeError(f"unknown finger(s): {', '.join(unknown)}. Default order is: {allowed}")
+        raise argparse.ArgumentTypeError(
+            f"unknown finger(s): {', '.join(unknown)}. Default order is: {allowed}")
     return fingers
 
 
@@ -316,16 +319,24 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_OPEN_ORDER,
         help="Comma-separated opening order. Default: thumb,index,middle,ring,little.",
     )
-    parser.add_argument("--open-duration-s", type=float, default=1.2, help="Seconds for each finger to open.")
-    parser.add_argument("--reset-duration-s", type=float, default=1.0, help="Seconds to close all fingers before each loop.")
-    parser.add_argument("--closed-hold-s", type=float, default=0.5, help="Seconds to hold the fully closed hand.")
-    parser.add_argument("--opened-hold-s", type=float, default=1.0, help="Seconds to hold after all selected fingers are open.")
-    parser.add_argument("--between-fingers-s", type=float, default=0.25, help="Pause between finger openings.")
-    parser.add_argument("--loop-pause-s", type=float, default=0.3, help="Pause before closing again.")
-    parser.add_argument("--rate-hz", type=float, default=20.0, help="Command update rate during slow motion.")
+    parser.add_argument("--open-duration-s", type=float, default=1.2,
+                        help="Seconds for each finger to open.")
+    parser.add_argument("--reset-duration-s", type=float, default=1.0,
+                        help="Seconds to close all fingers before each loop.")
+    parser.add_argument("--closed-hold-s", type=float, default=0.5,
+                        help="Seconds to hold the fully closed hand.")
+    parser.add_argument("--opened-hold-s", type=float, default=1.0,
+                        help="Seconds to hold after all selected fingers are open.")
+    parser.add_argument("--between-fingers-s", type=float, default=0.25,
+                        help="Pause between finger openings.")
+    parser.add_argument("--loop-pause-s", type=float, default=0.3,
+                        help="Pause before closing again.")
+    parser.add_argument("--rate-hz", type=float, default=20.0,
+                        help="Command update rate during slow motion.")
     parser.add_argument("--speed", type=int, default=200, help="Inspire speed register value.")
     parser.add_argument("--force", type=int, default=200, help="Inspire force register value.")
-    parser.add_argument("--dry-run", action="store_true", help="Print targets without sending commands.")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Print targets without sending commands.")
     return parser.parse_args()
 
 

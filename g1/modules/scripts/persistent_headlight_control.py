@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+from sdk_client import Robot
+from sdk_audio import parse_color, scale_color
 
 import argparse
 import os
@@ -11,12 +13,10 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from sdk_audio import parse_color, scale_color
-from sdk_client import Robot
-
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Persistently hold the robot headlight at one RGB color.")
+    parser = argparse.ArgumentParser(
+        description="Persistently hold the robot headlight at one RGB color.")
     parser.add_argument("color", help="RGB color as R,G,B, for example 255,0,0.")
     parser.add_argument("brightness", type=int, help="Brightness 0-100.")
     parser.add_argument("duration", type=float, help="Duration in seconds.")
@@ -28,7 +28,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--iface", default="eth0", help="DDS network interface.")
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain ID.")
-    parser.add_argument("--turn-off", action="store_true", help="Turn the headlight off before exiting.")
+    parser.add_argument("--turn-off", action="store_true",
+                        help="Turn the headlight off before exiting.")
     return parser.parse_args()
 
 
@@ -58,7 +59,8 @@ class HeadlightKeeper(threading.Thread):
                 break
 
             self.last_code = int(self.client.LedControl(*self.rgb))
-            print(f"LedControl({self.rgb[0]}, {self.rgb[1]}, {self.rgb[2]}) returned {self.last_code}", flush=True)
+            print(
+                f"LedControl({self.rgb[0]}, {self.rgb[1]}, {self.rgb[2]}) returned {self.last_code}", flush=True)
             if self.last_code != 0:
                 self.stop_event.set()
                 break

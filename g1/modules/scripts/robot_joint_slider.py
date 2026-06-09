@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+from sdk_hand import (
+    Dex3HandController,
+    HAND_MAX_LIMITS,
+    HAND_MIN_LIMITS,
+    TOPIC_HAND_BY_SIDE,
+    hand_open_targets,
+)
+from dds_env import ensure_cyclonedds_environment
 
 import argparse
 import os
@@ -14,7 +22,6 @@ PARENT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 if PARENT_DIR not in sys.path:
     sys.path.insert(0, PARENT_DIR)
 
-from dds_env import ensure_cyclonedds_environment
 
 ensure_cyclonedds_environment()
 
@@ -47,14 +54,6 @@ except ImportError as exc:
         "unitree_sdk2py is not installed. Install it with:\n"
         "  pip install -e <path-to-unitree_sdk2_python>"
     ) from exc
-
-from sdk_hand import (
-    Dex3HandController,
-    HAND_MAX_LIMITS,
-    HAND_MIN_LIMITS,
-    TOPIC_HAND_BY_SIDE,
-    hand_open_targets,
-)
 
 
 SLIDER_SCALE = 1000
@@ -135,7 +134,8 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
     parser.add_argument("--tau", type=float, default=0.0, help="Body joint feed-forward torque.")
     parser.add_argument("--hand-kp", type=float, default=0.8, help="Dex3 finger proportional gain.")
     parser.add_argument("--hand-kd", type=float, default=0.05, help="Dex3 finger derivative gain.")
-    parser.add_argument("--hand-tau", type=float, default=0.0, help="Dex3 finger feed-forward torque.")
+    parser.add_argument("--hand-tau", type=float, default=0.0,
+                        help="Dex3 finger feed-forward torque.")
     args, remaining = parser.parse_known_args()
     return args, [sys.argv[0], *remaining]
 
@@ -344,7 +344,8 @@ class RobotJointSliderApp(QWidget):
         self.hand_controllers: dict[str, Dex3HandController | None] = {}
         for hand in self.hand_sides:
             try:
-                self.hand_controllers[hand] = Dex3HandController(hand=hand, iface=self.iface, domain_id=self.domain_id)
+                self.hand_controllers[hand] = Dex3HandController(
+                    hand=hand, iface=self.iface, domain_id=self.domain_id)
             except Exception:
                 self.hand_controllers[hand] = None
 
@@ -363,7 +364,8 @@ class RobotJointSliderApp(QWidget):
 
         gains = QFormLayout()
         self.speed_box = self._make_spinbox(0.01, 5.0, self.speed_rad_s, 0.05)
-        self.speed_box.valueChanged.connect(lambda value: setattr(self, "speed_rad_s", float(value)))
+        self.speed_box.valueChanged.connect(
+            lambda value: setattr(self, "speed_rad_s", float(value)))
         gains.addRow("Ramp speed rad/s", self.speed_box)
 
         self.kp_box = self._make_spinbox(0.0, 100.0, self.kp, 0.5)
@@ -474,17 +476,23 @@ class RobotJointSliderApp(QWidget):
         current_label = QLabel(" -- ", self)
         desired_label = QLabel(" -- ", self)
 
-        min_box = self._make_spinbox(-ABS_RANGE_LIMIT_RAD, ABS_RANGE_LIMIT_RAD, spec.limit_min, 0.05)
-        max_box = self._make_spinbox(-ABS_RANGE_LIMIT_RAD, ABS_RANGE_LIMIT_RAD, spec.limit_max, 0.05)
-        min_box.valueChanged.connect(lambda _value, joint=spec.motor_index: self._update_slider_range(joint))
-        max_box.valueChanged.connect(lambda _value, joint=spec.motor_index: self._update_slider_range(joint))
+        min_box = self._make_spinbox(-ABS_RANGE_LIMIT_RAD,
+                                     ABS_RANGE_LIMIT_RAD, spec.limit_min, 0.05)
+        max_box = self._make_spinbox(-ABS_RANGE_LIMIT_RAD,
+                                     ABS_RANGE_LIMIT_RAD, spec.limit_max, 0.05)
+        min_box.valueChanged.connect(
+            lambda _value, joint=spec.motor_index: self._update_slider_range(joint))
+        max_box.valueChanged.connect(
+            lambda _value, joint=spec.motor_index: self._update_slider_range(joint))
 
         slider = QSlider(Qt.Horizontal, self)
         slider.setTickPosition(QSlider.TicksBelow)
-        slider.valueChanged.connect(lambda raw, joint=spec.motor_index: self._on_slider_changed(joint, raw))
+        slider.valueChanged.connect(
+            lambda raw, joint=spec.motor_index: self._on_slider_changed(joint, raw))
 
         reset_button = QPushButton("Current", self)
-        reset_button.clicked.connect(lambda _checked=False, joint=spec.motor_index: self._set_desired_to_current(joint))
+        reset_button.clicked.connect(
+            lambda _checked=False, joint=spec.motor_index: self._set_desired_to_current(joint))
 
         control = JointControl(
             spec=spec,
@@ -508,15 +516,19 @@ class RobotJointSliderApp(QWidget):
         max_default = float(HAND_MAX_LIMITS[hand][joint_index])
         min_box = self._make_spinbox(-ABS_RANGE_LIMIT_RAD, ABS_RANGE_LIMIT_RAD, min_default, 0.05)
         max_box = self._make_spinbox(-ABS_RANGE_LIMIT_RAD, ABS_RANGE_LIMIT_RAD, max_default, 0.05)
-        min_box.valueChanged.connect(lambda _value, side=hand, idx=joint_index: self._update_hand_slider_range(side, idx))
-        max_box.valueChanged.connect(lambda _value, side=hand, idx=joint_index: self._update_hand_slider_range(side, idx))
+        min_box.valueChanged.connect(lambda _value, side=hand,
+                                     idx=joint_index: self._update_hand_slider_range(side, idx))
+        max_box.valueChanged.connect(lambda _value, side=hand,
+                                     idx=joint_index: self._update_hand_slider_range(side, idx))
 
         slider = QSlider(Qt.Horizontal, self)
         slider.setTickPosition(QSlider.TicksBelow)
-        slider.valueChanged.connect(lambda raw, side=hand, idx=joint_index: self._on_hand_slider_changed(side, idx, raw))
+        slider.valueChanged.connect(lambda raw, side=hand,
+                                    idx=joint_index: self._on_hand_slider_changed(side, idx, raw))
 
         reset_button = QPushButton("Current", self)
-        reset_button.clicked.connect(lambda _checked=False, side=hand, idx=joint_index: self._set_hand_desired_to_current(side, idx))
+        reset_button.clicked.connect(lambda _checked=False, side=hand,
+                                     idx=joint_index: self._set_hand_desired_to_current(side, idx))
 
         control = HandJointControl(
             hand=hand,
@@ -583,8 +595,10 @@ class RobotJointSliderApp(QWidget):
             try:
                 for joint_index in range(7):
                     control = self.hand_controls[(hand, joint_index)]
-                    lo = max(float(HAND_MIN_LIMITS[hand][joint_index]), positions[joint_index] - DEFAULT_SOFT_RANGE_RAD)
-                    hi = min(float(HAND_MAX_LIMITS[hand][joint_index]), positions[joint_index] + DEFAULT_SOFT_RANGE_RAD)
+                    lo = max(float(HAND_MIN_LIMITS[hand][joint_index]),
+                             positions[joint_index] - DEFAULT_SOFT_RANGE_RAD)
+                    hi = min(float(HAND_MAX_LIMITS[hand][joint_index]),
+                             positions[joint_index] + DEFAULT_SOFT_RANGE_RAD)
                     if hi <= lo:
                         lo = float(HAND_MIN_LIMITS[hand][joint_index])
                         hi = float(HAND_MAX_LIMITS[hand][joint_index])
@@ -647,7 +661,8 @@ class RobotJointSliderApp(QWidget):
         self._update_hand_joint_labels(hand, joint_index)
 
     def _set_desired_to_current(self, joint: int) -> None:
-        self.desired_targets[joint] = float(self.latest_positions.get(joint, self.current_targets[joint]))
+        self.desired_targets[joint] = float(
+            self.latest_positions.get(joint, self.current_targets[joint]))
         self._update_slider_range(joint)
 
     def _set_hand_desired_to_current(self, hand: str, joint_index: int) -> None:
@@ -658,7 +673,8 @@ class RobotJointSliderApp(QWidget):
 
     def _sync_desired_to_current(self) -> None:
         for joint in self.all_joints:
-            self.desired_targets[joint] = float(self.latest_positions.get(joint, self.current_targets[joint]))
+            self.desired_targets[joint] = float(
+                self.latest_positions.get(joint, self.current_targets[joint]))
             self._update_slider_range(joint)
         for hand in self.hand_sides:
             positions = self.hand_latest_positions.get(hand, self.hand_current_targets[hand])
@@ -688,7 +704,8 @@ class RobotJointSliderApp(QWidget):
         if self._updating_controls:
             return
         lo, hi = self._hand_joint_limits(hand, joint_index)
-        self.hand_desired_targets[hand][joint_index] = max(lo, min(hi, float(raw_value) / SLIDER_SCALE))
+        self.hand_desired_targets[hand][joint_index] = max(
+            lo, min(hi, float(raw_value) / SLIDER_SCALE))
         self._update_hand_joint_labels(hand, joint_index)
 
     def _update_joint_labels(self, joint: int) -> None:
@@ -706,7 +723,8 @@ class RobotJointSliderApp(QWidget):
 
     def _update_hand_joint_labels(self, hand: str, joint_index: int) -> None:
         control = self.hand_controls[(hand, joint_index)]
-        current = float(self.hand_latest_positions.get(hand, self.hand_current_targets[hand])[joint_index])
+        current = float(self.hand_latest_positions.get(
+            hand, self.hand_current_targets[hand])[joint_index])
         desired = float(self.hand_desired_targets[hand][joint_index])
         lo, hi = self._hand_joint_limits(hand, joint_index)
         control.current_label.setText(f"{current: .3f} rad")

@@ -1,4 +1,8 @@
 from __future__ import annotations
+from unitree_sdk2py.rpc.client import Client
+from unitree_sdk2py.idl.std_msgs.msg.dds_ import String_
+from unitree_sdk2py.idl.nav_msgs.msg.dds_ import Odometry_
+from unitree_sdk2py.core.channel import ChannelSubscriber
 
 import json
 import threading
@@ -11,11 +15,6 @@ import math
 from dds_env import ensure_cyclonedds_environment
 
 ensure_cyclonedds_environment()
-
-from unitree_sdk2py.core.channel import ChannelSubscriber
-from unitree_sdk2py.idl.nav_msgs.msg.dds_ import Odometry_
-from unitree_sdk2py.idl.std_msgs.msg.dds_ import String_
-from unitree_sdk2py.rpc.client import Client
 
 
 SERVICE_NAME = "slam_operate"

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+from sdk_slam import SlamInfoSubscriber, SlamOdomSubscriber
 
 import argparse
 import json
@@ -25,7 +26,6 @@ PARENT_DIR = SCRIPT_DIR.parent
 if str(PARENT_DIR) not in sys.path:
     sys.path.insert(0, str(PARENT_DIR))
 
-from sdk_slam import SlamInfoSubscriber, SlamOdomSubscriber
 
 try:
     from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelSubscriber
@@ -241,7 +241,8 @@ def main() -> None:
                 if odom_pose is not None:
                     x, y, yaw = odom_pose
                     pose = np.eye(4, dtype=float)
-                    pose[:3, :3] = _quat_to_mat(0.0, 0.0, math.sin(float(yaw) * 0.5), math.cos(float(yaw) * 0.5))
+                    pose[:3, :3] = _quat_to_mat(0.0, 0.0, math.sin(
+                        float(yaw) * 0.5), math.cos(float(yaw) * 0.5))
                     pose[:3, 3] = [float(x), float(y), 0.0]
 
             if not viewer.update(latest_pts, pose):

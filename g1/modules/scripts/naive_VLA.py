@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+from sdk_client import Robot
 
 import argparse
 import base64
@@ -26,7 +27,6 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from sdk_client import Robot
 
 try:
     import cv2
@@ -293,15 +293,16 @@ class RgbdReceiver:
         cx = w // 2
         cy = h // 2
         center = depth_m[
-            max(0, cy - center_size) : min(h, cy + center_size),
-            max(0, cx - center_size) : min(w, cx + center_size),
+            max(0, cy - center_size): min(h, cy + center_size),
+            max(0, cx - center_size): min(w, cx + center_size),
         ]
-        roi = depth_m[int(h * 0.25) : int(h * 0.70), int(w * 0.30) : int(w * 0.70)]
+        roi = depth_m[int(h * 0.25): int(h * 0.70), int(w * 0.30): int(w * 0.70)]
         center_valid = center[center > 0]
         valid_values = depth_m[valid]
 
         depth_norm = np.zeros(depth_raw.shape, dtype=np.uint8)
-        depth_norm[valid] = np.clip((depth_m[valid] / self.max_depth_m) * 255.0, 0, 255).astype(np.uint8)
+        depth_norm[valid] = np.clip((depth_m[valid] / self.max_depth_m)
+                                    * 255.0, 0, 255).astype(np.uint8)
         depth_vis = cv2.applyColorMap(depth_norm, cv2.COLORMAP_PLASMA)
         depth_vis[~valid] = (0, 0, 0)
         ok, depth_enc = cv2.imencode(".jpg", depth_vis, [int(cv2.IMWRITE_JPEG_QUALITY), 82])
@@ -418,16 +419,19 @@ class NaiveVLA:
 
         if self._prompt_requests_system_diagnosis(normalized):
             diag = self.diagnose_system(speak=bool(speak))
-            result.update({"matched": "diagnose_system", "result": diag, "speech": diag.get("speech")})
+            result.update({"matched": "diagnose_system",
+                          "result": diag, "speech": diag.get("speech")})
             return result
 
         fuzzy_intent = self._fuzzy_builtin_intent(normalized)
         if fuzzy_intent is not None:
             return self._run_intent(text, fuzzy_intent, speak=bool(speak), source="fuzzy")
 
-        hand_match = re.search(r"\b(open|upen|close|clothes|those)\s+(?:the\s+)?(left|right|both)\s+hands?\b", normalized)
+        hand_match = re.search(
+            r"\b(open|upen|close|clothes|those)\s+(?:the\s+)?(left|right|both)\s+hands?\b", normalized)
         if hand_match is None:
-            hand_match = re.search(r"\b(left|right|both)\s+hands?\s+(open|upen|close|clothes|those)\b", normalized)
+            hand_match = re.search(
+                r"\b(left|right|both)\s+hands?\s+(open|upen|close|clothes|those)\b", normalized)
             if hand_match is not None:
                 hand = hand_match.group(1)
                 action = hand_match.group(2)
@@ -459,14 +463,16 @@ class NaiveVLA:
             axis = next((key[1:] for key in ("dx", "dy", "dz") if abs(float(ee[key])) > 0), "pose")
             reply = f"Moved {ee['arm']} end effector {axis} by {abs(next(float(ee[k]) for k in ('dx', 'dy', 'dz') if abs(float(ee[k])) > 0)):.2f} meters."
             speech = self._speak_feedback(reply, speak)
-            result.update({"matched": "ik_move_ee_pose", "args": ee, "result": tool_result, "speech": speech})
+            result.update({"matched": "ik_move_ee_pose", "args": ee,
+                          "result": tool_result, "speech": speech})
             return result
 
         loco = self._parse_loco_prompt(normalized)
         if loco is not None:
             tool_result = self.move_for(**loco)
             speech = self._speak_feedback("Moving.", speak)
-            result.update({"matched": "move_for", "args": loco, "result": tool_result, "speech": speech})
+            result.update({"matched": "move_for", "args": loco,
+                          "result": tool_result, "speech": speech})
             return result
 
         if "release arm" in normalized or "release arms" in normalized:
@@ -494,7 +500,8 @@ class NaiveVLA:
             raise RuntimeError("Robot SDK is disabled because --dry-run is active.")
         with self._lock:
             if self._robot is None:
-                self._robot = Robot(iface=self.iface, domain_id=self.domain_id, auto_start_sensors=False)
+                self._robot = Robot(iface=self.iface, domain_id=self.domain_id,
+                                    auto_start_sensors=False)
             return self._robot
 
     def _get_arm_sdk(self) -> Any:
@@ -859,7 +866,8 @@ class NaiveVLA:
 
     @staticmethod
     def _prompt_requests_visual_description(normalized: str) -> bool:
-        visual_words = ("camera", "visible", "see", "seeing", "objects", "object", "scene", "visual")
+        visual_words = ("camera", "visible", "see", "seeing",
+                        "objects", "object", "scene", "visual")
         describe_words = ("describe", "what", "tell me", "look")
         return any(word in normalized for word in visual_words) and any(word in normalized for word in describe_words)
 
@@ -877,10 +885,12 @@ class NaiveVLA:
 
     def _fuzzy_builtin_intent(self, normalized: str) -> dict[str, Any] | None:
         words = re.findall(r"[a-z]+", normalized)
-        best_diagnose = max((difflib.SequenceMatcher(None, word, "diagnose").ratio() for word in words), default=0.0)
+        best_diagnose = max((difflib.SequenceMatcher(None, word, "diagnose").ratio()
+                            for word in words), default=0.0)
         if best_diagnose >= 0.58 and any(word in normalized for word in ("system", "jetson", "board", "computer", "robot")):
             return {"intent": "diagnose_system", "confidence": best_diagnose}
-        best_shake = max((difflib.SequenceMatcher(None, word, "shake").ratio() for word in words), default=0.0)
+        best_shake = max((difflib.SequenceMatcher(None, word, "shake").ratio()
+                         for word in words), default=0.0)
         if best_shake >= 0.72 and ("hand" in normalized or "hands" in normalized):
             return {"intent": "hand_shake", "confidence": best_shake}
         return None
@@ -1091,11 +1101,13 @@ class NaiveVLA:
             return None
 
         magnitude = 0.03
-        number_match = re.search(r"([-+]?\d+(?:\.\d+)?)\s*(cm|centimeter|centimeters|m|meter|meters)?", normalized)
+        number_match = re.search(
+            r"([-+]?\d+(?:\.\d+)?)\s*(cm|centimeter|centimeters|m|meter|meters)?", normalized)
         if number_match:
             raw = abs(float(number_match.group(1)))
             unit = number_match.group(2) or "m"
-            magnitude = raw / 100.0 if unit.startswith("cm") or unit.startswith("centimeter") else raw
+            magnitude = raw / \
+                100.0 if unit.startswith("cm") or unit.startswith("centimeter") else raw
         magnitude = clamp(magnitude, 0.005, 0.10)
 
         negative_words = ("decrease", "reduce", "minus", "negative")
@@ -1246,7 +1258,8 @@ class NaiveVLA:
     @staticmethod
     def _safe_diagnostic_path(path: str) -> str:
         raw = str(path).strip() or "."
-        resolved = os.path.abspath(os.path.join(PROJECT_ROOT, raw) if not os.path.isabs(raw) else raw)
+        resolved = os.path.abspath(os.path.join(PROJECT_ROOT, raw)
+                                   if not os.path.isabs(raw) else raw)
         allowed_roots = [PROJECT_ROOT, "/home/unitree", "/tmp"]
         if not any(resolved == root or resolved.startswith(root + os.sep) for root in allowed_roots):
             raise ValueError("diagnostic path must be inside project root, /home/unitree, or /tmp")
@@ -1295,13 +1308,15 @@ class NaiveVLA:
         center = ctx.get("center_depth_m")
         near_cov = ctx.get("near_coverage_1m")
         valid = float(ctx.get("valid_depth_fraction") or 0.0)
-        pieces = [f"RGBD frame {ctx.get('width')}x{ctx.get('height')} with {valid * 100:.0f}% valid depth."]
+        pieces = [
+            f"RGBD frame {ctx.get('width')}x{ctx.get('height')} with {valid * 100:.0f}% valid depth."]
         if center is None:
             pieces.append("No reliable center depth is available.")
         elif center < 0.6:
             pieces.append(f"Something is very close in front of the robot at about {center:.2f} m.")
         elif center < 1.2:
-            pieces.append(f"The central view has a nearby target or obstacle at about {center:.2f} m.")
+            pieces.append(
+                f"The central view has a nearby target or obstacle at about {center:.2f} m.")
         else:
             pieces.append(f"The central view is relatively open to about {center:.2f} m.")
         if near_cov is not None:
@@ -1367,7 +1382,8 @@ class MicrophonePromptListener:
             from rclpy.node import Node
             from std_msgs.msg import String
         except Exception as exc:
-            print(f"Microphone prompts disabled: ROS 2 Python imports failed: {exc}", file=sys.stderr)
+            print(
+                f"Microphone prompts disabled: ROS 2 Python imports failed: {exc}", file=sys.stderr)
             return False
 
         self._rclpy = rclpy
@@ -1388,7 +1404,8 @@ class MicrophonePromptListener:
         try:
             self._node = PromptNode()
         except Exception as exc:
-            print(f"Microphone prompts disabled: ROS 2 node creation failed: {exc}", file=sys.stderr)
+            print(
+                f"Microphone prompts disabled: ROS 2 node creation failed: {exc}", file=sys.stderr)
             try:
                 if rclpy.ok():
                     rclpy.shutdown()
@@ -1573,7 +1590,8 @@ def make_handler(vla: NaiveVLA) -> type[BaseHTTPRequestHandler]:
             for word in words:
                 trial = f"{line} {word}".strip()
                 if len(trial) > 58:
-                    cv2.putText(img, line, (24, y), cv2.FONT_HERSHEY_SIMPLEX, 0.62, (220, 230, 226), 1)
+                    cv2.putText(img, line, (24, y), cv2.FONT_HERSHEY_SIMPLEX,
+                                0.62, (220, 230, 226), 1)
                     y += 30
                     line = word
                 else:
@@ -1734,10 +1752,13 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Naive RGBD vision-language-action tools with a small web UI."
     )
-    parser.add_argument("--iface", default="eth0", help="DDS interface for robot SDK commands; forced to eth0.")
+    parser.add_argument("--iface", default="eth0",
+                        help="DDS interface for robot SDK commands; forced to eth0.")
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain ID; forced to 0.")
-    parser.add_argument("--rgbd-host", "--robot-ip", dest="rgbd_host", default=os.environ.get("G1_RGBD_HOST", "10.34.0.83"))
-    parser.add_argument("--rgbd-port", type=int, default=int(os.environ.get("G1_RGBD_PORT", "5555")))
+    parser.add_argument("--rgbd-host", "--robot-ip", dest="rgbd_host",
+                        default=os.environ.get("G1_RGBD_HOST", "10.34.0.83"))
+    parser.add_argument("--rgbd-port", type=int,
+                        default=int(os.environ.get("G1_RGBD_PORT", "5555")))
     parser.add_argument("--rgbd-topic", default=os.environ.get("G1_RGBD_TOPIC", ""))
     parser.add_argument("--max-depth-m", type=float, default=4.0)
     parser.add_argument("--fps", type=float, default=12.0, help="RGBD UI update/decode rate.")
@@ -1746,18 +1767,28 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ollama-url", default="http://127.0.0.1:11434")
     parser.add_argument("--vision-model", default="qwen2.5vl:7b")
     parser.add_argument("--text-model", default="qwen3.5:9b")
-    parser.add_argument("--dry-run", action="store_true", help="Expose tools without sending robot SDK commands.")
-    parser.add_argument("--no-diagnostics", action="store_true", help="Disable allowlisted diagnostic shell tools.")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Expose tools without sending robot SDK commands.")
+    parser.add_argument("--no-diagnostics", action="store_true",
+                        help="Disable allowlisted diagnostic shell tools.")
     parser.add_argument("--no-web-search", action="store_true", help="Disable web_search tool.")
-    parser.add_argument("--speak-answers", action="store_true", help="Speak visual descriptions by default.")
-    parser.add_argument("--speech-volume", type=int, default=None, help="Optional robot speech volume 0-100.")
-    parser.add_argument("--speech-language", default=None, help="Optional TTS language, for example en or de.")
-    parser.add_argument("--hand-type", choices=("dummy", "dex3", "inspire"), default="dex3", help="Default hand hardware mode.")
-    parser.add_argument("--mic-topic", default="/audio_msg", help="ROS 2 ASR topic for spoken user prompts.")
-    parser.add_argument("--mic-min-confidence", type=float, default=0.0, help="Ignore ASR prompts below this confidence.")
+    parser.add_argument("--speak-answers", action="store_true",
+                        help="Speak visual descriptions by default.")
+    parser.add_argument("--speech-volume", type=int, default=None,
+                        help="Optional robot speech volume 0-100.")
+    parser.add_argument("--speech-language", default=None,
+                        help="Optional TTS language, for example en or de.")
+    parser.add_argument("--hand-type", choices=("dummy", "dex3", "inspire"),
+                        default="dex3", help="Default hand hardware mode.")
+    parser.add_argument("--mic-topic", default="/audio_msg",
+                        help="ROS 2 ASR topic for spoken user prompts.")
+    parser.add_argument("--mic-min-confidence", type=float, default=0.0,
+                        help="Ignore ASR prompts below this confidence.")
     parser.add_argument("--no-mic", action="store_true", help="Disable microphone prompt listener.")
-    parser.add_argument("--no-mic-speech", action="store_true", help="Do not speak feedback for microphone commands.")
-    parser.add_argument("--describe-once", action="store_true", help="Print one visual description, then exit.")
+    parser.add_argument("--no-mic-speech", action="store_true",
+                        help="Do not speak feedback for microphone commands.")
+    parser.add_argument("--describe-once", action="store_true",
+                        help="Print one visual description, then exit.")
     return parser.parse_args()
 
 

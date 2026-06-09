@@ -17,6 +17,12 @@ All move_* functions are single-shot: they send one command packet and
 return.  Call them inside your own control loop at whatever rate you need.
 """
 from __future__ import annotations
+from hand_pose_navigation_copy.arm_ik import ArmIK
+from hand_pose_navigation_copy.arm_fk import (
+    ArmFK, LEFT_ARM_JOINTS, RIGHT_ARM_JOINTS, JOINT_LIMITS,
+    _LEFT_SHOULDER_IN_BASE, _RIGHT_SHOULDER_IN_BASE,
+)
+from dds_env import ensure_cyclonedds_environment
 
 import math
 import os
@@ -29,12 +35,11 @@ import numpy as np
 
 # ── Path bootstrap ────────────────────────────────────────────────────────────
 _MODULES_DIR = os.path.dirname(os.path.abspath(__file__))
-_ROOT_DIR    = os.path.abspath(os.path.join(_MODULES_DIR, ".."))
+_ROOT_DIR = os.path.abspath(os.path.join(_MODULES_DIR, ".."))
 for _p in (_ROOT_DIR, _MODULES_DIR):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from dds_env import ensure_cyclonedds_environment
 ensure_cyclonedds_environment()
 
 try:
@@ -48,18 +53,13 @@ try:
 except ImportError as exc:
     raise SystemExit("unitree_sdk2py not installed.") from exc
 
-from hand_pose_navigation_copy.arm_fk import (
-    ArmFK, LEFT_ARM_JOINTS, RIGHT_ARM_JOINTS, JOINT_LIMITS,
-    _LEFT_SHOULDER_IN_BASE, _RIGHT_SHOULDER_IN_BASE,
-)
-from hand_pose_navigation_copy.arm_ik import ArmIK
 
 # ── Joint layout ──────────────────────────────────────────────────────────────
 G1_NUM_MOTOR = 29
 
-LEFT_LEG_JOINTS  = [0, 1, 2, 3, 4, 5]
+LEFT_LEG_JOINTS = [0, 1, 2, 3, 4, 5]
 RIGHT_LEG_JOINTS = [6, 7, 8, 9, 10, 11]
-WAIST_JOINTS     = [12, 13, 14]
+WAIST_JOINTS = [12, 13, 14]
 
 # Default gains from the Unitree g1_low_level_example
 _DEFAULT_KP: List[float] = [
@@ -86,40 +86,40 @@ _DEFAULT_LEG_IK_WEIGHTS = np.array([4.0, 4.0, 4.0, 2.0, 1.0, 1.0], dtype=np.floa
 # Leg joint limits [rad] from URDF / low_level_commands.py
 _LEG_LIMITS: Dict[str, List[Tuple[float, float]]] = {
     "left": [
-        (-2.5307,  2.8798),   # hip_pitch
-        (-0.5236,  2.9671),   # hip_roll
-        (-2.7576,  2.7576),   # hip_yaw
+        (-2.5307, 2.8798),   # hip_pitch
+        (-0.5236, 2.9671),   # hip_roll
+        (-2.7576, 2.7576),   # hip_yaw
         (-0.087267, 2.8798),  # knee
-        (-0.87267,  0.5236),  # ankle_pitch
-        (-0.2618,   0.2618),  # ankle_roll
+        (-0.87267, 0.5236),  # ankle_pitch
+        (-0.2618, 0.2618),  # ankle_roll
     ],
     "right": [
-        (-2.5307,  2.8798),
-        (-2.9671,  0.5236),
-        (-2.7576,  2.7576),
+        (-2.5307, 2.8798),
+        (-2.9671, 0.5236),
+        (-2.7576, 2.7576),
         (-0.087267, 2.8798),
-        (-0.87267,  0.5236),
-        (-0.2618,   0.2618),
+        (-0.87267, 0.5236),
+        (-0.2618, 0.2618),
     ],
 }
 
 # ── Leg kinematics (URDF-exact chain, sourced from g1_29dof_with_hand_rev_1_0_pkg.urdf)
 # Each entry: (xyz_in_parent, rpy_of_joint_frame, joint_axis)
 _LEFT_LEG_CHAIN = [
-    ([0.0,       0.064452,   -0.1027  ], [0.0,     0.0, 0.0], [0, 1, 0]),  # hip_pitch
-    ([0.0,       0.052,      -0.030465], [0.0, -0.1749, 0.0], [1, 0, 0]),  # hip_roll
-    ([0.025001,  0.0,        -0.12412 ], [0.0,     0.0, 0.0], [0, 0, 1]),  # hip_yaw
-    ([-0.078273, 0.0021489,  -0.17734 ], [0.0,  0.1749, 0.0], [0, 1, 0]),  # knee
-    ([0.0,      -9.4445e-05, -0.30001 ], [0.0,     0.0, 0.0], [0, 1, 0]),  # ankle_pitch
-    ([0.0,       0.0,        -0.017558], [0.0,     0.0, 0.0], [1, 0, 0]),  # ankle_roll
+    ([0.0, 0.064452, -0.1027], [0.0, 0.0, 0.0], [0, 1, 0]),  # hip_pitch
+    ([0.0, 0.052, -0.030465], [0.0, -0.1749, 0.0], [1, 0, 0]),  # hip_roll
+    ([0.025001, 0.0, -0.12412], [0.0, 0.0, 0.0], [0, 0, 1]),  # hip_yaw
+    ([-0.078273, 0.0021489, -0.17734], [0.0, 0.1749, 0.0], [0, 1, 0]),  # knee
+    ([0.0, -9.4445e-05, -0.30001], [0.0, 0.0, 0.0], [0, 1, 0]),  # ankle_pitch
+    ([0.0, 0.0, -0.017558], [0.0, 0.0, 0.0], [1, 0, 0]),  # ankle_roll
 ]
 _RIGHT_LEG_CHAIN = [
-    ([0.0,      -0.064452,  -0.1027  ], [0.0,     0.0, 0.0], [0, 1, 0]),
-    ([0.0,      -0.052,     -0.030465], [0.0, -0.1749, 0.0], [1, 0, 0]),
-    ([0.025001,  0.0,       -0.12412 ], [0.0,     0.0, 0.0], [0, 0, 1]),
-    ([-0.078273,-0.0021489, -0.17734 ], [0.0,  0.1749, 0.0], [0, 1, 0]),
-    ([0.0,       9.4445e-05,-0.30001 ], [0.0,     0.0, 0.0], [0, 1, 0]),
-    ([0.0,       0.0,       -0.017558], [0.0,     0.0, 0.0], [1, 0, 0]),
+    ([0.0, -0.064452, -0.1027], [0.0, 0.0, 0.0], [0, 1, 0]),
+    ([0.0, -0.052, -0.030465], [0.0, -0.1749, 0.0], [1, 0, 0]),
+    ([0.025001, 0.0, -0.12412], [0.0, 0.0, 0.0], [0, 0, 1]),
+    ([-0.078273, -0.0021489, -0.17734], [0.0, 0.1749, 0.0], [0, 1, 0]),
+    ([0.0, 9.4445e-05, -0.30001], [0.0, 0.0, 0.0], [0, 1, 0]),
+    ([0.0, 0.0, -0.017558], [0.0, 0.0, 0.0], [1, 0, 0]),
 ]
 # Foot centre in ankle_roll frame (from URDF visual origin)
 _FOOT_EE_OFFSET = np.array([0.026505, 0.0, -0.016425], dtype=np.float64)
@@ -138,9 +138,9 @@ def _T_from_xyz_rpy(xyz, rpy) -> np.ndarray:
     cy, sy = math.cos(y), math.sin(y)
     T = np.eye(4, dtype=np.float64)
     T[:3, :3] = np.array([
-        [cy*cp,  cy*sp*sr - sy*cr,  cy*sp*cr + sy*sr],
-        [sy*cp,  sy*sp*sr + cy*cr,  sy*sp*cr - cy*sr],
-        [-sp,    cp*sr,             cp*cr],
+        [cy * cp, cy * sp * sr - sy * cr, cy * sp * cr + sy * sr],
+        [sy * cp, sy * sp * sr + cy * cr, sy * sp * cr - cy * sr],
+        [-sp, cp * sr, cp * cr],
     ])
     T[:3, 3] = [float(v) for v in xyz]
     return T
@@ -152,9 +152,9 @@ def _rot_axis(axis, q: float) -> np.ndarray:
     c, s = math.cos(q), math.sin(q)
     t = 1.0 - c
     return np.array([
-        [t*ax*ax + c,      t*ax*ay - s*az, t*ax*az + s*ay],
-        [t*ax*ay + s*az,   t*ay*ay + c,    t*ay*az - s*ax],
-        [t*ax*az - s*ay,   t*ay*az + s*ax, t*az*az + c   ],
+        [t * ax * ax + c, t * ax * ay - s * az, t * ax * az + s * ay],
+        [t * ax * ay + s * az, t * ay * ay + c, t * ay * az - s * ax],
+        [t * ax * az - s * ay, t * ay * az + s * ax, t * az * az + c],
     ], dtype=np.float64)
 
 
@@ -184,7 +184,7 @@ class LegFK:
     def __init__(self, leg: str) -> None:
         if leg not in ("left", "right"):
             raise ValueError(f"leg must be 'left' or 'right', got {leg!r}")
-        self.leg   = leg
+        self.leg = leg
         self.chain = _LEG_CHAINS[leg]
 
     def compute(self, q: np.ndarray) -> np.ndarray:
@@ -213,13 +213,13 @@ class LegIK:
         tol_rot_rad: float = 0.02,
         damping: float = 0.05,
     ) -> None:
-        self.leg      = leg
+        self.leg = leg
         self.max_iter = max_iter
-        self.tol_pos  = tol_pos_m
-        self.tol_rot  = tol_rot_rad
-        self.damping  = damping
-        self._fk      = LegFK(leg)
-        self._limits  = _LEG_LIMITS[leg]
+        self.tol_pos = tol_pos_m
+        self.tol_rot = tol_rot_rad
+        self.damping = damping
+        self._fk = LegFK(leg)
+        self._limits = _LEG_LIMITS[leg]
 
     def solve(
         self,
@@ -234,35 +234,37 @@ class LegIK:
         eps = 1e-5
         for it in range(self.max_iter):
             T_cur = self._fk.compute(q)
-            err   = _pose_error(T_des, T_cur)
-            ep    = float(np.linalg.norm(err[:3]))
-            er    = float(np.linalg.norm(err[3:]))
+            err = _pose_error(T_des, T_cur)
+            ep = float(np.linalg.norm(err[:3]))
+            er = float(np.linalg.norm(err[3:]))
             if ep < self.tol_pos and er < self.tol_rot:
                 return q, {"success": True, "error_pos_m": ep, "error_rot_rad": er, "iterations": it}
 
             # Numerical Jacobian (6 rows × 6 cols)
-            J  = np.zeros((6, 6), dtype=np.float64)
+            J = np.zeros((6, 6), dtype=np.float64)
             p0 = T_cur[:3, 3]
             R0 = T_cur[:3, :3]
             for col in range(6):
-                q1 = q.copy(); q1[col] += eps
+                q1 = q.copy()
+                q1[col] += eps
                 T1 = self._fk.compute(q1)
                 J[:3, col] = (T1[:3, 3] - p0) / eps
                 dR = T1[:3, :3] @ R0.T
-                J[3:, col] = np.array([dR[2,1]-dR[1,2], dR[0,2]-dR[2,0], dR[1,0]-dR[0,1]]) / (2*eps)
+                J[3:, col] = np.array([dR[2, 1] - dR[1, 2], dR[0, 2] -
+                                      dR[2, 0], dR[1, 0] - dR[0, 1]]) / (2 * eps)
 
             JJT = J @ J.T
-            dq  = J.T @ np.linalg.solve(JJT + lam**2 * np.eye(6), err)
+            dq = J.T @ np.linalg.solve(JJT + lam**2 * np.eye(6), err)
             norm_dq = float(np.linalg.norm(dq))
             if norm_dq > 0.3:
                 dq *= 0.3 / norm_dq
             q = _clamp_q(q + dq, self._limits)
 
         T_cur = self._fk.compute(q)
-        err   = _pose_error(T_des, T_cur)
+        err = _pose_error(T_des, T_cur)
         return None, {
             "success": False,
-            "error_pos_m":   float(np.linalg.norm(err[:3])),
+            "error_pos_m": float(np.linalg.norm(err[:3])),
             "error_rot_rad": float(np.linalg.norm(err[3:])),
             "iterations": self.max_iter,
         }
@@ -308,15 +310,17 @@ class _LowStateReader:
 
 def _Rx(a: float) -> np.ndarray:
     c, s = math.cos(a), math.sin(a)
-    return np.array([[1,0,0],[0,c,-s],[0,s,c]], dtype=np.float64)
+    return np.array([[1, 0, 0], [0, c, -s], [0, s, c]], dtype=np.float64)
+
 
 def _Ry(a: float) -> np.ndarray:
     c, s = math.cos(a), math.sin(a)
-    return np.array([[c,0,s],[0,1,0],[-s,0,c]], dtype=np.float64)
+    return np.array([[c, 0, s], [0, 1, 0], [-s, 0, c]], dtype=np.float64)
+
 
 def _Rz(a: float) -> np.ndarray:
     c, s = math.cos(a), math.sin(a)
-    return np.array([[c,-s,0],[s,c,0],[0,0,1]], dtype=np.float64)
+    return np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]], dtype=np.float64)
 
 
 def _apply_pose_increment(T: np.ndarray, inc: np.ndarray) -> np.ndarray:
@@ -361,31 +365,34 @@ def _solve_dls(
                   dq = W⁻¹ Jᵀ (J W⁻¹ Jᵀ + λ²I)⁻¹ err
     fixed   : local joint indices held at q_init throughout the solve.
     """
-    n     = len(q_init)
-    q     = _clamp_q(q_init.copy(), limits)
-    W_inv = np.ones(n, dtype=np.float64) if weights is None else 1.0 / np.asarray(weights, dtype=np.float64)
-    eps   = 1e-5
+    n = len(q_init)
+    q = _clamp_q(q_init.copy(), limits)
+    W_inv = np.ones(n, dtype=np.float64) if weights is None else 1.0 / \
+        np.asarray(weights, dtype=np.float64)
+    eps = 1e-5
     for it in range(max_iter):
         T_cur = fk_fn(q)
-        err   = _pose_error(T_des, T_cur)
-        ep    = float(np.linalg.norm(err[:3]))
-        er    = float(np.linalg.norm(err[3:]))
+        err = _pose_error(T_des, T_cur)
+        ep = float(np.linalg.norm(err[:3]))
+        er = float(np.linalg.norm(err[3:]))
         if ep < tol_pos and er < tol_rot:
             return q, {"success": True, "error_pos_m": ep, "error_rot_rad": er, "iterations": it}
-        J  = np.zeros((6, n), dtype=np.float64)
+        J = np.zeros((6, n), dtype=np.float64)
         p0 = T_cur[:3, 3]
         R0 = T_cur[:3, :3]
         for col in range(n):
             if col in fixed:
                 continue
-            q1 = q.copy(); q1[col] += eps
+            q1 = q.copy()
+            q1[col] += eps
             T1 = fk_fn(q1)
             J[:3, col] = (T1[:3, 3] - p0) / eps
             dR = T1[:3, :3] @ R0.T
-            J[3:, col] = np.array([dR[2,1]-dR[1,2], dR[0,2]-dR[2,0], dR[1,0]-dR[0,1]]) / (2*eps)
+            J[3:, col] = np.array([dR[2, 1] - dR[1, 2], dR[0, 2] -
+                                  dR[2, 0], dR[1, 0] - dR[0, 1]]) / (2 * eps)
         # Weighted step: dq = W⁻¹ Jᵀ (J W⁻¹ Jᵀ + λ²I)⁻¹ err
-        A   = J * W_inv[np.newaxis, :]          # J @ diag(W_inv), shape (6, n)
-        dq  = W_inv * (J.T @ np.linalg.solve(A @ J.T + damping**2 * np.eye(6), err))
+        A = J * W_inv[np.newaxis, :]          # J @ diag(W_inv), shape (6, n)
+        dq = W_inv * (J.T @ np.linalg.solve(A @ J.T + damping**2 * np.eye(6), err))
         norm_dq = float(np.linalg.norm(dq))
         if norm_dq > 0.3:
             dq *= 0.3 / norm_dq
@@ -393,10 +400,10 @@ def _solve_dls(
         for i in fixed:
             q[i] = float(q_init[i])
     T_cur = fk_fn(q)
-    err   = _pose_error(T_des, T_cur)
+    err = _pose_error(T_des, T_cur)
     return None, {
         "success": False,
-        "error_pos_m":   float(np.linalg.norm(err[:3])),
+        "error_pos_m": float(np.linalg.norm(err[:3])),
         "error_rot_rad": float(np.linalg.norm(err[3:])),
         "iterations": max_iter,
     }
@@ -427,7 +434,7 @@ class LLSdk:
         arm_ik_max_iter: int = 24,
         leg_ik_max_iter: int = 64,
     ) -> None:
-        self.iface     = str(iface)
+        self.iface = str(iface)
         self.domain_id = int(domain_id)
 
         ChannelFactoryInitialize(self.domain_id, self.iface)
@@ -441,19 +448,19 @@ class LLSdk:
         self._state = _LowStateReader()
 
         self._arm_fk: Dict[str, ArmFK] = {
-            "left":  ArmFK("left",  "urdf"),
+            "left": ArmFK("left", "urdf"),
             "right": ArmFK("right", "urdf"),
         }
         self._arm_ik: Dict[str, ArmIK] = {
-            "left":  ArmIK("left",  "dls", max_iter=arm_ik_max_iter, tol_pos_m=0.005, tol_rot_rad=0.02),
+            "left": ArmIK("left", "dls", max_iter=arm_ik_max_iter, tol_pos_m=0.005, tol_rot_rad=0.02),
             "right": ArmIK("right", "dls", max_iter=arm_ik_max_iter, tol_pos_m=0.005, tol_rot_rad=0.02),
         }
         self._leg_fk: Dict[str, LegFK] = {
-            "left":  LegFK("left"),
+            "left": LegFK("left"),
             "right": LegFK("right"),
         }
         self._leg_ik: Dict[str, LegIK] = {
-            "left":  LegIK("left",  max_iter=leg_ik_max_iter),
+            "left": LegIK("left", max_iter=leg_ik_max_iter),
             "right": LegIK("right", max_iter=leg_ik_max_iter),
         }
 
@@ -495,16 +502,16 @@ class LLSdk:
     ) -> None:
         kp = kp or _DEFAULT_KP
         kd = kd or _DEFAULT_KD
-        self._cmd.mode_pr      = 0
+        self._cmd.mode_pr = 0
         self._cmd.mode_machine = int(mode_machine)
         for i in range(G1_NUM_MOTOR):
-            mc      = self._cmd.motor_cmd[i]
+            mc = self._cmd.motor_cmd[i]
             mc.mode = 1
-            mc.q    = float(q_full[i])
-            mc.dq   = float(dq)
-            mc.tau  = float(tau)
-            mc.kp   = float(kp[i])
-            mc.kd   = float(kd[i])
+            mc.q = float(q_full[i])
+            mc.dq = float(dq)
+            mc.tau = float(tau)
+            mc.kp = float(kp[i])
+            mc.kd = float(kd[i])
         self._cmd.crc = self._crc.Crc(self._cmd)
         self._pub.Write(self._cmd)
 
@@ -583,21 +590,22 @@ class LLSdk:
         dict with keys: success, error_pos_m, error_rot_rad, iterations
         (for "both" arms, returns the result for the last arm solved)
         """
-        inc   = np.asarray(pose_increment, dtype=np.float64)
-        arms  = ["left", "right"] if arm == "both" else [str(arm)]
+        inc = np.asarray(pose_increment, dtype=np.float64)
+        arms = ["left", "right"] if arm == "both" else [str(arm)]
         fixed = frozenset(int(i) for i in fixed_joints) if fixed_joints else frozenset()
-        w     = _DEFAULT_ARM_IK_WEIGHTS if joint_weights is None else np.asarray(joint_weights, dtype=np.float64)
+        w = _DEFAULT_ARM_IK_WEIGHTS if joint_weights is None else np.asarray(
+            joint_weights, dtype=np.float64)
 
         q_full, mm = self._state.wait(timeout)
         info: Dict = {"success": False, "error_pos_m": 0.0, "error_rot_rad": 0.0, "iterations": 0}
 
         for a in arms:
             arm_inc = _mirror_inc(inc) if (mirror and arm == "both" and a == "right") else inc
-            joints  = LEFT_ARM_JOINTS if a == "left" else RIGHT_ARM_JOINTS
-            limits  = JOINT_LIMITS[a]
-            q_arm   = np.array([q_full[j] for j in joints], dtype=np.float64)
-            T_cur   = self._arm_fk[a].compute_arm(q_arm)
-            T_des   = _apply_pose_increment(T_cur, arm_inc)
+            joints = LEFT_ARM_JOINTS if a == "left" else RIGHT_ARM_JOINTS
+            limits = JOINT_LIMITS[a]
+            q_arm = np.array([q_full[j] for j in joints], dtype=np.float64)
+            T_cur = self._arm_fk[a].compute_arm(q_arm)
+            T_des = _apply_pose_increment(T_cur, arm_inc)
 
             q_sol, info = _solve_dls(
                 self._arm_fk[a].compute_arm, T_des, q_arm, limits,
@@ -612,8 +620,8 @@ class LLSdk:
 
             delta = np.clip(q_sol - q_arm, -max_dq, max_dq)
             q_new = np.clip(q_arm + delta,
-                            np.array([l[0] for l in limits]),
-                            np.array([l[1] for l in limits]))
+                            np.array([limit[0] for limit in limits]),
+                            np.array([limit[1] for limit in limits]))
             for i, j in enumerate(joints):
                 q_full[j] = float(q_new[i])
 
@@ -660,21 +668,22 @@ class LLSdk:
         Leg IK via rt/lowcmd bypasses the loco controller balance stack.
         Only use this when the robot is supported externally or seated.
         """
-        inc   = np.asarray(pose_increment, dtype=np.float64)
-        legs  = ["left", "right"] if leg == "both" else [str(leg)]
+        inc = np.asarray(pose_increment, dtype=np.float64)
+        legs = ["left", "right"] if leg == "both" else [str(leg)]
         fixed = frozenset(int(i) for i in fixed_joints) if fixed_joints else frozenset()
-        w     = _DEFAULT_LEG_IK_WEIGHTS if joint_weights is None else np.asarray(joint_weights, dtype=np.float64)
+        w = _DEFAULT_LEG_IK_WEIGHTS if joint_weights is None else np.asarray(
+            joint_weights, dtype=np.float64)
 
         q_full, mm = self._state.wait(timeout)
         info: Dict = {"success": False, "error_pos_m": 0.0, "error_rot_rad": 0.0, "iterations": 0}
 
         for lg in legs:
             leg_inc = _mirror_inc(inc) if (mirror and leg == "both" and lg == "right") else inc
-            joints  = _LEG_JOINTS[lg]
-            limits  = _LEG_LIMITS[lg]
-            q_leg   = np.array([q_full[j] for j in joints], dtype=np.float64)
-            T_cur   = self._leg_fk[lg].compute(q_leg)
-            T_des   = _apply_pose_increment(T_cur, leg_inc)
+            joints = _LEG_JOINTS[lg]
+            limits = _LEG_LIMITS[lg]
+            q_leg = np.array([q_full[j] for j in joints], dtype=np.float64)
+            T_cur = self._leg_fk[lg].compute(q_leg)
+            T_des = _apply_pose_increment(T_cur, leg_inc)
 
             q_sol, info = _solve_dls(
                 self._leg_fk[lg].compute, T_des, q_leg, limits,
@@ -689,8 +698,8 @@ class LLSdk:
 
             delta = np.clip(q_sol - q_leg, -max_dq, max_dq)
             q_new = np.clip(q_leg + delta,
-                            np.array([l[0] for l in limits]),
-                            np.array([l[1] for l in limits]))
+                            np.array([limit[0] for limit in limits]),
+                            np.array([limit[1] for limit in limits]))
             for i, j in enumerate(joints):
                 q_full[j] = float(q_new[i])
 
@@ -708,12 +717,12 @@ class LLSdk:
         """Return the current 4×4 EE pose in base_link for the given arm."""
         q_full, _ = self._state.wait(timeout)
         joints = LEFT_ARM_JOINTS if arm == "left" else RIGHT_ARM_JOINTS
-        q_arm  = np.array([q_full[j] for j in joints])
+        q_arm = np.array([q_full[j] for j in joints])
         return self._arm_fk[arm].compute_arm(q_arm)
 
     def get_foot_pose(self, leg: str = "right", timeout: float = 3.0) -> np.ndarray:
         """Return the current 4×4 foot pose in base_link for the given leg."""
         q_full, _ = self._state.wait(timeout)
         joints = _LEG_JOINTS[leg]
-        q_leg  = np.array([q_full[j] for j in joints])
+        q_leg = np.array([q_full[j] for j in joints])
         return self._leg_fk[leg].compute(q_leg)

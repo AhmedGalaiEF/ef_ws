@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+from dds_env import ensure_cyclonedds_environment
 
 import argparse
 import os
@@ -14,7 +15,6 @@ PARENT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 if PARENT_DIR not in sys.path:
     sys.path.insert(0, PARENT_DIR)
 
-from dds_env import ensure_cyclonedds_environment
 
 ensure_cyclonedds_environment()
 
@@ -71,7 +71,8 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
     parser.add_argument("--arm", choices=("left", "right", "both"), default="both")
     parser.add_argument("--iface", default="eth0", help="Network interface for DDS traffic.")
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id.")
-    parser.add_argument("--rate-hz", type=float, default=50.0, help="Low-level command publish rate.")
+    parser.add_argument("--rate-hz", type=float, default=50.0,
+                        help="Low-level command publish rate.")
     parser.add_argument(
         "--speed-rad-s",
         type=float,
@@ -231,7 +232,8 @@ class ArmJointSliderApp(QWidget):
 
         gains = QFormLayout()
         self.speed_box = self._make_spinbox(0.01, 5.0, self.speed_rad_s, 0.05)
-        self.speed_box.valueChanged.connect(lambda value: setattr(self, "speed_rad_s", float(value)))
+        self.speed_box.valueChanged.connect(
+            lambda value: setattr(self, "speed_rad_s", float(value)))
         gains.addRow("Ramp speed rad/s", self.speed_box)
 
         self.kp_box = self._make_spinbox(0.0, 100.0, self.kp, 0.5)
@@ -300,17 +302,23 @@ class ArmJointSliderApp(QWidget):
         current_label = QLabel(" -- ", self)
         desired_label = QLabel(" -- ", self)
 
-        min_box = self._make_spinbox(-ABS_RANGE_LIMIT_RAD, ABS_RANGE_LIMIT_RAD, -DEFAULT_SOFT_RANGE_RAD, 0.05)
-        max_box = self._make_spinbox(-ABS_RANGE_LIMIT_RAD, ABS_RANGE_LIMIT_RAD, DEFAULT_SOFT_RANGE_RAD, 0.05)
-        min_box.valueChanged.connect(lambda _value, joint=motor_index: self._update_slider_range(joint))
-        max_box.valueChanged.connect(lambda _value, joint=motor_index: self._update_slider_range(joint))
+        min_box = self._make_spinbox(-ABS_RANGE_LIMIT_RAD,
+                                     ABS_RANGE_LIMIT_RAD, -DEFAULT_SOFT_RANGE_RAD, 0.05)
+        max_box = self._make_spinbox(-ABS_RANGE_LIMIT_RAD,
+                                     ABS_RANGE_LIMIT_RAD, DEFAULT_SOFT_RANGE_RAD, 0.05)
+        min_box.valueChanged.connect(
+            lambda _value, joint=motor_index: self._update_slider_range(joint))
+        max_box.valueChanged.connect(
+            lambda _value, joint=motor_index: self._update_slider_range(joint))
 
         slider = QSlider(Qt.Horizontal, self)
         slider.setTickPosition(QSlider.TicksBelow)
-        slider.valueChanged.connect(lambda raw, joint=motor_index: self._on_slider_changed(joint, raw))
+        slider.valueChanged.connect(
+            lambda raw, joint=motor_index: self._on_slider_changed(joint, raw))
 
         reset_button = QPushButton("Current", self)
-        reset_button.clicked.connect(lambda _checked=False, joint=motor_index: self._set_desired_to_current(joint))
+        reset_button.clicked.connect(
+            lambda _checked=False, joint=motor_index: self._set_desired_to_current(joint))
 
         control = JointControl(
             arm_name=arm_name,
@@ -391,12 +399,14 @@ class ArmJointSliderApp(QWidget):
         self._update_joint_labels(joint)
 
     def _set_desired_to_current(self, joint: int) -> None:
-        self.desired_targets[joint] = float(self.latest_positions.get(joint, self.current_targets[joint]))
+        self.desired_targets[joint] = float(
+            self.latest_positions.get(joint, self.current_targets[joint]))
         self._update_slider_range(joint)
 
     def _sync_desired_to_current(self) -> None:
         for joint in self.all_joints:
-            self.desired_targets[joint] = float(self.latest_positions.get(joint, self.current_targets[joint]))
+            self.desired_targets[joint] = float(
+                self.latest_positions.get(joint, self.current_targets[joint]))
             self._update_slider_range(joint)
 
     def _zero_gains_once(self) -> None:

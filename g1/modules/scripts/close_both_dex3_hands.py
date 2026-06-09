@@ -48,8 +48,10 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--iface", default="eth0", help="Network interface for DDS traffic.")
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id.")
-    parser.add_argument("--hold-s", type=float, default=2.0, help="Seconds to keep publishing the closed command.")
-    parser.add_argument("--ramp-s", type=float, default=1.0, help="Seconds to ramp both hands closed.")
+    parser.add_argument("--hold-s", type=float, default=2.0,
+                        help="Seconds to keep publishing the closed command.")
+    parser.add_argument("--ramp-s", type=float, default=1.0,
+                        help="Seconds to ramp both hands closed.")
     parser.add_argument("--rate-hz", type=float, default=50.0, help="DDS publish rate.")
     parser.add_argument("--kp", type=float, default=1.2, help="Joint proportional gain.")
     parser.add_argument("--kd", type=float, default=0.05, help="Joint derivative gain.")

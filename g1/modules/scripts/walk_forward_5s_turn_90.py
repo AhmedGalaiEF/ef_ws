@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+from sdk_client import Robot
 
 import argparse
 import os
@@ -11,8 +12,6 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PARENT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 if PARENT_DIR not in sys.path:
     sys.path.insert(0, PARENT_DIR)
-
-from sdk_client import Robot
 
 
 def parse_args() -> argparse.Namespace:

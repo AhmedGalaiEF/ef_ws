@@ -1,4 +1,5 @@
 from __future__ import annotations
+from unitree_sdk2py.core.channel import ChannelSubscriber
 
 import importlib
 import math
@@ -10,7 +11,6 @@ from dds_env import ensure_cyclonedds_environment
 
 ensure_cyclonedds_environment()
 
-from unitree_sdk2py.core.channel import ChannelSubscriber
 
 try:
     from unitree_sdk2py.idl.nav_msgs.msg.dds_ import Odometry_
@@ -136,7 +136,8 @@ def lowstate_snapshot_from_msg(msg: Any) -> LowStateSnapshot:
         except Exception:
             imu_gyro = None
         try:
-            imu_acc = tuple(float(imu.accelerometer[i]) for i in range(3))  # type: ignore[assignment]
+            imu_acc = tuple(float(imu.accelerometer[i])
+                            for i in range(3))  # type: ignore[assignment]
         except Exception:
             imu_acc = None
 

@@ -39,6 +39,8 @@ Key bindings (also shown in footer)
 """
 
 from __future__ import annotations
+from sdk_client import Robot
+from dds_env import ensure_cyclonedds_environment
 
 import argparse
 import curses
@@ -52,14 +54,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
-ROOT_DIR    = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 MODULES_DIR = os.path.join(ROOT_DIR, "modules")
 for _p in (ROOT_DIR, MODULES_DIR):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from dds_env import ensure_cyclonedds_environment
 
 ensure_cyclonedds_environment()
 
@@ -74,21 +75,20 @@ except ImportError as exc:
         "  pip install -e <path-to-unitree_sdk2_python>"
     ) from exc
 
-from sdk_client import Robot
 
 # ── Constants (identical to the GUI source) ───────────────────────────────────
-SLIDER_SCALE             = 1000
-ARM_SDK_WEIGHT_INDEX     = 29
-WAIST_HOLD_KP            = 480.0
-WAIST_HOLD_KD            = 12.0
-DEFAULT_ARM_KP           = 30.0
-DEFAULT_ARM_KD           = 1.5
-INACTIVE_TRANSITION_KP   = 300.0
-TRANSITION_EPSILON_RAD   = 1e-4
+SLIDER_SCALE = 1000
+ARM_SDK_WEIGHT_INDEX = 29
+WAIST_HOLD_KP = 480.0
+WAIST_HOLD_KD = 12.0
+DEFAULT_ARM_KP = 30.0
+DEFAULT_ARM_KD = 1.5
+INACTIVE_TRANSITION_KP = 300.0
+TRANSITION_EPSILON_RAD = 1e-4
 
-WAIST_JOINTS      = [12, 13, 14]
-LEFT_ARM_JOINTS   = [15, 16, 17, 18, 19, 20, 21]
-RIGHT_ARM_JOINTS  = [22, 23, 24, 25, 26, 27, 28]
+WAIST_JOINTS = [12, 13, 14]
+LEFT_ARM_JOINTS = [15, 16, 17, 18, 19, 20, 21]
+RIGHT_ARM_JOINTS = [22, 23, 24, 25, 26, 27, 28]
 UPPER_BODY_JOINTS = WAIST_JOINTS + LEFT_ARM_JOINTS + RIGHT_ARM_JOINTS
 ARM_CONTROL_MODES = ("both", "left", "right")
 
@@ -102,6 +102,8 @@ DEFAULT_POSE_FILE = os.path.join(
 )
 
 # ── Joint data structures (identical to GUI) ──────────────────────────────────
+
+
 @dataclass(frozen=True)
 class JointSpec:
     name: str
@@ -113,15 +115,17 @@ class JointSpec:
     right_max: float
     right_sign: float
 
+
 JOINT_SPECS = [
-    JointSpec("shoulder_pitch", 15, 22, -3.0892,  2.6704, -3.0892,  2.6704,  1.0),
-    JointSpec("shoulder_roll",  16, 23, -1.5882,  2.2515, -2.2515,  1.5882, -1.0),
-    JointSpec("shoulder_yaw",   17, 24, -2.6180,  2.6180, -2.6180,  2.6180, -1.0),
-    JointSpec("elbow",          18, 25, -1.0472,  2.0944, -1.0472,  2.0944,  1.0),
-    JointSpec("wrist_roll",     19, 26, -1.9722,  1.9722, -1.9722,  1.9722, -1.0),
-    JointSpec("wrist_pitch",    20, 27, -1.6144,  1.6144, -1.6144,  1.6144,  1.0),
-    JointSpec("wrist_yaw",      21, 28, -1.6144,  1.6144, -1.6144,  1.6144, -1.0),
+    JointSpec("shoulder_pitch", 15, 22, -3.0892, 2.6704, -3.0892, 2.6704, 1.0),
+    JointSpec("shoulder_roll", 16, 23, -1.5882, 2.2515, -2.2515, 1.5882, -1.0),
+    JointSpec("shoulder_yaw", 17, 24, -2.6180, 2.6180, -2.6180, 2.6180, -1.0),
+    JointSpec("elbow", 18, 25, -1.0472, 2.0944, -1.0472, 2.0944, 1.0),
+    JointSpec("wrist_roll", 19, 26, -1.9722, 1.9722, -1.9722, 1.9722, -1.0),
+    JointSpec("wrist_pitch", 20, 27, -1.6144, 1.6144, -1.6144, 1.6144, 1.0),
+    JointSpec("wrist_yaw", 21, 28, -1.6144, 1.6144, -1.6144, 1.6144, -1.0),
 ]
+
 
 @dataclass(frozen=True)
 class JointSelection:
@@ -152,6 +156,7 @@ class JointSelection:
             return min(self.left_max, float(self.right_max))
         return min(self.left_max, -float(self.right_min))
 
+
 JOINT_SELECTIONS: list[JointSelection] = [
     JointSelection(
         name=WAIST_JOINT_NAMES[j],
@@ -176,6 +181,8 @@ JOINT_SELECTIONS: list[JointSelection] = [
 JOINT_SELECTION_BY_NAME = {s.name: s for s in JOINT_SELECTIONS}
 
 # ── Robot helpers (identical to GUI) ─────────────────────────────────────────
+
+
 def _resolve_lowstate_type():
     for path in ("unitree_sdk2py.idl.unitree_hg.msg.dds_",
                  "unitree_sdk2py.idl.unitree_go.msg.dds_"):
@@ -233,9 +240,9 @@ class UpperBodyPoseController:
         for j in UPPER_BODY_JOINTS:
             c = self._cmd.motor_cmd[j]
             c.mode = 1
-            c.q    = float(targets[j])
-            c.dq   = 0.0
-            c.tau  = 0.0
+            c.q = float(targets[j])
+            c.dq = 0.0
+            c.tau = 0.0
             if j in WAIST_JOINTS:
                 c.kp = float(ov.get(j, waist_kp))
                 c.kd = float(waist_kd)
@@ -248,77 +255,82 @@ class UpperBodyPoseController:
     def write_zero_gains(self, hold: dict[int, float]) -> None:
         for j in UPPER_BODY_JOINTS:
             c = self._cmd.motor_cmd[j]
-            c.mode = 1; c.q = float(hold[j]); c.dq = 0.0
-            c.kp = 0.0; c.kd = 0.0; c.tau = 0.0
+            c.mode = 1
+            c.q = float(hold[j])
+            c.dq = 0.0
+            c.kp = 0.0
+            c.kd = 0.0
+            c.tau = 0.0
         self._cmd.crc = self._crc.Crc(self._cmd)
         self._pub.Write(self._cmd)
 
+
 # ── Focus constants ───────────────────────────────────────────────────────────
-FOCUS_JOINT    = 0
-FOCUS_POSES    = 1
+FOCUS_JOINT = 0
+FOCUS_POSES = 1
 FOCUS_SEQUENCE = 2
 
 # ── Colour pair indices ───────────────────────────────────────────────────────
-C_NORMAL  = 0
-C_GREEN   = 1   # connected / active
-C_YELLOW  = 2   # warning / step size
-C_RED     = 3   # released / error
-C_CYAN    = 4   # title / header
-C_SEL     = 5   # selected list row  (black on white)
-C_FOCUS   = 6   # focused panel header (black on cyan)
+C_NORMAL = 0
+C_GREEN = 1   # connected / active
+C_YELLOW = 2   # warning / step size
+C_RED = 3   # released / error
+C_CYAN = 4   # title / header
+C_SEL = 5   # selected list row  (black on white)
+C_FOCUS = 6   # focused panel header (black on cyan)
 C_RUNNING = 7   # sequence running (white on blue)
 
 
 # ── Main application ──────────────────────────────────────────────────────────
 class DualArmMirrorCLI:
     def __init__(self, args: argparse.Namespace) -> None:
-        self.iface        = str(args.iface)
-        self.domain_id    = int(args.domain_id)
-        self.pose_path    = Path(os.path.abspath(os.path.expanduser(str(args.file))))
-        self.rate_hz      = max(1.0, float(args.rate_hz))
-        self.max_speed    = max(0.01, float(args.speed_rad_s))
-        self.arm_kp       = float(args.kp)
-        self.arm_kd       = float(args.kd)
-        self.waist_kp     = float(WAIST_HOLD_KP)
-        self.waist_kd     = float(WAIST_HOLD_KD)
+        self.iface = str(args.iface)
+        self.domain_id = int(args.domain_id)
+        self.pose_path = Path(os.path.abspath(os.path.expanduser(str(args.file))))
+        self.rate_hz = max(1.0, float(args.rate_hz))
+        self.max_speed = max(0.01, float(args.speed_rad_s))
+        self.arm_kp = float(args.kp)
+        self.arm_kd = float(args.kd)
+        self.waist_kp = float(WAIST_HOLD_KP)
+        self.waist_kd = float(WAIST_HOLD_KD)
         self.arm_control_mode = str(args.arm_control)
 
         # Joint selection
-        self.joint_idx    = 0          # index into JOINT_SELECTIONS
-        self.adjust_step  = 0.05       # rad per key-press
+        self.joint_idx = 0          # index into JOINT_SELECTIONS
+        self.adjust_step = 0.05       # rad per key-press
 
         # Robot state mirrors (same names as GUI)
-        self.latest_positions   : dict[int, float] = {j: 0.0 for j in UPPER_BODY_JOINTS}
-        self.current_targets    : dict[int, float] = {j: 0.0 for j in UPPER_BODY_JOINTS}
-        self.desired_targets    : dict[int, float] = {j: 0.0 for j in UPPER_BODY_JOINTS}
-        self.seeded_from_state  = False
-        self.control_enabled    = True
+        self.latest_positions: dict[int, float] = {j: 0.0 for j in UPPER_BODY_JOINTS}
+        self.current_targets: dict[int, float] = {j: 0.0 for j in UPPER_BODY_JOINTS}
+        self.desired_targets: dict[int, float] = {j: 0.0 for j in UPPER_BODY_JOINTS}
+        self.seeded_from_state = False
+        self.control_enabled = True
         self.transition_joint_indices: set[int] = set()
 
         # Sequence state
-        self.saved_poses      : list[dict[str, Any]] = []
-        self.sequence_steps   : list[dict[str, Any]] = []
-        self.sequence_running  = False
+        self.saved_poses: list[dict[str, Any]] = []
+        self.sequence_steps: list[dict[str, Any]] = []
+        self.sequence_running = False
         self.sequence_step_index = 0
         self.sequence_next_time_s = 0.0
-        self.sequence_gap_s    = 2.0
+        self.sequence_gap_s = 2.0
         self.include_waist_new = True
 
         # UI cursor state
-        self.focus        = FOCUS_JOINT
-        self.pose_cursor  = 0
-        self.seq_cursor   = 0
-        self.status       = "Waiting for rt/lowstate upper-body state..."
+        self.focus = FOCUS_JOINT
+        self.pose_cursor = 0
+        self.seq_cursor = 0
+        self.status = "Waiting for rt/lowstate upper-body state..."
 
         # Timing
-        self.last_tick_s  = time.monotonic()
-        self._running     = True
+        self.last_tick_s = time.monotonic()
+        self._running = True
 
         # Init robot
         ChannelFactoryInitialize(self.domain_id, self.iface)
-        self.state_sub  = UpperBodyStateSubscriber(UPPER_BODY_JOINTS)
+        self.state_sub = UpperBodyStateSubscriber(UPPER_BODY_JOINTS)
         self.controller = UpperBodyPoseController(iface=self.iface, domain_id=self.domain_id)
-        self.robot      = Robot(iface=self.iface, domain_id=self.domain_id, auto_start_sensors=True)
+        self.robot = Robot(iface=self.iface, domain_id=self.domain_id, auto_start_sensors=True)
 
         self._load_saved_poses()
         self._seed_from_state()
@@ -332,8 +344,8 @@ class DualArmMirrorCLI:
             if snap:
                 pos, _ = snap
                 self.latest_positions = dict(pos)
-                self.current_targets  = dict(pos)
-                self.desired_targets  = dict(pos)
+                self.current_targets = dict(pos)
+                self.desired_targets = dict(pos)
                 self.seeded_from_state = True
                 self.status = f"Connected on {self.iface}"
                 return
@@ -456,7 +468,7 @@ class DualArmMirrorCLI:
         for j in UPPER_BODY_JOINTS:
             cur = float(self.current_targets[j])
             des = float(self.desired_targets[j])
-            d   = des - cur
+            d = des - cur
             if abs(d) <= step:
                 self.current_targets[j] = des
             else:
@@ -497,7 +509,7 @@ class DualArmMirrorCLI:
             self.status = "Sequence stopped: missing pose"
             return
         pose = self.saved_poses[pi]
-        iw   = bool(step.get("include_waist", True))
+        iw = bool(step.get("include_waist", True))
         try:
             self._apply_pose(pose, include_waist=iw)
         except Exception as exc:
@@ -531,7 +543,7 @@ class DualArmMirrorCLI:
             return
 
         now = time.monotonic()
-        dt  = max(1.0 / self.rate_hz, now - self.last_tick_s)
+        dt = max(1.0 / self.rate_hz, now - self.last_tick_s)
         self.last_tick_s = now
 
         if not self.control_enabled:
@@ -576,23 +588,24 @@ class DualArmMirrorCLI:
                   value: float, vmin: float, vmax: float) -> None:
         if width <= 0 or vmax <= vmin:
             return
-        frac   = max(0.0, min(1.0, (value - vmin) / (vmax - vmin)))
+        frac = max(0.0, min(1.0, (value - vmin) / (vmax - vmin)))
         filled = int(round(frac * width))
-        bar    = "█" * filled + "░" * (width - filled)
+        bar = "█" * filled + "░" * (width - filled)
         self._safe_addnstr(win, y, x, bar, width,
                            self._cp(C_GREEN) | curses.A_BOLD)
 
     # ── Section drawers ───────────────────────────────────────────────────────
 
     def _draw_header(self, win, h: int, w: int) -> None:
-        sel       = self._joint
+        sel = self._joint
         display_index = (
             sel.right_index
             if sel.right_index is not None and self.arm_control_mode == "right"
             else sel.left_index
         )
-        cur_val   = float(self.latest_positions.get(display_index, self.current_targets[display_index]))
-        tgt_val   = float(self.desired_targets[display_index])
+        cur_val = float(self.latest_positions.get(
+            display_index, self.current_targets[display_index]))
+        tgt_val = float(self.desired_targets[display_index])
         smin, smax = self._joint_slider_range(sel)
 
         # Row 0 — title
@@ -602,7 +615,7 @@ class DualArmMirrorCLI:
         self._safe_addstr(win, 0, 0, "─" * w, self._cp(C_CYAN))
         self._safe_addstr(win, 0, max(0, (w - len(title)) // 2), title,
                           self._cp(C_CYAN) | curses.A_BOLD)
-        conn_text  = "CONNECTED" if self.seeded_from_state else "WAITING"
+        conn_text = "CONNECTED" if self.seeded_from_state else "WAITING"
         armed_text = "ARMED" if self.control_enabled else "RELEASED"
         self._safe_addstr(win, 0, w - 22, f"[{conn_text}]", conn_attr)
         self._safe_addstr(win, 0, w - 12, f"[{armed_text}]", armed_attr)
@@ -623,7 +636,7 @@ class DualArmMirrorCLI:
         elif self.arm_control_mode == "right":
             map_txt = f"  Arms [{self.arm_control_mode}]: right {sel.name} = x"
         else:
-            sign    = "+" if sel.right_sign > 0 else "-"
+            sign = "+" if sel.right_sign > 0 else "-"
             map_txt = f"  Arms [{self.arm_control_mode}]: left {sel.name} = x   right {sel.name} = {sign}x"
         self._safe_addnstr(win, 2, 0, map_txt, w - 30)
         speed_txt = f"Speed: {self.max_speed:.3f} r/s [s]"
@@ -636,8 +649,8 @@ class DualArmMirrorCLI:
         self._safe_addnstr(win, 3, 0, range_txt, w)
 
         # Row 4 — target bar
-        bar_lpad  = 10
-        bar_rpad  = 12
+        bar_lpad = 10
+        bar_rpad = 12
         bar_width = max(10, w - bar_lpad - bar_rpad)
         self._safe_addstr(win, 4, 0, f"  {smin:+.3f} ")
         self._draw_bar(win, 4, bar_lpad, bar_width, tgt_val, smin, smax)
@@ -652,11 +665,11 @@ class DualArmMirrorCLI:
             cr_txt = (f"  Current: {cur_val:+.4f} rad   "
                       f"Target: {tgt_val:+.4f} rad")
         else:
-            cl  = float(self.latest_positions.get(sel.left_index,
-                         self.current_targets[sel.left_index]))
+            cl = float(self.latest_positions.get(sel.left_index,
+                                                 self.current_targets[sel.left_index]))
             clt = float(self.desired_targets[sel.left_index])
-            cr  = float(self.latest_positions.get(sel.right_index,
-                         self.current_targets[sel.right_index]))
+            cr = float(self.latest_positions.get(sel.right_index,
+                                                 self.current_targets[sel.right_index]))
             crt = float(self.desired_targets[sel.right_index])
             cr_txt = (f"  Current L/R: {cl:+.4f} / {cr:+.4f} rad   "
                       f"Target L/R: {clt:+.4f} / {crt:+.4f} rad")
@@ -666,65 +679,65 @@ class DualArmMirrorCLI:
         self._safe_addstr(win, 6, 0, "─" * w, self._cp(C_CYAN))
 
     def _draw_panels(self, win, h: int, w: int) -> None:
-        panel_top  = 7
-        panel_bot  = h - 4
+        panel_top = 7
+        panel_bot = h - 4
         panel_rows = max(0, panel_bot - panel_top)
-        mid        = w // 2
+        mid = w // 2
 
         # ── Poses panel header (left) ─────────────────────────────────────
-        poses_focus  = (self.focus == FOCUS_POSES)
-        ph_attr      = (self._cp(C_FOCUS) | curses.A_BOLD) if poses_focus else curses.A_BOLD
-        ph_text      = f" Poses ({len(self.saved_poses)}) [Tab focus] [p]save [l/⏎]load [d]del [a]→seq "
+        poses_focus = (self.focus == FOCUS_POSES)
+        ph_attr = (self._cp(C_FOCUS) | curses.A_BOLD) if poses_focus else curses.A_BOLD
+        ph_text = f" Poses ({len(self.saved_poses)}) [Tab focus] [p]save [l/⏎]load [d]del [a]→seq "
         self._safe_addnstr(win, panel_top, 0, ph_text[:mid], mid, ph_attr)
 
         # ── Sequence panel header (right) ─────────────────────────────────
         seq_focus = (self.focus == FOCUS_SEQUENCE)
-        sh_attr   = (self._cp(C_FOCUS) | curses.A_BOLD) if seq_focus else curses.A_BOLD
+        sh_attr = (self._cp(C_FOCUS) | curses.A_BOLD) if seq_focus else curses.A_BOLD
         waist_ind = "W" if self.include_waist_new else "w"
-        sh_text   = (f" Seq ({len(self.sequence_steps)}) gap:{self.sequence_gap_s:.1f}s "
-                     f"[{waist_ind}]waist [R]run [S]stop [x]rem [u/n]↕ ")
-        seq_x     = mid + 1
+        sh_text = (f" Seq ({len(self.sequence_steps)}) gap:{self.sequence_gap_s:.1f}s "
+                   f"[{waist_ind}]waist [R]run [S]stop [x]rem [u/n]↕ ")
+        seq_x = mid + 1
         self._safe_addstr(win, panel_top, mid, "│", self._cp(C_CYAN))
         self._safe_addnstr(win, panel_top, seq_x, sh_text[:w - seq_x], w - seq_x, sh_attr)
 
         # ── Poses list ────────────────────────────────────────────────────
         for row in range(panel_rows):
-            y    = panel_top + 1 + row
+            y = panel_top + 1 + row
             if y >= panel_bot:
                 break
             pidx = row
             self._safe_addstr(win, y, mid, "│", self._cp(C_CYAN))
             if pidx < len(self.saved_poses):
-                pose  = self.saved_poses[pidx]
-                name  = str(pose.get("name", f"pose_{pidx}"))
+                pose = self.saved_poses[pidx]
+                name = str(pose.get("name", f"pose_{pidx}"))
                 saved = str(pose.get("saved_at", ""))[:19]
-                text  = f" {pidx}: {name}  {saved}"
+                text = f" {pidx}: {name}  {saved}"
                 is_sel = (pidx == self.pose_cursor and poses_focus)
-                attr   = (self._cp(C_SEL) | curses.A_BOLD) if is_sel else 0
+                attr = (self._cp(C_SEL) | curses.A_BOLD) if is_sel else 0
                 cur_mark = "▶" if pidx == self.pose_cursor else " "
-                line   = f"{cur_mark}{text}"
+                line = f"{cur_mark}{text}"
                 self._safe_addnstr(win, y, 0, line[:mid], mid, attr)
             else:
                 self._safe_addstr(win, y, 0, " " * mid)
 
         # ── Sequence list ─────────────────────────────────────────────────
         for row in range(panel_rows):
-            y    = panel_top + 1 + row
+            y = panel_top + 1 + row
             if y >= panel_bot:
                 break
             sidx = row
             if sidx >= len(self.sequence_steps):
                 continue
-            step  = self.sequence_steps[sidx]
-            pi    = int(step.get("pose_index", -1))
+            step = self.sequence_steps[sidx]
+            pi = int(step.get("pose_index", -1))
             if 0 <= pi < len(self.saved_poses):
                 sname = str(self.saved_poses[pi].get("name", f"pose_{pi}"))
             else:
                 sname = "<missing>"
-            wt    = "waist on" if step.get("include_waist", True) else "waist off"
-            text  = f" {sidx + 1}: {sname} [{wt}]"
+            wt = "waist on" if step.get("include_waist", True) else "waist off"
+            text = f" {sidx + 1}: {sname} [{wt}]"
             is_sel_seq = (sidx == self.seq_cursor and seq_focus)
-            is_active  = (self.sequence_running and sidx == self.sequence_step_index - 1)
+            is_active = (self.sequence_running and sidx == self.sequence_step_index - 1)
             if is_sel_seq:
                 attr = self._cp(C_SEL) | curses.A_BOLD
             elif is_active:
@@ -965,7 +978,7 @@ class DualArmMirrorCLI:
                     self.sequence_running = False
                 self._write_saved_poses()
                 self.pose_cursor = min(self.pose_cursor, max(0, len(self.saved_poses) - 1))
-                self.seq_cursor  = min(self.seq_cursor,  max(0, len(self.sequence_steps) - 1))
+                self.seq_cursor = min(self.seq_cursor, max(0, len(self.sequence_steps) - 1))
                 self.status = f"Deleted pose '{name}'"
             else:
                 self.status = "No pose selected"
@@ -1021,14 +1034,14 @@ class DualArmMirrorCLI:
             elif not self.sequence_steps:
                 self.status = "Add poses to the sequence first"
             else:
-                self.sequence_running    = True
+                self.sequence_running = True
                 self.sequence_step_index = 0
                 self.sequence_next_time_s = 0.0
                 self.status = "Sequence started"
             return
 
         if key == ord("S"):
-            self.sequence_running    = False
+            self.sequence_running = False
             self.sequence_step_index = 0
             self.sequence_next_time_s = 0.0
             self.status = "Sequence stopped"
@@ -1043,13 +1056,13 @@ class DualArmMirrorCLI:
         if curses.has_colors():
             curses.start_color()
             curses.use_default_colors()
-            curses.init_pair(C_GREEN,   curses.COLOR_GREEN,  -1)
-            curses.init_pair(C_YELLOW,  curses.COLOR_YELLOW, -1)
-            curses.init_pair(C_RED,     curses.COLOR_RED,    -1)
-            curses.init_pair(C_CYAN,    curses.COLOR_CYAN,   -1)
-            curses.init_pair(C_SEL,     curses.COLOR_BLACK,  curses.COLOR_WHITE)
-            curses.init_pair(C_FOCUS,   curses.COLOR_BLACK,  curses.COLOR_CYAN)
-            curses.init_pair(C_RUNNING, curses.COLOR_WHITE,  curses.COLOR_BLUE)
+            curses.init_pair(C_GREEN, curses.COLOR_GREEN, -1)
+            curses.init_pair(C_YELLOW, curses.COLOR_YELLOW, -1)
+            curses.init_pair(C_RED, curses.COLOR_RED, -1)
+            curses.init_pair(C_CYAN, curses.COLOR_CYAN, -1)
+            curses.init_pair(C_SEL, curses.COLOR_BLACK, curses.COLOR_WHITE)
+            curses.init_pair(C_FOCUS, curses.COLOR_BLACK, curses.COLOR_CYAN)
+            curses.init_pair(C_RUNNING, curses.COLOR_WHITE, curses.COLOR_BLUE)
 
         curses.curs_set(0)
         stdscr.timeout(20)   # 50 fps; also sets tick cadence
@@ -1088,13 +1101,13 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
         description="Terminal mirror of dual_arm_mirror_ui_with_waist.py"
     )
-    p.add_argument("--iface",       default="eth0",  help="Network interface for DDS")
-    p.add_argument("--domain-id",   type=int, default=0)
-    p.add_argument("--file",        default=DEFAULT_POSE_FILE, help="Saved pose JSON file")
-    p.add_argument("--rate-hz",     type=float, default=50.0,  help="Command publish rate")
-    p.add_argument("--speed-rad-s", type=float, default=0.1,   help="Initial ramp limit rad/s")
-    p.add_argument("--kp",          type=float, default=DEFAULT_ARM_KP)
-    p.add_argument("--kd",          type=float, default=DEFAULT_ARM_KD)
+    p.add_argument("--iface", default="eth0", help="Network interface for DDS")
+    p.add_argument("--domain-id", type=int, default=0)
+    p.add_argument("--file", default=DEFAULT_POSE_FILE, help="Saved pose JSON file")
+    p.add_argument("--rate-hz", type=float, default=50.0, help="Command publish rate")
+    p.add_argument("--speed-rad-s", type=float, default=0.1, help="Initial ramp limit rad/s")
+    p.add_argument("--kp", type=float, default=DEFAULT_ARM_KP)
+    p.add_argument("--kd", type=float, default=DEFAULT_ARM_KD)
     p.add_argument(
         "--arm-control",
         choices=ARM_CONTROL_MODES,
@@ -1106,7 +1119,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    app  = DualArmMirrorCLI(args)
+    app = DualArmMirrorCLI(args)
     app.run()
 
 

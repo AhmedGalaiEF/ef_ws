@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+from std_msgs.msg import String
+from rclpy.node import Node
+import rclpy
 
 import argparse
 from html.parser import HTMLParser
@@ -20,10 +23,6 @@ from typing import Any
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
-
-import rclpy
-from rclpy.node import Node
-from std_msgs.msg import String
 
 
 DEFAULT_SYSTEM_PROMPT = (
@@ -93,19 +92,29 @@ def parse_args() -> argparse.Namespace:
         description="Listen to robot ASR, answer with Ollama qwen3.5:9b, and speak replies through the robot."
     )
     parser.add_argument("--topic", default="/audio_msg", help="ROS 2 ASR topic to subscribe to.")
-    parser.add_argument("--out", default="/tmp/robot_chat.jsonl", help="JSONL file for chat events.")
-    parser.add_argument("--text-out", default="/tmp/robot_chat.txt", help="Plain text transcript output file.")
+    parser.add_argument("--out", default="/tmp/robot_chat.jsonl",
+                        help="JSONL file for chat events.")
+    parser.add_argument("--text-out", default="/tmp/robot_chat.txt",
+                        help="Plain text transcript output file.")
     parser.add_argument("--ollama-url", default="http://127.0.0.1:11434", help="Ollama base URL.")
     parser.add_argument("--model", default="qwen3.5:9b", help="Ollama model name.")
-    parser.add_argument("--system-prompt", default=DEFAULT_SYSTEM_PROMPT, help="System prompt for the robot persona.")
-    parser.add_argument("--temperature", type=float, default=0.4, help="Ollama sampling temperature.")
-    parser.add_argument("--timeout", type=float, default=30.0, help="Ollama request timeout in seconds.")
-    parser.add_argument("--max-history", type=int, default=4, help="Maximum user/assistant messages to keep.")
-    parser.add_argument("--num-predict", type=int, default=48, help="Maximum tokens to generate per reply.")
+    parser.add_argument("--system-prompt", default=DEFAULT_SYSTEM_PROMPT,
+                        help="System prompt for the robot persona.")
+    parser.add_argument("--temperature", type=float, default=0.4,
+                        help="Ollama sampling temperature.")
+    parser.add_argument("--timeout", type=float, default=30.0,
+                        help="Ollama request timeout in seconds.")
+    parser.add_argument("--max-history", type=int, default=4,
+                        help="Maximum user/assistant messages to keep.")
+    parser.add_argument("--num-predict", type=int, default=48,
+                        help="Maximum tokens to generate per reply.")
     parser.add_argument("--num-ctx", type=int, default=1024, help="Ollama context window size.")
-    parser.add_argument("--keep-alive", default="15m", help="How long Ollama should keep the model loaded.")
-    parser.add_argument("--num-thread", type=int, default=None, help="Optional Ollama CPU thread count.")
-    parser.add_argument("--company-web-timeout", type=float, default=8.0, help="Timeout for EF Robotics web requests.")
+    parser.add_argument("--keep-alive", default="15m",
+                        help="How long Ollama should keep the model loaded.")
+    parser.add_argument("--num-thread", type=int, default=None,
+                        help="Optional Ollama CPU thread count.")
+    parser.add_argument("--company-web-timeout", type=float, default=8.0,
+                        help="Timeout for EF Robotics web requests.")
     parser.add_argument(
         "--company-web-max-chars",
         type=int,
@@ -118,19 +127,30 @@ def parse_args() -> argparse.Namespace:
         default=3,
         help="Maximum Ollama tool-call rounds per user message.",
     )
-    parser.add_argument("--no-warmup", action="store_true", help="Do not preload the model at startup.")
+    parser.add_argument("--no-warmup", action="store_true",
+                        help="Do not preload the model at startup.")
     parser.add_argument("--iface", default="eth0", help="DDS interface for robot audio playback.")
-    parser.add_argument("--domain-id", type=int, default=0, help="DDS domain ID for robot audio playback.")
+    parser.add_argument("--domain-id", type=int, default=0,
+                        help="DDS domain ID for robot audio playback.")
     parser.add_argument("--volume", type=int, default=None, help="Optional playback volume 0-100.")
-    parser.add_argument("--tts-language", default=None, help="Optional Piper language, for example en, de, fr, es, ar.")
-    parser.add_argument("--startup-speech", default="chat mode activated", help="Text to speak when chat mode starts.")
-    parser.add_argument("--no-startup-speech", action="store_true", help="Do not speak the startup phrase.")
-    parser.add_argument("--headlight-color", default="#123456", help="Headlight color to set when chat mode starts.")
-    parser.add_argument("--headlight-intensity", type=int, default=100, help="Startup headlight intensity 0-100.")
-    parser.add_argument("--no-headlight", action="store_true", help="Do not change the headlight on startup.")
-    parser.add_argument("--min-confidence", type=float, default=0.0, help="Ignore ASR below this confidence.")
-    parser.add_argument("--answer-fillers", action="store_true", help="Answer short filler utterances like um or hmm.")
-    parser.add_argument("--no-reply", action="store_true", help="Generate and save replies; do not speak them.")
+    parser.add_argument("--tts-language", default=None,
+                        help="Optional Piper language, for example en, de, fr, es, ar.")
+    parser.add_argument("--startup-speech", default="chat mode activated",
+                        help="Text to speak when chat mode starts.")
+    parser.add_argument("--no-startup-speech", action="store_true",
+                        help="Do not speak the startup phrase.")
+    parser.add_argument("--headlight-color", default="#123456",
+                        help="Headlight color to set when chat mode starts.")
+    parser.add_argument("--headlight-intensity", type=int, default=100,
+                        help="Startup headlight intensity 0-100.")
+    parser.add_argument("--no-headlight", action="store_true",
+                        help="Do not change the headlight on startup.")
+    parser.add_argument("--min-confidence", type=float, default=0.0,
+                        help="Ignore ASR below this confidence.")
+    parser.add_argument("--answer-fillers", action="store_true",
+                        help="Answer short filler utterances like um or hmm.")
+    parser.add_argument("--no-reply", action="store_true",
+                        help="Generate and save replies; do not speak them.")
     parser.add_argument(
         "--post-speak-ignore-s",
         type=float,
@@ -283,7 +303,7 @@ class RobotChat(Node):
     def _ask_ollama(self, user_text: str) -> str:
         max_history = max(1, int(self.args.max_history))
         messages = self.messages + [{"role": "user", "content": user_text}]
-        del messages[1 : max(1, len(messages) - max_history)]
+        del messages[1: max(1, len(messages) - max_history)]
 
         started = time.time()
         result = self._chat_with_company_web_tool(messages)
@@ -317,7 +337,8 @@ class RobotChat(Node):
             if not tool_calls:
                 return result
 
-            assistant_message: dict[str, Any] = {"role": "assistant", "content": message.get("content", "") or ""}
+            assistant_message: dict[str, Any] = {
+                "role": "assistant", "content": message.get("content", "") or ""}
             if tool_calls:
                 assistant_message["tool_calls"] = tool_calls
             messages.append(assistant_message)
@@ -424,7 +445,8 @@ class RobotChat(Node):
     def _normalize_company_url(self, url: str) -> str:
         parsed = urllib.parse.urlparse(str(url).strip())
         if not parsed.scheme:
-            parsed = urllib.parse.urlparse(f"https://www.ef-robotics.de/{str(url).strip().lstrip('/')}")
+            parsed = urllib.parse.urlparse(
+                f"https://www.ef-robotics.de/{str(url).strip().lstrip('/')}")
         normalized = parsed._replace(fragment="", query="")
         path = normalized.path.rstrip("/") or "/"
         normalized = normalized._replace(path=path)
@@ -488,7 +510,8 @@ class RobotChat(Node):
     def _run_startup_actions(self) -> None:
         if not self.args.no_headlight:
             try:
-                code = self._set_headlight_once(str(self.args.headlight_color), int(self.args.headlight_intensity))
+                code = self._set_headlight_once(
+                    str(self.args.headlight_color), int(self.args.headlight_intensity))
                 self.get_logger().info(
                     f"Headlight set color={self.args.headlight_color} intensity={self.args.headlight_intensity} code={code}"
                 )
@@ -520,7 +543,8 @@ class RobotChat(Node):
         env = os.environ.copy()
         env.setdefault("CYCLONEDDS_HOME", "/home/unitree/cyclonedds_ws/install/cyclonedds")
         env.setdefault("CYCLONEDDS_URI", "/home/unitree/cyclonedds_ws/cyclonedds.xml")
-        proc = subprocess.run(command, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        proc = subprocess.run(command, env=env, text=True,
+                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         if proc.stdout.strip():
             self.get_logger().info(proc.stdout.strip())
         return int(proc.returncode)
@@ -571,7 +595,8 @@ class RobotChat(Node):
         env = os.environ.copy()
         env.setdefault("CYCLONEDDS_HOME", "/home/unitree/cyclonedds_ws/install/cyclonedds")
         env.setdefault("CYCLONEDDS_URI", "/home/unitree/cyclonedds_ws/cyclonedds.xml")
-        proc = subprocess.run(command, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        proc = subprocess.run(command, env=env, text=True,
+                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         if proc.stdout.strip():
             self.get_logger().info(proc.stdout.strip())
         return int(proc.returncode)

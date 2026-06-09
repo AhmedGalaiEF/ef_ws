@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+from chat import DEFAULT_SYSTEM_PROMPT, RobotChat, clean_reply
 
 import argparse
 import csv
@@ -15,8 +16,6 @@ from typing import Any
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
-
-from chat import DEFAULT_SYSTEM_PROMPT, RobotChat, clean_reply
 
 
 FAQ_SYSTEM_PROMPT = (
@@ -83,25 +82,35 @@ def parse_args() -> argparse.Namespace:
         description="Listen to robot ASR, retrieve FAQ context, answer with Ollama, and speak replies."
     )
     parser.add_argument("--topic", default="/audio_msg", help="ROS 2 ASR topic to subscribe to.")
-    parser.add_argument("--out", default="/tmp/robot_chat_faqs.jsonl", help="JSONL file for chat events.")
-    parser.add_argument("--text-out", default="/tmp/robot_chat_faqs.txt", help="Plain text transcript output file.")
+    parser.add_argument("--out", default="/tmp/robot_chat_faqs.jsonl",
+                        help="JSONL file for chat events.")
+    parser.add_argument("--text-out", default="/tmp/robot_chat_faqs.txt",
+                        help="Plain text transcript output file.")
     parser.add_argument("--ollama-url", default="http://127.0.0.1:11434", help="Ollama base URL.")
     parser.add_argument("--model", default="qwen3.5:9b", help="Ollama model name.")
-    parser.add_argument("--system-prompt", default=DEFAULT_SYSTEM_PROMPT, help="System prompt for the robot persona.")
-    parser.add_argument("--temperature", type=float, default=0.2, help="Ollama sampling temperature.")
-    parser.add_argument("--timeout", type=float, default=30.0, help="Ollama request timeout in seconds.")
-    parser.add_argument("--max-history", type=int, default=4, help="Maximum user/assistant messages to keep.")
-    parser.add_argument("--num-predict", type=int, default=64, help="Maximum tokens to generate per reply.")
+    parser.add_argument("--system-prompt", default=DEFAULT_SYSTEM_PROMPT,
+                        help="System prompt for the robot persona.")
+    parser.add_argument("--temperature", type=float, default=0.2,
+                        help="Ollama sampling temperature.")
+    parser.add_argument("--timeout", type=float, default=30.0,
+                        help="Ollama request timeout in seconds.")
+    parser.add_argument("--max-history", type=int, default=4,
+                        help="Maximum user/assistant messages to keep.")
+    parser.add_argument("--num-predict", type=int, default=64,
+                        help="Maximum tokens to generate per reply.")
     parser.add_argument("--num-ctx", type=int, default=2048, help="Ollama context window size.")
-    parser.add_argument("--keep-alive", default="15m", help="How long Ollama should keep the model loaded.")
-    parser.add_argument("--num-thread", type=int, default=None, help="Optional Ollama CPU thread count.")
+    parser.add_argument("--keep-alive", default="15m",
+                        help="How long Ollama should keep the model loaded.")
+    parser.add_argument("--num-thread", type=int, default=None,
+                        help="Optional Ollama CPU thread count.")
     parser.add_argument(
         "--faq-file",
         action="append",
         default=None,
         help="FAQ file to retrieve from. Repeat for multiple files. Supports md, txt, json, jsonl, and csv.",
     )
-    parser.add_argument("--faq-top-k", type=int, default=3, help="Number of FAQ chunks to pass to the model.")
+    parser.add_argument("--faq-top-k", type=int, default=3,
+                        help="Number of FAQ chunks to pass to the model.")
     parser.add_argument(
         "--faq-min-score",
         type=float,
@@ -114,19 +123,30 @@ def parse_args() -> argparse.Namespace:
         default=1800,
         help="Maximum FAQ context characters sent to Ollama for one answer.",
     )
-    parser.add_argument("--no-warmup", action="store_true", help="Do not preload the model at startup.")
+    parser.add_argument("--no-warmup", action="store_true",
+                        help="Do not preload the model at startup.")
     parser.add_argument("--iface", default="eth0", help="DDS interface for robot audio playback.")
-    parser.add_argument("--domain-id", type=int, default=0, help="DDS domain ID for robot audio playback.")
+    parser.add_argument("--domain-id", type=int, default=0,
+                        help="DDS domain ID for robot audio playback.")
     parser.add_argument("--volume", type=int, default=None, help="Optional playback volume 0-100.")
-    parser.add_argument("--tts-language", default=None, help="Optional Piper language, for example en, de, fr, es, ar.")
-    parser.add_argument("--startup-speech", default="FAQ chat mode activated", help="Text to speak when chat mode starts.")
-    parser.add_argument("--no-startup-speech", action="store_true", help="Do not speak the startup phrase.")
-    parser.add_argument("--headlight-color", default="#123456", help="Headlight color to set when chat mode starts.")
-    parser.add_argument("--headlight-intensity", type=int, default=100, help="Startup headlight intensity 0-100.")
-    parser.add_argument("--no-headlight", action="store_true", help="Do not change the headlight on startup.")
-    parser.add_argument("--min-confidence", type=float, default=0.0, help="Ignore ASR below this confidence.")
-    parser.add_argument("--answer-fillers", action="store_true", help="Answer short filler utterances like um or hmm.")
-    parser.add_argument("--no-reply", action="store_true", help="Generate and save replies; do not speak them.")
+    parser.add_argument("--tts-language", default=None,
+                        help="Optional Piper language, for example en, de, fr, es, ar.")
+    parser.add_argument("--startup-speech", default="FAQ chat mode activated",
+                        help="Text to speak when chat mode starts.")
+    parser.add_argument("--no-startup-speech", action="store_true",
+                        help="Do not speak the startup phrase.")
+    parser.add_argument("--headlight-color", default="#123456",
+                        help="Headlight color to set when chat mode starts.")
+    parser.add_argument("--headlight-intensity", type=int, default=100,
+                        help="Startup headlight intensity 0-100.")
+    parser.add_argument("--no-headlight", action="store_true",
+                        help="Do not change the headlight on startup.")
+    parser.add_argument("--min-confidence", type=float, default=0.0,
+                        help="Ignore ASR below this confidence.")
+    parser.add_argument("--answer-fillers", action="store_true",
+                        help="Answer short filler utterances like um or hmm.")
+    parser.add_argument("--no-reply", action="store_true",
+                        help="Generate and save replies; do not speak them.")
     parser.add_argument(
         "--post-speak-ignore-s",
         type=float,
@@ -197,8 +217,10 @@ def entries_from_rows(rows: list[Any], source: str) -> list[FAQEntry]:
         if not isinstance(row, dict):
             entry = entry_from_parts(f"FAQ {index}", str(row), source)
         else:
-            title = row.get("question") or row.get("q") or row.get("title") or row.get("heading") or f"FAQ {index}"
-            answer = row.get("answer") or row.get("a") or row.get("content") or row.get("text") or ""
+            title = row.get("question") or row.get("q") or row.get(
+                "title") or row.get("heading") or f"FAQ {index}"
+            answer = row.get("answer") or row.get("a") or row.get(
+                "content") or row.get("text") or ""
             entry = entry_from_parts(str(title), str(answer), source)
         if entry:
             entries.append(entry)
@@ -276,12 +298,14 @@ class FAQRobotChat(RobotChat):
             faq_paths = [DEFAULT_FAQ_PATH]
         missing = [path for path in faq_paths if not path.exists()]
         if missing:
-            raise FileNotFoundError("FAQ file not found: " + ", ".join(str(path) for path in missing))
+            raise FileNotFoundError("FAQ file not found: " + ", ".join(str(path)
+                                    for path in missing))
         self.faq_entries = load_faq_entries(faq_paths) if faq_paths else []
         self.retriever = FAQRetriever(self.faq_entries)
         super().__init__(args)
         if self.faq_entries:
-            self.get_logger().info(f"Loaded {len(self.faq_entries)} FAQ entries from {len(faq_paths)} file(s)")
+            self.get_logger().info(
+                f"Loaded {len(self.faq_entries)} FAQ entries from {len(faq_paths)} file(s)")
         else:
             self.get_logger().warning(
                 f"No FAQ entries loaded. Pass --faq-file or create {DEFAULT_FAQ_PATH}."
@@ -298,7 +322,8 @@ class FAQRobotChat(RobotChat):
         faq_context = self._format_faq_context(retrieved)
         messages: list[dict[str, str]] = [self.messages[0], *history]
         if faq_context:
-            messages.append({"role": "system", "content": f"{FAQ_SYSTEM_PROMPT}\n\nFAQ context:\n{faq_context}"})
+            messages.append(
+                {"role": "system", "content": f"{FAQ_SYSTEM_PROMPT}\n\nFAQ context:\n{faq_context}"})
         else:
             messages.append({"role": "system", "content": FAQ_SYSTEM_PROMPT})
         messages.append({"role": "user", "content": user_text})
@@ -322,7 +347,8 @@ class FAQRobotChat(RobotChat):
         reply = clean_reply(str(result.get("message", {}).get("content", "")))
         if not reply:
             reply = "I do not know yet."
-        self.messages = [self.messages[0], *history, {"role": "user", "content": user_text}, {"role": "assistant", "content": reply}]
+        self.messages = [self.messages[0], *history,
+                         {"role": "user", "content": user_text}, {"role": "assistant", "content": reply}]
         if retrieved:
             sources = ", ".join(f"{entry.source}:{score:.2f}" for entry, score in retrieved)
             self.get_logger().info(f"FAQ RAG sources: {sources}")

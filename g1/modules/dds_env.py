@@ -48,7 +48,8 @@ def _iter_cyclonedds_uri_candidates() -> list[Path]:
         home / "cyclonedds_ws" / "cyclonedds.xml",
         home / "unitree_ros2" / "cyclonedds_ws" / "src" / "cyclonedds.xml",
         home / "Desktop" / "unitree" / "unitree_sdk2_python" / "cyclonedds.xml",
-        home / "academy_prep" / "academy_content" / "docs" / "repos" / "unitree_sdk2_python" / "cyclonedds.xml",
+        home / "academy_prep" / "academy_content" / "docs" /
+        "repos" / "unitree_sdk2_python" / "cyclonedds.xml",
     ]
 
 

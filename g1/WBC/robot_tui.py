@@ -33,6 +33,8 @@ Keys
 """
 
 from __future__ import annotations
+from modules.sdk_client import BODY_JOINT_NAME_BY_INDEX, Robot
+from dds_env import ensure_cyclonedds_environment
 
 import argparse
 import curses
@@ -50,11 +52,8 @@ for _p in (ROOT_DIR, MODULES_DIR):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from dds_env import ensure_cyclonedds_environment
 
 ensure_cyclonedds_environment()
-
-from modules.sdk_client import BODY_JOINT_NAME_BY_INDEX, Robot
 
 
 FOCUS_FSM = 0
@@ -234,7 +233,8 @@ class RobotTUI:
     def _draw_header(self, win, h: int, w: int) -> None:
         self._safe_addstr(win, 0, 0, "-" * w, self._cp(C_CYAN))
         title = "Robot TUI"
-        self._safe_addstr(win, 0, max(0, (w - len(title)) // 2), title, self._cp(C_CYAN) | curses.A_BOLD)
+        self._safe_addstr(win, 0, max(0, (w - len(title)) // 2),
+                          title, self._cp(C_CYAN) | curses.A_BOLD)
         self._safe_addnstr(
             win,
             1,
@@ -262,7 +262,8 @@ class RobotTUI:
 
     def _draw_fsm_panel(self, win, top: int, left: int, height: int, width: int) -> None:
         attr = self._cp(C_FOCUS) | curses.A_BOLD if self.focus == FOCUS_FSM else curses.A_BOLD
-        self._safe_addnstr(win, top, left, " FSM [z]zero [d]damp [a]id2 [w]walk [r]run [v]dev [f]refresh ", width, attr)
+        self._safe_addnstr(
+            win, top, left, " FSM [z]zero [d]damp [a]id2 [w]walk [r]run [v]dev [f]refresh ", width, attr)
         rows = [
             ("Zero torque", "z", "robot.zero_torque() / fsm_0_zt()"),
             ("Damp", "d", "robot.damp() / fsm_1_damp()"),
@@ -279,18 +280,25 @@ class RobotTUI:
         attr = self._cp(C_FOCUS) | curses.A_BOLD if self.focus == FOCUS_LOCO else curses.A_BOLD
         enabled = "ON" if self.loco_enabled else "OFF"
         enabled_attr = self._cp(C_GREEN if self.loco_enabled else C_RED) | curses.A_BOLD
-        self._safe_addnstr(win, top, left, " Locomotion [m]send [space]stop arrows/h/l adjust +/- step ", width, attr)
+        self._safe_addnstr(
+            win, top, left, " Locomotion [m]send [space]stop arrows/h/l adjust +/- step ", width, attr)
         self._safe_addstr(win, top + 1, left, f" continuous send: {enabled}", enabled_attr)
-        self._safe_addnstr(win, top + 2, left, f" vx   {self.vx:+.3f} m/s    limit +/-{self.max_vx:.2f}", width)
-        self._safe_addnstr(win, top + 3, left, f" vy   {self.vy:+.3f} m/s    limit +/-{self.max_vy:.2f}", width)
-        self._safe_addnstr(win, top + 4, left, f" vyaw {self.vyaw:+.3f} rad/s  limit +/-{self.max_vyaw:.2f}", width)
-        self._safe_addnstr(win, top + 5, left, f" step_v={self.step_v:.3f} m/s  step_yaw={self.step_yaw:.3f} rad/s", width, self._cp(C_YELLOW))
-        self._safe_addnstr(win, top + 6, left, " Up/Down=vx  h/l=vy  Left/Right=vyaw  0=zero command", width)
+        self._safe_addnstr(win, top + 2, left,
+                           f" vx   {self.vx:+.3f} m/s    limit +/-{self.max_vx:.2f}", width)
+        self._safe_addnstr(win, top + 3, left,
+                           f" vy   {self.vy:+.3f} m/s    limit +/-{self.max_vy:.2f}", width)
+        self._safe_addnstr(win, top + 4, left,
+                           f" vyaw {self.vyaw:+.3f} rad/s  limit +/-{self.max_vyaw:.2f}", width)
+        self._safe_addnstr(
+            win, top + 5, left, f" step_v={self.step_v:.3f} m/s  step_yaw={self.step_yaw:.3f} rad/s", width, self._cp(C_YELLOW))
+        self._safe_addnstr(win, top + 6, left,
+                           " Up/Down=vx  h/l=vy  Left/Right=vyaw  0=zero command", width)
 
     def _draw_probe_panel(self, win, top: int, left: int, height: int, width: int) -> None:
         attr = self._cp(C_FOCUS) | curses.A_BOLD if self.focus == FOCUS_PROBES else curses.A_BOLD
         page = PROBE_PAGES[self.probe_idx]
-        self._safe_addnstr(win, top, left, f" Probes page={page} [j/k]page [p]refresh ", width, attr)
+        self._safe_addnstr(
+            win, top, left, f" Probes page={page} [j/k]page [p]refresh ", width, attr)
         lines = self._probe_lines(page, max(0, height - 1), width)
         for idx, line in enumerate(lines):
             self._safe_addnstr(win, top + 1 + idx, left, line, width)
@@ -379,7 +387,8 @@ class RobotTUI:
             return
         if key == ord("m"):
             self.loco_enabled = not self.loco_enabled
-            self._set_status(f"Continuous locomotion send {'enabled' if self.loco_enabled else 'disabled'}")
+            self._set_status(
+                f"Continuous locomotion send {'enabled' if self.loco_enabled else 'disabled'}")
             if self.loco_enabled:
                 self._send_loco()
             return

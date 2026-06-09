@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+from sdk_hand import Dex3HandController, hand_open_targets
+from dds_env import ensure_cyclonedds_environment
+import numpy as np
 
 import argparse
 import json
@@ -16,9 +19,6 @@ PARENT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 if PARENT_DIR not in sys.path:
     sys.path.insert(0, PARENT_DIR)
 
-import numpy as np
-
-from dds_env import ensure_cyclonedds_environment
 
 ensure_cyclonedds_environment()
 
@@ -32,8 +32,6 @@ except ImportError as exc:
         "unitree_sdk2py is not installed. Install it with:\n"
         "  pip install -e <path-to-unitree_sdk2_python>"
     ) from exc
-
-from sdk_hand import Dex3HandController, hand_open_targets
 
 
 LEFT_ARM_IDX = [15, 16, 17, 18, 19, 20, 21]
@@ -50,17 +48,22 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--iface", default="eth0", help="Network interface for DDS traffic.")
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id.")
-    parser.add_argument("--file", default=DEFAULT_POSE_FILE, help="Saved arm and hand pose JSON file.")
+    parser.add_argument("--file", default=DEFAULT_POSE_FILE,
+                        help="Saved arm and hand pose JSON file.")
     parser.add_argument("--rate-hz", type=float, default=50.0, help="Command publish rate.")
-    parser.add_argument("--speed-rad-s", type=float, default=0.4, help="Maximum arm joint transition speed.")
-    parser.add_argument("--hand-speed-rad-s", type=float, default=0.6, help="Maximum finger joint transition speed.")
+    parser.add_argument("--speed-rad-s", type=float, default=0.4,
+                        help="Maximum arm joint transition speed.")
+    parser.add_argument("--hand-speed-rad-s", type=float, default=0.6,
+                        help="Maximum finger joint transition speed.")
     parser.add_argument("--kp", type=float, default=30.0, help="Arm joint proportional gain.")
     parser.add_argument("--kd", type=float, default=1.5, help="Arm joint derivative gain.")
     parser.add_argument("--tau", type=float, default=0.0, help="Arm joint feed-forward torque.")
     parser.add_argument("--hand-kp", type=float, default=0.5, help="Dex3 finger proportional gain.")
     parser.add_argument("--hand-kd", type=float, default=0.1, help="Dex3 finger derivative gain.")
-    parser.add_argument("--hand-tau", type=float, default=0.0, help="Dex3 finger feed-forward torque.")
-    parser.add_argument("--sleep-between", type=float, default=1.0, help="Seconds to hold each pose before moving to the next.")
+    parser.add_argument("--hand-tau", type=float, default=0.0,
+                        help="Dex3 finger feed-forward torque.")
+    parser.add_argument("--sleep-between", type=float, default=1.0,
+                        help="Seconds to hold each pose before moving to the next.")
     return parser.parse_args()
 
 
@@ -256,7 +259,8 @@ def main() -> int:
 
             name = str(pose.get("name", f"pose_{idx}"))
             arm_target_map, hand_targets = parse_pose(pose)
-            target_arm = np.asarray([arm_target_map[joint] for joint in ALL_ARM_JOINTS], dtype=np.float32)
+            target_arm = np.asarray([arm_target_map[joint]
+                                    for joint in ALL_ARM_JOINTS], dtype=np.float32)
             print(f"[{idx + 1}/{len(poses)}] Moving to pose '{name}'")
 
             while not stop_event.is_set():
@@ -286,7 +290,8 @@ def main() -> int:
                 current_hands = next_hands
                 arm_done = bool(np.allclose(current_arm, target_arm, atol=max(arm_step, 1e-4)))
                 hands_done = all(
-                    bool(np.allclose(current_hands[hand], hand_targets[hand], atol=max(hand_step, 1e-4)))
+                    bool(np.allclose(current_hands[hand],
+                         hand_targets[hand], atol=max(hand_step, 1e-4)))
                     for hand in ("left", "right")
                 )
                 if arm_done and hands_done:

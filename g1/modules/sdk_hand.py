@@ -1,4 +1,8 @@
 from __future__ import annotations
+from unitree_sdk2py.idl.unitree_hg.msg.dds_ import HandCmd_
+from unitree_sdk2py.idl.default import unitree_hg_msg_dds__HandCmd_
+from unitree_sdk2py.core.channel import ChannelPublisher, ChannelSubscriber
+from unitree_sdk2py.core import channel as channel_module
 
 import os
 import time
@@ -9,10 +13,6 @@ from dds_env import ensure_channel_factory_initialized, ensure_cyclonedds_enviro
 
 ensure_cyclonedds_environment()
 
-from unitree_sdk2py.core import channel as channel_module
-from unitree_sdk2py.core.channel import ChannelPublisher, ChannelSubscriber
-from unitree_sdk2py.idl.default import unitree_hg_msg_dds__HandCmd_
-from unitree_sdk2py.idl.unitree_hg.msg.dds_ import HandCmd_
 
 try:
     from unitree_sdk2py.idl.unitree_hg.msg.dds_ import HandState_
@@ -252,8 +252,10 @@ class Dex3HandController:
         lost_flags: list[int] = []
         for sensor in press_sensor_state:
             try:
-                pressures.append([float(value) for value in list(getattr(sensor, "pressure", []) or [])])
-                temperatures.append([float(value) for value in list(getattr(sensor, "temperature", []) or [])])
+                pressures.append([float(value)
+                                 for value in list(getattr(sensor, "pressure", []) or [])])
+                temperatures.append([float(value)
+                                    for value in list(getattr(sensor, "temperature", []) or [])])
                 lost_flags.append(int(getattr(sensor, "lost", 0)))
             except Exception:
                 pressures = []
@@ -425,7 +427,8 @@ class Dex3HandController:
                 step_dt = ramp_duration_s / float(ramp_steps)
                 for step_idx in range(1, ramp_steps + 1):
                     alpha = float(step_idx) / float(ramp_steps)
-                    interp_targets = self._interpolate_targets(start_targets, target_list, alpha=alpha)
+                    interp_targets = self._interpolate_targets(
+                        start_targets, target_list, alpha=alpha)
                     self._publish_targets_for(
                         interp_targets,
                         seconds=step_dt,
@@ -492,7 +495,8 @@ class Dex3HandController:
         persistent: bool = False,
     ) -> None:
         self._stop_release_thread()
-        targets = list(self._last_targets) if self._last_targets is not None else hand_open_targets(self.hand)
+        targets = list(
+            self._last_targets) if self._last_targets is not None else hand_open_targets(self.hand)
         msg = build_hand_msg(targets, kp=0.0, kd=0.0, tau=0.0, timeout=1)
         if persistent:
             stop_event = threading.Event()

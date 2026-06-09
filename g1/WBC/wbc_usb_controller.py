@@ -26,6 +26,9 @@ The D-pad mirrors the scheme's "select target / increment / decrement"
 behavior across the selected direct low-level body or Dex3 hand target family.
 """
 from __future__ import annotations
+from modules.sdk_hand import clamp_hand_targets, hand_grip_targets
+from modules.sdk_client import HAND_JOINT_NAMES, Robot, WAIST_HOLD_KD, WAIST_HOLD_KP
+from dds_env import ensure_cyclonedds_environment
 
 import argparse
 import curses
@@ -39,14 +42,15 @@ from dataclasses import dataclass
 from typing import Any
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-WBC_DIR = SCRIPT_DIR if os.path.exists(os.path.join(SCRIPT_DIR, "dds_env.py")) else os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
-ROOT_DIR = WBC_DIR if os.path.isdir(os.path.join(WBC_DIR, "modules")) else os.path.abspath(os.path.join(WBC_DIR, ".."))
+WBC_DIR = SCRIPT_DIR if os.path.exists(os.path.join(
+    SCRIPT_DIR, "dds_env.py")) else os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
+ROOT_DIR = WBC_DIR if os.path.isdir(os.path.join(
+    WBC_DIR, "modules")) else os.path.abspath(os.path.join(WBC_DIR, ".."))
 MODULES_DIR = os.path.join(ROOT_DIR, "modules")
 for _p in (WBC_DIR, ROOT_DIR, MODULES_DIR):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from dds_env import ensure_cyclonedds_environment
 
 ensure_cyclonedds_environment()
 
@@ -57,9 +61,6 @@ except ModuleNotFoundError as exc:
         "The 'pygame' package is required for USB controller support.\n"
         "Install with: pip install pygame"
     ) from exc
-
-from modules.sdk_client import HAND_JOINT_NAMES, Robot, WAIST_HOLD_KD, WAIST_HOLD_KP
-from modules.sdk_hand import clamp_hand_targets, hand_grip_targets
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -394,7 +395,8 @@ class WBCUsbControllerApp:
         ):
             pressed = self._button_down(button)
             live_buttons[int(button)] = pressed
-            self.button_edges[int(button)] = pressed and not self.prev_buttons.get(int(button), False)
+            self.button_edges[int(button)] = pressed and not self.prev_buttons.get(
+                int(button), False)
         self.prev_buttons = live_buttons
         axes = {
             "LX": self._axis_value(AXIS_LX),
@@ -443,7 +445,8 @@ class WBCUsbControllerApp:
 
     def _sync_targets_to_live_pose(self) -> None:
         positions = self.robot._read_joint_positions_or_raise(CONTROLLED_BODY_JOINTS, timeout=3.0)
-        self.ll_current_targets = {joint: float(positions[joint]) for joint in CONTROLLED_BODY_JOINTS}
+        self.ll_current_targets = {joint: float(
+            positions[joint]) for joint in CONTROLLED_BODY_JOINTS}
         self.ll_desired_targets = dict(self.ll_current_targets)
         for side in ("left", "right"):
             snapshot = self.robot.get_hand_state_snapshot(side)
@@ -527,7 +530,8 @@ class WBCUsbControllerApp:
         sides = ("left", "right") if self.target_scope == "both" else (self.target_scope,)
         for side in sides:
             self.hand_grip_percent[side] = clamped
-            self.hand_desired_targets[side] = clamp_hand_targets(side, hand_grip_targets(side, clamped))
+            self.hand_desired_targets[side] = clamp_hand_targets(
+                side, hand_grip_targets(side, clamped))
         self._set_status(f"Dex3 grip={clamped:.0f}% ({self.target_scope})")
 
     def _adjust_active_finger(self, delta: float) -> None:
@@ -540,7 +544,8 @@ class WBCUsbControllerApp:
             current = float(self.hand_desired_targets[side][finger_idx])
             updated = max(lo, min(hi, current + delta))
             self.hand_desired_targets[side][finger_idx] = updated
-            self.hand_desired_targets[side] = clamp_hand_targets(side, self.hand_desired_targets[side])
+            self.hand_desired_targets[side] = clamp_hand_targets(
+                side, self.hand_desired_targets[side])
             latest = updated
         if latest is not None:
             self._set_status(f"{finger_name}={latest:+.3f} ({self.target_scope})")
@@ -603,7 +608,8 @@ class WBCUsbControllerApp:
 
     def _publish_low_level_targets(self) -> None:
         waist_gains = {12: float(WAIST_HOLD_KP), 13: float(WAIST_HOLD_KP), 14: float(WAIST_HOLD_KP)}
-        waist_damping = {12: float(WAIST_HOLD_KD), 13: float(WAIST_HOLD_KD), 14: float(WAIST_HOLD_KD)}
+        waist_damping = {12: float(WAIST_HOLD_KD), 13: float(
+            WAIST_HOLD_KD), 14: float(WAIST_HOLD_KD)}
         self.robot._get_arm_sdk().publish_targets(
             self.ll_current_targets,
             kp=BODY_KP,
@@ -960,7 +966,8 @@ class WBCUsbControllerApp:
     def _draw_header(self, win, w: int) -> None:
         self._safe_addstr(win, 0, 0, "-" * w, self._cp(C_CYAN))
         title = "WBC USB Controller"
-        self._safe_addstr(win, 0, max(0, (w - len(title)) // 2), title, self._cp(C_CYAN) | curses.A_BOLD)
+        self._safe_addstr(win, 0, max(0, (w - len(title)) // 2),
+                          title, self._cp(C_CYAN) | curses.A_BOLD)
         self._safe_addnstr(
             win,
             1,
@@ -997,11 +1004,13 @@ class WBCUsbControllerApp:
     def _draw_motion_panel(self, win, top: int, left: int, width: int, height: int) -> None:
         hold_attr = self._cp(C_RED if self.manual_hold else C_GREEN) | curses.A_BOLD
         low_level_attr = self._cp(C_GREEN if self.low_level_enabled else C_YELLOW) | curses.A_BOLD
-        self._safe_addnstr(win, top, left, " Motion from gamepad sticks ", width, self._cp(C_CYAN) | curses.A_BOLD)
+        self._safe_addnstr(win, top, left, " Motion from gamepad sticks ",
+                           width, self._cp(C_CYAN) | curses.A_BOLD)
         rows = [
             (f" hold={('ON' if self.manual_hold else 'OFF')}", hold_attr),
             (f" low-level={('ON' if self.low_level_enabled else 'OFF')}", low_level_attr),
-            (f" arms released={('YES' if self.arms_released else 'NO')}", self._cp(C_YELLOW if self.arms_released else C_GREEN)),
+            (f" arms released={('YES' if self.arms_released else 'NO')}",
+             self._cp(C_YELLOW if self.arms_released else C_GREEN)),
             (f" vx   {self.vx:+.3f} / {self.max_vx:.2f} m/s", 0),
             (f" vy   {self.vy:+.3f} / {self.max_vy:.2f} m/s", 0),
             (f" vyaw {self.vyaw:+.3f} / {self.max_vyaw:.2f} rad/s", 0),
@@ -1013,7 +1022,8 @@ class WBCUsbControllerApp:
             self._safe_addnstr(win, top + 1 + idx, left, text, width, attr)
 
     def _draw_input_panel(self, win, top: int, left: int, width: int, height: int) -> None:
-        self._safe_addnstr(win, top, left, " Controller input ", width, self._cp(C_CYAN) | curses.A_BOLD)
+        self._safe_addnstr(win, top, left, " Controller input ",
+                           width, self._cp(C_CYAN) | curses.A_BOLD)
         axes = self.last_inputs.get("axes", {})
         buttons = self.last_inputs.get("buttons", {})
         hat = self.last_inputs.get("hat", HAT_CENTER)
@@ -1126,7 +1136,8 @@ class WBCUsbControllerApp:
             self._safe_addnstr(win, top + 1 + idx, left, row, width)
 
     def _draw_fsm_panel(self, win, top: int, left: int, width: int, height: int) -> None:
-        self._safe_addnstr(win, top, left, " FSM shortcuts ", width, self._cp(C_CYAN) | curses.A_BOLD)
+        self._safe_addnstr(win, top, left, " FSM shortcuts ",
+                           width, self._cp(C_CYAN) | curses.A_BOLD)
         rows = [
             "L2+Y -> zero torque",
             "L2+Dpad Up -> FSM 4",
@@ -1170,7 +1181,8 @@ class WBCUsbControllerApp:
             prefix = ">" if selected else " "
             suffix = " <" if selected else ""
             attr = self._cp(C_SEL) | curses.A_BOLD if selected else 0
-            self._safe_addnstr(win, top + 1 + idx, left, f"{prefix} {item.label}{suffix}", width, attr)
+            self._safe_addnstr(win, top + 1 + idx, left,
+                               f"{prefix} {item.label}{suffix}", width, attr)
 
     def draw(self, win, h: int, w: int) -> None:
         if h < 14 or w < 60:

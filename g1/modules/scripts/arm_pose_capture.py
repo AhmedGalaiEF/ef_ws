@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+from dds_env import ensure_cyclonedds_environment
 
 import argparse
 import json
@@ -16,7 +17,6 @@ PARENT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 if PARENT_DIR not in sys.path:
     sys.path.insert(0, PARENT_DIR)
 
-from dds_env import ensure_cyclonedds_environment
 
 ensure_cyclonedds_environment()
 
@@ -81,9 +81,11 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
     parser.add_argument("--iface", default="eth0", help="Network interface for DDS traffic.")
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id.")
     parser.add_argument("--rate-hz", type=float, default=50.0, help="Command publish rate.")
-    parser.add_argument("--waist-kp", type=float, default=30.0, help="Waist lock proportional gain.")
+    parser.add_argument("--waist-kp", type=float, default=30.0,
+                        help="Waist lock proportional gain.")
     parser.add_argument("--waist-kd", type=float, default=1.5, help="Waist lock derivative gain.")
-    parser.add_argument("--output", default=DEFAULT_OUTPUT, help="JSON file used to store captured poses.")
+    parser.add_argument("--output", default=DEFAULT_OUTPUT,
+                        help="JSON file used to store captured poses.")
     parser.add_argument(
         "--run-hanged-boot",
         action="store_true",
@@ -349,7 +351,8 @@ class ArmPoseCaptureApp(QWidget):
         self.log_box.appendPlainText(f"[{stamp}] {message}")
 
     def _load_pose_count(self) -> None:
-        self.output_path = Path(os.path.abspath(os.path.expanduser(self.output_edit.text().strip() or str(self.output_path))))
+        self.output_path = Path(os.path.abspath(os.path.expanduser(
+            self.output_edit.text().strip() or str(self.output_path))))
         if not self.output_path.exists():
             self.pose_count = 0
             return
@@ -432,11 +435,13 @@ class ArmPoseCaptureApp(QWidget):
             poses = []
             payload["poses"] = poses
         payload["arm_selection"] = self.arm
-        duplicate_count = sum(1 for existing_pose in poses if str(existing_pose.get("name", "")) == pose_name)
+        duplicate_count = sum(1 for existing_pose in poses if str(
+            existing_pose.get("name", "")) == pose_name)
         poses.append(pose_entry)
 
         self.output_path.parent.mkdir(parents=True, exist_ok=True)
-        self.output_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        self.output_path.write_text(json.dumps(
+            payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
         self.pose_count = len(poses)
         self.pose_name_edit.clear()

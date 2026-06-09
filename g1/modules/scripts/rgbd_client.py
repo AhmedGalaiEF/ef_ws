@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+import zmq
+import numpy as np
+import cv2
 
 import argparse
 import os
 import struct
 import time
+
 
 def _fix_qt_fontdir() -> None:
     current = os.environ.get("QT_QPA_FONTDIR")
@@ -23,9 +27,6 @@ def _fix_qt_fontdir() -> None:
 
 _fix_qt_fontdir()
 
-import cv2
-import numpy as np
-import zmq
 
 _fix_qt_fontdir()
 
@@ -74,7 +75,8 @@ def _colorize_depth(depth: np.ndarray, max_depth_m: float, scale: float | None) 
             if hi <= lo:
                 disp = np.zeros(depth.shape[:2], dtype=np.uint8)
             else:
-                disp = np.clip(255.0 * (depth.astype(np.float32) - lo) / (hi - lo), 0, 255).astype(np.uint8)
+                disp = np.clip(255.0 * (depth.astype(np.float32) - lo) /
+                               (hi - lo), 0, 255).astype(np.uint8)
                 disp[~valid] = 0
     return cv2.applyColorMap(disp, cv2.COLORMAP_JET)
 
@@ -89,8 +91,10 @@ def _overlay_info(
 ) -> tuple[np.ndarray, np.ndarray]:
     color = color.copy()
     depth_vis = depth_vis.copy()
-    cv2.putText(color, f"RGB  {fps:4.1f} FPS", (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 255, 0), 2)
-    cv2.putText(depth_vis, f"Depth  {fps:4.1f} FPS", (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (255, 255, 255), 2)
+    cv2.putText(color, f"RGB  {fps:4.1f} FPS", (12, 28),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 255, 0), 2)
+    cv2.putText(depth_vis, f"Depth  {fps:4.1f} FPS", (12, 28),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.75, (255, 255, 255), 2)
 
     if depth_scale is not None:
         cv2.putText(
@@ -122,13 +126,19 @@ def _overlay_info(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="ZeroMQ RGBD viewer for image_server.py RealSense streams.")
-    parser.add_argument("--host", "--robot-ip", dest="host", default="10.34.0.83", help="Publisher host/IP")
+    parser = argparse.ArgumentParser(
+        description="ZeroMQ RGBD viewer for image_server.py RealSense streams.")
+    parser.add_argument("--host", "--robot-ip", dest="host",
+                        default="10.34.0.83", help="Publisher host/IP")
     parser.add_argument("--port", type=int, default=5555, help="Publisher TCP port")
-    parser.add_argument("--topic", default="", help="ZMQ subscription prefix; empty subscribes to all")
-    parser.add_argument("--timeout-ms", type=int, default=3000, help="Receive timeout in milliseconds")
-    parser.add_argument("--max-depth-m", type=float, default=4.0, help="Upper range for depth visualization")
-    parser.add_argument("--window-scale", type=float, default=1.0, help="Resize display windows by this factor")
+    parser.add_argument("--topic", default="",
+                        help="ZMQ subscription prefix; empty subscribes to all")
+    parser.add_argument("--timeout-ms", type=int, default=3000,
+                        help="Receive timeout in milliseconds")
+    parser.add_argument("--max-depth-m", type=float, default=4.0,
+                        help="Upper range for depth visualization")
+    parser.add_argument("--window-scale", type=float, default=1.0,
+                        help="Resize display windows by this factor")
     args = parser.parse_args()
 
     endpoint = f"tcp://{args.host}:{args.port}"
@@ -150,8 +160,10 @@ def main() -> None:
                 parts = socket.recv_multipart()
             except zmq.Again:
                 blank = np.zeros((360, 640, 3), dtype=np.uint8)
-                cv2.putText(blank, f"Waiting for stream on {endpoint}", (20, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 220, 220), 2)
-                cv2.putText(blank, "Make sure image_server.py is publishing.", (20, 130), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (180, 180, 180), 2)
+                cv2.putText(
+                    blank, f"Waiting for stream on {endpoint}", (20, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 220, 220), 2)
+                cv2.putText(blank, "Make sure image_server.py is publishing.",
+                            (20, 130), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (180, 180, 180), 2)
                 cv2.imshow("RGB", blank)
                 cv2.imshow("Depth", blank)
                 if (cv2.waitKey(1) & 0xFF) in (27, ord("q")):
@@ -169,7 +181,8 @@ def main() -> None:
 
             if depth is None:
                 depth_vis = np.zeros_like(color)
-                cv2.putText(depth_vis, "No depth payload", (20, 70), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 180, 255), 2)
+                cv2.putText(depth_vis, "No depth payload", (20, 70),
+                            cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 180, 255), 2)
                 probe = None
             else:
                 depth_vis = _colorize_depth(depth, args.max_depth_m, depth_scale)
@@ -181,8 +194,10 @@ def main() -> None:
             color, depth_vis = _overlay_info(color, depth_vis, depth, depth_scale, fps, probe)
 
             if args.window_scale != 1.0:
-                color = cv2.resize(color, None, fx=args.window_scale, fy=args.window_scale, interpolation=cv2.INTER_AREA)
-                depth_vis = cv2.resize(depth_vis, None, fx=args.window_scale, fy=args.window_scale, interpolation=cv2.INTER_NEAREST)
+                color = cv2.resize(color, None, fx=args.window_scale,
+                                   fy=args.window_scale, interpolation=cv2.INTER_AREA)
+                depth_vis = cv2.resize(depth_vis, None, fx=args.window_scale,
+                                       fy=args.window_scale, interpolation=cv2.INTER_NEAREST)
 
             cv2.imshow("RGB", color)
             cv2.imshow("Depth", depth_vis)

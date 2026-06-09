@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+from dds_env import ensure_cyclonedds_environment
 
 import argparse
 import json
@@ -19,7 +20,6 @@ PARENT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 if PARENT_DIR not in sys.path:
     sys.path.insert(0, PARENT_DIR)
 
-from dds_env import ensure_cyclonedds_environment
 
 ensure_cyclonedds_environment()
 
@@ -65,7 +65,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--iface", default="eth0", help="Network interface for DDS traffic.")
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id.")
     parser.add_argument("--file", default=DEFAULT_TRAJECTORY_FILE, help="JSON trajectory file.")
-    parser.add_argument("--rate-hz", type=float, default=50.0, help="Capture and command publish rate.")
+    parser.add_argument("--rate-hz", type=float, default=50.0,
+                        help="Capture and command publish rate.")
     parser.add_argument(
         "--run-hanged-boot",
         action="store_true",
@@ -74,16 +75,22 @@ def parse_args() -> argparse.Namespace:
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    record = subparsers.add_parser("record", help="Call LocoClient.ShakeHand() and save the right arm trajectory.")
-    record.add_argument("--seconds", type=float, default=4.0, help="Seconds to capture after ShakeHand().")
+    record = subparsers.add_parser(
+        "record", help="Call LocoClient.ShakeHand() and save the right arm trajectory.")
+    record.add_argument("--seconds", type=float, default=4.0,
+                        help="Seconds to capture after ShakeHand().")
     record.add_argument("--name", default=None, help="Optional recording name.")
     record.add_argument("--yes", action="store_true", help="Skip the operator confirmation prompt.")
 
-    replay = subparsers.add_parser("replay", help="Replay a saved trajectory phase on the selected arm.")
+    replay = subparsers.add_parser(
+        "replay", help="Replay a saved trajectory phase on the selected arm.")
     replay.add_argument("--arm", choices=("left", "right"), required=True, help="Arm to replay on.")
-    replay.add_argument("--phase", choices=("raise", "drop"), required=True, help="Trajectory phase to replay.")
-    replay.add_argument("--index", type=int, default=None, help="Recording index. Defaults to latest.")
-    replay.add_argument("--name", default=None, help="Recording name. Uses the newest matching entry.")
+    replay.add_argument("--phase", choices=("raise", "drop"),
+                        required=True, help="Trajectory phase to replay.")
+    replay.add_argument("--index", type=int, default=None,
+                        help="Recording index. Defaults to latest.")
+    replay.add_argument("--name", default=None,
+                        help="Recording name. Uses the newest matching entry.")
     replay.add_argument(
         "--max-increment-rad",
         type=float,
@@ -92,10 +99,13 @@ def parse_args() -> argparse.Namespace:
     )
     replay.add_argument("--kp", type=float, default=30.0, help="Arm replay proportional gain.")
     replay.add_argument("--kd", type=float, default=1.5, help="Arm replay derivative gain.")
-    replay.add_argument("--waist-kp", type=float, default=30.0, help="Waist hold proportional gain.")
+    replay.add_argument("--waist-kp", type=float, default=30.0,
+                        help="Waist hold proportional gain.")
     replay.add_argument("--waist-kd", type=float, default=1.5, help="Waist hold derivative gain.")
-    replay.add_argument("--hold-seconds", type=float, default=1.0, help="Hold final command before exiting.")
-    replay.add_argument("--hold-forever", action="store_true", help="Hold final command until Ctrl-C.")
+    replay.add_argument("--hold-seconds", type=float, default=1.0,
+                        help="Hold final command before exiting.")
+    replay.add_argument("--hold-forever", action="store_true",
+                        help="Hold final command until Ctrl-C.")
 
     subparsers.add_parser("list", help="List saved trajectory recordings.")
     return parser.parse_args()
@@ -206,7 +216,8 @@ def choose_record(records: list[dict[str, Any]], *, name: str | None, index: int
     if not records:
         raise SystemExit("No saved recordings. Run the record command first.")
     if name is not None:
-        matches = [(idx, record) for idx, record in enumerate(records) if str(record.get("name", "")) == name]
+        matches = [(idx, record) for idx, record in enumerate(
+            records) if str(record.get("name", "")) == name]
         if not matches:
             raise SystemExit(f"No recording named '{name}'.")
         return matches[-1]

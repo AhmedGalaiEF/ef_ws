@@ -187,7 +187,8 @@ def _load_pbd_motion_file(path: str) -> dict[str, np.ndarray]:
             reader = csv.DictReader(handle)
             if not reader.fieldnames:
                 raise ValueError(f"CSV has no header: {path}")
-            ts_key = next((k for k in ("t_s", "ts", "time_s", "time") if k in reader.fieldnames), None)
+            ts_key = next((k for k in ("t_s", "ts", "time_s", "time")
+                          if k in reader.fieldnames), None)
             if ts_key is None:
                 raise ValueError(f"CSV must include one time column (t_s/ts/time_s/time): {path}")
             joint_cols: list[tuple[int, str]] = []
@@ -239,6 +240,7 @@ def _interp_motion_row(ts: np.ndarray, qs: np.ndarray, t: float) -> np.ndarray:
         return qs[hi]
     alpha = (t - t0) / (t1 - t0)
     return qs[lo] * (1.0 - alpha) + qs[hi] * alpha
+
 
 try:
     from unitree_sdk2py.idl.unitree_hg.msg.dds_ import HandState_
@@ -391,8 +393,8 @@ class Robot:
             self._client = secure_boot(iface=self.iface, domain_id=self.domain_id)
         else:
             self._client = create_loco_client(domain_id=self.domain_id, iface=self.iface)
-            #if recover_dev_mode_on_init:
-                #self.leave_dev_mode(restart_wait_s=1.0)
+            # if recover_dev_mode_on_init:
+            # self.leave_dev_mode(restart_wait_s=1.0)
 
         if auto_start_sensors:
             self.start_sensors()
@@ -680,9 +682,12 @@ class Robot:
         joint_state = self.get_joint_states()
         if joint_state is None:
             return None
-        joint_positions = [entry["position"] for entry in joint_state["joints"].values() if entry["position"] is not None]
-        joint_velocities = [entry["velocity"] for entry in joint_state["joints"].values() if entry["velocity"] is not None]
-        joint_torques = [entry["torque"] for entry in joint_state["joints"].values() if entry["torque"] is not None]
+        joint_positions = [entry["position"]
+                           for entry in joint_state["joints"].values() if entry["position"] is not None]
+        joint_velocities = [entry["velocity"]
+                            for entry in joint_state["joints"].values() if entry["velocity"] is not None]
+        joint_torques = [entry["torque"]
+                         for entry in joint_state["joints"].values() if entry["torque"] is not None]
         return {
             "timestamp": joint_state["timestamp"],
             "joint_count": len(joint_state["joints"]),
@@ -1120,7 +1125,8 @@ class Robot:
                             print("Teach duration limit reached. Press Enter to finish recording.")
                             duration_notice_sent = True
 
-                    commanded_row = [float(arm_positions[int(joint_index)]) for joint_index in arm_joints]
+                    commanded_row = [float(arm_positions[int(joint_index)])
+                                     for joint_index in arm_joints]
                     self._publish_pbd_teach_hold(
                         arm_joints,
                         arm_positions,
@@ -1247,7 +1253,8 @@ class Robot:
         data = _load_pbd_motion_file(motion_file)
         if "joints" not in data or "ts" not in data or "qs" not in data:
             raise ValueError("Motion file must contain 'joints', 'ts', and 'qs'.")
-        recorded_joints = [int(joint_index) for joint_index in np.asarray(data["joints"]).astype(int).tolist()]
+        recorded_joints = [int(joint_index)
+                           for joint_index in np.asarray(data["joints"]).astype(int).tolist()]
         ts = np.asarray(data["ts"], dtype=float)
         qs = np.asarray(data["qs"], dtype=float)
         if ts.size == 0 or qs.size == 0:
@@ -1266,7 +1273,8 @@ class Robot:
         active_qs = qs[:, active_cols]
         left_hand_qs = np.asarray(data.get("left_hand_qs", np.empty((0, 7))), dtype=float)
         right_hand_qs = np.asarray(data.get("right_hand_qs", np.empty((0, 7))), dtype=float)
-        replay_hands = left_hand_qs.shape == (ts.shape[0], 7) and right_hand_qs.shape == (ts.shape[0], 7)
+        replay_hands = left_hand_qs.shape == (
+            ts.shape[0], 7) and right_hand_qs.shape == (ts.shape[0], 7)
         resolved_log_path = log_path or f"{os.path.splitext(motion_file)[0]}_repeat.csv"
         os.makedirs(os.path.dirname(os.path.abspath(resolved_log_path)), exist_ok=True)
 
@@ -1366,12 +1374,15 @@ class Robot:
                 elapsed = time.time() - start
                 if elapsed > t_final:
                     break
-                latest_positions = self._read_joint_positions_or_raise(UPPER_BODY_JOINTS, timeout=timeout)
-                desired_row = np.asarray(_interp_motion_row(replay_ts, active_qs, elapsed), dtype=float)
+                latest_positions = self._read_joint_positions_or_raise(
+                    UPPER_BODY_JOINTS, timeout=timeout)
+                desired_row = np.asarray(_interp_motion_row(
+                    replay_ts, active_qs, elapsed), dtype=float)
                 row_delta = desired_row - previous_desired_row
                 for idx, joint_index in enumerate(requested_joints):
                     joint_key = int(joint_index)
-                    commanded_targets[joint_key] = float(commanded_targets[joint_key] + row_delta[idx])
+                    commanded_targets[joint_key] = float(
+                        commanded_targets[joint_key] + row_delta[idx])
                 self._publish_with_upper_body_hold(
                     commanded_targets,
                     latest_positions,
@@ -1381,8 +1392,10 @@ class Robot:
                     waist_kd=waist_kd,
                 )
                 if replay_hands:
-                    left_hand_desired = np.asarray(_interp_motion_row(replay_ts, left_hand_qs, elapsed), dtype=float)
-                    right_hand_desired = np.asarray(_interp_motion_row(replay_ts, right_hand_qs, elapsed), dtype=float)
+                    left_hand_desired = np.asarray(_interp_motion_row(
+                        replay_ts, left_hand_qs, elapsed), dtype=float)
+                    right_hand_desired = np.asarray(_interp_motion_row(
+                        replay_ts, right_hand_qs, elapsed), dtype=float)
                     self._get_hand("left").write_targets_once(
                         left_hand_desired.tolist(),
                         kp=0.8,
@@ -1400,15 +1413,18 @@ class Robot:
                 else:
                     left_hand_desired = right_hand_desired = None
                     left_hand_actual = right_hand_actual = None
-                actual_row = [float(latest_positions[int(joint_index)]) for joint_index in requested_joints]
-                target_row = [float(commanded_targets[int(joint_index)]) for joint_index in requested_joints]
+                actual_row = [float(latest_positions[int(joint_index)])
+                              for joint_index in requested_joints]
+                target_row = [float(commanded_targets[int(joint_index)])
+                              for joint_index in requested_joints]
                 writer.writerow(
                     [
                         "repeat",
                         f"{elapsed:.6f}",
                         " ".join(
                             [str(joint_index) for joint_index in requested_joints]
-                            + (PBD_HAND_JOINT_LABELS["left"] + PBD_HAND_JOINT_LABELS["right"] if replay_hands else [])
+                            + (PBD_HAND_JOINT_LABELS["left"] +
+                               PBD_HAND_JOINT_LABELS["right"] if replay_hands else [])
                         ),
                         " ".join(
                             [f"{value:.6f}" for value in target_row]
@@ -1445,7 +1461,8 @@ class Robot:
             }
             hold_deadline = time.time() + max(0.0, float(final_hold_s))
             while True:
-                final_positions = self._read_joint_positions_or_raise(UPPER_BODY_JOINTS, timeout=timeout)
+                final_positions = self._read_joint_positions_or_raise(
+                    UPPER_BODY_JOINTS, timeout=timeout)
                 self._publish_with_upper_body_hold(
                     final_targets,
                     final_positions,
@@ -1471,15 +1488,18 @@ class Robot:
                     right_hand_actual = self.get_hand_state_snapshot("right")
                 else:
                     left_hand_actual = right_hand_actual = None
-                actual_row = [float(final_positions[int(joint_index)]) for joint_index in requested_joints]
-                target_row = [float(final_targets[int(joint_index)]) for joint_index in requested_joints]
+                actual_row = [float(final_positions[int(joint_index)])
+                              for joint_index in requested_joints]
+                target_row = [float(final_targets[int(joint_index)])
+                              for joint_index in requested_joints]
                 writer.writerow(
                     [
                         "repeat_final_hold",
                         f"{time.time() - start:.6f}",
                         " ".join(
                             [str(joint_index) for joint_index in requested_joints]
-                            + (PBD_HAND_JOINT_LABELS["left"] + PBD_HAND_JOINT_LABELS["right"] if replay_hands else [])
+                            + (PBD_HAND_JOINT_LABELS["left"] +
+                               PBD_HAND_JOINT_LABELS["right"] if replay_hands else [])
                         ),
                         " ".join(
                             [f"{value:.6f}" for value in target_row]
@@ -1545,7 +1565,8 @@ class Robot:
         stop = float(target)
         steps = max(
             1,
-            int(abs(stop - start) / max(0.01, float(max_speed_rad_s)) * max(1.0, float(command_rate_hz))),
+            int(abs(stop - start) / max(0.01, float(max_speed_rad_s))
+                * max(1.0, float(command_rate_hz))),
         )
         dt = 1.0 / max(1.0, float(command_rate_hz))
         for step_idx in range(1, steps + 1):
@@ -1591,7 +1612,8 @@ class Robot:
         if side not in ("left", "right"):
             raise ValueError("arm must be 'left' or 'right'.")
         arm_joints = LEFT_ARM_JOINTS if side == "left" else RIGHT_ARM_JOINTS
-        roll_delta = abs(float(shoulder_roll_delta)) if side == "left" else -abs(float(shoulder_roll_delta))
+        roll_delta = abs(float(shoulder_roll_delta)) if side == "left" else - \
+            abs(float(shoulder_roll_delta))
         pitch_delta = -abs(float(shoulder_pitch_delta))
         elbow_delta_signed = -abs(float(elbow_delta))
         wrist_roll_delta_signed = abs(float(wrist_roll_delta))
@@ -1703,7 +1725,8 @@ class Robot:
         if side not in ("left", "right"):
             raise ValueError("arm must be 'left' or 'right'.")
         arm_joints = LEFT_ARM_JOINTS if side == "left" else RIGHT_ARM_JOINTS
-        roll_delta = abs(float(shoulder_roll_delta)) if side == "left" else -abs(float(shoulder_roll_delta))
+        roll_delta = abs(float(shoulder_roll_delta)) if side == "left" else - \
+            abs(float(shoulder_roll_delta))
         pitch_delta = -abs(float(shoulder_pitch_delta))
         elbow_delta_signed = -abs(float(elbow_delta))
         wrist_roll_delta_signed = abs(float(wrist_roll_delta))
@@ -1732,9 +1755,12 @@ class Robot:
         stage_4_steps = max(1, steps - stage_1_steps - stage_2_steps - stage_3_steps)
 
         wrist_and_elbow_retracted_pose = list(start_pose)
-        wrist_and_elbow_retracted_pose[3] = clamp_joint(arm_joints[3], float(start_pose[3]) - elbow_delta_signed)
-        wrist_and_elbow_retracted_pose[4] = clamp_joint(arm_joints[4], float(start_pose[4]) - wrist_roll_delta_signed)
-        wrist_and_elbow_retracted_pose[5] = clamp_joint(arm_joints[5], float(start_pose[5]) - wrist_pitch_delta_signed)
+        wrist_and_elbow_retracted_pose[3] = clamp_joint(
+            arm_joints[3], float(start_pose[3]) - elbow_delta_signed)
+        wrist_and_elbow_retracted_pose[4] = clamp_joint(
+            arm_joints[4], float(start_pose[4]) - wrist_roll_delta_signed)
+        wrist_and_elbow_retracted_pose[5] = clamp_joint(
+            arm_joints[5], float(start_pose[5]) - wrist_pitch_delta_signed)
 
         clearance_roll_pose = list(wrist_and_elbow_retracted_pose)
         clearance_roll_pose[1] = clamp_joint(
@@ -1743,7 +1769,8 @@ class Robot:
         )
 
         shoulder_pitch_retracted_pose = list(clearance_roll_pose)
-        shoulder_pitch_retracted_pose[0] = clamp_joint(arm_joints[0], float(start_pose[0]) - pitch_delta)
+        shoulder_pitch_retracted_pose[0] = clamp_joint(
+            arm_joints[0], float(start_pose[0]) - pitch_delta)
 
         target_pose = list(shoulder_pitch_retracted_pose)
         target_pose[1] = clamp_joint(
@@ -1752,7 +1779,8 @@ class Robot:
         )
         stages = [
             (start_pose, wrist_and_elbow_retracted_pose, stage_4_steps, "undo_elbow_and_wrist_pitch"),
-            (wrist_and_elbow_retracted_pose, clearance_roll_pose, stage_3_steps, "restore_shoulder_roll_clearance"),
+            (wrist_and_elbow_retracted_pose, clearance_roll_pose,
+             stage_3_steps, "restore_shoulder_roll_clearance"),
             (clearance_roll_pose, shoulder_pitch_retracted_pose, stage_2_steps, "shoulder_pitch_back"),
             (shoulder_pitch_retracted_pose, target_pose, stage_1_steps, "shoulder_roll_home"),
         ]
@@ -2115,15 +2143,18 @@ class Robot:
         except Exception:
             pass
         try:
-            gyro = tuple(float(msg.imu_state.gyroscope[i]) for i in range(3))  # type: ignore[assignment]
+            gyro = tuple(float(msg.imu_state.gyroscope[i])
+                         for i in range(3))  # type: ignore[assignment]
         except Exception:
             pass
         try:
-            acc = tuple(float(msg.imu_state.accelerometer[i]) for i in range(3))  # type: ignore[assignment]
+            acc = tuple(float(msg.imu_state.accelerometer[i])
+                        for i in range(3))  # type: ignore[assignment]
         except Exception:
             pass
         try:
-            quat = tuple(float(msg.imu_state.quaternion[i]) for i in range(4))  # type: ignore[assignment]
+            quat = tuple(float(msg.imu_state.quaternion[i])
+                         for i in range(4))  # type: ignore[assignment]
         except Exception:
             pass
         try:
@@ -2245,13 +2276,15 @@ class Robot:
         cx = w // 2
         cy = h // 2
         center = depth_m[
-            max(0, cy - center_size) : min(h, cy + center_size),
-            max(0, cx - center_size) : min(w, cx + center_size),
+            max(0, cy - center_size): min(h, cy + center_size),
+            max(0, cx - center_size): min(w, cx + center_size),
         ]
-        roi = depth_m[int(h * 0.25) : int(h * 0.70), int(w * 0.30) : int(w * 0.70)]
+        roi = depth_m[int(h * 0.25): int(h * 0.70), int(w * 0.30): int(w * 0.70)]
         center_valid = center[center > 0]
-        center_depth_m = float(__import__("numpy").median(center_valid)) if center_valid.size else None
-        near_coverage_1m = float(__import__("numpy").mean((roi > 0) & (roi <= 1.0))) if roi.size else None
+        center_depth_m = float(__import__("numpy").median(
+            center_valid)) if center_valid.size else None
+        near_coverage_1m = float(__import__("numpy").mean(
+            (roi > 0) & (roi <= 1.0))) if roi.size else None
 
         return {
             "source": f"zmq://{self.rgbd_host}:{self.rgbd_port}",
@@ -2325,10 +2358,12 @@ class Robot:
             odom_pose = self.get_odom_pose()
             dist = None
             if slam_pose is not None:
-                dist = math.hypot(float(target_x) - float(slam_pose[0]), float(target_y) - float(slam_pose[1]))
+                dist = math.hypot(float(target_x) -
+                                  float(slam_pose[0]), float(target_y) - float(slam_pose[1]))
             moved = None
             if before_slam is not None and slam_pose is not None:
-                moved = math.hypot(float(slam_pose[0]) - float(before_slam[0]), float(slam_pose[1]) - float(before_slam[1]))
+                moved = math.hypot(
+                    float(slam_pose[0]) - float(before_slam[0]), float(slam_pose[1]) - float(before_slam[1]))
             extra = []
             if dist is not None:
                 extra.append(f"dist_to_target={dist:.3f}m")
@@ -2379,7 +2414,8 @@ class Robot:
                 target_pose = (float(x), float(y), float(yaw))
                 frame_gap = None
                 if pos is not None and slam_pos is not None:
-                    frame_gap = math.hypot(float(pos[0]) - float(slam_pos[0]), float(pos[1]) - float(slam_pos[1]))
+                    frame_gap = math.hypot(
+                        float(pos[0]) - float(slam_pos[0]), float(pos[1]) - float(slam_pos[1]))
                 print(
                     f"[navigate_path] step={idx} target={self._format_pose_debug(target_pose)} "
                     f"sport_pose={self._format_pose_debug(pos)} "
@@ -2391,7 +2427,8 @@ class Robot:
                     dxy = math.hypot(float(x) - float(pos[0]), float(y) - float(pos[1]))
                     # pose_nav commonly rejects goals that are already effectively reached.
                     if dxy <= 0.20:
-                        print(f"[navigate_path] step={idx} skipped: sport_pose already within {dxy:.3f}m of target.")
+                        print(
+                            f"[navigate_path] step={idx} skipped: sport_pose already within {dxy:.3f}m of target.")
                         continue
                 rc = self._run_pose_nav(x, y, yaw)
                 print(f"[navigate_path] step={idx} pose_nav rc={rc}")
@@ -2404,7 +2441,8 @@ class Robot:
                     )
                 self._trace_nav_result(step_idx=idx, target=target_pose, before_slam=slam_pos)
                 if rc != 0:
-                    print(f"[navigate_path] failed at point {idx}: ({x:.3f},{y:.3f},{yaw:.3f}) rc={rc}")
+                    print(
+                        f"[navigate_path] failed at point {idx}: ({x:.3f},{y:.3f},{yaw:.3f}) rc={rc}")
                     ok = False
                     break
         finally:
@@ -2452,7 +2490,8 @@ class Robot:
         }
 
         if pose is not None and sport_pose is not None:
-            gap = math.hypot(float(sport_pose[0]) - float(pose[0]), float(sport_pose[1]) - float(pose[1]))
+            gap = math.hypot(float(sport_pose[0]) - float(pose[0]),
+                             float(sport_pose[1]) - float(pose[1]))
             status["sport_vs_slam_xy_gap_m"] = float(gap)
             sport_radius = math.hypot(float(sport_pose[0]), float(sport_pose[1]))
             if self._is_origin_like_pose(pose) and sport_radius > 0.50 and gap > 0.50:
@@ -2517,7 +2556,8 @@ class Robot:
                 "address": load_path,
             }
         }
-        print_resp("init_pose (1804)", req, client.init_pose(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, load_path))
+        print_resp("init_pose (1804)", req, client.init_pose(
+            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, load_path))
 
         qz = math.sin(float(goal_yaw) * 0.5)
         qw = math.cos(float(goal_yaw) * 0.5)
@@ -2535,7 +2575,8 @@ class Robot:
                 "mode": 1,
             }
         }
-        print_resp("pose_nav (1102)", req, client.pose_nav(float(goal_x), float(goal_y), 0.0, 0.0, 0.0, qz, qw, mode=1))
+        print_resp("pose_nav (1102)", req, client.pose_nav(
+            float(goal_x), float(goal_y), 0.0, 0.0, 0.0, qz, qw, mode=1))
 
         if pause:
             print_resp("pause_nav (1201)", {"data": {}}, client.pause_nav())
@@ -2666,7 +2707,8 @@ class Robot:
         if side == "both":
             for each_hand in ("left", "right"):
                 controller = self._get_hand(each_hand)
-                current_targets = list(controller._last_targets) if controller._last_targets is not None else None
+                current_targets = list(
+                    controller._last_targets) if controller._last_targets is not None else None
                 if current_targets is not None:
                     controller.set_targets(
                         current_targets,
@@ -2683,7 +2725,8 @@ class Robot:
                 )
             return
         controller = self._get_hand(side)
-        current_targets = list(controller._last_targets) if controller._last_targets is not None else None
+        current_targets = list(
+            controller._last_targets) if controller._last_targets is not None else None
         if current_targets is not None:
             controller.set_targets(
                 current_targets,
@@ -2728,7 +2771,8 @@ class Robot:
         settle_s: float = 0.6,
         rate_hz: float = 50.0,
     ) -> None:
-        self._get_hand(hand).move_finger(finger_name, hold_s=hold_s, settle_s=settle_s, rate_hz=rate_hz)
+        self._get_hand(hand).move_finger(finger_name, hold_s=hold_s,
+                                         settle_s=settle_s, rate_hz=rate_hz)
 
     def _get_latest_lidar_cloud_msg(self) -> tuple[PointCloud2_ | None, str | None, float]:
         with self._lock:
@@ -2785,11 +2829,13 @@ class Robot:
         lost: list[int] = []
         for sensor in list(getattr(msg, "press_sensor_state", []) or []):
             try:
-                pressures.append([float(value) for value in list(getattr(sensor, "pressure", []) or [])])
+                pressures.append([float(value)
+                                 for value in list(getattr(sensor, "pressure", []) or [])])
             except Exception:
                 pressures.append([])
             try:
-                temperatures.append([float(value) for value in list(getattr(sensor, "temperature", []) or [])])
+                temperatures.append([float(value)
+                                    for value in list(getattr(sensor, "temperature", []) or [])])
             except Exception:
                 temperatures.append([])
             try:
@@ -2934,7 +2980,8 @@ class Robot:
                 context.term()
             except Exception:
                 pass
-        raise RuntimeError(f"No RGBD frames received from tcp://{self.rgbd_host}:{self.rgbd_port} within {timeout:.1f}s.")
+        raise RuntimeError(
+            f"No RGBD frames received from tcp://{self.rgbd_host}:{self.rgbd_port} within {timeout:.1f}s.")
 
 
 __all__ = ["Robot", "ImuData"]

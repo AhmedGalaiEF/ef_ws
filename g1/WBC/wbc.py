@@ -40,25 +40,25 @@ from typing import Dict, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 # ── Joint indices (sdk_client.py BODY_JOINT_NAME_BY_INDEX) ──────────────────
-WAIST_YAW   = 12
-WAIST_ROLL  = 13
+WAIST_YAW = 12
+WAIST_ROLL = 13
 WAIST_PITCH = 14
 
 L_SHOULDER_PITCH = 15
-L_SHOULDER_ROLL  = 16
-L_SHOULDER_YAW   = 17
-L_ELBOW          = 18
-L_WRIST_ROLL     = 19
-L_WRIST_PITCH    = 20
-L_WRIST_YAW      = 21
+L_SHOULDER_ROLL = 16
+L_SHOULDER_YAW = 17
+L_ELBOW = 18
+L_WRIST_ROLL = 19
+L_WRIST_PITCH = 20
+L_WRIST_YAW = 21
 
 R_SHOULDER_PITCH = 22
-R_SHOULDER_ROLL  = 23
-R_SHOULDER_YAW   = 24
-R_ELBOW          = 25
-R_WRIST_ROLL     = 26
-R_WRIST_PITCH    = 27
-R_WRIST_YAW      = 28
+R_SHOULDER_ROLL = 23
+R_SHOULDER_YAW = 24
+R_ELBOW = 25
+R_WRIST_ROLL = 26
+R_WRIST_PITCH = 27
+R_WRIST_YAW = 28
 
 UPPER_BODY_JOINTS = [
     WAIST_YAW, WAIST_ROLL, WAIST_PITCH,
@@ -74,30 +74,30 @@ MAX_JOINT_STEP = 0.05  # rad
 
 # Conservative per-joint position limits [min, max] in radians
 JOINT_LIMITS: Dict[int, Tuple[float, float]] = {
-    WAIST_YAW:        (-0.52,  0.52),
-    WAIST_ROLL:       (-0.40,  0.40),
-    WAIST_PITCH:      (-0.50,  0.50),
-    L_SHOULDER_PITCH: (-1.57,  1.57),
-    L_SHOULDER_ROLL:  (-0.20,  2.60),
-    L_SHOULDER_YAW:   (-1.57,  1.57),
-    L_ELBOW:          (-1.57,  0.05),
-    L_WRIST_ROLL:     (-1.57,  1.57),
-    L_WRIST_PITCH:    (-1.57,  1.57),
-    L_WRIST_YAW:      (-1.57,  1.57),
-    R_SHOULDER_PITCH: (-1.57,  1.57),
-    R_SHOULDER_ROLL:  (-2.60,  0.20),
-    R_SHOULDER_YAW:   (-1.57,  1.57),
-    R_ELBOW:          (-1.57,  0.05),
-    R_WRIST_ROLL:     (-1.57,  1.57),
-    R_WRIST_PITCH:    (-1.57,  1.57),
-    R_WRIST_YAW:      (-1.57,  1.57),
+    WAIST_YAW: (-0.52, 0.52),
+    WAIST_ROLL: (-0.40, 0.40),
+    WAIST_PITCH: (-0.50, 0.50),
+    L_SHOULDER_PITCH: (-1.57, 1.57),
+    L_SHOULDER_ROLL: (-0.20, 2.60),
+    L_SHOULDER_YAW: (-1.57, 1.57),
+    L_ELBOW: (-1.57, 0.05),
+    L_WRIST_ROLL: (-1.57, 1.57),
+    L_WRIST_PITCH: (-1.57, 1.57),
+    L_WRIST_YAW: (-1.57, 1.57),
+    R_SHOULDER_PITCH: (-1.57, 1.57),
+    R_SHOULDER_ROLL: (-2.60, 0.20),
+    R_SHOULDER_YAW: (-1.57, 1.57),
+    R_ELBOW: (-1.57, 0.05),
+    R_WRIST_ROLL: (-1.57, 1.57),
+    R_WRIST_PITCH: (-1.57, 1.57),
+    R_WRIST_YAW: (-1.57, 1.57),
 }
 
 # ── arm_sdk servo gains ───────────────────────────────────────────────────────
 WAIST_KP = 480.0
 WAIST_KD = 12.0
-ARM_KP   = 30.0
-ARM_KD   = 1.5
+ARM_KP = 30.0
+ARM_KD = 1.5
 
 _KP_BY_JOINT: Dict[int, float] = {j: WAIST_KP for j in [WAIST_YAW, WAIST_ROLL, WAIST_PITCH]}
 _KD_BY_JOINT: Dict[int, float] = {j: WAIST_KD for j in [WAIST_YAW, WAIST_ROLL, WAIST_PITCH]}
@@ -109,8 +109,8 @@ class WBCConfig:
     """Tunable parameters for the whole-body balance controller."""
 
     # Waist roll PD gains  (IMU roll → waist roll command)
-    roll_kp:  float = 0.55
-    roll_kd:  float = 0.08
+    roll_kp: float = 0.55
+    roll_kd: float = 0.08
 
     # Waist pitch PD gains  (IMU pitch → waist pitch command)
     pitch_kp: float = 0.45
@@ -126,7 +126,7 @@ class WBCConfig:
     tilt_deadband: float = 0.012
 
     # Waist command magnitude clamp before absolute joint limiting (rad)
-    waist_roll_limit:  float = 0.35
+    waist_roll_limit: float = 0.35
     waist_pitch_limit: float = 0.45
 
     # Static feedforward offsets (rad) added on top of the PD output.
@@ -134,7 +134,7 @@ class WBCConfig:
     # a forward-heavy load (box held out in front).  Tune via set_load() or
     # set directly for quick manual adjustment.
     pitch_offset: float = 0.0
-    roll_offset:  float = 0.0
+    roll_offset: float = 0.0
 
 
 # ── Controller ───────────────────────────────────────────────────────────────
@@ -157,20 +157,20 @@ class WBController:
 
     def __init__(self, robot, cfg: Optional[WBCConfig] = None) -> None:
         self._robot = robot
-        self._cfg   = cfg or WBCConfig()
+        self._cfg = cfg or WBCConfig()
 
-        self._lock  = threading.Lock()
+        self._lock = threading.Lock()
         self._loco_cmd: Tuple[float, float, float] = (0.0, 0.0, 0.0)
-        self._neutral:  Optional[Dict[int, float]] = None   # {joint_idx: angle}
+        self._neutral: Optional[Dict[int, float]] = None   # {joint_idx: angle}
 
-        self._thread:  Optional[threading.Thread] = None
+        self._thread: Optional[threading.Thread] = None
         self._running: bool = False
         self._output_enabled: bool = False
         self._arms_released: bool = True
 
         # Last diagnostics (read from any thread)
-        self.last_imu_roll:       float = 0.0
-        self.last_imu_pitch:      float = 0.0
+        self.last_imu_roll: float = 0.0
+        self.last_imu_pitch: float = 0.0
         self.last_waist_roll_cmd: float = 0.0
         self.last_waist_pitch_cmd: float = 0.0
         self.last_odom: Optional[Tuple[float, float, float]] = None
@@ -332,8 +332,8 @@ class WBController:
 
     def _tick(self) -> None:
         with self._lock:
-            cfg     = self._cfg
-            loco    = self._loco_cmd
+            cfg = self._cfg
+            loco = self._loco_cmd
             neutral = dict(self._neutral) if self._neutral else {}
             output_enabled = self._output_enabled
 
@@ -345,12 +345,12 @@ class WBController:
         if imu is None:
             return
 
-        roll    = float(imu.rpy[0])   if imu.rpy  else 0.0
-        pitch   = float(imu.rpy[1])   if imu.rpy  else 0.0
-        gyro_x  = float(imu.gyro[0])  if imu.gyro else 0.0
-        gyro_y  = float(imu.gyro[1])  if imu.gyro else 0.0
+        roll = float(imu.rpy[0]) if imu.rpy else 0.0
+        pitch = float(imu.rpy[1]) if imu.rpy else 0.0
+        gyro_x = float(imu.gyro[0]) if imu.gyro else 0.0
+        gyro_y = float(imu.gyro[1]) if imu.gyro else 0.0
 
-        self.last_imu_roll  = roll
+        self.last_imu_roll = roll
         self.last_imu_pitch = pitch
 
         # Odometry (informational; available for future extensions)
@@ -370,28 +370,30 @@ class WBController:
         # ── 3. PD corrections for waist roll and pitch ───────────────────────
         #   Error = current tilt (positive roll = robot leaning left)
         #   Correction opposes the tilt: negative feedback
-        roll_err   = self._deadband(roll,  cfg.tilt_deadband)
-        pitch_err  = self._deadband(pitch, cfg.tilt_deadband)
+        roll_err = self._deadband(roll, cfg.tilt_deadband)
+        pitch_err = self._deadband(pitch, cfg.tilt_deadband)
 
-        waist_roll_delta  = -(cfg.roll_kp  * roll_err  + cfg.roll_kd  * gyro_x)
+        waist_roll_delta = -(cfg.roll_kp * roll_err + cfg.roll_kd * gyro_x)
         waist_pitch_delta = -(cfg.pitch_kp * pitch_err + cfg.pitch_kd * gyro_y)
 
         # Clamp correction magnitude (soft limit before joint clamping)
-        waist_roll_delta  = self._clamp(waist_roll_delta,  -cfg.waist_roll_limit,  cfg.waist_roll_limit)
-        waist_pitch_delta = self._clamp(waist_pitch_delta, -cfg.waist_pitch_limit, cfg.waist_pitch_limit)
+        waist_roll_delta = self._clamp(
+            waist_roll_delta, -cfg.waist_roll_limit, cfg.waist_roll_limit)
+        waist_pitch_delta = self._clamp(
+            waist_pitch_delta, -cfg.waist_pitch_limit, cfg.waist_pitch_limit)
 
-        self.last_waist_roll_cmd  = waist_roll_delta
+        self.last_waist_roll_cmd = waist_roll_delta
         self.last_waist_pitch_cmd = waist_pitch_delta
 
         # ── 4. Build desired target dict ─────────────────────────────────────
         targets: Dict[int, float] = dict(neutral)   # start from neutral
 
         # Total waist commands: PD feedback + static load feedforward offset
-        total_roll_cmd  = waist_roll_delta  + cfg.roll_offset
+        total_roll_cmd = waist_roll_delta + cfg.roll_offset
         total_pitch_cmd = waist_pitch_delta + cfg.pitch_offset
 
-        targets[WAIST_YAW]   = neutral.get(WAIST_YAW,   0.0)               # yaw stays neutral
-        targets[WAIST_ROLL]  = neutral.get(WAIST_ROLL,  0.0) + total_roll_cmd
+        targets[WAIST_YAW] = neutral.get(WAIST_YAW, 0.0)               # yaw stays neutral
+        targets[WAIST_ROLL] = neutral.get(WAIST_ROLL, 0.0) + total_roll_cmd
         targets[WAIST_PITCH] = neutral.get(WAIST_PITCH, 0.0) + total_pitch_cmd
 
         # Arm compensation: shoulder pitch/roll counter-rotate to cancel
@@ -400,16 +402,16 @@ class WBController:
         # in the same world-space pose even when the waist is biased backward.
         c = cfg.arm_compensation
         targets[L_SHOULDER_PITCH] = neutral.get(L_SHOULDER_PITCH, 0.0) - c * total_pitch_cmd
-        targets[L_SHOULDER_ROLL]  = neutral.get(L_SHOULDER_ROLL,  0.0) - c * total_roll_cmd
+        targets[L_SHOULDER_ROLL] = neutral.get(L_SHOULDER_ROLL, 0.0) - c * total_roll_cmd
         targets[R_SHOULDER_PITCH] = neutral.get(R_SHOULDER_PITCH, 0.0) - c * total_pitch_cmd
-        targets[R_SHOULDER_ROLL]  = neutral.get(R_SHOULDER_ROLL,  0.0) - c * total_roll_cmd
+        targets[R_SHOULDER_ROLL] = neutral.get(R_SHOULDER_ROLL, 0.0) - c * total_roll_cmd
 
         # All other joints already set to neutral above.
 
         # ── 5. Enforce per-step increment limit: max 0.05 rad ────────────────
         for j in UPPER_BODY_JOINTS:
             desired = targets.get(j, cur[j])
-            delta   = desired - cur[j]
+            delta = desired - cur[j]
             clamped = self._clamp(delta, -MAX_JOINT_STEP, MAX_JOINT_STEP)
             targets[j] = cur[j] + clamped
 

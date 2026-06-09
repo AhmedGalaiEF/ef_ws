@@ -18,6 +18,7 @@ except ImportError:
     print("Could not import sdk_hand. Ensure it is in the parent directory.")
     sys.exit(1)
 
+
 class GrippingApp(QWidget):
     def __init__(self, hand: str = "right", iface: str = "eth0", domain_id: int = 0):
         super().__init__()
@@ -104,7 +105,7 @@ class GrippingApp(QWidget):
     def on_slider_change(self):
         val = self.slider.value()
         targets = hand_grip_targets(self.hand, val)
-        
+
         # Update label text
         status = "Open"
         if val == 100:
@@ -113,7 +114,7 @@ class GrippingApp(QWidget):
             status = "Closing..."
 
         self.label.setText(f"{self.hand.title()} Finger Grip: {status} ({val}%)")
-        
+
         # Send command to the hand
         if self.controller:
             # We use a very short hold_s to maintain responsiveness in the UI.
@@ -163,6 +164,7 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id.")
     args, remaining = parser.parse_known_args()
     return args, [sys.argv[0], *remaining]
+
 
 if __name__ == '__main__':
     args, qt_argv = parse_args()

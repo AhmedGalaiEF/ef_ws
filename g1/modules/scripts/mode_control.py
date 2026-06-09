@@ -419,7 +419,7 @@ def make_app(controller: ModeController) -> dash.Dash:
 
         button_names = [name for name, _, _ in button_specs]
         if isinstance(trigger, str) and trigger.startswith("btn-"):
-            command_name = trigger[len("btn-") :]
+            command_name = trigger[len("btn-"):]
             try:
                 current = controller.state()
                 if button_disabled(current.mode, command_name):
@@ -455,11 +455,15 @@ def make_app(controller: ModeController) -> dash.Dash:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Dash/DBC mode control for Unitree G1.")
-    parser.add_argument("--iface", default=os.environ.get("G1_IFACE", "eth0"), help="DDS network interface.")
-    parser.add_argument("--domain-id", type=int, default=int(os.environ.get("G1_DOMAIN_ID", "0")), help="DDS domain ID.")
+    parser.add_argument("--iface", default=os.environ.get("G1_IFACE", "eth0"),
+                        help="DDS network interface.")
+    parser.add_argument("--domain-id", type=int,
+                        default=int(os.environ.get("G1_DOMAIN_ID", "0")), help="DDS domain ID.")
     parser.add_argument("--timeout", type=float, default=10.0, help="SDK RPC timeout in seconds.")
-    parser.add_argument("--host", default=os.environ.get("MODE_CONTROL_HOST", "0.0.0.0"), help="Dash bind host.")
-    parser.add_argument("--port", type=int, default=int(os.environ.get("MODE_CONTROL_PORT", "8051")), help="Dash bind port.")
+    parser.add_argument("--host", default=os.environ.get("MODE_CONTROL_HOST",
+                        "0.0.0.0"), help="Dash bind host.")
+    parser.add_argument(
+        "--port", type=int, default=int(os.environ.get("MODE_CONTROL_PORT", "8051")), help="Dash bind port.")
     parser.add_argument("--debug", action="store_true", help="Run Dash in debug mode.")
     parser.add_argument(
         "--climb-fsm-id",

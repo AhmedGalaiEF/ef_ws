@@ -35,6 +35,8 @@ Key bindings
 """
 
 from __future__ import annotations
+from sdk_client import Robot
+from dds_env import ensure_cyclonedds_environment
 
 import argparse
 import curses
@@ -47,14 +49,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
-ROOT_DIR    = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
 MODULES_DIR = os.path.join(ROOT_DIR, "modules")
 for _p in (ROOT_DIR, MODULES_DIR):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from dds_env import ensure_cyclonedds_environment
 ensure_cyclonedds_environment()
 
 try:
@@ -70,52 +71,51 @@ except ImportError as exc:
         "  pip install -e <path-to-unitree_sdk2_python>"
     ) from exc
 
-from sdk_client import Robot
 
 # ── Constants ──────────────────────────────────────────────────────────────────
-ARM_SDK_WEIGHT_INDEX   = 29
-WAIST_HOLD_KP          = 480.0
-WAIST_HOLD_KD          = 12.0
-DEFAULT_ARM_KP         = 30.0
-DEFAULT_ARM_KD         = 1.5
+ARM_SDK_WEIGHT_INDEX = 29
+WAIST_HOLD_KP = 480.0
+WAIST_HOLD_KD = 12.0
+DEFAULT_ARM_KP = 30.0
+DEFAULT_ARM_KD = 1.5
 INACTIVE_TRANSITION_KP = 300.0
 TRANSITION_EPSILON_RAD = 1e-4
 
-WAIST_JOINTS      = [12, 13, 14]
-LEFT_ARM_JOINTS   = [15, 16, 17, 18, 19, 20, 21]
-RIGHT_ARM_JOINTS  = [22, 23, 24, 25, 26, 27, 28]
+WAIST_JOINTS = [12, 13, 14]
+LEFT_ARM_JOINTS = [15, 16, 17, 18, 19, 20, 21]
+RIGHT_ARM_JOINTS = [22, 23, 24, 25, 26, 27, 28]
 UPPER_BODY_JOINTS = WAIST_JOINTS + LEFT_ARM_JOINTS + RIGHT_ARM_JOINTS
 
-LEFT_BASE  = 15   # joint index of left shoulder_pitch
+LEFT_BASE = 15   # joint index of left shoulder_pitch
 RIGHT_BASE = 22   # joint index of right shoulder_pitch
 
 # Offsets within each arm: 0=shl_pitch, 1=shl_roll, 2=shl_yaw,
 #                          3=elbow, 4=wrs_roll, 5=wrs_pitch, 6=wrs_yaw
 JOINT_NAMES = [
     "shoulder_pitch", "shoulder_roll", "shoulder_yaw",
-    "elbow",          "wrist_roll",    "wrist_pitch",  "wrist_yaw",
+    "elbow", "wrist_roll", "wrist_pitch", "wrist_yaw",
 ]
 
 # (min, max) for the displayed/controlled arm
 # Right arm limits (independent control, not mirror)
 RIGHT_LIMITS = [
-    (-3.0892,  2.6704),  # shoulder_pitch
-    (-2.2515,  1.5882),  # shoulder_roll
-    (-2.6180,  2.6180),  # shoulder_yaw
-    (-1.0472,  2.0944),  # elbow
-    (-1.9722,  1.9722),  # wrist_roll
-    (-1.6144,  1.6144),  # wrist_pitch
-    (-1.6144,  1.6144),  # wrist_yaw
+    (-3.0892, 2.6704),  # shoulder_pitch
+    (-2.2515, 1.5882),  # shoulder_roll
+    (-2.6180, 2.6180),  # shoulder_yaw
+    (-1.0472, 2.0944),  # elbow
+    (-1.9722, 1.9722),  # wrist_roll
+    (-1.6144, 1.6144),  # wrist_pitch
+    (-1.6144, 1.6144),  # wrist_yaw
 ]
 # Left arm limits
 LEFT_LIMITS = [
-    (-3.0892,  2.6704),  # shoulder_pitch
-    (-1.5882,  2.2515),  # shoulder_roll
-    (-2.6180,  2.6180),  # shoulder_yaw
-    (-1.0472,  2.0944),  # elbow
-    (-1.9722,  1.9722),  # wrist_roll
-    (-1.6144,  1.6144),  # wrist_pitch
-    (-1.6144,  1.6144),  # wrist_yaw
+    (-3.0892, 2.6704),  # shoulder_pitch
+    (-1.5882, 2.2515),  # shoulder_roll
+    (-2.6180, 2.6180),  # shoulder_yaw
+    (-1.0472, 2.0944),  # elbow
+    (-1.9722, 1.9722),  # wrist_roll
+    (-1.6144, 1.6144),  # wrist_pitch
+    (-1.6144, 1.6144),  # wrist_yaw
 ]
 
 ARM_MODES = ["right", "left", "both"]
@@ -128,58 +128,58 @@ ARM_MODES = ["right", "left", "both"]
 #   Y+  away (right): shoulder_roll and wrist_roll both decrease
 #   Z+  up:           elbow decreases, wrist_pitch increases
 AXIS_COUPLINGS_RIGHT: dict[str, list[tuple[int, float]]] = {
-    "X":     [(0, -1.0), (3, -1.0)],   # shl_pitch -, elbow -
-    "Y":     [(1, -1.0), (4, -1.0)],   # shl_roll -,  wrs_roll -
-    "Z":     [(3, -1.0), (5, +1.0)],   # elbow -,     wrs_pitch +
-    "Roll":  [(4, +1.0)],
+    "X": [(0, -1.0), (3, -1.0)],   # shl_pitch -, elbow -
+    "Y": [(1, -1.0), (4, -1.0)],   # shl_roll -,  wrs_roll -
+    "Z": [(3, -1.0), (5, +1.0)],   # elbow -,     wrs_pitch +
+    "Roll": [(4, +1.0)],
     "Pitch": [(5, +1.0)],
-    "Yaw":   [(6, +1.0)],
+    "Yaw": [(6, +1.0)],
 }
 # Left arm: Y motion is mirrored (shoulder_roll sign flips)
 AXIS_COUPLINGS_LEFT: dict[str, list[tuple[int, float]]] = {
-    "X":     [(0, -1.0), (3, -1.0)],
-    "Y":     [(1, +1.0), (4, +1.0)],   # mirrored: left arm away = increase shl_roll
-    "Z":     [(3, -1.0), (5, +1.0)],
-    "Roll":  [(4, +1.0)],
+    "X": [(0, -1.0), (3, -1.0)],
+    "Y": [(1, +1.0), (4, +1.0)],   # mirrored: left arm away = increase shl_roll
+    "Z": [(3, -1.0), (5, +1.0)],
+    "Roll": [(4, +1.0)],
     "Pitch": [(5, +1.0)],
-    "Yaw":   [(6, +1.0)],
+    "Yaw": [(6, +1.0)],
 }
 
 # Human-readable coupling summary for display
 AXIS_COUPLING_DESC: dict[str, str] = {
-    "X":     "shl_pitch + elbow",
-    "Y":     "shl_roll + wrs_roll",
-    "Z":     "elbow + wrs_pitch",
-    "Roll":  "wrist_roll",
+    "X": "shl_pitch + elbow",
+    "Y": "shl_roll + wrs_roll",
+    "Z": "elbow + wrs_pitch",
+    "Roll": "wrist_roll",
     "Pitch": "wrist_pitch",
-    "Yaw":   "wrist_yaw",
+    "Yaw": "wrist_yaw",
 }
 
 # key → (axis, sign)
 KEY_AXIS_MAP: dict[int, tuple[str, float]] = {
-    ord("w"): ("X",     +1.0),
-    ord("s"): ("X",     -1.0),
-    ord("a"): ("Y",     +1.0),
-    ord("d"): ("Y",     -1.0),
-    ord("q"): ("Z",     +1.0),
-    ord("e"): ("Z",     -1.0),
-    ord("i"): ("Roll",  +1.0),
-    ord("k"): ("Roll",  -1.0),
+    ord("w"): ("X", +1.0),
+    ord("s"): ("X", -1.0),
+    ord("a"): ("Y", +1.0),
+    ord("d"): ("Y", -1.0),
+    ord("q"): ("Z", +1.0),
+    ord("e"): ("Z", -1.0),
+    ord("i"): ("Roll", +1.0),
+    ord("k"): ("Roll", -1.0),
     ord("j"): ("Pitch", +1.0),
     ord("l"): ("Pitch", -1.0),
-    ord("u"): ("Yaw",   +1.0),
-    ord("o"): ("Yaw",   -1.0),
+    ord("u"): ("Yaw", +1.0),
+    ord("o"): ("Yaw", -1.0),
 }
 
 FLASH_DURATION = 0.25  # seconds to highlight moved joints
 
 # ── Colour pair indices ────────────────────────────────────────────────────────
-C_GREEN  = 1
+C_GREEN = 1
 C_YELLOW = 2
-C_RED    = 3
-C_CYAN   = 4
-C_SEL    = 5
-C_FOCUS  = 6
+C_RED = 3
+C_CYAN = 4
+C_SEL = 5
+C_FOCUS = 6
 
 
 # ── LowState subscriber ────────────────────────────────────────────────────────
@@ -238,9 +238,9 @@ class UpperBodyPoseController:
         for j in UPPER_BODY_JOINTS:
             c = self._cmd.motor_cmd[j]
             c.mode = 1
-            c.q    = float(targets[j])
-            c.dq   = 0.0
-            c.tau  = 0.0
+            c.q = float(targets[j])
+            c.dq = 0.0
+            c.tau = 0.0
             if j in WAIST_JOINTS:
                 c.kp = float(ov.get(j, waist_kp))
                 c.kd = float(waist_kd)
@@ -267,39 +267,39 @@ class UpperBodyPoseController:
 
 class Arm6DCLI:
     def __init__(self, args: argparse.Namespace) -> None:
-        self.iface       = str(args.iface)
-        self.domain_id   = int(args.domain_id)
-        self.pose_path   = Path(os.path.abspath(os.path.expanduser(str(args.file))))
-        self.rate_hz     = max(1.0, float(args.rate_hz))
-        self.max_speed   = max(0.01, float(args.speed_rad_s))
-        self.arm_kp      = float(args.kp)
-        self.arm_kd      = float(args.kd)
-        self.waist_kp    = float(WAIST_HOLD_KP)
-        self.waist_kd    = float(WAIST_HOLD_KD)
-        self.arm_mode    = str(args.arm_mode)
+        self.iface = str(args.iface)
+        self.domain_id = int(args.domain_id)
+        self.pose_path = Path(os.path.abspath(os.path.expanduser(str(args.file))))
+        self.rate_hz = max(1.0, float(args.rate_hz))
+        self.max_speed = max(0.01, float(args.speed_rad_s))
+        self.arm_kp = float(args.kp)
+        self.arm_kd = float(args.kd)
+        self.waist_kp = float(WAIST_HOLD_KP)
+        self.waist_kd = float(WAIST_HOLD_KD)
+        self.arm_mode = str(args.arm_mode)
         self.adjust_step = 0.05
 
-        self.latest_positions : dict[int, float] = {j: 0.0 for j in UPPER_BODY_JOINTS}
-        self.current_targets  : dict[int, float] = {j: 0.0 for j in UPPER_BODY_JOINTS}
-        self.desired_targets  : dict[int, float] = {j: 0.0 for j in UPPER_BODY_JOINTS}
-        self.seeded_from_state   = False
-        self.control_enabled     = True
-        self.transition_indices : set[int] = set()
+        self.latest_positions: dict[int, float] = {j: 0.0 for j in UPPER_BODY_JOINTS}
+        self.current_targets: dict[int, float] = {j: 0.0 for j in UPPER_BODY_JOINTS}
+        self.desired_targets: dict[int, float] = {j: 0.0 for j in UPPER_BODY_JOINTS}
+        self.seeded_from_state = False
+        self.control_enabled = True
+        self.transition_indices: set[int] = set()
 
-        self.saved_poses  : list[dict[str, Any]] = []
-        self.pose_cursor  = 0
-        self.status       = "Waiting for rt/lowstate..."
-        self._running     = True
-        self.last_tick_s  = time.monotonic()
+        self.saved_poses: list[dict[str, Any]] = []
+        self.pose_cursor = 0
+        self.status = "Waiting for rt/lowstate..."
+        self._running = True
+        self.last_tick_s = time.monotonic()
 
         self._flash_joints: set[int] = set()
-        self._flash_time   = 0.0
+        self._flash_time = 0.0
 
         ChannelFactoryInitialize(self.domain_id, self.iface)
-        self.state_sub  = UpperBodyStateSubscriber(UPPER_BODY_JOINTS)
+        self.state_sub = UpperBodyStateSubscriber(UPPER_BODY_JOINTS)
         self.controller = UpperBodyPoseController()
-        self.robot      = Robot(iface=self.iface, domain_id=self.domain_id,
-                                auto_start_sensors=True)
+        self.robot = Robot(iface=self.iface, domain_id=self.domain_id,
+                           auto_start_sensors=True)
         self._load_poses()
         self._seed_from_state()
 
@@ -311,8 +311,8 @@ class Arm6DCLI:
             snap = self.state_sub.snapshot()
             if snap:
                 self.latest_positions = snap
-                self.current_targets  = dict(snap)
-                self.desired_targets  = dict(snap)
+                self.current_targets = dict(snap)
+                self.desired_targets = dict(snap)
                 self.seeded_from_state = True
                 self.status = f"Connected — {self.iface}"
                 return
@@ -396,7 +396,7 @@ class Arm6DCLI:
                 moved.add(j)
 
         self._flash_joints = moved
-        self._flash_time   = time.monotonic()
+        self._flash_time = time.monotonic()
 
     # ── Robot tick ─────────────────────────────────────────────────────────────
 
@@ -405,7 +405,7 @@ class Arm6DCLI:
         for j in UPPER_BODY_JOINTS:
             cur = float(self.current_targets[j])
             des = float(self.desired_targets[j])
-            d   = des - cur
+            d = des - cur
             if abs(d) <= step:
                 self.current_targets[j] = des
             else:
@@ -439,7 +439,7 @@ class Arm6DCLI:
         if not self.seeded_from_state or not self.control_enabled:
             return
         now = time.monotonic()
-        dt  = max(1.0 / self.rate_hz, now - self.last_tick_s)
+        dt = max(1.0 / self.rate_hz, now - self.last_tick_s)
         self.last_tick_s = now
         self._step_toward_targets(dt)
         self.controller.write(
@@ -472,9 +472,9 @@ class Arm6DCLI:
                   value: float, vmin: float, vmax: float, attr: int = 0) -> None:
         if width <= 0 or vmax <= vmin:
             return
-        frac   = max(0.0, min(1.0, (value - vmin) / (vmax - vmin)))
+        frac = max(0.0, min(1.0, (value - vmin) / (vmax - vmin)))
         filled = int(round(frac * width))
-        bar    = "█" * filled + "░" * (width - filled)
+        bar = "█" * filled + "░" * (width - filled)
         try:
             win.addnstr(y, x, bar, width, attr or (self._cp(C_GREEN) | curses.A_BOLD))
         except curses.error:
@@ -483,15 +483,15 @@ class Arm6DCLI:
     # ── Section drawers ────────────────────────────────────────────────────────
 
     def _draw_header(self, win, h: int, w: int) -> int:
-        conn_attr  = self._cp(C_GREEN if self.seeded_from_state else C_RED) | curses.A_BOLD
-        armed_attr = self._cp(C_GREEN if self.control_enabled   else C_RED) | curses.A_BOLD
+        conn_attr = self._cp(C_GREEN if self.seeded_from_state else C_RED) | curses.A_BOLD
+        armed_attr = self._cp(C_GREEN if self.control_enabled else C_RED) | curses.A_BOLD
         title = "6D End-Effector Arm Controller"
         self._safe_add(win, 0, 0, "─" * w, self._cp(C_CYAN))
         self._safe_add(win, 0, max(0, (w - len(title)) // 2), title,
                        self._cp(C_CYAN) | curses.A_BOLD)
-        conn_txt  = "CONNECTED" if self.seeded_from_state else "WAITING"
-        armed_txt = "ARMED"     if self.control_enabled   else "RELEASED"
-        self._safe_add(win, 0, w - 23, f"[{conn_txt}]",  conn_attr)
+        conn_txt = "CONNECTED" if self.seeded_from_state else "WAITING"
+        armed_txt = "ARMED" if self.control_enabled else "RELEASED"
+        self._safe_add(win, 0, w - 23, f"[{conn_txt}]", conn_attr)
         self._safe_add(win, 0, w - 12, f"[{armed_txt}]", armed_attr)
 
         cfg = (f" arm:{self.arm_mode}  step:{self.adjust_step:.4f}rad  "
@@ -518,9 +518,9 @@ class Arm6DCLI:
             ("Z", "Q", "E", "up/dn"),
         ]
         rows_r = [
-            ("Roll",  "I", "K"),
+            ("Roll", "I", "K"),
             ("Pitch", "J", "L"),
-            ("Yaw",   "U", "O"),
+            ("Yaw", "U", "O"),
         ]
         for i, (axis, kp, kn, desc) in enumerate(rows_t):
             y = top + 1 + i
@@ -542,22 +542,22 @@ class Arm6DCLI:
 
         # Determine which arm to display (if both, show right)
         if self.arm_mode == "left":
-            base   = LEFT_BASE
+            base = LEFT_BASE
             limits = LEFT_LIMITS
         else:
-            base   = RIGHT_BASE
+            base = RIGHT_BASE
             limits = RIGHT_LIMITS
 
-        label_w  = 22
-        val_w    = 28  # "cur: +0.0000  tgt: +0.0000"
-        bar_w    = max(8, w - label_w - val_w - 2)
+        label_w = 22
+        val_w = 28  # "cur: +0.0000  tgt: +0.0000"
+        bar_w = max(8, w - label_w - val_w - 2)
 
         for i, name in enumerate(JOINT_NAMES):
-            y  = top + i
+            y = top + i
             ji = base + i
-            lim   = limits[i]
-            cur   = float(self.latest_positions.get(ji, self.current_targets[ji]))
-            tgt   = float(self.desired_targets[ji])
+            lim = limits[i]
+            cur = float(self.latest_positions.get(ji, self.current_targets[ji]))
+            tgt = float(self.desired_targets[ji])
             in_flash = flash_active and ji in self._flash_joints
             label_attr = (self._cp(C_YELLOW) | curses.A_BOLD) if in_flash else curses.A_BOLD
             label_txt = f" {name:<20}[{ji:02d}]"
@@ -577,16 +577,16 @@ class Arm6DCLI:
         hdr = f" Poses ({len(self.saved_poses)}) [p]save [l/⏎]load [d]del [↑↓]nav"
         self._safe_addn(win, top, 0, hdr, w, curses.A_BOLD)
         for row in range(avail):
-            y    = top + 1 + row
+            y = top + 1 + row
             pidx = row
             if pidx >= len(self.saved_poses):
                 break
             pose = self.saved_poses[pidx]
             name = str(pose.get("name", f"pose_{pidx}"))
-            ts   = str(pose.get("saved_at", ""))[:19]
+            ts = str(pose.get("saved_at", ""))[:19]
             mark = "▶" if pidx == self.pose_cursor else " "
             is_sel = (pidx == self.pose_cursor)
-            attr   = (self._cp(C_SEL) | curses.A_BOLD) if is_sel else 0
+            attr = (self._cp(C_SEL) | curses.A_BOLD) if is_sel else 0
             self._safe_addn(win, y, 0, f"{mark} {pidx}: {name:<24} {ts}", w, attr)
         self._safe_add(win, h - footer_rows, 0, "─" * w, self._cp(C_CYAN))
 
@@ -788,12 +788,12 @@ class Arm6DCLI:
         if curses.has_colors():
             curses.start_color()
             curses.use_default_colors()
-            curses.init_pair(C_GREEN,  curses.COLOR_GREEN,  -1)
+            curses.init_pair(C_GREEN, curses.COLOR_GREEN, -1)
             curses.init_pair(C_YELLOW, curses.COLOR_YELLOW, -1)
-            curses.init_pair(C_RED,    curses.COLOR_RED,    -1)
-            curses.init_pair(C_CYAN,   curses.COLOR_CYAN,   -1)
-            curses.init_pair(C_SEL,    curses.COLOR_BLACK,  curses.COLOR_WHITE)
-            curses.init_pair(C_FOCUS,  curses.COLOR_BLACK,  curses.COLOR_CYAN)
+            curses.init_pair(C_RED, curses.COLOR_RED, -1)
+            curses.init_pair(C_CYAN, curses.COLOR_CYAN, -1)
+            curses.init_pair(C_SEL, curses.COLOR_BLACK, curses.COLOR_WHITE)
+            curses.init_pair(C_FOCUS, curses.COLOR_BLACK, curses.COLOR_CYAN)
         curses.curs_set(0)
         stdscr.timeout(20)
 
@@ -830,18 +830,18 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
         description="6D end-effector TUI — Cartesian jogging for Unitree G1 arm."
     )
-    p.add_argument("--iface",       default="eth0",
+    p.add_argument("--iface", default="eth0",
                    help="Network interface for DDS")
-    p.add_argument("--domain-id",   type=int,   default=0)
-    p.add_argument("--file",        default="saved_6d_poses.json",
+    p.add_argument("--domain-id", type=int, default=0)
+    p.add_argument("--file", default="saved_6d_poses.json",
                    help="JSON file for saved poses")
-    p.add_argument("--rate-hz",     type=float, default=50.0,
+    p.add_argument("--rate-hz", type=float, default=50.0,
                    help="Command publish rate (Hz)")
     p.add_argument("--speed-rad-s", type=float, default=0.1,
                    help="Initial ramp limit (rad/s)")
-    p.add_argument("--kp",          type=float, default=DEFAULT_ARM_KP)
-    p.add_argument("--kd",          type=float, default=DEFAULT_ARM_KD)
-    p.add_argument("--arm-mode",    choices=ARM_MODES, default="right",
+    p.add_argument("--kp", type=float, default=DEFAULT_ARM_KP)
+    p.add_argument("--kd", type=float, default=DEFAULT_ARM_KD)
+    p.add_argument("--arm-mode", choices=ARM_MODES, default="right",
                    help="Initial arm control target")
     return p.parse_args()
 

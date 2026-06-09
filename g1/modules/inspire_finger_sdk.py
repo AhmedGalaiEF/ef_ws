@@ -126,14 +126,16 @@ def parse_fingers(value: str) -> tuple[str, ...]:
     if normalized == "all":
         return DEFAULT_SEQUENCE
 
-    fingers = tuple(part.strip().lower().replace("-", "_") for part in normalized.split(",") if part.strip())
+    fingers = tuple(part.strip().lower().replace("-", "_")
+                    for part in normalized.split(",") if part.strip())
     if not fingers:
         raise argparse.ArgumentTypeError("at least one finger is required")
 
     unknown = [finger for finger in fingers if finger not in FINGER_TO_IDXS]
     if unknown:
         allowed = ", ".join(("all", *DEFAULT_SEQUENCE, "thumb_bend", "thumb_rotation"))
-        raise argparse.ArgumentTypeError(f"unknown finger(s): {', '.join(unknown)}. Use one of: {allowed}")
+        raise argparse.ArgumentTypeError(
+            f"unknown finger(s): {', '.join(unknown)}. Use one of: {allowed}")
     return fingers
 
 
@@ -147,15 +149,22 @@ def parse_args() -> argparse.Namespace:
         help="Finger to move: all, thumb, index, middle, ring, little, thumb_bend, thumb_rotation, or comma-separated names.",
     )
     parser.add_argument("--hand", choices=("left", "right", "both"), default="right")
-    parser.add_argument("--percent", type=float, default=100.0, help="How far to close selected finger(s), 0-100.")
+    parser.add_argument("--percent", type=float, default=100.0,
+                        help="How far to close selected finger(s), 0-100.")
     parser.add_argument("--speed", type=int, default=200)
     parser.add_argument("--force", type=int, default=200)
-    parser.add_argument("--hold", type=float, default=1.0, help="Seconds to hold the selected finger target.")
-    parser.add_argument("--settle", type=float, default=0.5, help="Seconds to hold open before/after movement.")
-    parser.add_argument("--pause", type=float, default=0.35, help="Pause between fingers when finger=all.")
-    parser.add_argument("--no-open-first", action="store_true", help="Do not open the hand before moving.")
-    parser.add_argument("--no-reopen", action="store_true", help="Do not reopen the hand after moving.")
-    parser.add_argument("--dry-run", action="store_true", help="Print targets instead of sending Modbus commands.")
+    parser.add_argument("--hold", type=float, default=1.0,
+                        help="Seconds to hold the selected finger target.")
+    parser.add_argument("--settle", type=float, default=0.5,
+                        help="Seconds to hold open before/after movement.")
+    parser.add_argument("--pause", type=float, default=0.35,
+                        help="Pause between fingers when finger=all.")
+    parser.add_argument("--no-open-first", action="store_true",
+                        help="Do not open the hand before moving.")
+    parser.add_argument("--no-reopen", action="store_true",
+                        help="Do not reopen the hand after moving.")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Print targets instead of sending Modbus commands.")
     return parser.parse_args()
 
 

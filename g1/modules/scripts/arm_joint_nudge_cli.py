@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+from dds_env import ensure_cyclonedds_environment
 
 import argparse
 import os
@@ -14,7 +15,6 @@ PARENT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 if PARENT_DIR not in sys.path:
     sys.path.insert(0, PARENT_DIR)
 
-from dds_env import ensure_cyclonedds_environment
 
 ensure_cyclonedds_environment()
 
@@ -94,7 +94,8 @@ class ArmStateSubscriber:
 
     def _callback(self, msg: Any) -> None:
         try:
-            positions = {joint.motor_index: float(msg.motor_state[joint.motor_index].q) for joint in self.joints}
+            positions = {joint.motor_index: float(
+                msg.motor_state[joint.motor_index].q) for joint in self.joints}
         except Exception:
             return
         with self._lock:
@@ -275,13 +276,15 @@ class ArmJointNudgeCli:
         assert self.state_sub is not None
         positions = self.state_sub.wait(float(self.args.timeout))
         for joint in self.joints:
-            self.targets[joint.motor_index] = clamp(positions[joint.motor_index], joint.lo, joint.hi)
+            self.targets[joint.motor_index] = clamp(
+                positions[joint.motor_index], joint.lo, joint.hi)
         print("Synced targets to latest rt/lowstate arm positions.")
 
     def run(self) -> int:
         self.setup()
         print("Arm joint nudge CLI publishing on rt/arm_sdk.")
-        print(f"Default step is {self.step_rad:.3f} rad; every +/- command is capped at {MAX_NUDGE_RAD:.3f} rad.")
+        print(
+            f"Default step is {self.step_rad:.3f} rad; every +/- command is capped at {MAX_NUDGE_RAD:.3f} rad.")
         self.print_joint_list()
         self.print_help()
 
@@ -352,14 +355,19 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--iface", default="eth0", help="DDS network interface.")
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain ID.")
-    parser.add_argument("--timeout", type=float, default=5.0, help="Seconds to wait for rt/lowstate.")
-    parser.add_argument("--rate-hz", type=float, default=50.0, help="rt/arm_sdk publish rate while ramping.")
-    parser.add_argument("--speed-rad-s", type=float, default=0.25, help="Maximum ramp speed in rad/s.")
-    parser.add_argument("--step-rad", type=float, default=0.05, help="Default +/- nudge amount, capped at 0.1 rad.")
+    parser.add_argument("--timeout", type=float, default=5.0,
+                        help="Seconds to wait for rt/lowstate.")
+    parser.add_argument("--rate-hz", type=float, default=50.0,
+                        help="rt/arm_sdk publish rate while ramping.")
+    parser.add_argument("--speed-rad-s", type=float, default=0.25,
+                        help="Maximum ramp speed in rad/s.")
+    parser.add_argument("--step-rad", type=float, default=0.05,
+                        help="Default +/- nudge amount, capped at 0.1 rad.")
     parser.add_argument("--kp", type=float, default=30.0, help="Arm joint proportional gain.")
     parser.add_argument("--kd", type=float, default=1.5, help="Arm joint derivative gain.")
     parser.add_argument("--tau", type=float, default=0.0, help="Feed-forward torque.")
-    parser.add_argument("--zero-gains-on-exit", action="store_true", help="Send one zero-gain command before exiting.")
+    parser.add_argument("--zero-gains-on-exit", action="store_true",
+                        help="Send one zero-gain command before exiting.")
     return parser.parse_args()
 
 

@@ -137,7 +137,8 @@ def _resolve_piper_model(
         voice_name = _DEFAULT_PIPER_VOICES.get(language.strip().lower().replace("-", "_"))
         if not voice_name:
             supported = ", ".join(("en", "de", "fr", "es"))
-            raise ValueError(f"unsupported Piper language {language!r}; supported languages: {supported}")
+            raise ValueError(
+                f"unsupported Piper language {language!r}; supported languages: {supported}")
         value = _piper_voice_model_path(voice_name)
     if not value:
         value = os.environ.get("G1_PIPER_MODEL") or os.environ.get("PIPER_MODEL")
@@ -145,12 +146,14 @@ def _resolve_piper_model(
     if not value:
         default_models = (
             _piper_voice_model_path("en_US-lessac-medium"),
-            Path(__file__).resolve().parent / ".piper_voices" / "en_US-lessac-medium" / "en_US-lessac-medium.onnx",
+            Path(__file__).resolve().parent / ".piper_voices" /
+            "en_US-lessac-medium" / "en_US-lessac-medium.onnx",
         )
         for default_model in default_models:
             if default_model.exists():
                 return default_model
-        raise RuntimeError("Piper voice model is required for say(); set G1_PIPER_MODEL to a .onnx voice file")
+        raise RuntimeError(
+            "Piper voice model is required for say(); set G1_PIPER_MODEL to a .onnx voice file")
 
     model_path = Path(value).expanduser()
     if not model_path.exists():

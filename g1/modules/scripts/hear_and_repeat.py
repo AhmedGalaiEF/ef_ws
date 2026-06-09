@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+from unitree_sdk2py.idl.std_msgs.msg.dds_ import String_
+from sdk_client import Robot
 
 import argparse
 import json
@@ -10,9 +12,6 @@ from dds_env import ensure_cyclonedds_environment
 from sdk_sensors import LatestSubscriber
 
 ensure_cyclonedds_environment()
-
-from sdk_client import Robot
-from unitree_sdk2py.idl.std_msgs.msg.dds_ import String_
 
 
 AUDIO_TOPIC = "rt/audio_msg"
@@ -39,10 +38,12 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Listen to the robot microphone ASR stream and repeat recognized speech via Robot.say()."
     )
-    parser.add_argument("--iface", default="eth0", help="DDS network interface, for example eth0 or enp3s0.")
+    parser.add_argument("--iface", default="eth0",
+                        help="DDS network interface, for example eth0 or enp3s0.")
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain ID.")
     parser.add_argument("--topic", default=AUDIO_TOPIC, help="ASR topic to subscribe to.")
-    parser.add_argument("--volume", type=int, default=None, help="Optional playback volume 0-100 for Robot.say().")
+    parser.add_argument("--volume", type=int, default=None,
+                        help="Optional playback volume 0-100 for Robot.say().")
     parser.add_argument(
         "--min-confidence",
         type=float,

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+from sdk_hand import Dex3HandController, HAND_MAX_LIMITS, HAND_MIN_LIMITS, hand_open_targets
 
 import argparse
 import os
@@ -30,8 +31,6 @@ try:
 except ImportError as exc:
     raise SystemExit("PyQt5 not found. Install it with: pip install PyQt5") from exc
 
-from sdk_hand import Dex3HandController, HAND_MAX_LIMITS, HAND_MIN_LIMITS, hand_open_targets
-
 
 JOINT_NAMES = [
     "thumb_0",
@@ -51,7 +50,8 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
     parser.add_argument("--hand", choices=("right", "left"), default="right")
     parser.add_argument("--iface", default="eth0", help="Network interface for DDS traffic.")
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id.")
-    parser.add_argument("--rate-hz", type=float, default=50.0, help="Low-level command publish rate.")
+    parser.add_argument("--rate-hz", type=float, default=50.0,
+                        help="Low-level command publish rate.")
     parser.add_argument(
         "--speed-rad-s",
         type=float,
@@ -124,7 +124,8 @@ class Dex3JointSliderApp(QWidget):
 
         gains = QFormLayout()
         self.speed_box = self._make_spinbox(0.01, 5.0, self.speed_rad_s, 0.05)
-        self.speed_box.valueChanged.connect(lambda value: setattr(self, "speed_rad_s", float(value)))
+        self.speed_box.valueChanged.connect(
+            lambda value: setattr(self, "speed_rad_s", float(value)))
         gains.addRow("Ramp speed rad/s", self.speed_box)
 
         self.kp_box = self._make_spinbox(0.0, 5.0, self.kp, 0.1)

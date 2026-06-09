@@ -2,6 +2,7 @@ __pycache__/
 *.py[cod]
 *.log
 *.save
+.codex-tools/
 
 build/
 install/

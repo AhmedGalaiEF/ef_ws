@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+from sdk_client import Robot
+from dds_env import ensure_cyclonedds_environment
 
 import argparse
 import csv
@@ -19,8 +21,6 @@ PARENT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 if PARENT_DIR not in sys.path:
     sys.path.insert(0, PARENT_DIR)
 
-from dds_env import ensure_cyclonedds_environment
-from sdk_client import Robot
 
 ensure_cyclonedds_environment()
 
@@ -569,8 +569,10 @@ class RegressionArmMotionWindow(QWidget):
                 prev_positions, prev_ts = self._last_dataset_snapshot
                 command_name = self.active_command
                 command_idx = COMMAND_TO_INDEX[command_name]
-                input_positions = np.asarray([prev_positions[5], prev_positions[6]], dtype=np.float32)
-                output_positions = np.asarray([joint_positions[5], joint_positions[6]], dtype=np.float32)
+                input_positions = np.asarray(
+                    [prev_positions[5], prev_positions[6]], dtype=np.float32)
+                output_positions = np.asarray(
+                    [joint_positions[5], joint_positions[6]], dtype=np.float32)
                 feature = np.concatenate([command_feature(command_name), input_positions], axis=0)
                 sample = Sample(
                     t_s=float(prev_ts - self.session_started_at),
@@ -604,7 +606,8 @@ class RegressionArmMotionWindow(QWidget):
             QMessageBox.warning(self, "No Data", str(exc))
             return
 
-        self.model_coef, self.model_bias = fit_ridge_regression(features, targets, self.ridge_lambda)
+        self.model_coef, self.model_bias = fit_ridge_regression(
+            features, targets, self.ridge_lambda)
         predictions = features @ self.model_coef + self.model_bias
         self.model_rmse = float(np.sqrt(np.mean((predictions - targets) ** 2)))
         self._append_log(
@@ -616,12 +619,14 @@ class RegressionArmMotionWindow(QWidget):
 
     def _apply_prediction(self) -> None:
         if self.model_coef is None or self.model_bias is None:
-            QMessageBox.warning(self, "Model Missing", "Train the model before applying a prediction.")
+            QMessageBox.warning(self, "Model Missing",
+                                "Train the model before applying a prediction.")
             return
 
         command_name = self.command_selector.currentText()
         if self.state_sub is None or self.pinned_state_sub is None or self.infer_ctrl is None:
-            QMessageBox.warning(self, "Robot Session Missing", "Start a robot session before applying a prediction.")
+            QMessageBox.warning(self, "Robot Session Missing",
+                                "Start a robot session before applying a prediction.")
             return
         snap = self.state_sub.snapshot()
         pinned_snap = self.pinned_state_sub.snapshot()
@@ -630,7 +635,8 @@ class RegressionArmMotionWindow(QWidget):
             return
         right_arm_positions, _ = snap
         pinned_positions, _ = pinned_snap
-        input_positions = np.asarray([right_arm_positions[5], right_arm_positions[6]], dtype=np.float32)
+        input_positions = np.asarray(
+            [right_arm_positions[5], right_arm_positions[6]], dtype=np.float32)
         feature = np.concatenate([command_feature(command_name), input_positions], axis=0)
         target = feature @ self.model_coef + self.model_bias
         self.infer_ctrl.update_pinned_positions(
@@ -746,8 +752,10 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
     )
     parser.add_argument("--iface", default="eth0", help="network interface for DDS")
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id")
-    parser.add_argument("--sample-hz", type=float, default=20.0, help="recording rate while a command is held")
-    parser.add_argument("--ridge-lambda", type=float, default=1e-3, help="ridge regularization strength")
+    parser.add_argument("--sample-hz", type=float, default=20.0,
+                        help="recording rate while a command is held")
+    parser.add_argument("--ridge-lambda", type=float, default=1e-3,
+                        help="ridge regularization strength")
     parser.add_argument("--kp", type=float, default=25.0, help="arm replay kp for predicted poses")
     parser.add_argument("--kd", type=float, default=1.0, help="arm replay kd for predicted poses")
     parser.add_argument(

@@ -43,7 +43,8 @@ class CommandGateway(Node):
         )
         self._result_pub = self.create_publisher(String, "/g1/command_result", 20)
         self._status_pub = self.create_publisher(String, "/g1/gateway_status", 10)
-        self._status_srv = self.create_service(Trigger, "/g1/gateway_status_text", self._status_service)
+        self._status_srv = self.create_service(
+            Trigger, "/g1/gateway_status_text", self._status_service)
         self._timer = self.create_timer(1.0, self._tick)
 
     def _on_command_request(self, msg: String) -> None:
@@ -125,7 +126,8 @@ class CommandGateway(Node):
 
         pending = self._pending.pop(response.request_id, None)
         if pending is None:
-            self.get_logger().warning(f"No pending request for approval response {response.request_id}")
+            self.get_logger().warning(
+                f"No pending request for approval response {response.request_id}")
             return
 
         request: CommandRequest = pending["request"]

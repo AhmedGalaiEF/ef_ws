@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+from std_msgs.msg import String
+from rclpy.node import Node
+import rclpy
 
 import argparse
 import json
@@ -14,24 +17,26 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-import rclpy
-from rclpy.node import Node
-from std_msgs.msg import String
-
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Save /audio_msg ASR JSON payloads and speak recognized text back through the robot."
     )
     parser.add_argument("--topic", default="/audio_msg", help="ROS 2 ASR topic to subscribe to.")
-    parser.add_argument("--out", default="/tmp/audio_msg_reply.jsonl", help="JSONL file for saved ASR payloads.")
-    parser.add_argument("--text-out", default="/tmp/audio_msg_reply.txt", help="Plain text transcript output file.")
+    parser.add_argument("--out", default="/tmp/audio_msg_reply.jsonl",
+                        help="JSONL file for saved ASR payloads.")
+    parser.add_argument("--text-out", default="/tmp/audio_msg_reply.txt",
+                        help="Plain text transcript output file.")
     parser.add_argument("--iface", default="eth0", help="DDS interface for robot audio playback.")
-    parser.add_argument("--domain-id", type=int, default=0, help="DDS domain ID for robot audio playback.")
+    parser.add_argument("--domain-id", type=int, default=0,
+                        help="DDS domain ID for robot audio playback.")
     parser.add_argument("--volume", type=int, default=None, help="Optional playback volume 0-100.")
-    parser.add_argument("--tts-language", default=None, help="Optional Piper language, for example en, de, fr, es, ar.")
-    parser.add_argument("--min-confidence", type=float, default=0.0, help="Ignore ASR below this confidence.")
-    parser.add_argument("--no-reply", action="store_true", help="Only save messages; do not speak them back.")
+    parser.add_argument("--tts-language", default=None,
+                        help="Optional Piper language, for example en, de, fr, es, ar.")
+    parser.add_argument("--min-confidence", type=float, default=0.0,
+                        help="Ignore ASR below this confidence.")
+    parser.add_argument("--no-reply", action="store_true",
+                        help="Only save messages; do not speak them back.")
     return parser.parse_args()
 
 
@@ -122,7 +127,8 @@ class AudioMsgSaver(Node):
         env = os.environ.copy()
         env.setdefault("CYCLONEDDS_HOME", "/home/unitree/cyclonedds_ws/install/cyclonedds")
         env.setdefault("CYCLONEDDS_URI", "/home/unitree/cyclonedds_ws/cyclonedds.xml")
-        proc = subprocess.run(command, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        proc = subprocess.run(command, env=env, text=True,
+                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         if proc.stdout.strip():
             self.get_logger().info(proc.stdout.strip())
         return int(proc.returncode)

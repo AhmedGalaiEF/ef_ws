@@ -47,8 +47,8 @@ import signal
 import sys
 import time
 
-SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
-ROOT_DIR    = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 MODULES_DIR = os.path.join(ROOT_DIR, "modules")
 for _p in (ROOT_DIR, MODULES_DIR):
     if _p not in sys.path:
@@ -70,41 +70,41 @@ SQUEEZE_KD = 1.5
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Extend arms and grip a box from the sides.")
-    p.add_argument("--iface",       default="eth0",  help="Network interface")
-    p.add_argument("--domain-id",   type=int, default=0)
+    p.add_argument("--iface", default="eth0", help="Network interface")
+    p.add_argument("--domain-id", type=int, default=0)
 
     g = p.add_argument_group("extension")
     g.add_argument("--extend-duration", type=float, default=4.0,
                    help="Seconds for each arm-extension motion")
 
     g = p.add_argument_group("grip")
-    g.add_argument("--wait",           type=float, default=60.0,
+    g.add_argument("--wait", type=float, default=60.0,
                    help="Seconds to wait after extending for box placement (default 60)")
-    g.add_argument("--squeeze-delta",  type=float, default=0.20,
+    g.add_argument("--squeeze-delta", type=float, default=0.20,
                    help="Shoulder-yaw inward travel (rad) — larger = tighter grip")
-    g.add_argument("--squeeze-speed",  type=float, default=0.15,
+    g.add_argument("--squeeze-speed", type=float, default=0.15,
                    help="Max shoulder-yaw speed during squeeze (rad/s)")
-    g.add_argument("--squeeze-rate",   type=float, default=50.0,
+    g.add_argument("--squeeze-rate", type=float, default=50.0,
                    help="Command rate during squeeze motion (Hz)")
 
     g = p.add_argument_group("WBC / walking")
-    g.add_argument("--start-wbc",   action="store_true",
+    g.add_argument("--start-wbc", action="store_true",
                    help="Start WBC after gripping and hold the pose")
-    g.add_argument("--load-mass",   type=float, default=0.0,
+    g.add_argument("--load-mass", type=float, default=0.0,
                    help="Mass of held box (kg) — applies feedforward waist-pitch offset")
-    g.add_argument("--load-arm",    type=float, default=0.4,
+    g.add_argument("--load-arm", type=float, default=0.4,
                    help="Horizontal distance from waist to box CoM (m)")
-    g.add_argument("--vx",          type=float, default=0.0,
+    g.add_argument("--vx", type=float, default=0.0,
                    help="Forward walk speed once WBC is active (m/s)")
-    g.add_argument("--vy",          type=float, default=0.0)
-    g.add_argument("--vyaw",        type=float, default=0.0)
-    g.add_argument("--duration",    type=float, default=0.0,
+    g.add_argument("--vy", type=float, default=0.0)
+    g.add_argument("--vyaw", type=float, default=0.0)
+    g.add_argument("--duration", type=float, default=0.0,
                    help="Walk duration (s); 0 = hold indefinitely until Ctrl-C")
-    g.add_argument("--roll-kp",     type=float, default=0.55)
-    g.add_argument("--roll-kd",     type=float, default=0.08)
-    g.add_argument("--pitch-kp",    type=float, default=0.45)
-    g.add_argument("--pitch-kd",    type=float, default=0.06)
-    g.add_argument("--wbc-rate",    type=float, default=100.0)
+    g.add_argument("--roll-kp", type=float, default=0.55)
+    g.add_argument("--roll-kd", type=float, default=0.08)
+    g.add_argument("--pitch-kp", type=float, default=0.45)
+    g.add_argument("--pitch-kd", type=float, default=0.06)
+    g.add_argument("--wbc-rate", type=float, default=100.0)
     return p.parse_args()
 
 
@@ -143,10 +143,10 @@ def squeeze_box(
         start_l, target_l, start_r, target_r, duration_s,
     )
 
-    waist_gains   = {j: float(WAIST_HOLD_KP) for j in WAIST_JOINTS}
+    waist_gains = {j: float(WAIST_HOLD_KP) for j in WAIST_JOINTS}
     waist_damping = {j: float(WAIST_HOLD_KD) for j in WAIST_JOINTS}
 
-    dt    = 1.0 / max(1.0, rate_hz)
+    dt = 1.0 / max(1.0, rate_hz)
     steps = max(1, int(duration_s * rate_hz))
 
     for i in range(1, steps + 1):
@@ -165,9 +165,9 @@ def squeeze_box(
         time.sleep(dt)
 
     return {
-        "L_shoulder_yaw_start":  start_l,
+        "L_shoulder_yaw_start": start_l,
         "L_shoulder_yaw_target": target_l,
-        "R_shoulder_yaw_start":  start_r,
+        "R_shoulder_yaw_start": start_r,
         "R_shoulder_yaw_target": target_r,
     }
 
@@ -175,7 +175,7 @@ def squeeze_box(
 def hold_squeeze(robot: Robot, rate_hz: float = 20.0) -> None:
     """Re-publish the current joint positions at low rate to keep the squeeze active."""
     positions = robot._read_joint_positions_or_raise(UPPER_BODY_JOINTS, timeout=3.0)
-    waist_gains   = {j: float(WAIST_HOLD_KP) for j in WAIST_JOINTS}
+    waist_gains = {j: float(WAIST_HOLD_KP) for j in WAIST_JOINTS}
     waist_damping = {j: float(WAIST_HOLD_KD) for j in WAIST_JOINTS}
     dt = 1.0 / max(1.0, rate_hz)
     while True:
@@ -242,7 +242,7 @@ def main() -> None:
                 pass
             sys.exit(0)
 
-        signal.signal(signal.SIGINT,  _release)
+        signal.signal(signal.SIGINT, _release)
         signal.signal(signal.SIGTERM, _release)
         hold_squeeze(robot, rate_hz=20.0)
         return
@@ -269,7 +269,7 @@ def main() -> None:
         wbc.stop()
         sys.exit(0)
 
-    signal.signal(signal.SIGINT,  _shutdown)
+    signal.signal(signal.SIGINT, _shutdown)
     signal.signal(signal.SIGTERM, _shutdown)
 
     # WBC captures the squeezed pose as its neutral → holds the grip while balancing

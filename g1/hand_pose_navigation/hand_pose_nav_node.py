@@ -21,6 +21,8 @@ ROS 2 params (all overrideable via --ros-args -p):
     object_frame    object_visible_pose
 """
 from __future__ import annotations
+from rclpy.node import Node
+import rclpy
 
 import sys
 import os
@@ -32,8 +34,6 @@ _MODULES = os.path.join(_DIR, "..", "modules")
 if _MODULES not in sys.path:
     sys.path.insert(0, _MODULES)
 
-import rclpy
-from rclpy.node import Node
 
 try:
     from .camera_tf_publisher import CameraTFPublisher      # Step 1

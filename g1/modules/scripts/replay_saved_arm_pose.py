@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+from dds_env import ensure_cyclonedds_environment
 
 import argparse
 import json
@@ -18,7 +19,6 @@ PARENT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 if PARENT_DIR not in sys.path:
     sys.path.insert(0, PARENT_DIR)
 
-from dds_env import ensure_cyclonedds_environment
 
 ensure_cyclonedds_environment()
 
@@ -52,7 +52,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--file", default=DEFAULT_POSE_FILE, help="Saved JSON pose file.")
     parser.add_argument("--pose", default=None, help="Pose name to replay.")
-    parser.add_argument("--index", type=int, default=None, help="Pose index to replay if no name is given.")
+    parser.add_argument("--index", type=int, default=None,
+                        help="Pose index to replay if no name is given.")
     parser.add_argument("--list", action="store_true", help="List poses in the file and exit.")
     parser.add_argument("--iface", default="eth0", help="Network interface for DDS traffic.")
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id.")
@@ -65,7 +66,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--kp", type=float, default=30.0, help="Arm hold proportional gain.")
     parser.add_argument("--kd", type=float, default=1.5, help="Arm hold derivative gain.")
-    parser.add_argument("--waist-kp", type=float, default=30.0, help="Waist hold proportional gain.")
+    parser.add_argument("--waist-kp", type=float, default=30.0,
+                        help="Waist hold proportional gain.")
     parser.add_argument("--waist-kd", type=float, default=1.5, help="Waist hold derivative gain.")
     parser.add_argument(
         "--use-saved-waist",

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+from sdk_client import Robot
 
 import argparse
 import importlib
@@ -42,7 +43,8 @@ try:
     import numpy as np
     import pyqtgraph as pg
 except ImportError as exc:
-    raise SystemExit("numpy and pyqtgraph are required. Install them with: pip install numpy pyqtgraph") from exc
+    raise SystemExit(
+        "numpy and pyqtgraph are required. Install them with: pip install numpy pyqtgraph") from exc
 
 try:
     from unitree_sdk2py.core.channel import ChannelSubscriber
@@ -52,8 +54,6 @@ except ImportError as exc:
         "unitree_sdk2py is not installed. Install it with:\n"
         "  pip install -e <path-to-unitree_sdk2_python>"
     ) from exc
-
-from sdk_client import Robot
 
 
 DEFAULT_RGB_TOPIC = ""
@@ -403,7 +403,8 @@ class ImuSubscriber:
     def __init__(self, topic: str) -> None:
         self.topic = str(topic)
         self._lock = threading.Lock()
-        self._values: dict[str, Any] = {"rpy": None, "gyro": None, "acc": None, "quat": None, "temp": None}
+        self._values: dict[str, Any] = {"rpy": None,
+                                        "gyro": None, "acc": None, "quat": None, "temp": None}
         self._timestamp = 0.0
         self._sub = ChannelSubscriber(self.topic, SensorImu_)
         self._sub.Init(self._callback, 20)
@@ -525,7 +526,8 @@ class MonitorBackend:
                 if depth_frame is None:
                     status_lines.append(f"Waiting for DDS depth on {self.args.depth_topic}")
             else:
-                status_lines.append("Depth feed not configured. Pass --depth-topic if the board exposes one.")
+                status_lines.append(
+                    "Depth feed not configured. Pass --depth-topic if the board exposes one.")
 
             body = self.robot.get_imu()
             body_imu = {
@@ -543,7 +545,8 @@ class MonitorBackend:
                 secondary_imu, secondary_ts = self._secondary_imu.snapshot()
                 timestamps["secondary_imu"] = secondary_ts
                 if secondary_ts <= 0.0:
-                    status_lines.append(f"Waiting for secondary IMU on {self.args.secondary_imu_topic}")
+                    status_lines.append(
+                        f"Waiting for secondary IMU on {self.args.secondary_imu_topic}")
             else:
                 status_lines.append("Secondary or crotch IMU subscription disabled.")
 
@@ -573,7 +576,8 @@ class MonitorBackend:
             else:
                 status_lines.append("Waiting for rt/lowstate joint telemetry.")
 
-            lidar_points = self.robot.get_lidar_points(max_points=max(100, int(self.args.lidar_max_points)))
+            lidar_points = self.robot.get_lidar_points(
+                max_points=max(100, int(self.args.lidar_max_points)))
             if not lidar_points:
                 status_lines.append("Waiting for lidar point cloud.")
 
@@ -706,7 +710,8 @@ class SensorMonitorWindow(QMainWindow):
         joint_box = QGroupBox("Joint States and Torques")
         joint_layout = QVBoxLayout(joint_box)
         self.joint_table = QTableWidget(0, 4)
-        self.joint_table.setHorizontalHeaderLabels(["Joint", "q [rad]", "dq [rad/s]", "tau_est [Nm]"])
+        self.joint_table.setHorizontalHeaderLabels(
+            ["Joint", "q [rad]", "dq [rad/s]", "tau_est [Nm]"])
         self.joint_table.verticalHeader().setVisible(False)
         self.joint_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.joint_table.setSelectionMode(QTableWidget.NoSelection)

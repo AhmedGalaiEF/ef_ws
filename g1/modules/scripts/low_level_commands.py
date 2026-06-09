@@ -312,9 +312,11 @@ class LowLevelJointExample:
         start = float(hand_targets[hand][joint_idx])
         target = clamp(start + float(self.args.offset), lo, hi)
         if math.isclose(start, target, abs_tol=1e-6):
-            print(f"skip {hand}_hand {joint_idx} {HAND_JOINT_NAMES[joint_idx]}: start {start:.3f} already at limit")
+            print(
+                f"skip {hand}_hand {joint_idx} {HAND_JOINT_NAMES[joint_idx]}: start {start:.3f} already at limit")
             return
-        print(f"{hand}_hand {joint_idx} {HAND_JOINT_NAMES[joint_idx]}: {start:+.3f} -> {target:+.3f}")
+        print(
+            f"{hand}_hand {joint_idx} {HAND_JOINT_NAMES[joint_idx]}: {start:+.3f} -> {target:+.3f}")
         steps = max(1, int(float(self.args.duration_per_joint) * self.rate_hz))
         for step in range(steps + 1):
             ratio = smoothstep(step / steps)
@@ -365,15 +367,18 @@ class LowLevelJointExample:
                 for value, lo, hi in zip(hand_targets[hand], HAND_MIN_LIMITS[hand], HAND_MAX_LIMITS[hand])
             ]
 
-        print(f"mode_machine={mode_machine}; holding current pose for {self.args.initial_hold_s:.1f}s")
+        print(
+            f"mode_machine={mode_machine}; holding current pose for {self.args.initial_hold_s:.1f}s")
         self.hold_all(body_targets, hand_targets, mode_machine, self.args.initial_hold_s)
 
         try:
             for local_idx, (name, motor_idx, lo, hi) in enumerate(BODY_JOINTS):
-                self.exercise_body_joint(name, local_idx, motor_idx, lo, hi, body_targets, hand_targets, mode_machine)
+                self.exercise_body_joint(name, local_idx, motor_idx, lo, hi,
+                                         body_targets, hand_targets, mode_machine)
             for hand in list(hand_targets):
                 for joint_idx in range(7):
-                    self.exercise_hand_joint(hand, joint_idx, hand_targets, body_targets, mode_machine)
+                    self.exercise_hand_joint(hand, joint_idx, hand_targets,
+                                             body_targets, mode_machine)
             print(f"done; holding final pose for {self.args.final_hold_s:.1f}s")
             self.hold_all(body_targets, hand_targets, mode_machine, self.args.final_hold_s)
         finally:
@@ -391,19 +396,28 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--iface", default="eth0", help="DDS network interface.")
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain ID.")
-    parser.add_argument("--timeout", type=float, default=5.0, help="Seconds to wait for SDK RPC/state.")
+    parser.add_argument("--timeout", type=float, default=5.0,
+                        help="Seconds to wait for SDK RPC/state.")
     parser.add_argument("--offset", type=float, default=0.4, help="Joint offset in radians.")
-    parser.add_argument("--duration-per-joint", type=float, default=8.0, help="Ramp duration per joint.")
-    parser.add_argument("--initial-hold-s", type=float, default=2.0, help="Hold current pose before moving.")
-    parser.add_argument("--final-hold-s", type=float, default=2.0, help="Hold final pose before exit.")
+    parser.add_argument("--duration-per-joint", type=float,
+                        default=8.0, help="Ramp duration per joint.")
+    parser.add_argument("--initial-hold-s", type=float, default=2.0,
+                        help="Hold current pose before moving.")
+    parser.add_argument("--final-hold-s", type=float, default=2.0,
+                        help="Hold final pose before exit.")
     parser.add_argument("--rate-hz", type=float, default=250.0, help="Low-level publish rate.")
     parser.add_argument("--hand-kp", type=float, default=0.5, help="Dex3 hand kp.")
     parser.add_argument("--hand-kd", type=float, default=0.1, help="Dex3 hand kd.")
-    parser.add_argument("--hands", choices=HAND_CHOICES, default="both", help="Which Dex3 hand(s) to include.")
-    parser.add_argument("--require-hands", action="store_true", help="Fail if selected Dex3 hand state is unavailable.")
-    parser.add_argument("--return-each-joint", action="store_true", help="Return each joint to its start before moving on.")
-    parser.add_argument("--zero-gains-on-exit", action="store_true", help="Send one zero-gain command on exit.")
-    parser.add_argument("--yes", action="store_true", help="Actually release motion switcher and send low-level commands.")
+    parser.add_argument("--hands", choices=HAND_CHOICES, default="both",
+                        help="Which Dex3 hand(s) to include.")
+    parser.add_argument("--require-hands", action="store_true",
+                        help="Fail if selected Dex3 hand state is unavailable.")
+    parser.add_argument("--return-each-joint", action="store_true",
+                        help="Return each joint to its start before moving on.")
+    parser.add_argument("--zero-gains-on-exit", action="store_true",
+                        help="Send one zero-gain command on exit.")
+    parser.add_argument("--yes", action="store_true",
+                        help="Actually release motion switcher and send low-level commands.")
     return parser.parse_args()
 
 

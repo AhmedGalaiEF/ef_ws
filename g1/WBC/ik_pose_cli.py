@@ -32,6 +32,13 @@ Key bindings
   q / Esc              quit
 """
 from __future__ import annotations
+from hand_pose_navigation_copy.arm_ik import ArmIK
+from hand_pose_navigation_copy.arm_fk import (
+    ArmFK, LEFT_ARM_JOINTS, RIGHT_ARM_JOINTS,
+    _LEFT_SHOULDER_IN_BASE, _RIGHT_SHOULDER_IN_BASE,
+)
+from sdk_client import Robot
+from dds_env import ensure_cyclonedds_environment
 
 import argparse
 import curses
@@ -45,14 +52,13 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 # ── Path setup ────────────────────────────────────────────────────────────────
-SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
-ROOT_DIR    = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 MODULES_DIR = os.path.join(ROOT_DIR, "modules")
 for _p in (ROOT_DIR, MODULES_DIR):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from dds_env import ensure_cyclonedds_environment
 ensure_cyclonedds_environment()
 
 try:
@@ -65,49 +71,43 @@ try:
 except ImportError as exc:
     raise SystemExit("unitree_sdk2py not installed.") from exc
 
-from sdk_client import Robot
 
 # FK/IK package at <ROOT_DIR>/hand_pose_navigation_copy/
-from hand_pose_navigation_copy.arm_fk import (
-    ArmFK, LEFT_ARM_JOINTS, RIGHT_ARM_JOINTS,
-    _LEFT_SHOULDER_IN_BASE, _RIGHT_SHOULDER_IN_BASE,
-)
-from hand_pose_navigation_copy.arm_ik import ArmIK
 
 # ── Joint indices ─────────────────────────────────────────────────────────────
-WAIST_JOINTS      = [12, 13, 14]
+WAIST_JOINTS = [12, 13, 14]
 UPPER_BODY_JOINTS = WAIST_JOINTS + LEFT_ARM_JOINTS + RIGHT_ARM_JOINTS
 
 ARM_SDK_WEIGHT_INDEX = 29
-WAIST_HOLD_KP        = 480.0
-WAIST_HOLD_KD        = 12.0
-DEFAULT_ARM_KP       = 30.0
-DEFAULT_ARM_KD       = 1.5
+WAIST_HOLD_KP = 480.0
+WAIST_HOLD_KD = 12.0
+DEFAULT_ARM_KP = 30.0
+DEFAULT_ARM_KD = 1.5
 
 ARM_CONTROL_MODES = ("both", "left", "right")
 ARM_JOINTS: Dict[str, List[int]] = {
-    "left":  LEFT_ARM_JOINTS,
+    "left": LEFT_ARM_JOINTS,
     "right": RIGHT_ARM_JOINTS,
 }
 JOINT_LABELS = ("sh_p", "sh_r", "sh_y", "elbow", "wr_r", "wr_p", "wr_y")
 
 _SHOULDER_ORIGIN: Dict[str, np.ndarray] = {
-    "left":  _LEFT_SHOULDER_IN_BASE,
+    "left": _LEFT_SHOULDER_IN_BASE,
     "right": _RIGHT_SHOULDER_IN_BASE,
 }
 
 # ── DOF table ─────────────────────────────────────────────────────────────────
 DOF_NAMES = ("x", "y", "z", "roll", "pitch", "yaw")
-DOF_UNITS = ("m",  "m", "m", "rad",  "rad",   "rad")
-N_DOFS    = 6
+DOF_UNITS = ("m", "m", "m", "rad", "rad", "rad")
+N_DOFS = 6
 
 # ── Colour pairs ──────────────────────────────────────────────────────────────
-C_GREEN  = 1
+C_GREEN = 1
 C_YELLOW = 2
-C_RED    = 3
-C_CYAN   = 4
-C_SEL    = 5
-C_BOLD   = 6
+C_RED = 3
+C_CYAN = 4
+C_SEL = 5
+C_BOLD = 6
 
 
 # ── Rotation helpers ──────────────────────────────────────────────────────────
@@ -116,13 +116,16 @@ def _Rx(a: float) -> np.ndarray:
     c, s = math.cos(a), math.sin(a)
     return np.array([[1, 0, 0], [0, c, -s], [0, s, c]], dtype=np.float64)
 
+
 def _Ry(a: float) -> np.ndarray:
     c, s = math.cos(a), math.sin(a)
     return np.array([[c, 0, s], [0, 1, 0], [-s, 0, c]], dtype=np.float64)
 
+
 def _Rz(a: float) -> np.ndarray:
     c, s = math.cos(a), math.sin(a)
     return np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]], dtype=np.float64)
+
 
 _ROT_BY_AXIS = (_Rx, _Ry, _Rz)   # axis index 0/1/2 = roll/pitch/yaw
 
@@ -131,13 +134,13 @@ def _rpy_from_R(R: np.ndarray) -> Tuple[float, float, float]:
     """ZYX Euler angles (roll, pitch, yaw) from 3×3 rotation matrix."""
     sy = math.sqrt(R[0, 0] ** 2 + R[1, 0] ** 2)
     if sy > 1e-6:
-        roll  = math.atan2( R[2, 1],  R[2, 2])
-        pitch = math.atan2(-R[2, 0],  sy)
-        yaw   = math.atan2( R[1, 0],  R[0, 0])
+        roll = math.atan2(R[2, 1], R[2, 2])
+        pitch = math.atan2(-R[2, 0], sy)
+        yaw = math.atan2(R[1, 0], R[0, 0])
     else:
-        roll  = math.atan2(-R[1, 2],  R[1, 1])
-        pitch = math.atan2(-R[2, 0],  sy)
-        yaw   = 0.0
+        roll = math.atan2(-R[1, 2], R[1, 1])
+        pitch = math.atan2(-R[2, 0], sy)
+        yaw = 0.0
     return roll, pitch, yaw
 
 
@@ -178,9 +181,9 @@ def _resolve_lowstate_type():
 class UpperBodyStateSubscriber:
     def __init__(self, joints: List[int]) -> None:
         self._joints = [int(j) for j in joints]
-        self._lock   = threading.Lock()
+        self._lock = threading.Lock()
         self._pos: Dict[int, float] = {}
-        self._ts  = 0.0
+        self._ts = 0.0
         t = _resolve_lowstate_type()
         if t is None:
             raise RuntimeError("LowState_ not found in unitree_sdk2py.")
@@ -194,7 +197,7 @@ class UpperBodyStateSubscriber:
             return
         with self._lock:
             self._pos = pos
-            self._ts  = time.time()
+            self._ts = time.time()
 
     def snapshot(self) -> Optional[Tuple[Dict[int, float], float]]:
         with self._lock:
@@ -227,9 +230,9 @@ class ArmSDKPublisher:
         for j in UPPER_BODY_JOINTS:
             c = self._cmd.motor_cmd[j]
             c.mode = 1
-            c.q    = float(targets[j])
-            c.dq   = 0.0
-            c.tau  = 0.0
+            c.q = float(targets[j])
+            c.dq = 0.0
+            c.tau = 0.0
             if j in WAIST_JOINTS:
                 c.kp = float(waist_kp)
                 c.kd = float(waist_kd)
@@ -243,11 +246,11 @@ class ArmSDKPublisher:
         for j in UPPER_BODY_JOINTS:
             c = self._cmd.motor_cmd[j]
             c.mode = 1
-            c.q    = float(hold[j])
-            c.dq   = 0.0
-            c.kp   = 0.0
-            c.kd   = 0.0
-            c.tau  = 0.0
+            c.q = float(hold[j])
+            c.dq = 0.0
+            c.kp = 0.0
+            c.kd = 0.0
+            c.tau = 0.0
         self._cmd.crc = self._crc.Crc(self._cmd)
         self._pub.Write(self._cmd)
 
@@ -256,15 +259,15 @@ class ArmSDKPublisher:
 
 class IKPoseCLI:
     def __init__(self, args: argparse.Namespace) -> None:
-        self.iface            = str(args.iface)
-        self.domain_id        = int(args.domain_id)
-        self.rate_hz          = max(1.0, float(args.rate_hz))
-        self.max_speed        = max(0.01, float(args.speed_rad_s))
-        self.arm_kp           = float(args.kp)
-        self.arm_kd           = float(args.kd)
-        self.waist_kp         = float(WAIST_HOLD_KP)
-        self.waist_kd         = float(WAIST_HOLD_KD)
-        self.waist_enabled    = True   # False = waist released (kp/kd = 0)
+        self.iface = str(args.iface)
+        self.domain_id = int(args.domain_id)
+        self.rate_hz = max(1.0, float(args.rate_hz))
+        self.max_speed = max(0.01, float(args.speed_rad_s))
+        self.arm_kp = float(args.kp)
+        self.arm_kd = float(args.kd)
+        self.waist_kp = float(WAIST_HOLD_KP)
+        self.waist_kd = float(WAIST_HOLD_KD)
+        self.waist_enabled = True   # False = waist released (kp/kd = 0)
         self.arm_control_mode = str(args.arm_control)
 
         # EE step sizes (per key-press)
@@ -279,20 +282,20 @@ class IKPoseCLI:
         # current_targets  : what is actively being sent (ramped)
         # desired_targets  : goal the ramp is tracking toward
         self.latest_positions: Dict[int, float] = {j: 0.0 for j in UPPER_BODY_JOINTS}
-        self.current_targets:  Dict[int, float] = {j: 0.0 for j in UPPER_BODY_JOINTS}
-        self.desired_targets:  Dict[int, float] = {j: 0.0 for j in UPPER_BODY_JOINTS}
+        self.current_targets: Dict[int, float] = {j: 0.0 for j in UPPER_BODY_JOINTS}
+        self.desired_targets: Dict[int, float] = {j: 0.0 for j in UPPER_BODY_JOINTS}
 
-        self.seeded       = False
-        self.armed        = True    # False while arms are released
-        self._running     = True
-        self.status       = "Waiting for rt/lowstate…"
+        self.seeded = False
+        self.armed = True    # False while arms are released
+        self._running = True
+        self.status = "Waiting for rt/lowstate…"
 
         # DOF navigation
         self.dof_idx = 0   # 0–5: x, y, z, roll, pitch, yaw
 
         # ── EE target poses — absolute hand pose in base_link frame ───────
         self.target_T: Dict[str, np.ndarray] = {
-            "left":  np.eye(4, dtype=np.float64),
+            "left": np.eye(4, dtype=np.float64),
             "right": np.eye(4, dtype=np.float64),
         }
         self._home_T: Dict[str, np.ndarray] = {
@@ -302,23 +305,23 @@ class IKPoseCLI:
         # ── FK / IK ───────────────────────────────────────────────────────
         # IK tolerances tuned for fast warm-start solves (~3 ms each)
         self._fk: Dict[str, ArmFK] = {
-            "left":  ArmFK("left",  "urdf"),
+            "left": ArmFK("left", "urdf"),
             "right": ArmFK("right", "urdf"),
         }
         self._ik: Dict[str, ArmIK] = {
-            "left":  ArmIK("left",  "dls", max_iter=10, tol_pos_m=0.005, tol_rot_rad=0.02),
+            "left": ArmIK("left", "dls", max_iter=10, tol_pos_m=0.005, tol_rot_rad=0.02),
             "right": ArmIK("right", "dls", max_iter=10, tol_pos_m=0.005, tol_rot_rad=0.02),
         }
         self.ik_info: Dict[str, Dict] = {
-            "left":  {"success": None, "error_pos_m": 0.0, "error_rot_rad": 0.0, "iterations": 0},
+            "left": {"success": None, "error_pos_m": 0.0, "error_rot_rad": 0.0, "iterations": 0},
             "right": {"success": None, "error_pos_m": 0.0, "error_rot_rad": 0.0, "iterations": 0},
         }
 
         # ── Robot objects ─────────────────────────────────────────────────
         ChannelFactoryInitialize(self.domain_id, self.iface)
         self.state_sub = UpperBodyStateSubscriber(UPPER_BODY_JOINTS)
-        self.pub       = ArmSDKPublisher()
-        self.robot     = Robot(iface=self.iface, domain_id=self.domain_id, auto_start_sensors=True)
+        self.pub = ArmSDKPublisher()
+        self.robot = Robot(iface=self.iface, domain_id=self.domain_id, auto_start_sensors=True)
 
         self._seed_from_state()
 
@@ -332,8 +335,8 @@ class IKPoseCLI:
             if snap:
                 pos, _ = snap
                 self.latest_positions = dict(pos)
-                self.current_targets  = dict(pos)
-                self.desired_targets  = dict(pos)
+                self.current_targets = dict(pos)
+                self.desired_targets = dict(pos)
                 self.seeded = True
                 self._sync_ee_from_joints()
                 self.status = f"Connected on {self.iface}"
@@ -376,7 +379,7 @@ class IKPoseCLI:
         """Increment the selected DOF on each active arm's EE target, then solve IK."""
         for arm in self._active_arms():
             T_prev = self.target_T[arm].copy()
-            T_new  = T_prev.copy()
+            T_new = T_prev.copy()
 
             arm_delta = delta
             if self.dof_idx == 1:
@@ -417,8 +420,8 @@ class IKPoseCLI:
             return False
 
         # Clamp each joint's delta to ±max_dq per key-press
-        delta  = q_sol - q_init
-        delta  = np.clip(delta, -self.max_dq, self.max_dq)
+        delta = q_sol - q_init
+        delta = np.clip(delta, -self.max_dq, self.max_dq)
         q_apply = q_init + delta
 
         for i, j in enumerate(joints):
@@ -433,7 +436,7 @@ class IKPoseCLI:
         for j in UPPER_BODY_JOINTS:
             cur = float(self.current_targets[j])
             des = float(self.desired_targets[j])
-            d   = des - cur
+            d = des - cur
             if abs(d) <= step:
                 self.current_targets[j] = des
             else:
@@ -445,7 +448,7 @@ class IKPoseCLI:
             pos, _ = snap
             self.latest_positions = pos
             if not self.seeded:
-                self.seeded          = True
+                self.seeded = True
                 self.current_targets = dict(pos)
                 self.desired_targets = dict(pos)
                 self._sync_ee_from_joints()
@@ -454,7 +457,7 @@ class IKPoseCLI:
             return
 
         now = time.monotonic()
-        dt  = max(1.0 / self.rate_hz, now - self._last_tick)
+        dt = max(1.0 / self.rate_hz, now - self._last_tick)
         self._last_tick = now
 
         self._ramp_step(dt)
@@ -505,20 +508,20 @@ class IKPoseCLI:
 
         # ── Title ─────────────────────────────────────────────────────────
         title = "6D EE IK Pose Control"
-        conn_attr  = self._cp(C_GREEN if self.seeded else C_RED) | curses.A_BOLD
-        armed_attr = self._cp(C_GREEN if self.armed  else C_RED) | curses.A_BOLD
+        conn_attr = self._cp(C_GREEN if self.seeded else C_RED) | curses.A_BOLD
+        armed_attr = self._cp(C_GREEN if self.armed else C_RED) | curses.A_BOLD
         self._addstr(win, row, 0, "─" * w, self._cp(C_CYAN))
         self._addstr(win, row, max(0, (w - len(title)) // 2), title,
                      self._cp(C_CYAN) | curses.A_BOLD)
-        conn_txt  = "CONNECTED" if self.seeded else "WAITING"
+        conn_txt = "CONNECTED" if self.seeded else "WAITING"
         armed_txt = "ARMED" if self.armed else "RELEASED"
-        self._addstr(win, row, w - 22, f"[{conn_txt}]",  conn_attr)
+        self._addstr(win, row, w - 22, f"[{conn_txt}]", conn_attr)
         self._addstr(win, row, w - 12, f"[{armed_txt}]", armed_attr)
         row += 1
 
         # ── Parameter bar ─────────────────────────────────────────────────
         waist_lbl = "ON" if self.waist_enabled else "OFF"
-        arm_txt   = f"  Arm: [{self.arm_control_mode.upper()}]  (m)  Waist: [{waist_lbl}]  (w)"
+        arm_txt = f"  Arm: [{self.arm_control_mode.upper()}]  (m)  Waist: [{waist_lbl}]  (w)"
         param_txt = (f"ramp {self.max_speed:.3f} r/s (s)  "
                      f"max_dq {self.max_dq:.3f} rad (d/[/])")
         self._addnstr(win, row, 0, arm_txt, w // 2)
@@ -531,9 +534,9 @@ class IKPoseCLI:
         row += 1
 
         # ── DOF table ─────────────────────────────────────────────────────
-        disp    = self._display_arm()
-        T_cur   = self._fk_live(disp) if self.seeded else np.eye(4)
-        T_tgt   = self.target_T[disp]
+        disp = self._display_arm()
+        T_cur = self._fk_live(disp) if self.seeded else np.eye(4)
+        T_tgt = self.target_T[disp]
         cur_rpy = _rpy_from_R(T_cur[:3, :3])
         tgt_rpy = _rpy_from_R(T_tgt[:3, :3])
 
@@ -543,7 +546,7 @@ class IKPoseCLI:
         row += 1
 
         for i in range(N_DOFS):
-            sel  = (i == self.dof_idx)
+            sel = (i == self.dof_idx)
             mark = "▶" if sel else " "
             step = self._ee_step(i)
             unit = DOF_UNITS[i]
@@ -572,20 +575,20 @@ class IKPoseCLI:
             if self.arm_control_mode not in ("both", arm):
                 continue
             info = self.ik_info[arm]
-            ok   = info.get("success")
+            ok = info.get("success")
             if ok is None:
-                txt  = f"  IK {arm:<5}: pending"
+                txt = f"  IK {arm:<5}: pending"
                 attr = 0
             elif ok:
-                txt  = (f"  IK {arm:<5}: OK  "
-                        f"pos={info['error_pos_m']:.4f}m  "
-                        f"rot={info['error_rot_rad']:.4f}rad  "
-                        f"{info['iterations']}it")
+                txt = (f"  IK {arm:<5}: OK  "
+                       f"pos={info['error_pos_m']:.4f}m  "
+                       f"rot={info['error_rot_rad']:.4f}rad  "
+                       f"{info['iterations']}it")
                 attr = self._cp(C_GREEN)
             else:
-                txt  = (f"  IK {arm:<5}: FAIL — target rolled back  "
-                        f"(pos={info['error_pos_m']:.4f}m  "
-                        f"rot={info['error_rot_rad']:.4f}rad)")
+                txt = (f"  IK {arm:<5}: FAIL — target rolled back  "
+                       f"(pos={info['error_pos_m']:.4f}m  "
+                       f"rot={info['error_rot_rad']:.4f}rad)")
                 attr = self._cp(C_RED)
             self._addnstr(win, row, 0, txt, w, attr)
             row += 1
@@ -609,9 +612,9 @@ class IKPoseCLI:
             if self.arm_control_mode not in ("both", arm):
                 continue
             prefix = f"  {arm.upper():<5}: "
-            lbl    = "  ".join(f"{n:<5}" for n in JOINT_LABELS)
-            tgt_v  = "  ".join(f"{self.desired_targets[j]:+.3f}" for j in joints)
-            liv_v  = "  ".join(
+            lbl = "  ".join(f"{n:<5}" for n in JOINT_LABELS)
+            tgt_v = "  ".join(f"{self.desired_targets[j]:+.3f}" for j in joints)
+            liv_v = "  ".join(
                 f"{self.latest_positions.get(j, self.current_targets[j]):+.3f}"
                 for j in joints
             )
@@ -619,8 +622,8 @@ class IKPoseCLI:
             row += 1
             if row < h - 6:
                 half = w // 2
-                self._addnstr(win, row, 0,     prefix + tgt_v, half)
-                self._addnstr(win, row, half,  prefix + liv_v, w - half,
+                self._addnstr(win, row, 0, prefix + tgt_v, half)
+                self._addnstr(win, row, half, prefix + liv_v, w - half,
                               self._cp(C_YELLOW))
                 row += 1
 
@@ -806,12 +809,12 @@ class IKPoseCLI:
         if curses.has_colors():
             curses.start_color()
             curses.use_default_colors()
-            curses.init_pair(C_GREEN,  curses.COLOR_GREEN,  -1)
+            curses.init_pair(C_GREEN, curses.COLOR_GREEN, -1)
             curses.init_pair(C_YELLOW, curses.COLOR_YELLOW, -1)
-            curses.init_pair(C_RED,    curses.COLOR_RED,    -1)
-            curses.init_pair(C_CYAN,   curses.COLOR_CYAN,   -1)
-            curses.init_pair(C_SEL,    curses.COLOR_BLACK,  curses.COLOR_WHITE)
-            curses.init_pair(C_BOLD,   curses.COLOR_BLACK,  curses.COLOR_CYAN)
+            curses.init_pair(C_RED, curses.COLOR_RED, -1)
+            curses.init_pair(C_CYAN, curses.COLOR_CYAN, -1)
+            curses.init_pair(C_SEL, curses.COLOR_BLACK, curses.COLOR_WHITE)
+            curses.init_pair(C_BOLD, curses.COLOR_BLACK, curses.COLOR_CYAN)
 
         curses.curs_set(0)
         stdscr.timeout(20)   # 50 fps
@@ -848,15 +851,15 @@ def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
         description="6D end-effector IK pose control TUI for the G1 arms"
     )
-    p.add_argument("--iface",        default="eth0",  help="DDS network interface")
-    p.add_argument("--domain-id",    type=int,   default=0)
-    p.add_argument("--rate-hz",      type=float, default=25.0,  help="Publish rate Hz")
-    p.add_argument("--speed-rad-s",  type=float, default=0.2,
+    p.add_argument("--iface", default="eth0", help="DDS network interface")
+    p.add_argument("--domain-id", type=int, default=0)
+    p.add_argument("--rate-hz", type=float, default=25.0, help="Publish rate Hz")
+    p.add_argument("--speed-rad-s", type=float, default=0.2,
                    help="Joint ramp speed rad/s (how fast joints move to new target)")
-    p.add_argument("--max-dq",       type=float, default=0.2,
+    p.add_argument("--max-dq", type=float, default=0.2,
                    help="Max joint change applied per IK key-press (rad, default 0.2)")
-    p.add_argument("--kp",           type=float, default=DEFAULT_ARM_KP)
-    p.add_argument("--kd",           type=float, default=DEFAULT_ARM_KD)
+    p.add_argument("--kp", type=float, default=DEFAULT_ARM_KP)
+    p.add_argument("--kd", type=float, default=DEFAULT_ARM_KD)
     p.add_argument(
         "--arm-control",
         choices=ARM_CONTROL_MODES,

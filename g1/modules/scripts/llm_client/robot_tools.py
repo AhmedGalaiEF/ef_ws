@@ -88,9 +88,10 @@ def build_robot_tools(robot: Any) -> Tuple[Dict[str, Callable[..., Any]], List[D
         # Map the rough height/length targets onto the SDK's per-joint deltas
         # (extend_arm_forward signs/clamps internally).
         h = max(-0.30, min(0.30, float(height_m)))
-        l = max(0.10, min(0.60, float(length_m)))
-        shoulder_pitch_delta = max(0.10, min(0.90, 0.50 - h * 1.5))   # higher target -> less pitch down
-        elbow_delta = max(0.10, min(1.40, 1.30 - l * 1.8))             # longer reach -> less bent
+        reach = max(0.10, min(0.60, float(length_m)))
+        # higher target -> less pitch down
+        shoulder_pitch_delta = max(0.10, min(0.90, 0.50 - h * 1.5))
+        elbow_delta = max(0.10, min(1.40, 1.30 - reach * 1.8))             # longer reach -> less bent
         result = robot.extend_arm_forward(
             arm=side,
             duration_s=float(duration_s),
