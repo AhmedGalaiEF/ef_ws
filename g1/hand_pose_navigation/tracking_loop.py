@@ -17,9 +17,9 @@ converges to within tolerance of the target, or on timeout.
 """
 from __future__ import annotations
 
-import time
-import threading
 import math
+import threading
+import time
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional
 
@@ -61,7 +61,7 @@ class LoopStatus:
         print(entry)
 
     def to_dict(self) -> Dict:
-        def finite_or_none(value: float):
+        def finite_or_none(value: float) -> Optional[float]:
             return value if math.isfinite(value) else None
 
         return {
@@ -203,7 +203,10 @@ class TrackingLoop:
                 self._sleep(dt, t0)
                 continue
 
-            detection: Optional[DetectionResult] = self.detector.detect(rgb_bgr, depth_m)
+            detection: Optional[DetectionResult] = self.detector.detect(
+                rgb_bgr,
+                depth_m,
+            )
             if detection is None:
                 self._status.detection_failures += 1
                 self._status.record("[Step 2] No detection — skipping.")
@@ -239,11 +242,17 @@ class TrackingLoop:
                 continue
 
             # ── Check if already converged ────────────────────────────
-            err_pos, err_rot = self._pose_error_scalars(T_base_desired, T_base_hand)
+            err_pos, err_rot = self._pose_error_scalars(
+                T_base_desired,
+                T_base_hand,
+            )
             self._status.last_error_pos_m = err_pos
             self._status.last_error_rot_rad = err_rot
 
-            if err_pos < self.convergence_pos_m and err_rot < self.convergence_rot_rad:
+            if (
+                err_pos < self.convergence_pos_m
+                and err_rot < self.convergence_rot_rad
+            ):
                 self._status.converged = True
                 self._status.record(
                     f"[Step 10] Converged! pos_err={err_pos:.4f}m  "
@@ -254,7 +263,10 @@ class TrackingLoop:
                 break
 
             # ── Step 7: IK ───────────────────────────────────────────
-            q_arm_desired, ik_info = self.ik.solve(T_base_desired, q_init=q_arm_cur)
+            q_arm_desired, ik_info = self.ik.solve(
+                T_base_desired,
+                q_init=q_arm_cur,
+            )
             if q_arm_desired is None:
                 self._status.ik_failures += 1
                 self._status.record(
@@ -272,8 +284,11 @@ class TrackingLoop:
                 continue
 
             # ── Step 9: send command ─────────────────────────────────
-            move_duration = min(dt * 1.5, 0.3)   # short smooth step each iteration
-            result = self.executor.execute(
+            move_duration = min(
+                dt * 1.5,
+                0.3,
+            )  # short smooth step each iteration
+            self.executor.execute(
                 q_arm_desired,
                 duration_s=move_duration,
                 q_arm_start=q_arm_cur,
@@ -305,12 +320,24 @@ class TrackingLoop:
             return np.zeros(30)
 
     @staticmethod
-    def _pose_error_scalars(T_des: np.ndarray, T_cur: np.ndarray):
+    def _pose_error_scalars(
+        T_des: np.ndarray,
+        T_cur: np.ndarray,
+    ) -> tuple[float, float]:
         pos_err = float(np.linalg.norm(T_des[:3, 3] - T_cur[:3, 3]))
         R_err = T_des[:3, :3] @ T_cur[:3, :3].T
-        rot_err = float(np.linalg.norm(
-            np.array([R_err[2,1]-R_err[1,2], R_err[0,2]-R_err[2,0], R_err[1,0]-R_err[0,1]])
-        ) * 0.5)
+        rot_err = float(
+            np.linalg.norm(
+                np.array(
+                    [
+                        R_err[2, 1] - R_err[1, 2],
+                        R_err[0, 2] - R_err[2, 0],
+                        R_err[1, 0] - R_err[0, 1],
+                    ]
+                )
+            )
+            * 0.5
+        )
         return pos_err, rot_err
 
     @staticmethod

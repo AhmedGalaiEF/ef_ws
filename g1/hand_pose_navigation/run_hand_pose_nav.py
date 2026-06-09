@@ -37,13 +37,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--standoff-m", type=float, default=0.08)
     parser.add_argument("--rate-hz", type=float, default=10.0)
     parser.add_argument("--timeout-s", type=float, default=30.0)
-    parser.add_argument("--ik-solver", choices=("dls", "scipy", "pin"), default="dls")
+    parser.add_argument(
+        "--ik-solver",
+        choices=("dls", "scipy", "pin"),
+        default="dls",
+    )
     parser.add_argument("--iface", default="eth0")
     parser.add_argument("--domain-id", type=int, default=0)
     parser.add_argument(
         "--use-ros-tf",
         action="store_true",
-        help="Use the ROS 2 TF-based node path. Default uses direct in-process TF.",
+        help=(
+            "Use the ROS 2 TF-based node path. Default uses direct "
+            "in-process TF."
+        ),
     )
     parser.add_argument(
         "--ros-rmw",
@@ -56,7 +63,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--mock",
         action="store_true",
-        help="Use the built-in mock robot instead of connecting to sdk_client.",
+        help=(
+            "Use the built-in mock robot instead of connecting to sdk_client."
+        ),
     )
     parser.add_argument("--web-host", default="0.0.0.0")
     parser.add_argument("--web-port", type=int, default=8088)
@@ -74,7 +83,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--no-sdk-preinit",
         action="store_true",
-        help="Let HandPoseNavNode construct sdk_client.Robot after ROS nodes start.",
+        help=(
+            "Let HandPoseNavNode construct sdk_client.Robot after ROS nodes "
+            "start."
+        ),
     )
     return parser.parse_args()
 
@@ -112,6 +124,8 @@ def main() -> int:
 
         nav = DirectHandPoseNav(config_from_args(args))
         server = None
+        import time
+
         try:
             if not args.no_web:
                 server, _thread = start_status_server(
@@ -119,9 +133,10 @@ def main() -> int:
                     host=args.web_host,
                     port=args.web_port,
                 )
-                print(f"Status webpage: http://{args.web_host}:{args.web_port}/")
+                print(
+                    f"Status webpage: http://{args.web_host}:{args.web_port}/"
+                )
 
-            import time
             if args.no_web:
                 while nav.status_snapshot().get("running", False):
                     time.sleep(0.2)

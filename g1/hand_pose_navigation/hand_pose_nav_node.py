@@ -81,27 +81,42 @@ class HandPoseNavNode(Node):
 
         # ── Declare all parameters ────────────────────────────────────
         self.declare_parameter("arm", config.get("arm", "right"))
-        self.declare_parameter("detection_method", config.get("detection_method", "aruco"))
+        self.declare_parameter(
+            "detection_method",
+            config.get("detection_method", "aruco"),
+        )
         self.declare_parameter("aruco_id", config.get("aruco_id", 0))
-        self.declare_parameter("marker_size_m", config.get("marker_size_m", 0.05))
+        self.declare_parameter(
+            "marker_size_m",
+            config.get("marker_size_m", 0.05),
+        )
         self.declare_parameter("standoff_m", config.get("standoff_m", 0.08))
         self.declare_parameter("rate_hz", config.get("rate_hz", 10.0))
         self.declare_parameter("timeout_s", config.get("timeout_s", 30.0))
         self.declare_parameter("ik_solver", config.get("ik_solver", "dls"))
-        self.declare_parameter("camera_frame", config.get("camera_frame", "camera_color_optical_frame"))
-        self.declare_parameter("base_frame", config.get("base_frame", "base_link"))
-        self.declare_parameter("object_frame", config.get("object_frame", "object_visible_pose"))
+        self.declare_parameter(
+            "camera_frame",
+            config.get("camera_frame", "camera_color_optical_frame"),
+        )
+        self.declare_parameter(
+            "base_frame",
+            config.get("base_frame", "base_link"),
+        )
+        self.declare_parameter(
+            "object_frame",
+            config.get("object_frame", "object_visible_pose"),
+        )
         self.declare_parameter("iface", config.get("iface", "eth0"))
         self.declare_parameter("domain_id", config.get("domain_id", 0))
 
-        arm               = self.get_parameter("arm").value
-        detection_method  = self.get_parameter("detection_method").value
-        aruco_id          = self.get_parameter("aruco_id").value
-        marker_size_m     = self.get_parameter("marker_size_m").value
-        standoff_m        = self.get_parameter("standoff_m").value
-        rate_hz           = self.get_parameter("rate_hz").value
-        timeout_s         = self.get_parameter("timeout_s").value
-        ik_solver         = self.get_parameter("ik_solver").value
+        arm = self.get_parameter("arm").value
+        detection_method = self.get_parameter("detection_method").value
+        aruco_id = self.get_parameter("aruco_id").value
+        marker_size_m = self.get_parameter("marker_size_m").value
+        standoff_m = self.get_parameter("standoff_m").value
+        rate_hz = self.get_parameter("rate_hz").value
+        timeout_s = self.get_parameter("timeout_s").value
+        ik_solver = self.get_parameter("ik_solver").value
         self._config = {
             "arm": arm,
             "detection_method": detection_method,
@@ -117,7 +132,10 @@ class HandPoseNavNode(Node):
             "sdk_preinit_error": config.get("sdk_preinit_error", ""),
         }
 
-        self.get_logger().info(f"[HPN] Starting hand_pose_nav — arm={arm}, method={detection_method}")
+        self.get_logger().info(
+            f"[HPN] Starting hand_pose_nav — arm={arm}, "
+            f"method={detection_method}"
+        )
 
         # ── Step 1: camera TF ─────────────────────────────────────────
         self._cam_tf_pub = CameraTFPublisher()
@@ -129,7 +147,9 @@ class HandPoseNavNode(Node):
             aruco_id=aruco_id,
             marker_size_m=marker_size_m,
         )
-        self.get_logger().info(f"[Step 2] TargetDetector({detection_method}) created.")
+        self.get_logger().info(
+            f"[Step 2] TargetDetector({detection_method}) created."
+        )
 
         # ── Step 3: detected pose publisher ──────────────────────────
         self._pose_pub = DetectedPosePublisher()
@@ -162,14 +182,16 @@ class HandPoseNavNode(Node):
             self._sdk_error = ""
             self.get_logger().info("[SDK] Using pre-connected robot.")
         elif _ROBOT_AVAILABLE and not config.get("mock", False):
-            iface     = self.get_parameter("iface").value
+            iface = self.get_parameter("iface").value
             domain_id = self.get_parameter("domain_id").value
             try:
                 self._robot = Robot(iface=iface, domain_id=domain_id)
                 self._robot.start_sensors()
                 self._robot_mode = "sdk"
                 self._sdk_error = ""
-                self.get_logger().info("[SDK] Robot connected, sensors started.")
+                self.get_logger().info(
+                    "[SDK] Robot connected, sensors started."
+                )
             except Exception as exc:
                 self._robot = _MockRobot()
                 self._robot_mode = "mock"
@@ -182,9 +204,13 @@ class HandPoseNavNode(Node):
             self._robot_mode = "mock"
             self._sdk_error = config.get("sdk_preinit_error", "")
             if config.get("mock", False):
-                self.get_logger().warn("[SDK] mock mode requested - using mock robot.")
+                self.get_logger().warn(
+                    "[SDK] mock mode requested - using mock robot."
+                )
             else:
-                self.get_logger().warn("[SDK] sdk_client not available - using mock robot.")
+                self.get_logger().warn(
+                    "[SDK] sdk_client not available - using mock robot."
+                )
 
         self._executor_obj = ArmExecutor(self._robot, arm=arm)
         self.get_logger().info("[Step 9] ArmExecutor created.")
@@ -216,12 +242,14 @@ class HandPoseNavNode(Node):
 
     def status_snapshot(self) -> Dict:
         status = self._tracking_loop.status.to_dict()
-        status.update({
-            "node": self.get_name(),
-            "robot_mode": self._robot_mode,
-            "sdk_error": self._sdk_error,
-            "config": dict(self._config),
-        })
+        status.update(
+            {
+                "node": self.get_name(),
+                "robot_mode": self._robot_mode,
+                "sdk_error": self._sdk_error,
+                "config": dict(self._config),
+            }
+        )
         return status
 
     def destroy_node(self) -> None:
@@ -236,12 +264,18 @@ class HandPoseNavNode(Node):
 class _MockRobot:
     def get_rgbd(self, timeout=2.0):
         import numpy as np
+
         rgb = np.zeros((480, 640, 3), dtype=np.uint8)
         depth = np.full((480, 640), 0.8, dtype=np.float32)
         return {"rgb_bgr": rgb, "depth_m": depth}
 
     def get_joint_states(self):
-        return {"joints": {f"j{i}": {"index": i, "position": 0.0} for i in range(30)}}
+        return {
+            "joints": {
+                f"j{i}": {"index": i, "position": 0.0}
+                for i in range(30)
+            }
+        }
 
     def move_upper_body_joint(self, **kw):
         pass

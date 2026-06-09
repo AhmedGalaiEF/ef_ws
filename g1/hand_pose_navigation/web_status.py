@@ -95,7 +95,8 @@ _INDEX_HTML = """<!doctype html>
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        sans-serif;
       background: var(--bg);
       color: var(--text);
     }
@@ -181,7 +182,8 @@ _INDEX_HTML = """<!doctype html>
       max-height: 58vh;
       overflow: auto;
       white-space: pre-wrap;
-      font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas,
+        monospace;
     }
     @media (max-width: 820px) {
       header { align-items: flex-start; flex-direction: column; }
@@ -193,14 +195,25 @@ _INDEX_HTML = """<!doctype html>
 <body>
   <header>
     <h1>Hand Pose Navigation</h1>
-    <div><span id="dot" class="status-dot"></span><span id="state">Connecting</span></div>
+    <div>
+      <span id="dot" class="status-dot"></span>
+      <span id="state">Connecting</span>
+    </div>
   </header>
   <main>
     <section class="summary">
-      <div class="metric"><label>Iteration</label><strong id="iteration">-</strong></div>
-      <div class="metric"><label>Elapsed</label><strong id="elapsed">-</strong></div>
-      <div class="metric"><label>Position Error</label><strong id="poserr">-</strong></div>
-      <div class="metric"><label>Rotation Error</label><strong id="roterr">-</strong></div>
+      <div class="metric">
+        <label>Iteration</label><strong id="iteration">-</strong>
+      </div>
+      <div class="metric">
+        <label>Elapsed</label><strong id="elapsed">-</strong>
+      </div>
+      <div class="metric">
+        <label>Position Error</label><strong id="poserr">-</strong>
+      </div>
+      <div class="metric">
+        <label>Rotation Error</label><strong id="roterr">-</strong>
+      </div>
     </section>
     <section class="grid">
       <div class="panel">
@@ -214,13 +227,24 @@ _INDEX_HTML = """<!doctype html>
     </section>
   </main>
   <script>
-    const ids = Object.fromEntries(["dot", "state", "iteration", "elapsed", "poserr", "roterr", "runtime", "log"].map(id => [id, document.getElementById(id)]));
+    const ids = Object.fromEntries(
+      [
+        "dot", "state", "iteration", "elapsed",
+        "poserr", "roterr", "runtime", "log"
+      ]
+        .map(id => [id, document.getElementById(id)])
+    );
     function fmtNum(value, digits, suffix) {
-      return Number.isFinite(value) ? `${value.toFixed(digits)}${suffix}` : "-";
+      return Number.isFinite(value)
+        ? `${value.toFixed(digits)}${suffix}`
+        : "-";
     }
     function render(data) {
-      ids.dot.className = "status-dot " + (data.running ? "running" : (data.converged ? "done" : ""));
-      ids.state.textContent = data.running ? "Running" : (data.converged ? "Converged" : "Stopped");
+      ids.dot.className =
+        "status-dot " +
+        (data.running ? "running" : (data.converged ? "done" : ""));
+      ids.state.textContent =
+        data.running ? "Running" : (data.converged ? "Converged" : "Stopped");
       ids.iteration.textContent = data.iteration ?? "-";
       ids.elapsed.textContent = fmtNum(data.total_elapsed_s, 1, "s");
       ids.poserr.textContent = fmtNum(data.last_error_pos_m, 4, "m");
@@ -238,7 +262,9 @@ _INDEX_HTML = """<!doctype html>
         "IK Fails": data.ik_failures ?? 0,
         "Safety Rejects": data.safety_rejections ?? 0
       };
-      ids.runtime.innerHTML = Object.entries(rows).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
+      ids.runtime.innerHTML = Object.entries(rows)
+        .map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`)
+        .join("");
       ids.log.textContent = (data.log || []).join("\\n");
       ids.log.scrollTop = ids.log.scrollHeight;
     }

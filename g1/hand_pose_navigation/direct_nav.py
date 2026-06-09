@@ -44,11 +44,18 @@ class DirectPosePublisher:
 
 
 class DirectTFUtils:
-    def __init__(self, pose_publisher: DirectPosePublisher, T_base_camera: np.ndarray) -> None:
+    def __init__(
+        self,
+        pose_publisher: DirectPosePublisher,
+        T_base_camera: np.ndarray,
+    ) -> None:
         self._pose_publisher = pose_publisher
         self._T_base_camera = T_base_camera
 
-    def base_to_target(self, timeout_s: Optional[float] = None) -> Optional[np.ndarray]:
+    def base_to_target(
+        self,
+        timeout_s: Optional[float] = None,
+    ) -> Optional[np.ndarray]:
         result = self._pose_publisher.last_result
         if result is None:
             return None
@@ -130,12 +137,14 @@ class DirectHandPoseNav:
 
     def status_snapshot(self) -> Dict:
         status = self._tracking_loop.status.to_dict()
-        status.update({
-            "node": "direct_hand_pose_nav",
-            "robot_mode": self._robot_mode,
-            "sdk_error": self._sdk_error,
-            "config": dict(self._config),
-        })
+        status.update(
+            {
+                "node": "direct_hand_pose_nav",
+                "robot_mode": self._robot_mode,
+                "sdk_error": self._sdk_error,
+                "config": dict(self._config),
+            }
+        )
         return status
 
 
@@ -146,7 +155,12 @@ class _MockRobot:
         return {"rgb_bgr": rgb, "depth_m": depth}
 
     def get_joint_states(self):
-        return {"joints": {f"j{i}": {"index": i, "position": 0.0} for i in range(30)}}
+        return {
+            "joints": {
+                f"j{i}": {"index": i, "position": 0.0}
+                for i in range(30)
+            }
+        }
 
     def move_upper_body_joint(self, **kw):
         pass
