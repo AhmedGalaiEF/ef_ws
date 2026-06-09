@@ -5,7 +5,7 @@ import threading
 from pathlib import Path
 
 _CHANNEL_FACTORY_LOCK = threading.Lock()
-_CHANNEL_FACTORY_CONFIG: tuple[int, str] | None = None
+_CHANNEL_FACTORY_CONFIG: tuple[int, str | None] | None = None
 
 
 def _is_valid_cyclonedds_home(path: str | None) -> bool:
@@ -76,20 +76,59 @@ def ensure_cyclonedds_environment() -> None:
         os.environ["CYCLONEDDS_URI"] = uri
 
 
-def ensure_channel_factory_initialized(domain_id: int = 0, iface: str = "eth0") -> None:
+def _normalize_iface(iface: str | None) -> str | None:
+    if iface is None:
+        return None
+    resolved = str(iface).strip()
+    if not resolved:
+        return None
+    if resolved.lower() in {"auto", "default", "none"}:
+        return None
+    return resolved
+
+
+def default_dds_iface(preferred: str = "eth0") -> str:
+    """Prefer a specific live NIC, otherwise fall back to the first live NIC."""
+    live_ifaces: list[str] = []
+    net_root = Path("/sys/class/net")
+    try:
+        for entry in sorted(net_root.iterdir()):
+            name = entry.name
+            if name.startswith(("lo", "loopback")):
+                continue
+            try:
+                operstate = (entry / "operstate").read_text(encoding="ascii").strip()
+            except OSError:
+                continue
+            if operstate == "up":
+                live_ifaces.append(name)
+    except OSError:
+        return "auto"
+
+    preferred_iface = _normalize_iface(preferred)
+    if preferred_iface and preferred_iface in live_ifaces:
+        return preferred_iface
+    if live_ifaces:
+        return live_ifaces[0]
+    return "auto"
+
+
+def ensure_channel_factory_initialized(domain_id: int = 0, iface: str | None = None) -> None:
     """Initialize the Unitree SDK channel factory once per process."""
     global _CHANNEL_FACTORY_CONFIG
 
     resolved_domain = int(domain_id)
-    resolved_iface = str(iface)
+    resolved_iface = _normalize_iface(iface)
     ensure_cyclonedds_environment()
     with _CHANNEL_FACTORY_LOCK:
         if _CHANNEL_FACTORY_CONFIG is not None:
             if _CHANNEL_FACTORY_CONFIG != (resolved_domain, resolved_iface):
+                configured_iface = _CHANNEL_FACTORY_CONFIG[1] or "auto"
+                requested_iface = resolved_iface or "auto"
                 raise RuntimeError(
                     "Unitree channel factory already initialized for "
-                    f"domain={_CHANNEL_FACTORY_CONFIG[0]} iface={_CHANNEL_FACTORY_CONFIG[1]}, "
-                    f"refusing domain={resolved_domain} iface={resolved_iface}."
+                    f"domain={_CHANNEL_FACTORY_CONFIG[0]} iface={configured_iface}, "
+                    f"refusing domain={resolved_domain} iface={requested_iface}."
                 )
             return
         from unitree_sdk2py.core.channel import ChannelFactoryInitialize
@@ -98,4 +137,8 @@ def ensure_channel_factory_initialized(domain_id: int = 0, iface: str = "eth0") 
         _CHANNEL_FACTORY_CONFIG = (resolved_domain, resolved_iface)
 
 
-__all__ = ["ensure_channel_factory_initialized", "ensure_cyclonedds_environment"]
+__all__ = [
+    "default_dds_iface",
+    "ensure_channel_factory_initialized",
+    "ensure_cyclonedds_environment",
+]

@@ -5,29 +5,16 @@ hand_pose_navigation
 Pipeline for guiding the G1 robot hand to a visually-detected target pose
 using RGB-D perception and ROS 2 TF.
 
-Table 1 steps:
-  1  camera_tf_publisher    — Calibrate: static TF camera_link -> camera_color_optical_frame
-  2  target_detector        — Detect target pose in RGB-D (T_camera_object)
-  3  detected_pose_publisher— Broadcast object_visible_pose TF frame
-  4  arm_fk                 — FK from joint states -> T_base_hand
-  5  tf_utils               — lookupTransform base_link <- object_visible_pose
-  6  grasp_planner          — Define desired hand pose with offset
-  7  arm_ik                 — Solve IK for q_arm_desired
-  8  reachability_checker   — Collision / joint-limit check
-  9  arm_executor           — Send ll_joint_move command
-  10 tracking_loop          — Continuous TF-feedback controller
+This package intentionally avoids importing the full perception / ROS stack at
+module import time. Several callers only need lightweight kinematics modules
+such as `arm_fk` or `arm_ik`, and eagerly importing the rest of the package can
+pull in native dependencies that interfere with unrelated runtime subsystems.
 """
 
-from .camera_tf_publisher import CameraTFPublisher
-from .target_detector import TargetDetector, DetectionResult
-from .detected_pose_publisher import DetectedPosePublisher
-from .arm_fk import ArmFK
-from .tf_utils import TFUtils
-from .grasp_planner import GraspPlanner
-from .arm_ik import ArmIK
-from .reachability_checker import ReachabilityChecker
-from .arm_executor import ArmExecutor
-from .tracking_loop import TrackingLoop
+from __future__ import annotations
+
+from importlib import import_module
+from typing import Any
 
 __all__ = [
     "CameraTFPublisher",
@@ -42,3 +29,31 @@ __all__ = [
     "ArmExecutor",
     "TrackingLoop",
 ]
+
+_EXPORTS: dict[str, tuple[str, str]] = {
+    "CameraTFPublisher": (".camera_tf_publisher", "CameraTFPublisher"),
+    "TargetDetector": (".target_detector", "TargetDetector"),
+    "DetectionResult": (".target_detector", "DetectionResult"),
+    "DetectedPosePublisher": (".detected_pose_publisher", "DetectedPosePublisher"),
+    "ArmFK": (".arm_fk", "ArmFK"),
+    "TFUtils": (".tf_utils", "TFUtils"),
+    "GraspPlanner": (".grasp_planner", "GraspPlanner"),
+    "ArmIK": (".arm_ik", "ArmIK"),
+    "ReachabilityChecker": (".reachability_checker", "ReachabilityChecker"),
+    "ArmExecutor": (".arm_executor", "ArmExecutor"),
+    "TrackingLoop": (".tracking_loop", "TrackingLoop"),
+}
+
+
+def __getattr__(name: str) -> Any:
+    if name not in _EXPORTS:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    module_name, attr_name = _EXPORTS[name]
+    module = import_module(module_name, __name__)
+    value = getattr(module, attr_name)
+    globals()[name] = value
+    return value
+
+
+def __dir__() -> list[str]:
+    return sorted(list(globals().keys()) + __all__)
