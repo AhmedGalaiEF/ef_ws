@@ -45,15 +45,6 @@ Key bindings
   q / Esc              quit
 """
 from __future__ import annotations
-from hand_pose_navigation_copy.arm_fk import JOINT_LIMITS
-from hand_pose_navigation_copy.arm_ik import ArmIK
-from hand_pose_navigation_copy.arm_fk import (
-    ArmFK, LEFT_ARM_JOINTS, RIGHT_ARM_JOINTS,
-    _LEFT_SHOULDER_IN_BASE, _RIGHT_SHOULDER_IN_BASE,
-)
-from sdk_hand import Dex3HandController, hand_grip_targets
-from sdk_client import Robot
-from dds_env import ensure_cyclonedds_environment
 
 import argparse
 import curses
@@ -74,11 +65,33 @@ for _p in (ROOT_DIR, MODULES_DIR):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
+try:
+    from hand_pose_navigation_copy.arm_fk import JOINT_LIMITS
+    from hand_pose_navigation_copy.arm_ik import ArmIK
+    from hand_pose_navigation_copy.arm_fk import (
+        ArmFK, LEFT_ARM_JOINTS, RIGHT_ARM_JOINTS,
+        _LEFT_SHOULDER_IN_BASE, _RIGHT_SHOULDER_IN_BASE,
+    )
+except ModuleNotFoundError:
+    from hand_pose_navigation.arm_fk import JOINT_LIMITS
+    from hand_pose_navigation.arm_ik import ArmIK
+    from hand_pose_navigation.arm_fk import (
+        ArmFK, LEFT_ARM_JOINTS, RIGHT_ARM_JOINTS,
+        _LEFT_SHOULDER_IN_BASE, _RIGHT_SHOULDER_IN_BASE,
+    )
+
+from sdk_hand import Dex3HandController, hand_grip_targets
+from dds_env import (
+    default_dds_iface,
+    ensure_channel_factory_initialized,
+    ensure_cyclonedds_environment,
+)
+
 ensure_cyclonedds_environment()
 
 try:
     from unitree_sdk2py.core.channel import (
-        ChannelFactoryInitialize, ChannelPublisher, ChannelSubscriber,
+        ChannelPublisher, ChannelSubscriber,
     )
     from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
     from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_
@@ -251,6 +264,7 @@ class ArmSDKPublisher:
         waist_pr_kp: float,   # pitch (13) and roll (12) kp
         waist_y_kp: float,    # yaw (14) kp
         waist_kd: float,
+        arm_sdk_weight: float = 1.0,
     ) -> None:
         for j in UPPER_BODY_JOINTS:
             c = self._cmd.motor_cmd[j]
@@ -267,6 +281,7 @@ class ArmSDKPublisher:
             else:
                 c.kp = float(arm_kp)
                 c.kd = float(arm_kd)
+        self._cmd.motor_cmd[ARM_SDK_WEIGHT_INDEX].q = float(arm_sdk_weight)
         self._cmd.crc = self._crc.Crc(self._cmd)
         self._pub.Write(self._cmd)
 
@@ -351,10 +366,9 @@ class IKPoseCLI:
         }
         self.hand_info: Dict[str, str] = {"left": "off", "right": "off"}
 
-        ChannelFactoryInitialize(self.domain_id, self.iface)
+        ensure_channel_factory_initialized(self.domain_id, self.iface)
         self.state_sub = UpperBodyStateSubscriber(UPPER_BODY_JOINTS)
         self.pub = ArmSDKPublisher()
-        self.robot = Robot(iface=self.iface, domain_id=self.domain_id, auto_start_sensors=True)
         self.hand_controllers: Dict[str, Dex3HandController] = {}
         self._init_hand_controllers()
 
@@ -399,6 +413,59 @@ class IKPoseCLI:
                 "error_rot_rad": 0.0,
                 "iterations": 0,
             }
+
+    def _wait_for_state(self, timeout: float = 2.0) -> Dict[int, float]:
+        deadline = time.monotonic() + max(0.0, float(timeout))
+        while time.monotonic() < deadline:
+            snap = self.state_sub.snapshot()
+            if snap:
+                pos, _ = snap
+                self.latest_positions = dict(pos)
+                return dict(pos)
+            time.sleep(0.02)
+        raise TimeoutError("Timed out waiting for rt/lowstate.")
+
+    def _release_arms(self, duration_s: float = 3.0, command_rate_hz: float = 50.0) -> None:
+        positions = self._wait_for_state(timeout=3.0)
+        steps = max(1, int(max(0.0, float(duration_s)) * max(1.0, float(command_rate_hz))))
+        dt = 1.0 / max(1.0, float(command_rate_hz))
+        base_waist_pr_kp = self.waist_pr_kp if self.waist_enabled else 0.0
+        base_waist_y_kp = self.waist_y_kp if self.waist_enabled else 0.0
+        base_waist_kd = self.waist_kd if self.waist_enabled else 0.0
+        for step_idx in range(steps + 1):
+            ratio = float(step_idx) / float(steps)
+            fade = ratio * ratio * (3.0 - 2.0 * ratio)
+            authority = 1.0 - fade
+            self.pub.publish(
+                positions,
+                arm_kp=self.arm_kp * authority,
+                arm_kd=self.arm_kd * authority,
+                waist_pr_kp=base_waist_pr_kp * authority,
+                waist_y_kp=base_waist_y_kp * authority,
+                waist_kd=base_waist_kd * authority,
+                arm_sdk_weight=authority,
+            )
+            time.sleep(dt)
+
+    def _unrelease_arms(self, duration_s: float = 1.0, command_rate_hz: float = 50.0) -> None:
+        positions = self._wait_for_state(timeout=3.0)
+        steps = max(1, int(max(0.0, float(duration_s)) * max(1.0, float(command_rate_hz))))
+        dt = 1.0 / max(1.0, float(command_rate_hz))
+        waist_pr_kp = self.waist_pr_kp if self.waist_enabled else 0.0
+        waist_y_kp = self.waist_y_kp if self.waist_enabled else 0.0
+        waist_kd = self.waist_kd if self.waist_enabled else 0.0
+        for step_idx in range(steps + 1):
+            authority = float(step_idx) / float(steps)
+            self.pub.publish(
+                positions,
+                arm_kp=self.arm_kp,
+                arm_kd=self.arm_kd,
+                waist_pr_kp=waist_pr_kp,
+                waist_y_kp=waist_y_kp,
+                waist_kd=waist_kd,
+                arm_sdk_weight=authority,
+            )
+            time.sleep(dt)
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -1070,8 +1137,7 @@ class IKPoseCLI:
         # ── Release arms ──────────────────────────────────────────────────
         if key == ord("r"):
             try:
-                self.robot.wait_for_low_state(timeout=2.0)
-                self.robot.release_arms()
+                self._release_arms()
                 self.armed = False
                 self.status = "Arms released — move freely, press e to reengage"
             except Exception as exc:
@@ -1081,8 +1147,7 @@ class IKPoseCLI:
         # ── Reengage arms ─────────────────────────────────────────────────
         if key == ord("e"):
             try:
-                self.robot.wait_for_low_state(timeout=2.0)
-                self.robot.unrelease_arms()
+                self._unrelease_arms()
                 self.armed = True
                 self._sync_targets_to_live()
                 self.status = "Reengaged — synced to live pose"
@@ -1157,10 +1222,11 @@ class IKPoseCLI:
             if now - self._last_tick >= dt_target:
                 self.tick()
 
-        try:
-            self.robot.release_arms()
-        except Exception:
-            pass
+        if self.armed:
+            try:
+                self._release_arms()
+            except Exception:
+                pass
 
 
 # ── CLI entry point ───────────────────────────────────────────────────────────
@@ -1169,7 +1235,11 @@ def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
         description="6D end-effector IK pose control TUI for the G1 arms — v2"
     )
-    p.add_argument("--iface", default="eth0", help="DDS network interface")
+    p.add_argument(
+        "--iface",
+        default=default_dds_iface(),
+        help="DDS network interface (default: auto-detected)",
+    )
     p.add_argument("--domain-id", type=int, default=0)
     p.add_argument("--rate-hz", type=float, default=25.0, help="Publish rate Hz")
     p.add_argument("--speed-rad-s", type=float, default=0.2,

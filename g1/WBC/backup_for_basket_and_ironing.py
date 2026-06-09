@@ -57,15 +57,6 @@ Key bindings
   q / Esc              quit
 """
 from __future__ import annotations
-from hand_pose_navigation_copy.arm_fk import JOINT_LIMITS
-from hand_pose_navigation_copy.arm_ik import ArmIK
-from hand_pose_navigation_copy.arm_fk import (
-    ArmFK, LEFT_ARM_JOINTS, RIGHT_ARM_JOINTS,
-    _LEFT_SHOULDER_IN_BASE, _RIGHT_SHOULDER_IN_BASE,
-)
-from sdk_hand import Dex3HandController, hand_grip_targets
-from sdk_client import Robot
-from dds_env import ensure_cyclonedds_environment
 
 import argparse
 import curses
@@ -88,6 +79,25 @@ MODULES_DIR = os.path.join(ROOT_DIR, "modules")
 for _p in (ROOT_DIR, MODULES_DIR):
     if _p not in sys.path:
         sys.path.insert(0, _p)
+
+try:
+    from hand_pose_navigation_copy.arm_fk import JOINT_LIMITS
+    from hand_pose_navigation_copy.arm_ik import ArmIK
+    from hand_pose_navigation_copy.arm_fk import (
+        ArmFK, LEFT_ARM_JOINTS, RIGHT_ARM_JOINTS,
+        _LEFT_SHOULDER_IN_BASE, _RIGHT_SHOULDER_IN_BASE,
+    )
+except ModuleNotFoundError:
+    from hand_pose_navigation.arm_fk import JOINT_LIMITS
+    from hand_pose_navigation.arm_ik import ArmIK
+    from hand_pose_navigation.arm_fk import (
+        ArmFK, LEFT_ARM_JOINTS, RIGHT_ARM_JOINTS,
+        _LEFT_SHOULDER_IN_BASE, _RIGHT_SHOULDER_IN_BASE,
+    )
+
+from sdk_hand import Dex3HandController, hand_grip_targets
+from sdk_client import Robot
+from dds_env import ensure_cyclonedds_environment
 
 ensure_cyclonedds_environment()
 
