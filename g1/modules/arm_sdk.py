@@ -18,11 +18,6 @@ Quick start:
     sdk.resync()
 """
 from __future__ import annotations
-from hand_pose_navigation_copy.arm_ik import ArmIK
-from hand_pose_navigation_copy.arm_fk import (
-    ArmFK, LEFT_ARM_JOINTS, RIGHT_ARM_JOINTS, JOINT_LIMITS,
-)
-from dds_env import ensure_channel_factory_initialized, ensure_cyclonedds_environment
 
 import math
 import os
@@ -52,6 +47,19 @@ _ROOT_DIR = os.path.abspath(os.path.join(_MODULES_DIR, ".."))
 for _p in (_ROOT_DIR, _MODULES_DIR):
     if _p not in sys.path:
         sys.path.insert(0, _p)
+
+try:
+    from hand_pose_navigation_copy.arm_ik import ArmIK
+    from hand_pose_navigation_copy.arm_fk import (
+        ArmFK, LEFT_ARM_JOINTS, RIGHT_ARM_JOINTS, JOINT_LIMITS,
+    )
+except ModuleNotFoundError:
+    from hand_pose_navigation.arm_ik import ArmIK
+    from hand_pose_navigation.arm_fk import (
+        ArmFK, LEFT_ARM_JOINTS, RIGHT_ARM_JOINTS, JOINT_LIMITS,
+    )
+
+from dds_env import ensure_channel_factory_initialized, ensure_cyclonedds_environment
 
 ensure_cyclonedds_environment()
 
