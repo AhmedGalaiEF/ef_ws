@@ -1,2 +1,0 @@
-[0.276s] Invoking command in '/home/melodse/ef_ws/build/slam_example': /usr/bin/cmake --build /home/melodse/ef_ws/build/slam_example -- -j12 -l12
-[0.451s] [100%] Built target keyDemo
