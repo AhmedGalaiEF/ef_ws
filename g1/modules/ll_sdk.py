@@ -515,6 +515,43 @@ class LLSdk:
         self._cmd.crc = self._crc.Crc(self._cmd)
         self._pub.Write(self._cmd)
 
+    def _ramp_publish(
+        self,
+        q_start: List[float],
+        q_target: List[float],
+        mode_machine: int,
+        *,
+        speed_rad_s: float,
+        rate_hz: float,
+        kp: Optional[List[float]] = None,
+        kd: Optional[List[float]] = None,
+        dq: float = 0.0,
+        tau: float = 0.0,
+    ) -> Dict[str, float | int]:
+        speed = float(speed_rad_s)
+        rate = max(1.0, float(rate_hz))
+        if speed <= 0.0:
+            self._publish(q_target, mode_machine, kp=kp, kd=kd, dq=dq, tau=tau)
+            return {"steps": 1, "speed_rad_s": speed, "rate_hz": rate}
+
+        max_delta = max(abs(float(dst) - float(src)) for src, dst in zip(q_start, q_target))
+        steps = max(1, int(math.ceil(max_delta / max(1e-6, speed / rate))))
+        if steps <= 1:
+            self._publish(q_target, mode_machine, kp=kp, kd=kd, dq=dq, tau=tau)
+            return {"steps": 1, "speed_rad_s": speed, "rate_hz": rate}
+
+        dt = 1.0 / rate
+        for step_idx in range(1, steps + 1):
+            alpha = float(step_idx) / float(steps)
+            q_step = [
+                float(src) + alpha * (float(dst) - float(src))
+                for src, dst in zip(q_start, q_target)
+            ]
+            self._publish(q_step, mode_machine, kp=kp, kd=kd, dq=dq, tau=tau)
+            if step_idx < steps:
+                time.sleep(dt)
+        return {"steps": steps, "speed_rad_s": speed, "rate_hz": rate}
+
     # ── Public API ────────────────────────────────────────────────────────────
 
     def move_ll_joint(
@@ -525,6 +562,8 @@ class LLSdk:
         kp: Optional[Dict[int, float]] = None,
         kd: Optional[Dict[int, float]] = None,
         tau: float = 0.0,
+        ramp_speed_rad_s: float = 0.0,
+        ramp_rate_hz: float = 50.0,
         timeout: float = 3.0,
     ) -> None:
         """Send one rt/lowcmd packet with the specified joint targets.
@@ -540,6 +579,7 @@ class LLSdk:
             Applied uniformly to every joint in this packet.
         """
         q_full, mm = self._state.wait(timeout)
+        q_start = list(q_full)
         for idx, val in targets.items():
             q_full[int(idx)] = float(val)
 
@@ -552,7 +592,17 @@ class LLSdk:
             for idx, val in kd.items():
                 kd_list[int(idx)] = float(val)
 
-        self._publish(q_full, mm, kp=kp_list, kd=kd_list, dq=dq, tau=tau)
+        self._ramp_publish(
+            q_start,
+            q_full,
+            mm,
+            speed_rad_s=float(ramp_speed_rad_s),
+            rate_hz=float(ramp_rate_hz),
+            kp=kp_list,
+            kd=kd_list,
+            dq=dq,
+            tau=tau,
+        )
 
     def ik_move_EE(
         self,
@@ -563,6 +613,8 @@ class LLSdk:
         fixed_joints: "Optional[List[int]]" = None,
         joint_weights: "Optional[np.ndarray]" = None,
         max_dq: float = 0.2,
+        ramp_speed_rad_s: float = 0.35,
+        ramp_rate_hz: float = 50.0,
         timeout: float = 3.0,
     ) -> Dict:
         """Move one (or both) arm end-effector(s) by a Cartesian increment.
@@ -597,6 +649,7 @@ class LLSdk:
             joint_weights, dtype=np.float64)
 
         q_full, mm = self._state.wait(timeout)
+        q_start = list(q_full)
         info: Dict = {"success": False, "error_pos_m": 0.0, "error_rot_rad": 0.0, "iterations": 0}
 
         for a in arms:
@@ -625,7 +678,13 @@ class LLSdk:
             for i, j in enumerate(joints):
                 q_full[j] = float(q_new[i])
 
-        self._publish(q_full, mm)
+        info["ramp"] = self._ramp_publish(
+            q_start,
+            q_full,
+            mm,
+            speed_rad_s=float(ramp_speed_rad_s),
+            rate_hz=float(ramp_rate_hz),
+        )
         return info
 
     def ik_move_EE_leg(
@@ -637,6 +696,8 @@ class LLSdk:
         fixed_joints: "Optional[List[int]]" = None,
         joint_weights: "Optional[np.ndarray]" = None,
         max_dq: float = 0.15,
+        ramp_speed_rad_s: float = 0.35,
+        ramp_rate_hz: float = 50.0,
         timeout: float = 3.0,
     ) -> Dict:
         """Move one (or both) leg foot end-effector(s) by a Cartesian increment.
@@ -675,6 +736,7 @@ class LLSdk:
             joint_weights, dtype=np.float64)
 
         q_full, mm = self._state.wait(timeout)
+        q_start = list(q_full)
         info: Dict = {"success": False, "error_pos_m": 0.0, "error_rot_rad": 0.0, "iterations": 0}
 
         for lg in legs:
@@ -703,7 +765,13 @@ class LLSdk:
             for i, j in enumerate(joints):
                 q_full[j] = float(q_new[i])
 
-        self._publish(q_full, mm)
+        info["ramp"] = self._ramp_publish(
+            q_start,
+            q_full,
+            mm,
+            speed_rad_s=float(ramp_speed_rad_s),
+            rate_hz=float(ramp_rate_hz),
+        )
         return info
 
     # ── Convenience helpers ───────────────────────────────────────────────────

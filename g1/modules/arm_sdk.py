@@ -440,6 +440,46 @@ class ArmSdk:
             waist_kd=self.waist_kd,
         )
 
+    def _ramp_to_desired(
+        self,
+        start: Dict[int, float],
+        target: Dict[int, float],
+        *,
+        speed_rad_s: float,
+        rate_hz: float,
+    ) -> Dict[str, float | int]:
+        """Ramp desired joint targets before publishing the final target."""
+        speed = float(speed_rad_s)
+        rate = max(1.0, float(rate_hz))
+        if speed <= 0.0:
+            self._desired = dict(target)
+            self._publish()
+            return {"steps": 1, "speed_rad_s": speed, "rate_hz": rate}
+
+        max_delta = max(
+            abs(float(target.get(j, start.get(j, 0.0))) - float(start.get(j, 0.0)))
+            for j in target
+        )
+        steps = max(1, int(math.ceil(max_delta / max(1e-6, speed / rate))))
+        if steps <= 1:
+            self._desired = dict(target)
+            self._publish()
+            return {"steps": 1, "speed_rad_s": speed, "rate_hz": rate}
+
+        dt = 1.0 / rate
+        keys = list(target)
+        for step_idx in range(1, steps + 1):
+            alpha = float(step_idx) / float(steps)
+            self._desired = {
+                j: float(start.get(j, target[j])) + alpha * (float(target[j]) - float(start.get(j, target[j])))
+                for j in keys
+            }
+            self._publish()
+            if step_idx < steps:
+                time.sleep(dt)
+        self._desired = dict(target)
+        return {"steps": steps, "speed_rad_s": speed, "rate_hz": rate}
+
     # ── Public API ────────────────────────────────────────────────────────────
 
     def resync(self, timeout: float = 3.0) -> None:
@@ -487,6 +527,8 @@ class ArmSdk:
         position_only: bool = False,
         selected_axis: "Optional[int]" = None,
         max_dq: float = 0.2,
+        ramp_speed_rad_s: float = 0.35,
+        ramp_rate_hz: float = 50.0,
         timeout: float = 3.0,
     ) -> Dict:
         """Move one (or both) arm end-effector(s) by a Cartesian increment.
@@ -517,6 +559,11 @@ class ArmSdk:
             Position axis index used for soft axis-clamped success near limits.
         max_dq : float
             Per-joint safety clamp on the IK step (rad).
+        ramp_speed_rad_s : float
+            Maximum joint-target ramp speed after IK succeeds. Set <= 0 for a
+            single publish, but the notebook and VLA paths should leave this on.
+        ramp_rate_hz : float
+            Publish rate used while ramping to the solved joint target.
 
         Returns
         -------
@@ -534,6 +581,8 @@ class ArmSdk:
 
         self._seed(timeout)
         assert self._desired is not None
+        start_desired = dict(self._desired)
+        target_desired = dict(self._desired)
         q_state = self._state.wait(timeout)  # fresh measured state for IK init
 
         info: Dict = {"success": False, "error_pos_m": 0.0, "error_rot_rad": 0.0, "iterations": 0}
@@ -576,11 +625,18 @@ class ArmSdk:
                                 np.array([limit[0] for limit in limits]),
                                 np.array([limit[1] for limit in limits]))
                 for i, j in enumerate(joints):
-                    self._desired[j] = float(q_new[i])
+                    target_desired[j] = float(q_new[i])
                 solved = True
                 break
 
-        self._publish()
+        self._desired = dict(target_desired)
+        ramp_info = self._ramp_to_desired(
+            start_desired,
+            target_desired,
+            speed_rad_s=float(ramp_speed_rad_s),
+            rate_hz=float(ramp_rate_hz),
+        )
+        info["ramp"] = ramp_info
         return info
 
     def get_ee_pose(self, arm: str = "right", timeout: float = 3.0) -> np.ndarray:
