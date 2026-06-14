@@ -68,6 +68,10 @@ LAYER_STYLE = {
     "occupancy": ("Derived occupied cells", "#d9d9d9", 4, 0.70),
 }
 
+NAV_REACHED_DISTANCE_M = 0.35
+NAV_TARGET_TIMEOUT_S = 120.0
+NAV_POLL_INTERVAL_S = 0.5
+
 
 @dataclass
 class PoseTarget:
@@ -78,6 +82,9 @@ class PoseTarget:
 
     def quaternion(self) -> tuple[float, float, float, float]:
         return (0.0, 0.0, math.sin(self.yaw * 0.5), math.cos(self.yaw * 0.5))
+
+    def xy_distance_to(self, other: "PoseTarget") -> float:
+        return math.hypot(self.x - other.x, self.y - other.y)
 
 
 @dataclass
@@ -509,6 +516,17 @@ class SlamWebState:
                 result = response_dict(self.client.pose_nav(
                     target.x, target.y, target.z, qx, qy, qz, qw, mode=1))
                 result["target"] = {"x": target.x, "y": target.y, "yaw": target.yaw}
+                if result["ok"]:
+                    reached, final_pose, elapsed = self._wait_for_target(target)
+                    result["reached"] = reached
+                    result["elapsed_s"] = round(elapsed, 2)
+                    if final_pose is not None:
+                        result["final_pose"] = {"x": final_pose.x, "y": final_pose.y, "yaw": final_pose.yaw}
+                        result["final_distance_m"] = round(final_pose.xy_distance_to(target), 3)
+                    if not reached:
+                        result["ok"] = False
+                        result["code"] = 1
+                        result["raw"] = f"Timed out waiting for step {idx} to be reached."
             elif step.kind == "action" and step.action is not None:
                 result = self.execute_high_level_action(step.action)
             else:
@@ -520,6 +538,18 @@ class SlamWebState:
                 ok = False
                 break
         return self._record("execute_sequence", {"code": 0 if ok else 1, "ok": ok, "raw": results})
+
+    def _wait_for_target(self, target: PoseTarget) -> tuple[bool, Optional[PoseTarget], float]:
+        start = time.time()
+        last_pose: Optional[PoseTarget] = None
+        while time.time() - start < NAV_TARGET_TIMEOUT_S:
+            pose = self.current_pose()
+            if pose is not None:
+                last_pose = pose
+                if pose.xy_distance_to(target) <= NAV_REACHED_DISTANCE_M:
+                    return True, pose, time.time() - start
+            time.sleep(NAV_POLL_INTERVAL_S)
+        return False, last_pose, time.time() - start
 
     def _mapping_worker(self) -> None:
         while not self._worker_stop.is_set():

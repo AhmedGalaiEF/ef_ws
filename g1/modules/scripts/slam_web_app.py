@@ -78,6 +78,10 @@ DEFAULT_SELECTED_LAYERS = [
     "slam_web_points",
 ]
 DEFAULT_MAX_POINTS_PER_LAYER = 500
+DEFAULT_MAP_REFRESH_INTERVAL_MS = 2000
+NAV_REACHED_DISTANCE_M = 0.35
+NAV_TARGET_TIMEOUT_S = 120.0
+NAV_POLL_INTERVAL_S = 0.5
 
 
 @dataclass
@@ -89,6 +93,9 @@ class PoseTarget:
 
     def quaternion(self) -> tuple[float, float, float, float]:
         return (0.0, 0.0, math.sin(self.yaw * 0.5), math.cos(self.yaw * 0.5))
+
+    def xy_distance_to(self, other: "PoseTarget") -> float:
+        return math.hypot(self.x - other.x, self.y - other.y)
 
 
 class LatestCloudSubscriber:
@@ -453,11 +460,34 @@ class SlamWebState:
                 target.x, target.y, target.z, qx, qy, qz, qw, mode=1))
             result["target_index"] = idx
             result["target"] = {"x": target.x, "y": target.y, "yaw": target.yaw}
+            if result["ok"]:
+                reached, final_pose, elapsed = self._wait_for_target(target)
+                result["reached"] = reached
+                result["elapsed_s"] = round(elapsed, 2)
+                if final_pose is not None:
+                    result["final_pose"] = {"x": final_pose.x, "y": final_pose.y, "yaw": final_pose.yaw}
+                    result["final_distance_m"] = round(final_pose.xy_distance_to(target), 3)
+                if not reached:
+                    result["ok"] = False
+                    result["code"] = 1
+                    result["raw"] = f"Timed out waiting for task {idx} to be reached."
             results.append(result)
             if not result["ok"]:
                 ok = False
                 break
         return self._record("execute_tasks", {"code": 0 if ok else 1, "ok": ok, "raw": results})
+
+    def _wait_for_target(self, target: PoseTarget) -> tuple[bool, Optional[PoseTarget], float]:
+        start = time.time()
+        last_pose: Optional[PoseTarget] = None
+        while time.time() - start < NAV_TARGET_TIMEOUT_S:
+            pose = self.current_pose()
+            if pose is not None:
+                last_pose = pose
+                if pose.xy_distance_to(target) <= NAV_REACHED_DISTANCE_M:
+                    return True, pose, time.time() - start
+            time.sleep(NAV_POLL_INTERVAL_S)
+        return False, last_pose, time.time() - start
 
     def _mapping_worker(self) -> None:
         while not self._worker_stop.is_set():
@@ -516,7 +546,13 @@ class SlamWebState:
         }
 
 
-def make_figure(state: SlamWebState, selected_layers: list[str], max_points: int, view_mode: str) -> go.Figure:
+def make_figure(
+    state: SlamWebState,
+    selected_layers: list[str],
+    max_points: int,
+    view_mode: str,
+    stored_view: Optional[dict[str, Any]] = None,
+) -> go.Figure:
     fig = go.Figure()
     pose = state.current_pose()
     extent_points: list[tuple[float, float]] = []
@@ -658,6 +694,14 @@ def make_figure(state: SlamWebState, selected_layers: list[str], max_points: int
         )
     )
 
+    xaxis = {"title": "x (m)", "scaleanchor": "y", "scaleratio": 1, "gridcolor": "#303642"}
+    yaxis = {"title": "y (m)", "gridcolor": "#303642"}
+    if stored_view and stored_view.get("xrange") and stored_view.get("yrange"):
+        xaxis["range"] = stored_view["xrange"]
+        xaxis["autorange"] = False
+        yaxis["range"] = stored_view["yrange"]
+        yaxis["autorange"] = False
+
     fig.update_layout(
         template="plotly_dark",
         uirevision="slam-map",
@@ -666,14 +710,14 @@ def make_figure(state: SlamWebState, selected_layers: list[str], max_points: int
         legend={"orientation": "h", "yanchor": "bottom", "y": 1.01, "xanchor": "left", "x": 0},
         paper_bgcolor="#111318",
         plot_bgcolor="#171a21",
-        xaxis={"title": "x (m)", "scaleanchor": "y", "scaleratio": 1, "gridcolor": "#303642"},
-        yaxis={"title": "y (m)", "gridcolor": "#303642"},
+        xaxis=xaxis,
+        yaxis=yaxis,
         height=760,
     )
     return fig
 
 
-def app_layout(state: SlamWebState) -> html.Div:
+def app_layout(state: SlamWebState, refresh_interval_ms: int = DEFAULT_MAP_REFRESH_INTERVAL_MS) -> html.Div:
     layer_options = [
         {"label": LAYER_STYLE.get(name, (name,))[0], "value": name}
         for name in [
@@ -762,7 +806,8 @@ def app_layout(state: SlamWebState) -> html.Div:
                 ],
                 className="main",
             ),
-            dcc.Interval(id="map-interval", interval=700, n_intervals=0),
+            dcc.Interval(id="map-interval", interval=max(250, int(refresh_interval_ms)), n_intervals=0),
+            dcc.Store(id="map-view-store"),
         ],
         className="app",
     )
@@ -797,14 +842,17 @@ input { width: 100%; box-sizing: border-box; background: #f7f9fc; color: #111827
 """
 
 
-def create_dash_app(state: SlamWebState) -> dash.Dash:
+def create_dash_app(
+    state: SlamWebState,
+    refresh_interval_ms: int = DEFAULT_MAP_REFRESH_INTERVAL_MS,
+) -> dash.Dash:
     app = dash.Dash(__name__)
     app.index_string = f"""<!DOCTYPE html>
 <html>
   <head>{{%metas%}}<title>G1 SLAM Web Map</title>{{%favicon%}}{{%css%}}<style>{CSS}</style></head>
   <body>{{%app_entry%}}<footer>{{%config%}}{{%scripts%}}{{%renderer%}}</footer></body>
 </html>"""
-    app.layout = app_layout(state)
+    app.layout = app_layout(state, refresh_interval_ms=refresh_interval_ms)
 
     @app.callback(
         Output("map-graph", "figure"),
@@ -814,10 +862,17 @@ def create_dash_app(state: SlamWebState) -> dash.Dash:
         Input("layers", "value"),
         Input("max-points", "value"),
         Input("view-mode", "value"),
+        State("map-view-store", "data"),
     )
-    def update_map(_n: int, layers: list[str], max_points: int, view_mode: str):
+    def update_map(_n: int, layers: list[str], max_points: int, view_mode: str, stored_view: Optional[dict[str, Any]]):
         status = state.status()
-        fig = make_figure(state, layers or [], int(max_points or DEFAULT_MAX_POINTS_PER_LAYER), str(view_mode or "world"))
+        fig = make_figure(
+            state,
+            layers or [],
+            int(max_points or DEFAULT_MAX_POINTS_PER_LAYER),
+            str(view_mode or "world"),
+            stored_view,
+        )
         pose = status["pose"]
         pose_text = "pose=<none>" if pose is None else f"pose x={pose['x']:.2f} y={pose['y']:.2f} yaw={pose['yaw']:.2f}"
         kiss = status["kiss"]
@@ -831,6 +886,26 @@ def create_dash_app(state: SlamWebState) -> dash.Dash:
         topics = json.dumps(
             {"topics": status["topics"], "last_action": status["last_action"]}, indent=2, sort_keys=True)
         return fig, line, topics
+
+    @app.callback(
+        Output("map-view-store", "data"),
+        Input("map-graph", "relayoutData"),
+        prevent_initial_call=True,
+    )
+    def remember_map_view(relayout_data: Optional[dict[str, Any]]):
+        if not relayout_data:
+            return dash.no_update
+        if relayout_data.get("xaxis.autorange") or relayout_data.get("yaxis.autorange"):
+            return None
+        xrange = relayout_data.get("xaxis.range")
+        yrange = relayout_data.get("yaxis.range")
+        if xrange is None:
+            xrange = [relayout_data.get("xaxis.range[0]"), relayout_data.get("xaxis.range[1]")]
+        if yrange is None:
+            yrange = [relayout_data.get("yaxis.range[0]"), relayout_data.get("yaxis.range[1]")]
+        if any(value is None for value in [*xrange, *yrange]):
+            return dash.no_update
+        return {"xrange": [float(xrange[0]), float(xrange[1])], "yrange": [float(yrange[0]), float(yrange[1])]}
 
     @app.callback(
         Output("action-output", "children"),
@@ -899,13 +974,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8060)
     parser.add_argument("--map-path", default="/home/unitree/test.pcd")
+    parser.add_argument("--refresh-ms", type=int, default=int(os.environ.get("G1_SLAM_REFRESH_MS", str(DEFAULT_MAP_REFRESH_INTERVAL_MS))))
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
     state = SlamWebState(args.iface, args.domain_id, DEFAULT_TOPICS, args.map_path)
-    app = create_dash_app(state)
+    app = create_dash_app(state, refresh_interval_ms=args.refresh_ms)
     print(
         f"SLAM web app: http://{args.host}:{args.port} iface={args.iface} domain={args.domain_id}")
     app.run(host=args.host, port=args.port, debug=False)
