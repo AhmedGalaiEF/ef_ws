@@ -2,7 +2,12 @@
 from __future__ import annotations
 from unitree_sdk2py.idl.sensor_msgs.msg.dds_ import PointCloud2_
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelSubscriber
+import os, sys
+sys.path.append(os.path.join(os.getcwd(),".."))
+
 from sdk_slam import SlamInfoSubscriber, SlamOdomSubscriber, SlamOperateClient
+
+
 
 import argparse
 import json
@@ -65,6 +70,14 @@ LAYER_STYLE = {
     "kiss_map": ("KISS-ICP voxel map", "#ffffff", 2, 0.80),
     "occupancy": ("Derived occupied cells", "#d9d9d9", 4, 0.70),
 }
+
+DEFAULT_SELECTED_LAYERS = [
+    "slam_mapping",
+    "slam_relocation",
+    "slam_global_map",
+    "slam_web_points",
+]
+DEFAULT_MAX_POINTS_PER_LAYER = 500
 
 
 @dataclass
@@ -538,7 +551,7 @@ def make_figure(state: SlamWebState, selected_layers: list[str], max_points: int
         )
 
     if "occupancy" in selected_layers:
-        occ = state.occupancy.points(max_points=16000)
+        occ = state.occupancy.points(max_points=max_points)
         if occ.size:
             sample = occ[:: max(1, int(occ.shape[0] / 1000) + 1)]
             extent_points.extend((float(x), float(y)) for x, y in sample[:, :2])
@@ -679,8 +692,6 @@ def app_layout(state: SlamWebState) -> html.Div:
             "grid",
         ]
     ]
-    default_layers = ["slam_mapping", "slam_relocation", "slam_global_map",
-                      "slam_web_points", "deskewed", "kiss_map", "occupancy", "collision", "warning"]
     return html.Div(
         [
             html.Div(
@@ -730,9 +741,9 @@ def app_layout(state: SlamWebState) -> html.Div:
                             ),
                             html.Label("Layers"),
                             dcc.Checklist(id="layers", options=layer_options,
-                                          value=default_layers, className="layers"),
+                                          value=DEFAULT_SELECTED_LAYERS, className="layers"),
                             html.Label("Max points per layer"),
-                            dcc.Slider(id="max-points", min=1000, max=60000, step=1000, value=22000,
+                            dcc.Slider(id="max-points", min=100, max=60000, step=100, value=DEFAULT_MAX_POINTS_PER_LAYER,
                                        marks=None, tooltip={"placement": "bottom", "always_visible": True}),
                             html.Div(id="action-output", className="action-output"),
                             html.Pre(id="topic-output", className="topic-output"),
@@ -806,7 +817,7 @@ def create_dash_app(state: SlamWebState) -> dash.Dash:
     )
     def update_map(_n: int, layers: list[str], max_points: int, view_mode: str):
         status = state.status()
-        fig = make_figure(state, layers or [], int(max_points or 22000), str(view_mode or "world"))
+        fig = make_figure(state, layers or [], int(max_points or DEFAULT_MAX_POINTS_PER_LAYER), str(view_mode or "world"))
         pose = status["pose"]
         pose_text = "pose=<none>" if pose is None else f"pose x={pose['x']:.2f} y={pose['y']:.2f} yaw={pose['yaw']:.2f}"
         kiss = status["kiss"]
