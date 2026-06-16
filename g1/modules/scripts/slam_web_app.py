@@ -98,6 +98,15 @@ class PoseTarget:
         return math.hypot(self.x - other.x, self.y - other.y)
 
 
+def is_default_zero_pose(pose: PoseTarget) -> bool:
+    return (
+        abs(pose.x) < 1e-5
+        and abs(pose.y) < 1e-5
+        and abs(pose.z) < 1e-5
+        and abs(pose.yaw) < 1e-5
+    )
+
+
 class LatestCloudSubscriber:
     def __init__(self, name: str, topic: str) -> None:
         self.name = name
@@ -145,7 +154,13 @@ def parse_pose(payload_raw: Optional[str]) -> Optional[PoseTarget]:
             yaw = math.atan2(siny_cosp, cosy_cosp)
         else:
             yaw = float(cur.get("yaw", 0.0))
-        return PoseTarget(x=x, y=y, z=z, yaw=yaw)
+        pose = PoseTarget(x=x, y=y, z=z, yaw=yaw)
+        # /slam_info can contain interleaved zero-pose messages from other
+        # publishers. Treat those as missing data so relocation never starts
+        # from the default origin by accident.
+        if is_default_zero_pose(pose):
+            return None
+        return pose
     except Exception:
         return None
 
@@ -357,6 +372,7 @@ class SlamWebState:
             sub.start()
         self.tasks: list[PoseTarget] = []
         self.initial_pose: Optional[PoseTarget] = None
+        self.last_valid_pose: Optional[PoseTarget] = None
         self.selected_pose: Optional[PoseTarget] = None
         self.slam_running = False
         self.relocation_ready = False
@@ -370,7 +386,10 @@ class SlamWebState:
         self._worker.start()
 
     def current_pose(self) -> Optional[PoseTarget]:
-        return parse_pose(self.info.get_info()) or parse_pose(self.info.get_key())
+        pose = parse_pose(self.info.get_info()) or parse_pose(self.info.get_key())
+        if pose is not None:
+            self.last_valid_pose = pose
+        return pose
 
     def _record(self, label: str, result: dict[str, Any]) -> dict[str, Any]:
         self.last_action = {"label": label, **result, "stamp": time.time()}
@@ -392,7 +411,13 @@ class SlamWebState:
 
     def relocate(self, path: str) -> dict[str, Any]:
         self.map_path = path
-        pose = self.current_pose() or self.initial_pose or PoseTarget(0.0, 0.0, 0.0)
+        pose = self.current_pose() or self.last_valid_pose or self.initial_pose
+        if pose is None:
+            return self._record("init_pose", {
+                "code": 1,
+                "ok": False,
+                "raw": "Cannot start relocation: no valid non-zero SLAM pose has been received yet.",
+            })
         qx, qy, qz, qw = pose.quaternion()
         result = response_dict(self.client.init_pose(pose.x, pose.y, pose.z, qx, qy, qz, qw, path))
         self.relocation_ready = bool(result["ok"])
