@@ -17,8 +17,8 @@ All move_* functions are single-shot: they send one command packet and
 return.  Call them inside your own control loop at whatever rate you need.
 """
 from __future__ import annotations
-from hand_pose_navigation_copy.arm_ik import ArmIK
-from hand_pose_navigation_copy.arm_fk import (
+from hand_pose_navigation.arm_ik import ArmIK
+from hand_pose_navigation.arm_fk import (
     ArmFK, LEFT_ARM_JOINTS, RIGHT_ARM_JOINTS, JOINT_LIMITS,
     _LEFT_SHOULDER_IN_BASE, _RIGHT_SHOULDER_IN_BASE,
 )

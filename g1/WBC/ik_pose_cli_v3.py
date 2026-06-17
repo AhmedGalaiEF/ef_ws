@@ -59,10 +59,13 @@ Key bindings
 from __future__ import annotations
 
 import argparse
+import atexit
 import curses
+import fcntl
 import json
 import math
 import os
+import signal
 import sys
 import threading
 import time
@@ -75,9 +78,14 @@ import numpy as np
 # ── Path setup ────────────────────────────────────────────────────────────────
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
-MODULES_DIR = os.path.join(ROOT_DIR, "modules")
-for _p in (ROOT_DIR, MODULES_DIR):
-    if _p not in sys.path:
+_PATH_CANDIDATES = (
+    SCRIPT_DIR,
+    os.path.join(SCRIPT_DIR, "modules"),
+    ROOT_DIR,
+    os.path.join(ROOT_DIR, "modules"),
+)
+for _p in reversed(_PATH_CANDIDATES):
+    if os.path.isdir(_p) and _p not in sys.path:
         sys.path.insert(0, _p)
 
 try:
@@ -163,6 +171,7 @@ FOCUS_POSES = 1
 FOCUS_SEQUENCE = 2
 
 DEFAULT_POSE_FILE = os.path.join(SCRIPT_DIR, "saved_ik_pose_cli_v3_poses.json")
+DEFAULT_LOCK_FILE = "/tmp/ik_pose_cli_v3_rt_arm_sdk.lock"
 
 STABLE_HOLD_POSE_NAME = "stable_hold"
 STABLE_HOLD_ARM_JOINTS = {
@@ -338,10 +347,66 @@ class ArmSDKPublisher:
         self._pub.Write(self._cmd)
 
 
+class ControllerLockError(RuntimeError):
+    pass
+
+
+class SingleControllerLock:
+    """Process lock so only one TUI publishes rt/arm_sdk targets at a time."""
+
+    def __init__(self, path: str = DEFAULT_LOCK_FILE) -> None:
+        self.path = str(path)
+        self._fd: Optional[int] = None
+
+    def acquire(self) -> None:
+        fd = os.open(self.path, os.O_RDWR | os.O_CREAT, 0o644)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            owner = self._read_owner(fd)
+            os.close(fd)
+            raise ControllerLockError(
+                "Another ik_pose_cli_v3.py session already owns rt/arm_sdk"
+                + (f" ({owner})" if owner else "")
+                + f". Stop that session first, or shut down Jupyter if it is stale. Lock: {self.path}"
+            ) from exc
+        os.ftruncate(fd, 0)
+        owner = (
+            f"pid={os.getpid()} "
+            f"cwd={os.getcwd()} "
+            f"started={datetime.now(timezone.utc).isoformat()}\n"
+        )
+        os.write(fd, owner.encode("ascii"))
+        self._fd = fd
+
+    @staticmethod
+    def _read_owner(fd: int) -> str:
+        try:
+            os.lseek(fd, 0, os.SEEK_SET)
+            return os.read(fd, 512).decode("utf-8", "replace").strip()
+        except Exception:
+            return ""
+
+    def release(self) -> None:
+        fd = self._fd
+        if fd is None:
+            return
+        self._fd = None
+        try:
+            os.ftruncate(fd, 0)
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
+
+
 # ── Main TUI ──────────────────────────────────────────────────────────────────
 
 class IKPoseCLI:
     def __init__(self, args: argparse.Namespace) -> None:
+        self._closed = False
+        self._closing = False
+        self._controller_lock = SingleControllerLock()
+        self._controller_lock.acquire()
         self.iface = str(args.iface)
         self.domain_id = int(args.domain_id)
         self.pose_path = Path(os.path.abspath(os.path.expanduser(str(args.file))))
@@ -426,6 +491,12 @@ class IKPoseCLI:
 
         self._load_pose_file()
         self._seed_from_state()
+
+    def __del__(self) -> None:
+        try:
+            self.close()
+        except Exception:
+            pass
 
     # ── Initialisation ────────────────────────────────────────────────────────
 
@@ -1292,7 +1363,7 @@ class IKPoseCLI:
     def handle_key(self, key: int, win, h: int, w: int) -> None:  # noqa: C901
         # ── Quit ──────────────────────────────────────────────────────────
         if key in (ord("q"), 27):
-            self._running = False
+            self.request_shutdown()
             return
 
         if key == 9:
@@ -1621,7 +1692,30 @@ class IKPoseCLI:
     # ── Main curses loop ──────────────────────────────────────────────────────
 
     def run(self) -> None:
-        curses.wrapper(self._curses_main)
+        try:
+            curses.wrapper(self._curses_main)
+        finally:
+            self.close()
+
+    def request_shutdown(self) -> None:
+        self._running = False
+        self.sequence_running = False
+
+    def close(self) -> None:
+        if self._closed or self._closing:
+            return
+        self._closing = True
+        self.request_shutdown()
+        try:
+            if getattr(self, "armed", False):
+                self._release_arms()
+                self.armed = False
+        except Exception:
+            pass
+        finally:
+            self._closed = True
+            self._closing = False
+            self._controller_lock.release()
 
     def _curses_main(self, stdscr) -> None:
         if curses.has_colors():
@@ -1654,6 +1748,8 @@ class IKPoseCLI:
             key = stdscr.getch()
             if key != -1:
                 self.handle_key(key, stdscr, h, w)
+                if not self._running:
+                    break
 
             now = time.monotonic()
             if now - self._last_tick >= dt_target:
@@ -1662,11 +1758,7 @@ class IKPoseCLI:
                 except Exception as exc:
                     self.status = f"Tick error: {exc}"
 
-        if self.armed:
-            try:
-                self._release_arms()
-            except Exception:
-                pass
+        self.close()
 
 
 # ── CLI entry point ───────────────────────────────────────────────────────────
@@ -1720,7 +1812,28 @@ def _parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
-    IKPoseCLI(_parse_args()).run()
+    try:
+        app = IKPoseCLI(_parse_args())
+    except ControllerLockError as exc:
+        print(f"ik_pose_cli_v3: {exc}", file=sys.stderr)
+        raise SystemExit(2) from exc
+
+    atexit.register(app.close)
+
+    def _stop(signum, _frame) -> None:
+        app.request_shutdown()
+        if app._closing:
+            return
+        app.close()
+        raise SystemExit(128 + int(signum))
+
+    for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+        try:
+            signal.signal(sig, _stop)
+        except (AttributeError, ValueError):
+            pass
+
+    app.run()
 
 
 if __name__ == "__main__":
