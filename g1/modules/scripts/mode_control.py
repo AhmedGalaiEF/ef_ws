@@ -10,6 +10,13 @@ from dataclasses import dataclass
 from typing import Any
 
 try:
+    from sdk_client import Robot
+except ImportError as exc:
+    raise SystemExit(
+        "Local sdk_client.Robot helper is required for this app."
+    ) from exc
+
+try:
     import dash
     import dash_bootstrap_components as dbc
     from dash import Input, Output, State, dcc, html
@@ -81,6 +88,7 @@ class ModeController:
         self._initialized = False
         self._loco: LocoClient | None = None
         self._motion: MotionSwitcherClient | None = None
+        self._robot: Robot | None = None
 
     def _ensure_clients(self) -> None:
         if self._initialized:
@@ -232,10 +240,29 @@ class ModeController:
                     return f"AI mode selected. code={code}"
                 code = self._result_code(self._motion.ReleaseMode())
                 return f"AI mode released; dev mode active. code={code}"
+            if name == "release_arms":
+                robot = self.robot()
+                robot.start_sensors()
+                result = robot.release_arms()
+                return f"Release arms command sent. result={json.dumps(result, default=str)}"
+            if name == "stop":
+                self.robot().stop()
+                return "Stop command sent."
             raise ValueError(f"Unknown command: {name}")
+
+    def robot(self) -> Robot:
+        if self._robot is None:
+            self._robot = Robot(
+                iface=self.iface,
+                domain_id=self.domain_id,
+                auto_start_sensors=False,
+            )
+        return self._robot
 
 
 def button_disabled(mode: str, button: str) -> bool:
+    if button in {"release_arms", "stop"}:
+        return False
     if mode == "unavailable":
         return True
     if mode == "zero_torque":
@@ -302,6 +329,8 @@ def make_app(controller: ModeController) -> dash.Dash:
         ("run", "Run", "success"),
         ("climb", "Climb", "success"),
         ("dev", "Dev Off", "secondary"),
+        ("release_arms", "Release Arms", "info"),
+        ("stop", "Stop", "danger"),
     ]
 
     app.layout = html.Div(

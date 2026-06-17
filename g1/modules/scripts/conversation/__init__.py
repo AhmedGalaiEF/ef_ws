@@ -10,6 +10,7 @@ _MODULES = {
     "chat": "modules.scripts.chat",
     "chat_with_FAQs": "modules.scripts.chat_with_FAQs",
     "chat_with_ef_knowledge": "modules.scripts.chat_with_ef_knowledge",
+    "chat_with_knowledge": "modules.scripts.chat_with_knowledge",
     "hear_and_repeat": "modules.scripts.hear_and_repeat",
     "llm_client": "modules.scripts.llm_client",
     "naive_VLA": "modules.scripts.naive_VLA",

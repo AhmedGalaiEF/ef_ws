@@ -10,6 +10,7 @@ helpers or removed from the core wrapper.
 """
 from __future__ import annotations
 
+import base64
 import csv
 import json
 import math
@@ -17,8 +18,13 @@ import numpy as np
 import os
 import pickle
 import re
+import shutil
+import subprocess
+import sys
 import threading
 import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -67,6 +73,17 @@ DEFAULT_LIDAR_CLOUD_FALLBACK_TOPIC = "rt/utlidar/cloud_livox_mid360"
 DEFAULT_RGBD_HOST = os.environ.get("G1_RGBD_HOST", "10.34.0.83")
 DEFAULT_RGBD_PORT = int(os.environ.get("G1_RGBD_PORT", "5555"))
 DEFAULT_RGBD_TOPIC = os.environ.get("G1_RGBD_TOPIC", "")
+DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
+DEFAULT_CHAT_MODEL = "qwen3.5:9b"
+DEFAULT_VISION_MODEL = "qwen2.5vl:7b"
+VISION_MODEL_CANDIDATES = (
+    "qwen2.5vl:7b",
+    "qwen2.5vl",
+    "llava:latest",
+    "llava",
+    "minicpm-v:latest",
+    "minicpm-v",
+)
 HAND_STATE_TOPIC_BY_SIDE = {
     "left": "rt/dex3/left/state",
     "right": "rt/dex3/right/state",
@@ -321,6 +338,9 @@ class Robot:
         rgbd_host: str = DEFAULT_RGBD_HOST,
         rgbd_port: int = DEFAULT_RGBD_PORT,
         rgbd_topic: str = DEFAULT_RGBD_TOPIC,
+        ollama_url: str = DEFAULT_OLLAMA_URL,
+        chat_model: str = DEFAULT_CHAT_MODEL,
+        vision_model: str = DEFAULT_VISION_MODEL,
     ) -> None:
         self.iface = iface
         self.domain_id = int(domain_id)
@@ -333,6 +353,9 @@ class Robot:
         self.rgbd_host = str(rgbd_host)
         self.rgbd_port = int(rgbd_port)
         self.rgbd_topic = str(rgbd_topic)
+        self.ollama_url = str(ollama_url).rstrip("/")
+        self.chat_model = str(chat_model)
+        self.vision_model = str(vision_model)
         self.point_cloud_topics = list(
             dict.fromkeys(
                 [
@@ -387,6 +410,7 @@ class Robot:
         self._hands: dict[str, Dex3HandController] = {}
         self._usb_controller_thread: threading.Thread | None = None
         self._usb_controller_stop = threading.Event()
+        self._chat_process: subprocess.Popen[str] | None = None
         self.slam_is_running = False
 
         if safety_boot:
@@ -444,6 +468,93 @@ class Robot:
             self._arm_action_client.SetTimeout(10.0)
             self._arm_action_client.Init()
         return self._arm_action_client
+
+    def _ollama_request(
+        self,
+        path: str,
+        body: dict[str, Any] | None = None,
+        *,
+        timeout: float = 30.0,
+        method: str | None = None,
+    ) -> dict[str, Any]:
+        data = None if body is None else json.dumps(body).encode("utf-8")
+        request = urllib.request.Request(
+            f"{self.ollama_url}{path}",
+            data=data,
+            headers={"Content-Type": "application/json"} if body is not None else {},
+            method=method or ("POST" if body is not None else "GET"),
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                raw = response.read().decode("utf-8")
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"Ollama HTTP {exc.code}: {detail}") from exc
+        return json.loads(raw) if raw else {}
+
+    def _ollama_ready(self, *, timeout: float = 1.5) -> bool:
+        try:
+            payload = self._ollama_request("/api/tags", timeout=timeout, method="GET")
+        except Exception:
+            return False
+        return isinstance(payload, dict) and "models" in payload
+
+    def _ensure_ollama_running(
+        self,
+        *,
+        command: str = "ollama",
+        start_timeout: float = 20.0,
+        log_path: str = "/tmp/ollama_sdk_client_server.log",
+    ) -> bool:
+        if self._ollama_ready(timeout=1.5):
+            return True
+        if shutil.which(command) is None and not os.path.exists(command):
+            return False
+        with open(log_path, "a", encoding="utf-8") as log_handle:
+            log_handle.write(f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] starting ollama serve\n")
+            log_handle.flush()
+            proc = subprocess.Popen(
+                [command, "serve"],
+                stdout=log_handle,
+                stderr=subprocess.STDOUT,
+                text=True,
+                start_new_session=True,
+            )
+        deadline = time.time() + max(1.0, float(start_timeout))
+        while time.time() < deadline:
+            if self._ollama_ready(timeout=1.0):
+                return True
+            if proc.poll() is not None:
+                return False
+            time.sleep(0.5)
+        return False
+
+    def _ollama_model_names(self) -> set[str]:
+        payload = self._ollama_request("/api/tags", timeout=5.0, method="GET")
+        models = payload.get("models", []) if isinstance(payload, dict) else []
+        names: set[str] = set()
+        for item in models:
+            if isinstance(item, dict) and item.get("name"):
+                names.add(str(item["name"]))
+                names.add(str(item["name"]).split(":", 1)[0])
+        return names
+
+    @staticmethod
+    def _ollama_model_available(model: str, names: set[str]) -> bool:
+        selected = str(model)
+        return selected in names or selected.split(":", 1)[0] in names
+
+    def _select_available_vision_model(self, names: set[str]) -> str | None:
+        candidates = (self.vision_model, DEFAULT_VISION_MODEL, *VISION_MODEL_CANDIDATES)
+        seen: set[str] = set()
+        for candidate in candidates:
+            selected = str(candidate)
+            if selected in seen:
+                continue
+            seen.add(selected)
+            if self._ollama_model_available(selected, names):
+                return selected
+        return None
 
     def _ensure_slam_info_subscriber(self) -> SlamInfoSubscriber:
         if self._slam_info_sub is None:
@@ -614,6 +725,157 @@ class Robot:
                 return True
             time.sleep(0.05)
         return self._lowstate_sub.get_latest()[0] is not None
+
+    def get_mic(
+        self,
+        topic: str = "/audio_msg",
+        *,
+        duration_s: float = 5.0,
+        max_messages: int | None = None,
+        print_messages: bool = True,
+        use_cli: bool = True,
+    ) -> list[dict[str, Any]]:
+        """Listen to the ROS ASR/microphone topic and return received messages.
+
+        The default topic matches chat.py. Messages are stored as dictionaries
+        with timestamp, topic, raw text, and parsed JSON payload when available.
+        """
+        if use_cli:
+            return self._get_mic_via_ros2_cli(
+                topic,
+                duration_s=duration_s,
+                max_messages=max_messages,
+                print_messages=print_messages,
+            )
+
+        old_ros_domain = os.environ.get("ROS_DOMAIN_ID")
+        os.environ["ROS_DOMAIN_ID"] = str(self.domain_id)
+        try:
+            import rclpy
+            from rclpy.context import Context
+            from rclpy.node import Node
+            from std_msgs.msg import String
+        except Exception as exc:
+            raise RuntimeError(f"get_mic requires ROS 2 rclpy and std_msgs: {exc}") from exc
+
+        context = Context()
+        node: Any = None
+        messages: list[dict[str, Any]] = []
+
+        def _callback(msg: String) -> None:
+            raw = str(msg.data)
+            parsed: Any
+            try:
+                parsed = json.loads(raw)
+            except Exception:
+                parsed = None
+            record = {
+                "timestamp": time.time(),
+                "topic": topic,
+                "raw": raw,
+                "payload": parsed,
+                "text": str(parsed.get("text", "")) if isinstance(parsed, dict) else raw,
+            }
+            messages.append(record)
+            if print_messages:
+                print(f"[{topic}] {raw}")
+
+        try:
+            rclpy.init(context=context)
+            node = Node("robot_sdk_mic_listener", context=context)
+            node.create_subscription(String, topic, _callback, 10)
+            deadline = time.time() + max(0.0, float(duration_s))
+            while time.time() < deadline:
+                rclpy.spin_once(node, timeout_sec=0.1)
+                if max_messages is not None and len(messages) >= int(max_messages):
+                    break
+        except Exception as exc:
+            print(f"rclpy get_mic failed ({exc}); falling back to `ros2 topic echo`.")
+            return self._get_mic_via_ros2_cli(
+                topic,
+                duration_s=duration_s,
+                max_messages=max_messages,
+                print_messages=print_messages,
+                rclpy_error=str(exc),
+            )
+        finally:
+            if node is not None:
+                node.destroy_node()
+            if context.ok():
+                rclpy.shutdown(context=context)
+            if old_ros_domain is None:
+                os.environ.pop("ROS_DOMAIN_ID", None)
+            else:
+                os.environ["ROS_DOMAIN_ID"] = old_ros_domain
+        return messages
+
+    def _get_mic_via_ros2_cli(
+        self,
+        topic: str,
+        *,
+        duration_s: float,
+        max_messages: int | None,
+        print_messages: bool,
+        rclpy_error: str | None = None,
+    ) -> list[dict[str, Any]]:
+        env = os.environ.copy()
+        env["ROS_DOMAIN_ID"] = str(self.domain_id)
+        env.pop("CYCLONEDDS_URI", None)
+        env.pop("CYCLONEDDS_HOME", None)
+        command = [
+            "timeout",
+            f"{max(0.1, float(duration_s))}s",
+            "ros2",
+            "topic",
+            "echo",
+            "--qos-reliability",
+            "reliable",
+            "--full-length",
+            str(topic),
+            "std_msgs/msg/String",
+        ]
+        proc = subprocess.run(
+            command,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            env=env,
+        )
+        messages: list[dict[str, Any]] = []
+        count = 0
+        blocks = proc.stdout.split("---")
+        for block in blocks:
+            lines = [line.strip() for line in block.splitlines() if line.strip()]
+            if not lines:
+                continue
+            data_lines = [line for line in lines if line.startswith("data:")]
+            line = data_lines[0].split(":", 1)[1].strip() if data_lines else " ".join(lines)
+            if line.startswith("'") and line.endswith("'"):
+                line = line[1:-1]
+            if line.startswith('"') and line.endswith('"'):
+                line = line[1:-1]
+            parsed: Any = None
+            try:
+                parsed = json.loads(line)
+            except Exception:
+                parsed = None
+            record = {
+                "timestamp": time.time(),
+                "topic": topic,
+                "raw": line,
+                "payload": parsed,
+                "text": str(parsed.get("text", "")) if isinstance(parsed, dict) else line,
+                "source": "ros2 topic echo",
+            }
+            if rclpy_error:
+                record["rclpy_error"] = rclpy_error
+            messages.append(record)
+            count += 1
+            if print_messages:
+                print(f"[{topic}] {line}")
+            if max_messages is not None and count >= int(max_messages):
+                break
+        return messages
 
     def get_mode(self) -> int | None:
         msg = self.get_sport_state()
@@ -1607,6 +1869,10 @@ class Robot:
         elbow_delta: float = 0.9,
         wrist_roll_delta: float = 0.4,
         wrist_pitch_delta: float = 0.4,
+        final_shoulder_pitch_delta: float = 0.08,
+        final_shoulder_roll_toward_body_delta: float = 0.10,
+        final_elbow_delta: float = 0.10,
+        final_wrist_pitch_delta: float = 0.08,
     ) -> dict[str, Any]:
         side = str(arm).strip().lower()
         if side not in ("left", "right"):
@@ -1618,6 +1884,13 @@ class Robot:
         elbow_delta_signed = -abs(float(elbow_delta))
         wrist_roll_delta_signed = abs(float(wrist_roll_delta))
         wrist_pitch_delta_signed = -abs(float(wrist_pitch_delta))
+        final_pitch_delta = -abs(float(final_shoulder_pitch_delta))
+        final_roll_delta = -math.copysign(
+            abs(float(final_shoulder_roll_toward_body_delta)),
+            roll_delta,
+        )
+        final_elbow_delta_signed = -abs(float(final_elbow_delta))
+        final_wrist_pitch_delta_signed = -abs(float(final_wrist_pitch_delta))
         joint_limits = {
             arm_joints[0]: (-3.0892, 2.6704),
             arm_joints[1]: (-1.5882, 2.2515) if side == "left" else (-2.2515, 1.5882),
@@ -1638,7 +1911,8 @@ class Robot:
         stage_1_steps = max(1, steps // 4)
         stage_2_steps = max(1, steps // 4)
         stage_3_steps = max(1, steps // 4)
-        stage_4_steps = max(1, steps - stage_1_steps - stage_2_steps - stage_3_steps)
+        stage_4_steps = max(1, steps // 5)
+        stage_5_steps = max(1, steps - stage_1_steps - stage_2_steps - stage_3_steps - stage_4_steps)
 
         roll_pose = list(start_pose)
         roll_pose[1] = clamp_joint(arm_joints[1], float(start_pose[1]) + roll_delta)
@@ -1657,11 +1931,21 @@ class Robot:
         target_pose[3] = clamp_joint(arm_joints[3], float(start_pose[3]) + elbow_delta_signed)
         target_pose[4] = clamp_joint(arm_joints[4], float(start_pose[4]) + wrist_roll_delta_signed)
         target_pose[5] = clamp_joint(arm_joints[5], float(start_pose[5]) + wrist_pitch_delta_signed)
+
+        final_pose = list(target_pose)
+        final_pose[0] = clamp_joint(arm_joints[0], float(target_pose[0]) + final_pitch_delta)
+        final_pose[1] = clamp_joint(arm_joints[1], float(target_pose[1]) + final_roll_delta)
+        final_pose[3] = clamp_joint(arm_joints[3], float(target_pose[3]) + final_elbow_delta_signed)
+        final_pose[5] = clamp_joint(
+            arm_joints[5],
+            float(target_pose[5]) + final_wrist_pitch_delta_signed,
+        )
         stages = [
             (start_pose, roll_pose, stage_1_steps, "shoulder_roll_clearance"),
             (roll_pose, pitch_pose, stage_2_steps, "shoulder_pitch_forward"),
             (pitch_pose, restored_roll_pose, stage_3_steps, "partial_shoulder_roll_restore"),
             (restored_roll_pose, target_pose, stage_4_steps, "elbow_and_wrist_pitch"),
+            (target_pose, final_pose, stage_5_steps, "final_forward_up_and_in"),
         ]
 
         for stage_start, stage_target, stage_steps, _stage_name in stages:
@@ -1692,6 +1976,7 @@ class Robot:
             "forward_pose": pitch_pose,
             "restored_roll_pose": restored_roll_pose,
             "target_pose": target_pose,
+            "final_pose": final_pose,
             "joint_names": [BODY_JOINT_NAME_BY_INDEX[joint_index] for joint_index in arm_joints],
             "stages": [stage_name for _start, _target, _steps, stage_name in stages],
             "command_rate_hz": float(command_rate_hz),
@@ -1715,6 +2000,10 @@ class Robot:
         elbow_delta: float = 1,
         wrist_roll_delta: float = 0.2,
         wrist_pitch_delta: float = 0.4,
+        final_shoulder_pitch_delta: float = 0.08,
+        final_shoulder_roll_toward_body_delta: float = 0.10,
+        final_elbow_delta: float = 0.10,
+        final_wrist_pitch_delta: float = 0.08,
     ) -> dict[str, Any]:
         """Best-effort inverse of :meth:`extend_arm_forward`.
 
@@ -1731,6 +2020,13 @@ class Robot:
         elbow_delta_signed = -abs(float(elbow_delta))
         wrist_roll_delta_signed = abs(float(wrist_roll_delta))
         wrist_pitch_delta_signed = -abs(float(wrist_pitch_delta))
+        final_pitch_delta = -abs(float(final_shoulder_pitch_delta))
+        final_roll_delta = -math.copysign(
+            abs(float(final_shoulder_roll_toward_body_delta)),
+            roll_delta,
+        )
+        final_elbow_delta_signed = -abs(float(final_elbow_delta))
+        final_wrist_pitch_delta_signed = -abs(float(final_wrist_pitch_delta))
         restore_fraction = max(0.0, min(1.0, float(shoulder_roll_restore_fraction)))
         joint_limits = {
             arm_joints[0]: (-3.0892, 2.6704),
@@ -1752,33 +2048,50 @@ class Robot:
         stage_1_steps = max(1, steps // 4)
         stage_2_steps = max(1, steps // 4)
         stage_3_steps = max(1, steps // 4)
-        stage_4_steps = max(1, steps - stage_1_steps - stage_2_steps - stage_3_steps)
+        stage_4_steps = max(1, steps // 5)
+        stage_5_steps = max(1, steps - stage_1_steps - stage_2_steps - stage_3_steps - stage_4_steps)
 
-        wrist_and_elbow_retracted_pose = list(start_pose)
+        final_adjustment_retracted_pose = list(start_pose)
+        final_adjustment_retracted_pose[0] = clamp_joint(
+            arm_joints[0], float(start_pose[0]) - final_pitch_delta)
+        final_adjustment_retracted_pose[1] = clamp_joint(
+            arm_joints[1], float(start_pose[1]) - final_roll_delta)
+        final_adjustment_retracted_pose[3] = clamp_joint(
+            arm_joints[3], float(start_pose[3]) - final_elbow_delta_signed)
+        final_adjustment_retracted_pose[5] = clamp_joint(
+            arm_joints[5], float(start_pose[5]) - final_wrist_pitch_delta_signed)
+
+        wrist_and_elbow_retracted_pose = list(final_adjustment_retracted_pose)
         wrist_and_elbow_retracted_pose[3] = clamp_joint(
-            arm_joints[3], float(start_pose[3]) - elbow_delta_signed)
+            arm_joints[3], float(final_adjustment_retracted_pose[3]) - elbow_delta_signed)
         wrist_and_elbow_retracted_pose[4] = clamp_joint(
-            arm_joints[4], float(start_pose[4]) - wrist_roll_delta_signed)
+            arm_joints[4], float(final_adjustment_retracted_pose[4]) - wrist_roll_delta_signed)
         wrist_and_elbow_retracted_pose[5] = clamp_joint(
-            arm_joints[5], float(start_pose[5]) - wrist_pitch_delta_signed)
+            arm_joints[5], float(final_adjustment_retracted_pose[5]) - wrist_pitch_delta_signed)
 
         clearance_roll_pose = list(wrist_and_elbow_retracted_pose)
         clearance_roll_pose[1] = clamp_joint(
             arm_joints[1],
-            float(start_pose[1]) + (roll_delta * restore_fraction),
+            float(final_adjustment_retracted_pose[1]) + (roll_delta * restore_fraction),
         )
 
         shoulder_pitch_retracted_pose = list(clearance_roll_pose)
         shoulder_pitch_retracted_pose[0] = clamp_joint(
-            arm_joints[0], float(start_pose[0]) - pitch_delta)
+            arm_joints[0], float(final_adjustment_retracted_pose[0]) - pitch_delta)
 
         target_pose = list(shoulder_pitch_retracted_pose)
         target_pose[1] = clamp_joint(
             arm_joints[1],
-            float(start_pose[1]) - (roll_delta * (1.0 - restore_fraction)),
+            float(final_adjustment_retracted_pose[1]) - (roll_delta * (1.0 - restore_fraction)),
         )
         stages = [
-            (start_pose, wrist_and_elbow_retracted_pose, stage_4_steps, "undo_elbow_and_wrist_pitch"),
+            (start_pose, final_adjustment_retracted_pose, stage_5_steps, "undo_final_forward_up_and_in"),
+            (
+                final_adjustment_retracted_pose,
+                wrist_and_elbow_retracted_pose,
+                stage_4_steps,
+                "undo_elbow_and_wrist_pitch",
+            ),
             (wrist_and_elbow_retracted_pose, clearance_roll_pose,
              stage_3_steps, "restore_shoulder_roll_clearance"),
             (clearance_roll_pose, shoulder_pitch_retracted_pose, stage_2_steps, "shoulder_pitch_back"),
@@ -1809,6 +2122,7 @@ class Robot:
         return {
             "arm": side,
             "start_pose": start_pose,
+            "final_adjustment_retracted_pose": final_adjustment_retracted_pose,
             "wrist_and_elbow_retracted_pose": wrist_and_elbow_retracted_pose,
             "clearance_roll_pose": clearance_roll_pose,
             "shoulder_pitch_retracted_pose": shoulder_pitch_retracted_pose,
@@ -2239,6 +2553,24 @@ class Robot:
             raise RuntimeError(f"GetImageSample failed with code={code}")
         return bytes(data)
 
+    def get_detection_image_jpeg(self, timeout: float = 2.0) -> tuple[bytes, str]:
+        """Return an RGB JPEG for vision-model detection.
+
+        Prefer the Unitree VideoClient. If that path is unavailable, fall back
+        to the RGBD ZMQ stream used by the notebook demos.
+        """
+        try:
+            return self.get_camera_image_jpeg(), "video_client"
+        except Exception as video_exc:
+            try:
+                frame = self.get_rgbd(timeout=timeout)
+                return bytes(frame["rgb_jpeg"]), "rgbd"
+            except Exception as rgbd_exc:
+                raise RuntimeError(
+                    "Could not get an RGB image from VideoClient or RGBD stream. "
+                    f"VideoClient error: {video_exc}; RGBD error: {rgbd_exc}"
+                ) from rgbd_exc
+
     def get_rgb_jpeg(self, timeout: float | None = None) -> bytes:
         _ = timeout
         return self.get_camera_image_jpeg()
@@ -2300,6 +2632,287 @@ class Robot:
             "center_depth_m": center_depth_m,
             "near_coverage_1m": near_coverage_1m,
             "valid_depth_fraction": float(valid.mean()) if valid.size else 0.0,
+        }
+
+    @staticmethod
+    def _extract_json_object(text: str) -> dict[str, Any]:
+        cleaned = str(text).strip()
+        if cleaned.startswith("```"):
+            cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned, flags=re.IGNORECASE)
+            cleaned = re.sub(r"\s*```$", "", cleaned)
+        try:
+            value = json.loads(cleaned)
+            return value if isinstance(value, dict) else {}
+        except Exception:
+            pass
+        start = cleaned.find("{")
+        end = cleaned.rfind("}")
+        if start >= 0 and end > start:
+            try:
+                value = json.loads(cleaned[start:end + 1])
+                return value if isinstance(value, dict) else {}
+            except Exception:
+                return {}
+        return {}
+
+    @staticmethod
+    def _normalize_bbox(value: Any) -> tuple[float, float, float, float] | None:
+        if value is None:
+            return None
+        if isinstance(value, dict):
+            seq = [value.get(key) for key in ("x1", "y1", "x2", "y2")]
+        else:
+            seq = list(value) if isinstance(value, (list, tuple)) else []
+        if len(seq) != 4:
+            return None
+        try:
+            x1, y1, x2, y2 = [float(item) for item in seq]
+        except Exception:
+            return None
+        if max(abs(x1), abs(y1), abs(x2), abs(y2)) > 1.5:
+            return None
+        x1, x2 = sorted((max(0.0, min(1.0, x1)), max(0.0, min(1.0, x2))))
+        y1, y2 = sorted((max(0.0, min(1.0, y1)), max(0.0, min(1.0, y2))))
+        if (x2 - x1) <= 0.01 or (y2 - y1) <= 0.01:
+            return None
+        return (x1, y1, x2, y2)
+
+    @staticmethod
+    def _resize_jpeg_for_ollama(
+        rgb_jpeg: bytes,
+        *,
+        max_side_px: int = 512,
+        quality: int = 85,
+    ) -> bytes:
+        if int(max_side_px) <= 0:
+            return rgb_jpeg
+        try:
+            import cv2
+            import numpy as np
+
+            frame = decode_video_frame_bgr(rgb_jpeg)
+            height, width = frame.shape[:2]
+            longest = max(height, width)
+            if longest > int(max_side_px):
+                scale = float(max_side_px) / float(longest)
+                frame = cv2.resize(
+                    frame,
+                    (max(1, int(round(width * scale))), max(1, int(round(height * scale)))),
+                    interpolation=cv2.INTER_AREA,
+                )
+            ok, encoded = cv2.imencode(
+                ".jpg",
+                frame,
+                [int(cv2.IMWRITE_JPEG_QUALITY), max(40, min(95, int(quality)))],
+            )
+            return bytes(encoded) if ok else rgb_jpeg
+        except Exception:
+            return rgb_jpeg
+
+    def setup_ollama_vision_model(
+        self,
+        model: str | None = None,
+        *,
+        pull: bool = False,
+        ollama_command: str = "ollama",
+        start_server: bool = True,
+        start_timeout: float = 20.0,
+    ) -> dict[str, Any]:
+        """Prepare the Ollama vision model used by detect().
+
+        If pull=True and the model is not installed, this runs
+        `ollama pull <model>`. Otherwise it reports whether the model is
+        already available.
+        """
+        requested = str(model) if model is not None else None
+        selected = requested or str(self.vision_model)
+
+        server_ready = self._ollama_ready(timeout=1.5)
+        if not server_ready and start_server:
+            server_ready = self._ensure_ollama_running(
+                command=ollama_command,
+                start_timeout=start_timeout,
+            )
+        if not server_ready:
+            return {
+                "ok": False,
+                "server_ready": False,
+                "model": selected,
+                "installed": False,
+                "message": "Ollama server is not reachable.",
+            }
+
+        names = self._ollama_model_names()
+        if requested is None:
+            available = self._select_available_vision_model(names)
+            if available is not None:
+                selected = available
+                self.vision_model = selected
+        installed = self._ollama_model_available(selected, names)
+        pull_result: dict[str, Any] | None = None
+        if not installed and pull:
+            if shutil.which(ollama_command) is None and not os.path.exists(ollama_command):
+                raise FileNotFoundError(f"Ollama executable not found: {ollama_command}")
+            proc = subprocess.run(
+                [ollama_command, "pull", selected],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                timeout=1800,
+            )
+            pull_result = {"returncode": int(proc.returncode), "output": proc.stdout}
+            if proc.returncode != 0:
+                return {
+                    "ok": False,
+                    "server_ready": True,
+                    "model": selected,
+                    "installed": False,
+                    "pull": pull_result,
+                    "message": f"ollama pull failed for {selected}.",
+                }
+            names = self._ollama_model_names()
+            installed = self._ollama_model_available(selected, names)
+            if installed:
+                self.vision_model = selected
+        return {
+            "ok": bool(installed),
+            "server_ready": True,
+            "model": selected,
+            "installed": bool(installed),
+            "pull": pull_result,
+            "message": "ready" if installed else f"Model is not installed. Run: ollama pull {selected}",
+        }
+
+    def detect(
+        self,
+        object: str = "human",
+        *,
+        img: bool = False,
+        model: str | None = None,
+        confidence_threshold: float = 0.0,
+        timeout: float = 120.0,
+        image_max_side_px: int = 512,
+        image_quality: int = 85,
+    ) -> float | dict[str, Any]:
+        """Detect whether an object is visible in the current RGB camera view.
+
+        Returns a confidence float when img=False. When img=True, returns a
+        dictionary containing confidence, normalized bbox, pixel bbox, raw model
+        response, and an RGB numpy image with the bbox drawn when available.
+        """
+        setup = self.setup_ollama_vision_model(model=model, pull=False)
+        if not setup.get("ok"):
+            raise RuntimeError(str(setup.get("message", "Ollama vision model is not ready.")))
+        selected_model = str(setup.get("model") or model or self.vision_model)
+
+        target = str(object).strip() or "object"
+        rgb_jpeg, image_source = self.get_detection_image_jpeg(timeout=min(5.0, float(timeout)))
+        prompt = (
+            "You are a visual object detector. Inspect the image and answer only valid JSON. "
+            f"Target object: {target!r}. "
+            "Return this exact schema: "
+            "{\"object\":\"target name\",\"present\":true|false,\"confidence\":0.0,"
+            "\"bbox\":[x1,y1,x2,y2],\"reason\":\"short\"}. "
+            "bbox must be normalized image coordinates from 0 to 1 around the most likely target, "
+            "or null if the target is not visible. Confidence must be between 0 and 1."
+        )
+        retry_sides = [
+            int(image_max_side_px),
+            min(384, int(image_max_side_px)),
+            min(256, int(image_max_side_px)),
+        ]
+        last_error: Exception | None = None
+        result: dict[str, Any] | None = None
+        used_side = retry_sides[0]
+        for side in dict.fromkeys(max(64, value) for value in retry_sides):
+            used_side = int(side)
+            ollama_jpeg = self._resize_jpeg_for_ollama(
+                rgb_jpeg,
+                max_side_px=used_side,
+                quality=int(image_quality),
+            )
+            body = {
+                "model": selected_model,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": prompt,
+                        "images": [base64.b64encode(ollama_jpeg).decode("ascii")],
+                    }
+                ],
+                "stream": False,
+                "keep_alive": "0",
+                "think": False,
+                "options": {
+                    "temperature": 0.0,
+                    "num_predict": 120,
+                    "num_ctx": 1024,
+                    "num_batch": 128,
+                },
+            }
+            try:
+                result = self._ollama_request("/api/chat", body, timeout=timeout)
+                last_error = None
+                break
+            except Exception as exc:
+                last_error = exc
+                if "llama runner process has terminated" not in str(exc) and "timed out" not in str(exc).lower():
+                    raise
+                time.sleep(1.0)
+        if result is None:
+            raise RuntimeError(f"Ollama vision request failed after retries: {last_error}") from last_error
+        raw_text = str(result.get("message", {}).get("content", "")).strip()
+        parsed = self._extract_json_object(raw_text)
+        try:
+            confidence = float(parsed.get("confidence", 0.0))
+        except Exception:
+            confidence = 0.0
+        confidence = max(0.0, min(1.0, confidence))
+        if not bool(parsed.get("present", confidence > 0.0)):
+            confidence = 0.0
+        bbox_norm = self._normalize_bbox(parsed.get("bbox"))
+
+        if not img:
+            return confidence
+
+        import cv2
+
+        frame_bgr = decode_video_frame_bgr(rgb_jpeg)
+        height, width = frame_bgr.shape[:2]
+        bbox_px: tuple[int, int, int, int] | None = None
+        if bbox_norm is not None and confidence >= float(confidence_threshold):
+            x1, y1, x2, y2 = bbox_norm
+            bbox_px = (
+                int(round(x1 * width)),
+                int(round(y1 * height)),
+                int(round(x2 * width)),
+                int(round(y2 * height)),
+            )
+            cv2.rectangle(frame_bgr, (bbox_px[0], bbox_px[1]), (bbox_px[2], bbox_px[3]), (0, 255, 0), 2)
+            label = f"{target} {confidence:.2f}"
+            cv2.putText(
+                frame_bgr,
+                label,
+                (bbox_px[0], max(20, bbox_px[1] - 8)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (0, 255, 0),
+                2,
+                cv2.LINE_AA,
+            )
+        image_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+        return {
+            "object": target,
+            "confidence": confidence,
+            "present": confidence > float(confidence_threshold),
+            "bbox": bbox_norm,
+            "bbox_pixels": bbox_px,
+            "image_rgb": image_rgb,
+            "raw_response": raw_text,
+            "model": selected_model,
+            "image_source": image_source,
+            "image_max_side_px": used_side,
+            "rgb_jpeg": rgb_jpeg,
         }
 
     # ------------------------------------------------------------------
@@ -2590,6 +3203,134 @@ class Robot:
     # ------------------------------------------------------------------
     # Safety + audio
     # ------------------------------------------------------------------
+
+    def chat(
+        self,
+        text: str | None = None,
+        *,
+        model: str | None = None,
+        system_prompt: str | None = None,
+        temperature: float = 0.4,
+        num_predict: int = 80,
+        timeout: float = 30.0,
+        speak: bool = False,
+        start_robot_chat: bool = False,
+        extra_args: list[str] | None = None,
+    ) -> str | subprocess.Popen[str]:
+        """Chat with Ollama, or launch the ASR-backed chat.py node.
+
+        Pass text for a single Ollama reply. Pass start_robot_chat=True, or
+        call with text=None, to start scripts/chat.py in a subprocess.
+        """
+        selected_model = str(model or self.chat_model)
+        if start_robot_chat or text is None:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            script = os.path.join(base_dir, "chat.py")
+            if not os.path.exists(script):
+                script = os.path.join(base_dir, "scripts", "chat.py")
+            command = [
+                sys.executable,
+                script,
+                "--iface",
+                str(self.iface),
+                "--domain-id",
+                str(self.domain_id),
+                "--ollama-url",
+                str(self.ollama_url),
+                "--model",
+                selected_model,
+            ]
+            if extra_args:
+                command.extend([str(item) for item in extra_args])
+            log_path = "/tmp/robot_sdk_chat.log"
+            pid_path = "/tmp/robot_sdk_chat.pid"
+            log_handle = open(log_path, "a", encoding="utf-8")
+            log_handle.write(f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] starting {' '.join(command)}\n")
+            log_handle.flush()
+            proc = subprocess.Popen(
+                command,
+                text=True,
+                stdout=log_handle,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
+            log_handle.close()
+            self._chat_process = proc
+            with open(pid_path, "w", encoding="utf-8") as handle:
+                handle.write(str(proc.pid))
+            return proc
+
+        if not self._ollama_ready(timeout=1.5):
+            self._ensure_ollama_running()
+        prompt = system_prompt or (
+            "You are the voice of a Unitree humanoid robot. "
+            "Answer naturally, concisely, and do not mention hidden reasoning."
+        )
+        body = {
+            "model": selected_model,
+            "messages": [
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": str(text)},
+            ],
+            "stream": False,
+            "think": False,
+            "options": {
+                "temperature": float(temperature),
+                "num_predict": int(num_predict),
+            },
+        }
+        result = self._ollama_request("/api/chat", body, timeout=timeout)
+        reply = str(result.get("message", {}).get("content", "")).strip()
+        reply = " ".join(reply.split())
+        if speak and reply:
+            self.say(reply)
+        return reply
+
+    def stop_chat(self, *, timeout: float = 3.0) -> bool:
+        """Stop a chat.py process launched by Robot.chat()."""
+        pid_path = "/tmp/robot_sdk_chat.pid"
+        pids: list[int] = []
+        proc = self._chat_process
+        if proc is not None and proc.poll() is None:
+            pids.append(int(proc.pid))
+        try:
+            with open(pid_path, "r", encoding="utf-8") as handle:
+                value = handle.read().strip()
+            if value:
+                pids.append(int(value))
+        except Exception:
+            pass
+
+        stopped = False
+        for pid in sorted(set(pids)):
+            try:
+                os.kill(pid, 15)
+                stopped = True
+            except ProcessLookupError:
+                continue
+            except Exception:
+                continue
+
+        deadline = time.time() + max(0.0, float(timeout))
+        for pid in sorted(set(pids)):
+            while time.time() < deadline:
+                try:
+                    os.kill(pid, 0)
+                except ProcessLookupError:
+                    break
+                time.sleep(0.05)
+            else:
+                try:
+                    os.kill(pid, 9)
+                    stopped = True
+                except Exception:
+                    pass
+        try:
+            os.unlink(pid_path)
+        except Exception:
+            pass
+        self._chat_process = None
+        return stopped
 
     def hanged_boot(
         self,

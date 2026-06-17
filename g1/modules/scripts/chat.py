@@ -11,6 +11,7 @@ import subprocess
 import string
 import sys
 import time
+import shutil
 import urllib.error
 import urllib.request
 from difflib import SequenceMatcher
@@ -68,6 +69,12 @@ def parse_args() -> argparse.Namespace:
                         help="How long Ollama should keep the model loaded.")
     parser.add_argument("--num-thread", type=int, default=None,
                         help="Optional Ollama CPU thread count.")
+    parser.add_argument("--ollama-command", default="ollama",
+                        help="Ollama executable used when starting a local server.")
+    parser.add_argument("--ollama-start-timeout", type=float, default=20.0,
+                        help="Seconds to wait for a newly started Ollama server.")
+    parser.add_argument("--no-start-ollama", action="store_true",
+                        help="Do not start ollama serve when the local API is unavailable.")
     parser.add_argument("--no-warmup", action="store_true",
                         help="Do not preload the model at startup.")
     parser.add_argument("--iface", default="eth0", help="DDS interface for robot audio playback.")
@@ -138,10 +145,12 @@ class RobotChat(Node):
         self.last_text: str | None = None
         self.last_reply: str | None = None
         self.last_reply_ts = 0.0
+        self.ollama_process: subprocess.Popen[str] | None = None
         self.create_subscription(String, args.topic, self.on_audio_msg, 10)
         self.get_logger().info(
             f"Chatting from {args.topic} with Ollama model={args.model}; saving to {self.out_path}"
         )
+        self._ensure_ollama_running()
         self._run_startup_actions()
         if not args.no_warmup:
             self._warm_up_ollama()
@@ -281,6 +290,68 @@ class RobotChat(Node):
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
             raise RuntimeError(f"HTTP {exc.code}: {detail}") from exc
+
+    def _ensure_ollama_running(self) -> None:
+        if self._ollama_ready(timeout=1.5):
+            self.get_logger().info(f"Ollama API is available at {self.args.ollama_url}")
+            return
+        if self.args.no_start_ollama:
+            self.get_logger().warning(
+                f"Ollama API is unavailable at {self.args.ollama_url}; --no-start-ollama is set"
+            )
+            return
+        command = str(self.args.ollama_command)
+        if shutil.which(command) is None and not Path(command).exists():
+            self.get_logger().warning(
+                f"Ollama API is unavailable and executable was not found: {command}"
+            )
+            return
+
+        log_path = Path("/tmp/ollama_chat_server.log")
+        self.get_logger().info(f"Starting Ollama server with `{command} serve`; log={log_path}")
+        log_handle = log_path.open("a", encoding="utf-8")
+        log_handle.write(f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] starting ollama serve\n")
+        log_handle.flush()
+        env = os.environ.copy()
+        self.ollama_process = subprocess.Popen(
+            [command, "serve"],
+            stdout=log_handle,
+            stderr=subprocess.STDOUT,
+            text=True,
+            env=env,
+            start_new_session=True,
+        )
+
+        deadline = time.time() + max(1.0, float(self.args.ollama_start_timeout))
+        while time.time() < deadline:
+            if self._ollama_ready(timeout=1.0):
+                self.get_logger().info(
+                    f"Ollama server is ready at {self.args.ollama_url} pid={self.ollama_process.pid}"
+                )
+                return
+            if self.ollama_process.poll() is not None:
+                self.get_logger().warning(
+                    f"ollama serve exited early with code {self.ollama_process.returncode}; see {log_path}"
+                )
+                return
+            time.sleep(0.5)
+        self.get_logger().warning(
+            f"Ollama server did not become ready within {self.args.ollama_start_timeout:.1f}s; see {log_path}"
+        )
+
+    def _ollama_ready(self, *, timeout: float) -> bool:
+        request = urllib.request.Request(
+            f"{str(self.args.ollama_url).rstrip('/')}/api/tags",
+            method="GET",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                if int(response.status) != 200:
+                    return False
+                payload = json.loads(response.read().decode("utf-8"))
+                return isinstance(payload, dict) and "models" in payload
+        except Exception:
+            return False
 
     def _run_startup_actions(self) -> None:
         if not self.args.no_headlight:

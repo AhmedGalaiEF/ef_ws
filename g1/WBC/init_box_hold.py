@@ -5,8 +5,7 @@ Box-hold initialization for the G1.
 Sequence
 --------
 1. Acquire arm_sdk authority (unrelease_arms).
-2. Extend right arm forward (wrist_roll_delta=0 to avoid the asymmetric
-   downward rotation on the right side), then extend left arm forward.
+2. Extend right arm forward, then extend left arm forward.
 3. Wait --wait seconds (default 60 s) so a box can be placed between
    the hands.
 4. Slowly squeeze both shoulder-yaw joints inward to clamp the box from
@@ -23,13 +22,6 @@ horizontally:
 
   left  target = current_yaw - squeeze_delta
   right target = current_yaw + squeeze_delta
-
-Wrist-roll asymmetry fix
-------------------------
-extend_arm_forward() always applies +abs(wrist_roll_delta), which rotates
-the right hand downward relative to the left (opposite joint convention).
-The right arm is therefore extended with wrist_roll_delta=0.0 so that
-only the left arm receives the +0.4 rad adjustment.
 
 Usage
 -----
@@ -206,11 +198,8 @@ def main() -> None:
     time.sleep(0.5)
 
     # ── Step 2: extend arms forward ───────────────────────────────────────────
-    # Right arm: wrist_roll_delta=0.0 suppresses the +0.4 rad that would
-    # rotate the right hand downward (opposite joint convention to left arm).
-    log.info("Extending right arm forward (wrist roll held neutral) …")
-    robot.extend_arm_forward(arm="right", duration_s=args.extend_duration,
-                             wrist_roll_delta=0.0)
+    log.info("Extending right arm forward …")
+    robot.extend_arm_forward(arm="right", duration_s=args.extend_duration)
 
     log.info("Extending left arm forward …")
     robot.extend_arm_forward(arm="left", duration_s=args.extend_duration)

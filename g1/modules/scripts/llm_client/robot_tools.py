@@ -76,33 +76,24 @@ def build_robot_tools(robot: Any) -> Tuple[Dict[str, Callable[..., Any]], List[D
         arm: str = "right",
         duration_s: float = 3.0,
     ) -> str:
-        """Reach the arm forward to an approximate (height, length) target.
+        """Reach the arm forward using the saved pose trajectory.
 
-        ``height_m`` is relative to a neutral chest-level pose: +0.20 = upper
-        chest, 0 = chest, -0.20 = lower belly. ``length_m`` is forward reach
-        from the shoulder: 0.2 = close in, 0.5 = nearly full extension.
+        ``height_m`` and ``length_m`` are accepted for compatibility with the
+        tool schema but no longer tune the joint trajectory.
         """
         side = str(arm).strip().lower()
         if side not in {"left", "right"}:
             return f"error: arm must be 'left' or 'right', got '{arm}'"
-        # Map the rough height/length targets onto the SDK's per-joint deltas
-        # (extend_arm_forward signs/clamps internally).
         h = max(-0.30, min(0.30, float(height_m)))
         reach = max(0.10, min(0.60, float(length_m)))
-        # higher target -> less pitch down
-        shoulder_pitch_delta = max(0.10, min(0.90, 0.50 - h * 1.5))
-        elbow_delta = max(0.10, min(1.40, 1.30 - reach * 1.8))             # longer reach -> less bent
         result = robot.extend_arm_forward(
             arm=side,
             duration_s=float(duration_s),
-            shoulder_pitch_delta=shoulder_pitch_delta,
-            elbow_delta=elbow_delta,
         )
         target = result.get("target_pose") if isinstance(result, dict) else None
         return (
-            f"reached {side} arm to height={h:+.2f} m, length={l:.2f} m "
-            f"(shoulder_pitch_delta={shoulder_pitch_delta:.2f}, "
-            f"elbow_delta={elbow_delta:.2f}); target_pose={target}"
+            f"reached {side} arm using saved pose trajectory "
+            f"(requested height={h:+.2f} m, length={reach:.2f} m); target_pose={target}"
         )
 
     # ---- gripping ---------------------------------------------------------
@@ -208,23 +199,21 @@ def build_robot_tools(robot: Any) -> Tuple[Dict[str, Callable[..., Any]], List[D
             "function": {
                 "name": "reach_forward",
                 "description": (
-                    "Extend the chosen arm forward to an approximate (height, "
-                    "length) endpoint relative to a neutral chest-level pose. "
-                    "Use this to position the gripper near an object before "
-                    "calling 'grab'."
+                    "Extend the chosen arm forward using the saved pose trajectory. "
+                    "Use this to position the gripper near an object before calling 'grab'."
                 ),
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "height_m": {
                             "type": "number",
-                            "description": "Target height relative to chest (m). +0.20 = upper chest, 0 = chest, -0.20 = lower belly.",
+                            "description": "Accepted for compatibility; the saved pose trajectory currently ignores it.",
                             "minimum": -0.30,
                             "maximum": 0.30,
                         },
                         "length_m": {
                             "type": "number",
-                            "description": "Forward reach distance from the shoulder (m). 0.2 = close in, 0.5 = nearly full extension.",
+                            "description": "Accepted for compatibility; the saved pose trajectory currently ignores it.",
                             "minimum": 0.10,
                             "maximum": 0.60,
                         },
