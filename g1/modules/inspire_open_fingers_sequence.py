@@ -28,8 +28,8 @@ class InspireHandConfig:
 
 
 HAND_CONFIGS: dict[str, InspireHandConfig] = {
-    "right": InspireHandConfig(ip="192.168.124.210"),
-    "left": InspireHandConfig(ip="192.168.124.211"),
+    "right": InspireHandConfig(ip="192.168.123.210"),
+    "left": InspireHandConfig(ip="192.168.123.211"),
 }
 
 # Inspire RH56DFTP angle register order:
