@@ -1,28 +1,53 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-from sdk_client import Robot
-from sdk_audio import parse_color, scale_color
 
 import argparse
 import os
 import sys
 import threading
 import time
+from typing import TYPE_CHECKING
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
+
+from sdk_audio import parse_color, scale_color
+
+if TYPE_CHECKING:
+    from sdk_client import Robot
+
+
+def brightness_arg(value: str) -> int:
+    brightness = int(value)
+    if not 0 <= brightness <= 100:
+        raise argparse.ArgumentTypeError("brightness must be between 0 and 100")
+    return brightness
+
+
+def nonnegative_float_arg(value: str) -> float:
+    parsed = float(value)
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("value must be >= 0")
+    return parsed
+
+
+def positive_float_arg(value: str) -> float:
+    parsed = float(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("value must be > 0")
+    return parsed
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Persistently hold the robot headlight at one RGB color.")
     parser.add_argument("color", help="RGB color as R,G,B, for example 255,0,0.")
-    parser.add_argument("brightness", type=int, help="Brightness 0-100.")
-    parser.add_argument("duration", type=float, help="Duration in seconds.")
+    parser.add_argument("brightness", type=brightness_arg, help="Brightness 0-100.")
+    parser.add_argument("duration", type=nonnegative_float_arg, help="Duration in seconds.")
     parser.add_argument(
         "--interval",
-        type=float,
+        type=positive_float_arg,
         default=0.2,
         help="Seconds between repeated AudioClient.LedControl calls.",
     )
@@ -69,7 +94,8 @@ class HeadlightKeeper(threading.Thread):
 
 def main() -> int:
     args = parse_args()
-    rgb = scale_color(parse_color(str(args.color)), int(args.brightness))
+    rgb = scale_color(parse_color(str(args.color)), args.brightness)
+    from sdk_client import Robot
 
     robot = Robot(
         iface=args.iface,

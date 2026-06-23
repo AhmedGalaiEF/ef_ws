@@ -1,17 +1,26 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-from unitree_sdk2py.idl.std_msgs.msg.dds_ import String_
-from sdk_client import Robot
 
 import argparse
 import json
+import os
+import sys
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+from unitree_sdk2py.idl.std_msgs.msg.dds_ import String_
 
 from dds_env import ensure_cyclonedds_environment
 from sdk_sensors import LatestSubscriber
 
 ensure_cyclonedds_environment()
+
+if TYPE_CHECKING:
+    from sdk_client import Robot
 
 
 AUDIO_TOPIC = "rt/audio_msg"
@@ -75,6 +84,7 @@ def is_final_result(payload: dict[str, Any]) -> bool:
 
 def main() -> int:
     args = parse_args()
+    from sdk_client import Robot
 
     robot = Robot(
         iface=args.iface,

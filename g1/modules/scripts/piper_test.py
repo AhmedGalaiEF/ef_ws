@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-from sdk_client import Robot
 
 import argparse
 import os
 import sys
 import time
+from typing import TYPE_CHECKING
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
+
+if TYPE_CHECKING:
+    from sdk_client import Robot
 
 
 BIRTHDAY_LINES = {
@@ -81,6 +84,7 @@ def birthday_text(language: str, name: str) -> str:
 
 def main() -> int:
     args = parse_args()
+    from sdk_client import Robot
 
     language_texts = [(language, birthday_text(language, args.name)) for language in args.languages]
     if args.dry_run:

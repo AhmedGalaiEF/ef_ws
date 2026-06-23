@@ -4,10 +4,15 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 import threading
 import time
 from dataclasses import dataclass
 from typing import Any
+
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
 try:
     from sdk_client import Robot

@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-from sdk_client import Robot
 
 import argparse
 import base64
@@ -26,6 +25,8 @@ from typing import Any, Callable
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
+
+from sdk_client import Robot
 
 
 try:

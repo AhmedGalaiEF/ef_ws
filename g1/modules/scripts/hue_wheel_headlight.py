@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-from sdk_client import Robot
 
 import argparse
 import colorsys
@@ -12,6 +11,8 @@ from collections.abc import Iterator
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
+
+from sdk_client import Robot
 
 
 def parse_args() -> argparse.Namespace:

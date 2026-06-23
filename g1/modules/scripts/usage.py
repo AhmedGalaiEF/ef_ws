@@ -1,10 +1,19 @@
+#!/usr/bin/env python3
 from __future__ import annotations
 
 import argparse
 import json
+import os
+import sys
 import time
+from typing import TYPE_CHECKING
 
-from sdk_client import Robot
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+if TYPE_CHECKING:
+    from sdk_client import Robot
 
 
 def print_section(title: str, payload) -> None:
@@ -74,6 +83,7 @@ def main() -> None:
     parser.add_argument("--slam-type", default="indoor")
     parser.add_argument("--slam-save-path")
     args = parser.parse_args()
+    from sdk_client import Robot
 
     robot = Robot(
         iface=args.iface,
