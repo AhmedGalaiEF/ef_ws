@@ -1,82 +1,142 @@
-Inspire Hands Scripts Explanation
+#!/usr/bin/env python3
+from __future__ import annotations
 
-Python
+import argparse
+import time
+from contextlib import ExitStack
 
-python/三代手控制程序/demo_485.py
-Controls a 3rd-generation hand over RS-485 serial. It opens /dev/ttyUSB0, writes
-speed, force, and angle registers, reads back temperature and actual angle values,
-and triggers an action sequence. This is the simplest serial demo.
+from inspire_sdk import (
+    CLEAR_ERROR_REGISTER,
+    DEFAULT_OPEN_ORDER,
+    HAND_CLOSE_TARGET,
+    HAND_CONFIGS,
+    ModbusTcp,
+    NullClient,
+    open_next_finger,
+    ramp_to_target,
+)
 
-python/三代手控制程序/demo_can.py
-Controls a 3rd-generation hand using the CAN-style framed protocol. It builds
-custom frames with 0xAA ... 0x55, splits 6 values across two frames when needed,
-and reads values back in two parts.
 
-python/四代手控制程序/demo_485.py
-Same structure as the 3rd-generation demo_485.py, but intended for the
-4th-generation hand. Good starting point if the device is connected by USB serial.
+def parse_order(value: str) -> tuple[str, ...]:
+    fingers = tuple(part.strip().lower().replace("-", "_") for part in value.split(",") if part.strip())
+    if not fingers:
+        raise argparse.ArgumentTypeError("at least one finger is required")
 
-python/四代手控制程序/demo_can.py
-CAN-style demo for the 4th-generation hand. It encodes addresses into extended
-identifiers, sends write and read frames, and reconstructs the returned values.
+    allowed = set(DEFAULT_OPEN_ORDER) | {"thumb_bend", "thumb_rotation", "thumb_rot", "pinky"}
+    unknown = [finger for finger in fingers if finger not in allowed]
+    if unknown:
+        raise argparse.ArgumentTypeError(f"unknown finger(s): {', '.join(unknown)}")
+    return fingers
 
-python/四代手控制程序/demo_modbus.py
-Controls one hand over Modbus TCP, defaulting to 192.168.11.210:6000. It writes
-angle, force, and speed registers, reads status, error, and temperature values,
-and runs an action sequence.
 
-python/四代手控制程序/demo_modbus_multi-device.py
-Same Modbus approach, but for multiple hands at once. It tries to connect to
-several IPs, then starts one thread per device and runs the same control
-sequence in parallel.
+def run_sequence(
+    hand: str,
+    *,
+    order: tuple[str, ...],
+    open_duration_s: float,
+    reset_duration_s: float,
+    closed_hold_s: float,
+    opened_hold_s: float,
+    between_fingers_s: float,
+    loop_pause_s: float,
+    rate_hz: float,
+    speed: int,
+    force: int,
+    repeat: int,
+    dry_run: bool,
+) -> None:
+    sides = ("left", "right") if hand == "both" else (hand,)
+    cycle = 1
 
-python/四代手控制程序/touch_data.py
-Reads full tactile sensor register blocks over Modbus TCP. It formats raw data
-into matrices for pinky, ring, middle, index, thumb, and palm, then prints the
-structured tactile arrays.
+    with ExitStack() as stack:
+        clients: dict[str, ModbusTcp | None] = {}
+        for side in sides:
+            config = HAND_CONFIGS[side]
+            client = (
+                stack.enter_context(ModbusTcp(config.ip, config.port, config.unit_id))
+                if not dry_run
+                else stack.enter_context(NullClient())
+            )
+            clients[side] = client
+            if client is not None:
+                client.write_single_register(CLEAR_ERROR_REGISTER, 1)
 
-python/四代手控制程序/touch_data_ts.py
-Reads higher-level tactile force values instead of full matrices. It extracts
-floating-point normal force and tangential force for each finger and prints them
-continuously.
+        current = {side: list(HAND_CLOSE_TARGET) for side in sides}
+        while repeat <= 0 or cycle <= repeat:
+            for side in sides:
+                print(f"{side}: cycle {cycle} closing all fingers")
+                current[side] = ramp_to_target(
+                    clients[side],
+                    current[side],
+                    HAND_CLOSE_TARGET,
+                    duration_s=reset_duration_s,
+                    rate_hz=rate_hz,
+                    speed=speed,
+                    force=force,
+                    dry_run=dry_run,
+                )
+            if closed_hold_s > 0:
+                time.sleep(float(closed_hold_s))
 
-C
+            for finger in order:
+                for side in sides:
+                    print(f"{side}: opening {finger}")
+                    current[side] = ramp_to_target(
+                        clients[side],
+                        current[side],
+                        open_next_finger(current[side], finger),
+                        duration_s=open_duration_s,
+                        rate_hz=rate_hz,
+                        speed=speed,
+                        force=force,
+                        dry_run=dry_run,
+                    )
+                if between_fingers_s > 0:
+                    time.sleep(float(between_fingers_s))
 
-C/control_485_C/hand_api.h
-Header for the low-level RS-485 API. It defines protocol constants, data
-structures for finger state, and function declarations for reading and writing
-registers and controlling the hand.
+            if opened_hold_s > 0:
+                time.sleep(float(opened_hold_s))
+            if loop_pause_s > 0 and (repeat <= 0 or cycle < repeat):
+                time.sleep(float(loop_pause_s))
+            cycle += 1
 
-C/control_485_C/hand_api.c
-Implementation of the low-level RS-485 API. It builds serial frames, parses
-incoming frames, manages serial settings, and exposes functions like setting
-angle, speed, force, clearing errors, and reading status.
 
-C/control_485_C/test.cpp
-Small C++ test program that uses hand_api. It opens /dev/ttyUSB0, starts
-receive threads, and repeatedly runs Action(0) as a demo loop.
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Close an Inspire hand over Modbus TCP, then open fingers one by one.")
+    parser.add_argument("--hand", choices=("left", "right", "both"), default="right")
+    parser.add_argument("--order", type=parse_order, default=DEFAULT_OPEN_ORDER)
+    parser.add_argument("--open-duration-s", type=float, default=1.2)
+    parser.add_argument("--reset-duration-s", type=float, default=1.0)
+    parser.add_argument("--closed-hold-s", type=float, default=0.5)
+    parser.add_argument("--opened-hold-s", type=float, default=1.0)
+    parser.add_argument("--between-fingers-s", type=float, default=0.25)
+    parser.add_argument("--loop-pause-s", type=float, default=0.3)
+    parser.add_argument("--rate-hz", type=float, default=20.0)
+    parser.add_argument("--speed", type=int, default=200)
+    parser.add_argument("--force", type=int, default=200)
+    parser.add_argument("--repeat", type=int, default=0, help="Number of cycles to run. Use 0 for endless looping.")
+    parser.add_argument("--dry-run", action="store_true")
+    return parser.parse_args()
 
-C/control_485_C/CMakeLists.txt
-Build file for the C API and test program. It creates a static library
-named hand_api and the test executable.
 
-C/control_485_C/1.txt
-A short usage note. It tells you to change the serial device and hand ID before
-building and running.
+def main() -> None:
+    args = parse_args()
+    run_sequence(
+        args.hand,
+        order=args.order,
+        open_duration_s=args.open_duration_s,
+        reset_duration_s=args.reset_duration_s,
+        closed_hold_s=args.closed_hold_s,
+        opened_hold_s=args.opened_hold_s,
+        between_fingers_s=args.between_fingers_s,
+        loop_pause_s=args.loop_pause_s,
+        rate_hz=args.rate_hz,
+        speed=args.speed,
+        force=args.force,
+        repeat=args.repeat,
+        dry_run=args.dry_run,
+    )
 
-C++
 
-C++/三、四代手通用控制程序/control_485.cpp
-Standalone C++ serial demo using Boost.Asio. It writes speed, force, and angle
-registers, reads back values, and prints raw frames and parsed results.
-
-C++/三、四代手通用控制程序/control_can.cpp
-Standalone C++ CAN-style demo using Boost.Asio. It builds the custom frame
-format, handles timeouts, writes six-value register groups in two chunks, and
-reads them back.
-
-Recommended starting points
-
-Use python/.../demo_485.py for USB serial control.
-Use python/.../demo_modbus.py for Ethernet or Modbus control.
-Use touch_data.py or touch_data_ts.py if tactile sensor data is needed.
+if __name__ == "__main__":
+    main()

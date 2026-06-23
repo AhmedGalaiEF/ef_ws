@@ -1,266 +1,268 @@
-#ifndef _API_H_ 
-#define _API_H_ 
+#!/usr/bin/env python3
+from __future__ import annotations
 
-#ifdef __cplusplus  
-extern "C" {  
-#endif
+import argparse
+import time
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 
-#include <stdint.h>
-#include <string.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <stdlib.h>
-#include <sys/types.h>
-#include <termios.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <termios.h>
-#include <errno.h>
-#include <pthread.h> 
-
-// #endif
-
-#define kSend_Frame_Head1				0xEB
-#define kSend_Frame_Head2				0x90
+import serial
 
 
-#define kRcv_Frame_Head1				0x90
-#define kRcv_Frame_Head2				0xEB
+ANGLE_SET_REGISTER = 1486
+FORCE_SET_REGISTER = 1498
+SPEED_SET_REGISTER = 1522
+CLEAR_ERROR_REGISTER = 1004
+ACTION_SEQUENCE_REGISTER = 2320
+ACTION_RUN_REGISTER = 2322
 
 
-//Direct control flag
-
-#define kCmd_Handg3_Read  			       0x11  //read register
-#define kCmd_Handg3_Write  			       0x12	 //write register
-#define kCmd_Mc_Angle_Force                          0x14  //motor motion enable
-#define kCmd_Mc_Force                                0x15  //motor motion disable
-#define kCmd_Mc_Current                              0x16  //save parameters to flash
-#define kCmd_Mc_All                                  0x17  //get drive status
-
-
-//Number of data                          
-#define kUart_Recv_Length                            256   //data length
+@dataclass(frozen=True)
+class InspireSerialConfig:
+    port: str
+    baudrate: int = 115200
+    hand_id: int = 1
+    timeout_s: float = 0.05
+    write_delay_s: float = 0.01
 
 
+HAND_CONFIGS: dict[str, InspireSerialConfig] = {
+    "right": InspireSerialConfig(port="/dev/ttyUSB0"),
+    "left": InspireSerialConfig(port="/dev/ttyUSB1"),
+}
 
-struct Figure
-{
-	  int16_t       m_current_angle;                   // Current finger angle
-	  int16_t       m_current_current;                 // Current finger motor current
-	  int16_t       m_current_forceact;                // Actual finger force
-	  int8_t        m_error_code;                      // Finger error code
-};
+HAND_OPEN_TARGET = [700, 700, 700, 700, 800, 0]
+HAND_CLOSE_TARGET = [0, 0, 0, 0, 1000, 600]
 
-typedef struct 
-{
-	 struct Figure  tLittleFinger;                                  
-	 struct Figure  tRingFinger;                      
-	 struct Figure  tMiddleFinger;                     
-	 struct Figure  tIndexFinger;                      
-	 struct Figure  tThumbBend;                       
-	 struct Figure  tThumbSide;                        
-}ActuatorStatusTypeDef;
+FINGER_TO_IDXS: dict[str, tuple[int, ...]] = {
+    "little": (0,),
+    "pinky": (0,),
+    "ring": (1,),
+    "middle": (2,),
+    "index": (3,),
+    "thumb": (4, 5),
+    "thumb_bend": (4,),
+    "thumb_rotation": (5,),
+    "thumb_rot": (5,),
+}
 
-typedef struct _Uart_Data_Buff{
-	uint8_t m_tx_len;
-	uint8_t m_rec_array[128];     //Define receive data array
-	uint8_t m_send_array[128];     //Define send data array
-}UartDataBuff;
+DEFAULT_OPEN_ORDER = ("thumb", "index", "middle", "ring", "little")
 
 
+class SerialHand:
+    def __init__(
+        self,
+        port: str,
+        *,
+        baudrate: int = 115200,
+        hand_id: int = 1,
+        timeout_s: float = 0.05,
+        write_delay_s: float = 0.01,
+        verbose: bool = False,
+    ) -> None:
+        self.port = port
+        self.baudrate = int(baudrate)
+        self.hand_id = int(hand_id)
+        self.timeout_s = float(timeout_s)
+        self.write_delay_s = float(write_delay_s)
+        self.verbose = bool(verbose)
+        self.ser: serial.Serial | None = None
 
-extern ActuatorStatusTypeDef tHand;
-extern UartDataBuff tUartData;
+    def __enter__(self) -> SerialHand:
+        self.connect()
+        return self
 
-extern volatile int fd_left,fd_right,nByte;
-extern volatile uint8_t   sum,g_unHand_id;                   //Hand ID
-extern volatile uint16_t  g_unNum;                      //Define data length
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()
 
-/*********************************************************************************************************
-** Function name:       void*Action(int array)    
-** Descriptions:        Action function     
-** input parameters:    number of action
-** output parameters:   none
-** Returned value:      None
-*********************************************************************************************************/
-void*Action(int numOfAction);
-/*********************************************************************************************************
-** Function name:       void*ThreadEntry(void*arg)     
-** Descriptions:        Thread function     
-** input parameters:    None
-** output parameters:   none
-** Returned value:      None
-*********************************************************************************************************/
-void*ThreadEntry_left(void*arg);
+    def connect(self) -> None:
+        self.ser = serial.Serial(
+            port=self.port,
+            baudrate=self.baudrate,
+            timeout=self.timeout_s,
+            write_timeout=self.timeout_s,
+        )
+        self.ser.reset_input_buffer()
+        self.ser.reset_output_buffer()
 
-void*ThreadEntry_right(void*arg);
-/*********************************************************************************************************
-** Function name:       void setTimer(int seconds, int mseconds, int com)     
-** Descriptions:        Timing function     
-** input parameters:    seconds: the seconds; mseconds: the micro seconds,com:the com
-** output parameters:   none
-** Returned value:      None
-*********************************************************************************************************/
-void setTimer(int seconds, int mseconds, int com);
-/*********************************************************************************************************
-** Function name:       int set_opt(int ,int , int , char , int )     
-** Descriptions:        Serial port configuration function     
-** input parameters:    com,speed,bit,even,stop
-** output parameters:   none
-** Returned value:      None
-*********************************************************************************************************/
-int set_opt(int ,int , int , char , int );
-/*********************************************************************************************************
-** Function name:       int Read_Hand_Data(uint8_t ID, uint8_t adress, uint8_t len)     
-** Descriptions:        Read hand data      
-** input parameters:    Input ID of the hand
-** output parameters:   Outout command array
-** Returned value:      None
-*********************************************************************************************************/
-int Read_Hand_Data(uint8_t ID, uint16_t adress, uint16_t len);
-/*********************************************************************************************************
-** Function name:       int Save_Hand_Data(uint8_t ID)      
-** Descriptions:        Save hand data      
-** input parameters:    Input ID of the hand
-** output parameters:   Outout command array
-** Returned value:      None
-*********************************************************************************************************/
-int Save_Hand_Data(u_int8_t ID);
-/*********************************************************************************************************
-** Function name:       int Read_Hand_Register_Data(uint8_t ID,uint16_t val,uint16_t vallen)      
-** Descriptions:        Read hand register data      
-** input parameters:    ID:Input ID of the drive
-                        val:Input starting register value
-                        vallen:Input read register length
-** output parameters:   Outout command array
-** Returned value:      None
-*********************************************************************************************************/
-int Read_Hand_Register_Data(uint8_t ID,uint16_t val,uint16_t vallen);
-/*********************************************************************************************************
-** Function name:       int Change_Hand_ID(uint8_t ID,uint8_t val)      
-** Descriptions:        Change hand ID      
-** input parameters:    ID:Input ID of the drive
-                        val:Input another ID
-** output parameters:   Outout command array
-** Returned value:      None
-*********************************************************************************************************/
-int Change_Hand_ID(uint8_t ID,uint8_t val);
-/*********************************************************************************************************
-** Function name:       int Change_Hand_Baud(uint8_t ID,uint8_t baud)      
-** Descriptions:        Change baud of the hand      
-** input parameters:    ID:ID of the current hand
-                        baud:Representative number of baud rate,0--19200 1--57600 2--115200 
-** output parameters:   Outout command array
-** Returned value:      None
-*********************************************************************************************************/
-int Change_Hand_Baud(uint8_t ID,uint8_t baud);
-/*********************************************************************************************************
-** Function name:       int Clear_Hand_Error(uint8_t ID)      
-** Descriptions:        Clear drive error      
-** input parameters:    Input ID of the drive
-** output parameters:   Outout command array
-** Returned value:      None
-*********************************************************************************************************/
-int Clear_Hand_Error(uint8_t ID);
-/*********************************************************************************************************
-** Function name:       int Reset_Hand(uint8_t ID)      
-** Descriptions:        Reset drive       
-** input parameters:    Input ID of the drive
-** output parameters:   Outout command array
-** Returned value:      None
-*********************************************************************************************************/
-int Reset_Hand(uint8_t ID);
-/*********************************************************************************************************
-** Function name:       int Force_Sensor_Calibration(uint8_t ID)      
-** Descriptions:        Calibrate the force sensor      
-** input parameters:    Input ID of the drive
-** output parameters:   Outout command array
-** Returned value:      None
-*********************************************************************************************************/
-int Force_Sensor_Calibration(uint8_t ID);
-/*********************************************************************************************************
-** Function name:       int Write_Hand_Angle(uint8_t ID,uint16_t val1,uint16_t val2,uint16_t val3,uint16_t val4,uint16_t val5,uint16_t val6)      
-** Descriptions:        Set the angle of each finger      
-** input parameters:    ID:Input ID of the drive
-                        val1:Little figure angle setting value
-                        val2:Ring finger angle setting value
-                        val3:Middle finger angle setting value
-                        val4:Index finger angle setting value
-                        val5:Thumb angle setting value
-                        val6:Thumb swing angle setting value
-** output parameters:   Outout command array
-** Returned value:      None
-*********************************************************************************************************/
-int Write_Hand_Angle(uint8_t ID,uint16_t val1,uint16_t val2,uint16_t val3,uint16_t val4,uint16_t val5,uint16_t val6);
-/*********************************************************************************************************
-** Function name:       int Write_Hand_Drive_Position(uint8_t ID,uint16_t val1,uint16_t val2,uint16_t val3,uint16_t val4,uint16_t val5,uint16_t val6)      
-** Descriptions:        Through register set the position of each finger      
-** input parameters:    ID:Input ID of the drive
-                        val1:Little figure position setting value
-                        val2:Ring finger position setting value
-                        val3:Middle finger position setting value
-                        val4:Index finger position setting value
-                        val5:Thumb angle position value
-                        val6:Thumb swing position setting value
-** output parameters:   Outout command array
-** Returned value:      None
-*********************************************************************************************************/
-int Write_Hand_Drive_Position(uint8_t ID,uint16_t val1,uint16_t val2,uint16_t val3,uint16_t val4,uint16_t val5,uint16_t val6);
-/*********************************************************************************************************
-** Function name:       int Write_Hand_Angle_Position(uint8_t ID,uint16_t val1,uint16_t val2,uint16_t val3,uint16_t val4,uint16_t val5,uint16_t val6)      
-** Descriptions:        Through register set the Angle of each finger      
-** input parameters:    ID:Input ID of the drive
-                        val1:Little figure angle setting value
-                        val2:Ring finger angle setting value
-                        val3:Middle finger angle setting value
-                        val4:Index finger angle setting value
-                        val5:Thumb angle setting value
-                        val6:Thumb swing angle setting value
-** output parameters:   Outout command array
-** Returned value:      None
-*********************************************************************************************************/
-int Write_Hand_Angle_Position(uint8_t ID,uint16_t val1,uint16_t val2,uint16_t val3,uint16_t val4,uint16_t val5,uint16_t val6);
-/*********************************************************************************************************
-** Function name:       int Write_Hand_Force_Threshold(uint8_t ID,uint16_t val1,uint16_t val2,uint16_t val3,uint16_t val4,uint16_t val5,uint16_t val6)      
-** Descriptions:        Through register set the force threshole of each finger       
-** input parameters:    ID:Input ID of the drive
-                        val1:Little figure force threshole setting value
-                        val2:Ring finger force threshole setting value
-                        val3:Middle finger force threshole setting value
-                        val4:Index finger force threshole setting value
-                        val5:Thumb force threshole setting value
-                        val6:Thumb swing force threshole setting value
-** output parameters:   Outout command array
-** Returned value:      None
-*********************************************************************************************************/
-int Write_Hand_Force_Threshold(uint8_t ID,uint16_t val1,uint16_t val2,uint16_t val3,uint16_t val4,uint16_t val5,uint16_t val6);
-/*********************************************************************************************************
-** Function name:       int Write_Hand_Speed(uint8_t ID,uint16_t val1,uint16_t val2,uint16_t val3,uint16_t val4,uint16_t val5,uint16_t val6)      
-** Descriptions:        Through register set the speed of each finger     
-** input parameters:    Input ID of the drive
-                        val1:Little figure speed setting value
-                        val2:Ring finger speed setting value
-                        val3:Middle finger speed setting value
-                        val4:Index finger speed setting value
-                        val5:Thumb speed setting value
-                        val6:Thumb swing speed setting value
-** output parameters:   Outout command array
-** Returned value:      None
-*********************************************************************************************************/
-int Write_Hand_Speed(uint8_t ID,uint16_t val1,uint16_t val2,uint16_t val3,uint16_t val4,uint16_t val5,uint16_t val6);
-/*********************************************************************************************************
-** Function name:       int Uart_Rece_Data_Parsing()
-** Descriptions:        Parse hand data
-** input parameters:    None
-** output parameters:   Hand data
-** Returned value:      None
-*********************************************************************************************************/
-int Uart_Rece_Data_Parsing();
+    def close(self) -> None:
+        if self.ser is not None:
+            self.ser.close()
+            self.ser = None
+
+    def write_single_register(self, address: int, value: int) -> None:
+        register = int(value) & 0xFFFF
+        self._write_register(address, [register & 0xFF, (register >> 8) & 0xFF])
+
+    def write_registers(self, address: int, values: Iterable[int]) -> None:
+        payload: list[int] = []
+        for value in values:
+            register = int(value) & 0xFFFF
+            payload.extend((register & 0xFF, (register >> 8) & 0xFF))
+        self._write_register(address, payload)
+
+    def _write_register(self, address: int, payload: Sequence[int]) -> None:
+        if self.ser is None:
+            raise RuntimeError("Serial port is not connected")
+
+        frame = [0xEB, 0x90, self.hand_id, len(payload) + 3, 0x12, address & 0xFF, (address >> 8) & 0xFF]
+        frame.extend(int(value) & 0xFF for value in payload)
+        frame.append(sum(frame[2:]) & 0xFF)
+
+        if self.verbose:
+            print(f"{self.port}: tx {[hex(value) for value in frame]}")
+
+        self.ser.write(bytes(frame))
+        self.ser.flush()
+        time.sleep(self.write_delay_s)
+
+        response = self.ser.read_all()
+        if self.verbose and response:
+            print(f"{self.port}: rx {response!r}")
 
 
-#ifdef __cplusplus  
-}  
-#endif  
+class NullClient:
+    def __enter__(self) -> None:
+        return None
 
-#endif // _API_H_ 
+    def __exit__(self, exc_type, exc, tb) -> None:
+        return None
+
+
+def add_serial_connection_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--hand", choices=("left", "right", "both"), default="right")
+    parser.add_argument("--both-hands", action="store_true", help="Run the sequence on both hands.")
+    parser.add_argument("--right-port", default=HAND_CONFIGS["right"].port, help="TTY device for the right hand.")
+    parser.add_argument("--left-port", default=HAND_CONFIGS["left"].port, help="TTY device for the left hand.")
+    parser.add_argument("--baudrate", type=int, default=115200, help="Serial baudrate.")
+    parser.add_argument("--right-id", type=int, default=1, help="Hand ID for the right hand.")
+    parser.add_argument("--left-id", type=int, default=1, help="Hand ID for the left hand.")
+    parser.add_argument("--timeout-s", type=float, default=0.05, help="Serial read/write timeout.")
+    parser.add_argument("--write-delay-s", type=float, default=0.01, help="Delay after each serial frame.")
+    parser.add_argument("--verbose-serial", action="store_true", help="Print raw serial frames.")
+    parser.add_argument("--dry-run", action="store_true", help="Print targets without sending commands.")
+
+
+def build_hand_configs(args: argparse.Namespace) -> dict[str, InspireSerialConfig]:
+    return {
+        "right": InspireSerialConfig(
+            port=args.right_port,
+            baudrate=args.baudrate,
+            hand_id=args.right_id,
+            timeout_s=args.timeout_s,
+            write_delay_s=args.write_delay_s,
+        ),
+        "left": InspireSerialConfig(
+            port=args.left_port,
+            baudrate=args.baudrate,
+            hand_id=args.left_id,
+            timeout_s=args.timeout_s,
+            write_delay_s=args.write_delay_s,
+        ),
+    }
+
+
+def clamp_register(value: float | int) -> int:
+    return max(0, min(1000, round(float(value))))
+
+
+def normalize_hand(value: str) -> str:
+    hand = str(value).strip().lower()
+    if hand in {"r", "right"}:
+        return "right"
+    if hand in {"l", "left"}:
+        return "left"
+    raise ValueError("hand must be 'left' or 'right'")
+
+
+def normalize_hands(value: str) -> tuple[str, ...]:
+    hand = str(value).strip().lower()
+    if hand in {"b", "both", "both_hands", "both-hands"}:
+        return ("left", "right")
+    return (normalize_hand(hand),)
+
+
+def parse_order(value: str) -> tuple[str, ...]:
+    fingers = tuple(part.strip().lower().replace("-", "_") for part in value.split(",") if part.strip())
+    if not fingers:
+        raise argparse.ArgumentTypeError("at least one finger is required")
+
+    unknown = [finger for finger in fingers if finger not in FINGER_TO_IDXS]
+    if unknown:
+        allowed = ", ".join(DEFAULT_OPEN_ORDER)
+        raise argparse.ArgumentTypeError(f"unknown finger(s): {', '.join(unknown)}. Default order is: {allowed}")
+    return fingers
+
+
+def interpolate(start: Sequence[int], stop: Sequence[int], alpha: float) -> list[int]:
+    return [
+        clamp_register(start_value + (stop_value - start_value) * alpha)
+        for start_value, stop_value in zip(start, stop)
+    ]
+
+
+def open_next_finger(current: Sequence[int], finger: str) -> list[int]:
+    target = [clamp_register(value) for value in current]
+    for idx in FINGER_TO_IDXS[finger]:
+        target[idx] = HAND_OPEN_TARGET[idx]
+    return target
+
+
+def send_target(
+    client: SerialHand | None,
+    target: Sequence[int],
+    *,
+    speed: int,
+    force: int,
+    dry_run: bool,
+) -> None:
+    values = [clamp_register(value) for value in target]
+    if dry_run:
+        print(f"target={values}")
+        return
+
+    if client is None:
+        raise RuntimeError("Serial client is required unless dry-run is enabled")
+
+    client.write_registers(SPEED_SET_REGISTER, [clamp_register(speed)] * 6)
+    client.write_registers(FORCE_SET_REGISTER, [clamp_register(force)] * 6)
+    client.write_registers(ANGLE_SET_REGISTER, values)
+
+
+def ramp_to_target(
+    client: SerialHand | None,
+    current: Sequence[int],
+    target: Sequence[int],
+    *,
+    duration_s: float,
+    rate_hz: float,
+    speed: int,
+    force: int,
+    dry_run: bool,
+) -> list[int]:
+    duration_s = max(0.0, float(duration_s))
+    rate_hz = max(1.0, float(rate_hz))
+    steps = max(1, round(duration_s * rate_hz))
+    delay_s = duration_s / steps if duration_s > 0 else 0.0
+
+    for step in range(1, steps + 1):
+        alpha = step / steps
+        next_target = interpolate(current, target, alpha)
+        send_target(client, next_target, speed=speed, force=force, dry_run=dry_run)
+        if delay_s > 0:
+            time.sleep(delay_s)
+
+    return [clamp_register(value) for value in target]
+
+
+def trigger_action(client: SerialHand | None, action_id: int, *, dry_run: bool) -> None:
+    action_id = max(0, int(action_id))
+    if dry_run:
+        print(f"action_id={action_id}")
+        return
+
+    if client is None:
+        raise RuntimeError("Serial client is required unless dry-run is enabled")
+
+    client.write_single_register(ACTION_SEQUENCE_REGISTER, action_id)
+    client.write_single_register(ACTION_RUN_REGISTER, 1)
