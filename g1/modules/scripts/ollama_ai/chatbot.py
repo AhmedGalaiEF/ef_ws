@@ -18,9 +18,14 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 
-import rclpy
-from rclpy.node import Node
-from std_msgs.msg import String
+if "--motion-worker" not in sys.argv:
+    import rclpy
+    from rclpy.node import Node
+    from std_msgs.msg import String
+else:
+    rclpy = None  # type: ignore[assignment]
+    Node = object  # type: ignore[assignment,misc]
+    String = None  # type: ignore[assignment]
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -33,7 +38,6 @@ for path in (SCRIPTS_DIR, WBC_DIR, G1_DIR / "modules"):
     if path.exists() and str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from chat import clean_reply  # noqa: E402
 from ik_pose_cli_v3 import (  # noqa: E402
     IKPoseCLI,
     ControllerLockError,
@@ -133,7 +137,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--startup-speech", default="chatbot ready")
     parser.add_argument("--no-startup-speech", action="store_true")
     parser.add_argument("--audit-log", default="/tmp/ollama_chatbot.jsonl")
+    parser.add_argument("--motion-worker", action="store_true", help=argparse.SUPPRESS)
     return parser.parse_args()
+
+
+def clean_reply(text: str) -> str:
+    text = str(text).strip()
+    while "<think>" in text and "</think>" in text:
+        before, rest = text.split("<think>", 1)
+        _hidden, after = rest.split("</think>", 1)
+        text = (before + after).strip()
+    return " ".join(text.split())
 
 
 def compact_text(text: str) -> str:
@@ -375,6 +389,17 @@ class Speaker:
         return thread
 
 
+class PrintLogger:
+    def info(self, message: str) -> None:
+        print(message, flush=True)
+
+    def warning(self, message: str) -> None:
+        print(f"WARNING: {message}", file=sys.stderr, flush=True)
+
+    def error(self, message: str) -> None:
+        print(f"ERROR: {message}", file=sys.stderr, flush=True)
+
+
 class MotionPlayer:
     def __init__(self, args: argparse.Namespace, logger: Any) -> None:
         self.args = args
@@ -383,7 +408,9 @@ class MotionPlayer:
         self.ctrl: IKPoseCLI | None = None
         self.poses_by_name: dict[str, dict[str, Any]] = {}
         self.lock = threading.RLock()
-        self.stop_event = threading.Event()
+        self.close_event = threading.Event()
+        self.sequence_stop_event = threading.Event()
+        self.sequence_active = threading.Event()
         self.tick_thread: threading.Thread | None = None
         self.sequence_thread: threading.Thread | None = None
         if self.enabled:
@@ -427,7 +454,7 @@ class MotionPlayer:
             self.poses_by_name = {str(p.get("name", "")): p for p in poses if isinstance(p, dict)}
 
     def _tick_loop(self) -> None:
-        while not self.stop_event.is_set():
+        while not self.close_event.is_set():
             with self.lock:
                 ctrl = self.ctrl
                 if ctrl is not None and not ctrl._closed:
@@ -460,7 +487,11 @@ class MotionPlayer:
         if not self.enabled:
             self.logger.info("[motion disabled] would play: " + ", ".join(names))
             return None
-        self.stop_sequence()
+        if self.sequence_active.is_set() or (self.sequence_thread and self.sequence_thread.is_alive()):
+            self.logger.warning("Motion command ignored because a sequence is already active.")
+            return None
+        self.sequence_stop_event.clear()
+        self.sequence_active.set()
         self.sequence_thread = threading.Thread(
             target=self._play_sequence,
             args=(list(names), speed, loop),
@@ -470,27 +501,61 @@ class MotionPlayer:
         return self.sequence_thread
 
     def stop_sequence(self) -> None:
-        self.stop_event.set()
+        self.sequence_stop_event.set()
         if self.sequence_thread and self.sequence_thread.is_alive():
-            self.sequence_thread.join(timeout=0.3)
-        self.stop_event.clear()
+            timeout_s = max(3.0, float(self.args.pose_timeout_s) + 3.0)
+            self.sequence_thread.join(timeout=timeout_s)
+            if self.sequence_thread.is_alive():
+                self.logger.warning("Motion sequence did not stop before timeout.")
 
     def _play_sequence(self, names: list[str], speed: float | None, loop: bool) -> None:
-        while not self.stop_event.is_set():
-            for name in names:
-                if self.stop_event.is_set():
+        try:
+            self._reengage_for_sequence()
+            while not self.sequence_stop_event.is_set():
+                for name in names:
+                    if self.sequence_stop_event.is_set():
+                        return
+                    pose = self.poses_by_name.get(name)
+                    if pose is None:
+                        self.logger.warning(f"Skipping missing pose: {name}")
+                        continue
+                    self._apply_pose(pose, name=name, speed=speed)
+                    self._wait_targets_reached(timeout_s=float(self.args.pose_timeout_s))
+                    gap = max(0.0, float(self.args.sequence_gap))
+                    if gap:
+                        time.sleep(gap)
+                if not loop:
                     return
-                pose = self.poses_by_name.get(name)
-                if pose is None:
-                    self.logger.warning(f"Skipping missing pose: {name}")
-                    continue
-                self._apply_pose(pose, name=name, speed=speed)
-                self._wait_targets_reached(timeout_s=float(self.args.pose_timeout_s))
-                gap = max(0.0, float(self.args.sequence_gap))
-                if gap:
-                    time.sleep(gap)
-            if not loop:
-                return
+        finally:
+            self._release_after_sequence()
+            self.sequence_active.clear()
+
+    def _reengage_for_sequence(self) -> None:
+        with self.lock:
+            ctrl = self.ctrl
+        if ctrl is None:
+            return
+        try:
+            ctrl._unrelease_arms(duration_s=0.8)
+            with self.lock:
+                ctrl.armed = True
+                ctrl._sync_targets_to_live()
+            self.logger.info("Arms reengaged for motion sequence.")
+        except Exception as exc:
+            self.logger.warning(f"Could not reengage arms before sequence: {exc}")
+
+    def _release_after_sequence(self) -> None:
+        with self.lock:
+            ctrl = self.ctrl
+        if ctrl is None:
+            return
+        try:
+            ctrl._release_arms(duration_s=1.0)
+            with self.lock:
+                ctrl.armed = False
+            self.logger.info("Arms released after motion sequence.")
+        except Exception as exc:
+            self.logger.warning(f"Could not release arms after sequence: {exc}")
 
     def _apply_pose(self, pose: dict[str, Any], *, name: str, speed: float | None) -> None:
         with self.lock:
@@ -502,7 +567,7 @@ class MotionPlayer:
 
     def _wait_targets_reached(self, timeout_s: float) -> bool:
         deadline = time.time() + max(0.1, timeout_s)
-        while time.time() < deadline and not self.stop_event.is_set():
+        while time.time() < deadline and not self.sequence_stop_event.is_set():
             with self.lock:
                 if self.ctrl is not None and self.ctrl._targets_reached():
                     return True
@@ -510,7 +575,8 @@ class MotionPlayer:
         return False
 
     def close(self) -> None:
-        self.stop_event.set()
+        self.sequence_stop_event.set()
+        self.close_event.set()
         if self.sequence_thread and self.sequence_thread.is_alive():
             self.sequence_thread.join(timeout=0.5)
         if self.tick_thread and self.tick_thread.is_alive():
@@ -520,13 +586,133 @@ class MotionPlayer:
                 self.ctrl.close()
 
 
+class MotionWorkerClient:
+    def __init__(self, args: argparse.Namespace, logger: Any) -> None:
+        self.args = args
+        self.logger = logger
+        self.enabled = bool(args.enable_motion)
+        self.proc: subprocess.Popen[str] | None = None
+        if self.enabled:
+            self._start_worker()
+
+    def _start_worker(self) -> None:
+        command = [
+            sys.executable,
+            str(Path(__file__).resolve()),
+            "--motion-worker",
+            "--enable-motion",
+            "--iface", str(self.args.iface),
+            "--domain-id", str(int(self.args.domain_id)),
+            "--pose-file", str(self.args.pose_file),
+            "--motion-speed", str(float(self.args.motion_speed)),
+            "--thinking-speed", str(float(self.args.thinking_speed)),
+            "--explain-speed", str(float(self.args.explain_speed)),
+            "--sequence-gap", str(float(self.args.sequence_gap)),
+            "--pose-timeout-s", str(float(self.args.pose_timeout_s)),
+            "--no-speech",
+            "--no-startup-speech",
+        ]
+        env = os.environ.copy()
+        env.setdefault("CYCLONEDDS_HOME", "/home/unitree/cyclonedds_ws/install/cyclonedds")
+        env.setdefault("CYCLONEDDS_URI", "/home/unitree/cyclonedds_ws/cyclonedds.xml")
+        self.proc = subprocess.Popen(
+            command,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            env=env,
+        )
+        threading.Thread(target=self._log_worker_output, daemon=True).start()
+        self.logger.info(f"Started motion worker pid={self.proc.pid}")
+
+    def _log_worker_output(self) -> None:
+        proc = self.proc
+        if proc is None or proc.stdout is None:
+            return
+        for line in proc.stdout:
+            text = line.strip()
+            if text:
+                self.logger.info(f"[motion] {text}")
+
+    def play_async(self, names: list[str], *, speed: float | None = None, loop: bool = False) -> None:
+        if not names:
+            return
+        if not self.enabled:
+            self.logger.info("[motion disabled] would play: " + ", ".join(names))
+            return
+        self._send({"cmd": "play", "names": names, "speed": speed, "loop": bool(loop)})
+
+    def stop_sequence(self) -> None:
+        if self.enabled:
+            self._send({"cmd": "stop"})
+
+    def close(self) -> None:
+        if self.proc is None:
+            return
+        self._send({"cmd": "close"})
+        try:
+            self.proc.wait(timeout=2.0)
+        except subprocess.TimeoutExpired:
+            self.proc.terminate()
+            try:
+                self.proc.wait(timeout=1.0)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
+
+    def _send(self, payload: dict[str, Any]) -> None:
+        proc = self.proc
+        if proc is None or proc.stdin is None:
+            self.logger.warning("Motion worker is not running.")
+            return
+        if proc.poll() is not None:
+            self.logger.warning(f"Motion worker exited with code {proc.returncode}.")
+            return
+        try:
+            proc.stdin.write(json.dumps(payload, sort_keys=True) + "\n")
+            proc.stdin.flush()
+        except BrokenPipeError:
+            self.logger.warning("Motion worker pipe is closed.")
+
+
+def run_motion_worker(args: argparse.Namespace) -> int:
+    motion = MotionPlayer(args, PrintLogger())
+    print("motion worker ready", flush=True)
+    try:
+        for line in sys.stdin:
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError as exc:
+                print(f"invalid command: {exc}", flush=True)
+                continue
+            cmd = str(payload.get("cmd", "")).strip().lower()
+            if cmd == "play":
+                names = payload.get("names", [])
+                if isinstance(names, list):
+                    motion.play_async(
+                        [str(name) for name in names],
+                        speed=payload.get("speed"),
+                        loop=bool(payload.get("loop", False)),
+                    )
+            elif cmd == "stop":
+                motion.stop_sequence()
+            elif cmd == "close":
+                break
+            else:
+                print(f"unknown command: {cmd}", flush=True)
+    finally:
+        motion.close()
+    return 0
+
+
 class ChatbotNode(Node):
-    def __init__(self, args: argparse.Namespace) -> None:
+    def __init__(self, args: argparse.Namespace, motion: MotionWorkerClient | None = None) -> None:
         super().__init__("ollama_ai_chatbot")
         self.args = args
         self.ollama = OllamaClient(args)
         self.speaker = Speaker(args, self.get_logger())
-        self.motion = MotionPlayer(args, self.get_logger())
+        self.motion = motion if motion is not None else MotionWorkerClient(args, self.get_logger())
         self.audit_path = Path(args.audit_log).expanduser()
         self.audit_path.parent.mkdir(parents=True, exist_ok=True)
         knowledge_paths = [Path(item).expanduser() for item in args.knowledge_file]
@@ -716,19 +902,31 @@ class ChatbotNode(Node):
 
 def main() -> int:
     args = parse_args()
+    if args.motion_worker:
+        return run_motion_worker(args)
+    motion: MotionWorkerClient | None = None
+    node: ChatbotNode | None = None
     try:
         rclpy.init()
-        node = ChatbotNode(args)
+        motion = MotionWorkerClient(args, PrintLogger()) if args.enable_motion else None
+        node = ChatbotNode(args, motion=motion)
     except ControllerLockError as exc:
         print(f"chatbot: {exc}", file=sys.stderr)
         return 2
+    except Exception:
+        if motion is not None:
+            motion.close()
+        raise
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
     finally:
         try:
-            node.destroy_node()
+            if node is not None:
+                node.destroy_node()
+            elif motion is not None:
+                motion.close()
         except Exception:
             pass
         rclpy.shutdown()
