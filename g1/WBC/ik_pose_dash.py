@@ -962,7 +962,7 @@ def seq_actions(*_):
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main() -> None:
-    global _ctrl, _tick_running
+    global _ctrl, _tick_running, _tick_thread
 
     # Split our extra flags from the ik_pose_cli_v3 flags
     extra_parser = argparse.ArgumentParser(add_help=False)
@@ -986,32 +986,47 @@ def main() -> None:
         raise SystemExit(2) from exc
 
     _tick_running = True
-    t = threading.Thread(target=_tick_loop, daemon=True)
-    t.start()
+    _tick_thread = threading.Thread(target=_tick_loop, daemon=True)
+    _tick_thread.start()
 
     print(f"Open  http://localhost:{extra_args.port}  in your browser.")
 
     import atexit, signal as _signal
 
-    def _shutdown(*_):
+    shutdown_done = False
+
+    def _shutdown() -> None:
+        nonlocal shutdown_done
         global _tick_running
+        if shutdown_done:
+            return
+        shutdown_done = True
         _tick_running = False
         if _ctrl and not _ctrl._closed:
             _ctrl.close()
+        if _tick_thread and _tick_thread.is_alive():
+            _tick_thread.join(timeout=1.0)
+
+    def _signal_stop(signum, _frame) -> None:
+        _shutdown()
+        raise SystemExit(128 + int(signum))
 
     atexit.register(_shutdown)
     for _sig in ("SIGINT", "SIGTERM"):
         try:
-            _signal.signal(getattr(_signal, _sig), _shutdown)
+            _signal.signal(getattr(_signal, _sig), _signal_stop)
         except Exception:
             pass
 
-    app.run(
-        host=extra_args.host,
-        port=extra_args.port,
-        debug=extra_args.debug,
-        use_reloader=False,
-    )
+    try:
+        app.run(
+            host=extra_args.host,
+            port=extra_args.port,
+            debug=extra_args.debug,
+            use_reloader=False,
+        )
+    finally:
+        _shutdown()
 
 
 if __name__ == "__main__":
