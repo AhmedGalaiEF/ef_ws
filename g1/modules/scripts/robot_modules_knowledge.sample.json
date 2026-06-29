@@ -1,0 +1,661 @@
+{
+  "metadata": {
+    "title": "Unitree G1 local Python modules knowledge base",
+    "purpose": "Sample structured JSON knowledge for chat_with_knowledge.py. It helps the robot answer practical questions about the local Python modules in g1/modules.",
+    "generated_from": [
+      "../sdk_client.py",
+      "../sdk_sensors.py",
+      "../arm_sdk.py",
+      "../ll_sdk.py",
+      "../sdk_audio.py",
+      "../sdk_hand.py",
+      "../sdk_slam.py",
+      "../dds_env.py",
+      "../secure_boot.py",
+      "FAQs.md",
+      "chat.py",
+      "chat_with_knowledge.py"
+    ],
+    "default_runtime": {
+      "iface": "eth0",
+      "domain_id": 0,
+      "robot_wrapper": "from sdk_client import Robot; robot = Robot(iface='eth0', domain_id=0)"
+    },
+    "important_safety_rule": "For physical motion, use small increments, keep the robot supported when required, and stop on unexpected behavior. Do not invent unverified API calls."
+  },
+  "knowledge": [
+    {
+      "title": "Initialize the robot SDK wrapper",
+      "category": "setup",
+      "source_files": ["../sdk_client.py", "../dds_env.py", "FAQs.md"],
+      "question_triggers": [
+        "How do I initialize the robot?",
+        "How do I connect to the Unitree SDK?",
+        "What interface and domain id should I use?",
+        "How do I create Robot?"
+      ],
+      "answer": "Most higher-level capabilities are exposed through sdk_client.Robot. Use iface='eth0' and domain_id=0 by default. The helper sets CycloneDDS environment defaults and initializes the Unitree DDS channel factory.",
+      "example_python": [
+        "from sdk_client import Robot",
+        "robot = Robot(iface='eth0', domain_id=0)"
+      ],
+      "notes": [
+        "If unitree_sdk2py is missing, install the Unitree Python SDK in editable mode with pip install -e <path-to-unitree_sdk2_python>.",
+        "Several scripts use CYCLONEDDS_HOME=/home/unitree/cyclonedds_ws/install/cyclonedds and CYCLONEDDS_URI=/home/unitree/cyclonedds_ws/cyclonedds.xml."
+      ]
+    },
+    {
+      "title": "Access RGB camera data",
+      "category": "perception camera vision image video rgb",
+      "source_files": ["../sdk_client.py", "../sdk_sensors.py", "../scripts/rgbd_client.py", "../scripts/real_sense.py"],
+      "question_triggers": [
+        "How do I access the camera data?",
+        "How do I get an RGB image?",
+        "How do I get camera frame data?",
+        "How do I decode a camera JPEG?"
+      ],
+      "answer": "Use sdk_client.Robot camera helpers. get_camera_image_jpeg() returns raw JPEG bytes from the Unitree VideoClient. get_rgb_jpeg() is an alias. get_camera_frame_bgr() decodes to an OpenCV BGR frame. get_camera_frame_rgb() returns an RGB numpy frame.",
+      "example_python": [
+        "from sdk_client import Robot",
+        "robot = Robot(iface='eth0', domain_id=0)",
+        "jpeg_bytes = robot.get_camera_image_jpeg()",
+        "bgr = robot.get_camera_frame_bgr()",
+        "rgb = robot.get_camera_frame_rgb()"
+      ],
+      "implementation_details": [
+        "sdk_sensors.load_video_client_type() tries unitree_sdk2py.g1.video.video_client.VideoClient, then go2.video.video_client.VideoClient.",
+        "sdk_sensors.decode_video_frame_bgr(payload) uses cv2.imdecode on JPEG bytes and raises if the payload is empty or undecodable."
+      ],
+      "common_errors": [
+        "If GetImageSample returns nonzero, get_camera_image_jpeg() raises RuntimeError.",
+        "OpenCV must be installed to decode frames."
+      ]
+    },
+    {
+      "title": "Access RGBD depth camera data",
+      "category": "perception camera depth rgbd realsense zmq",
+      "source_files": ["../sdk_client.py", "../scripts/rgbd_client.py", "../scripts/real_sense.py"],
+      "question_triggers": [
+        "How do I get depth data?",
+        "How do I access RGBD?",
+        "How do I get distance from the camera?",
+        "How do I read RealSense depth?"
+      ],
+      "answer": "Use robot.get_rgbd(timeout=2.0) when the RGBD ZMQ stream is running. It returns RGB and depth payloads plus decoded arrays and useful depth summaries.",
+      "example_python": [
+        "from sdk_client import Robot",
+        "robot = Robot(iface='eth0', domain_id=0)",
+        "rgbd = robot.get_rgbd(timeout=2.0)",
+        "rgb = rgbd['rgb_rgb']",
+        "depth_m = rgbd['depth_m']",
+        "center_depth = rgbd['center_depth_m']"
+      ],
+      "returned_fields": [
+        "source",
+        "topic",
+        "timestamp",
+        "rgb_jpeg",
+        "depth_png",
+        "rgb_bgr",
+        "rgb_rgb",
+        "depth_raw",
+        "depth_m",
+        "depth_scale_m_per_unit",
+        "center_depth_m",
+        "near_coverage_1m",
+        "valid_depth_fraction"
+      ],
+      "configuration": [
+        "Default RGBD host is environment variable G1_RGBD_HOST or 10.34.0.83.",
+        "Default RGBD port is environment variable G1_RGBD_PORT or 5555.",
+        "Default RGBD topic is environment variable G1_RGBD_TOPIC or empty string."
+      ],
+      "common_errors": [
+        "RGBD access requires pyzmq.",
+        "Decoding requires cv2 and numpy.",
+        "If no RGBD publisher is running, the receive call times out."
+      ]
+    },
+    {
+      "title": "Read lidar point cloud data",
+      "category": "perception lidar pointcloud points mapping",
+      "source_files": ["../sdk_client.py"],
+      "question_triggers": [
+        "How do I get lidar data?",
+        "How do I read point cloud points?",
+        "How do I access lidar points?"
+      ],
+      "answer": "Use robot.get_lidar_points(max_points=20000). It returns a list of dictionaries with x, y, z floats from the latest lidar cloud message.",
+      "example_python": [
+        "from sdk_client import Robot",
+        "robot = Robot(iface='eth0', domain_id=0)",
+        "points = robot.get_lidar_points(max_points=5000)",
+        "first = points[0] if points else None"
+      ],
+      "topics": [
+        "rt/utlidar/cloud_deskewed",
+        "rt/utlidar/cloud_livox_mid360",
+        "rt/unitree/slam_mapping/points",
+        "rt/unitree/slam_relocation/points"
+      ],
+      "notes": [
+        "The wrapper chooses the freshest point cloud among configured point cloud topics.",
+        "The extractor reads x, y, z fields from sensor_msgs PointCloud2-like DDS messages."
+      ]
+    },
+    {
+      "title": "Read robot pose, odometry, velocity, IMU, and joint states",
+      "category": "sensors odometry imu joints state telemetry",
+      "source_files": ["../sdk_client.py", "../sdk_sensors.py"],
+      "question_triggers": [
+        "How do I read the robot state?",
+        "How do I get odometry?",
+        "How do I get yaw?",
+        "How do I read joint positions?",
+        "How do I get IMU data?"
+      ],
+      "answer": "Use the sdk_client.Robot state getters. get_robot_state() returns a combined status dictionary. get_odom_pose() returns x, y, yaw when available. get_yaw() returns yaw from IMU. get_joint_states() returns named body and hand joint positions, velocities, and torques.",
+      "example_python": [
+        "from sdk_client import Robot",
+        "robot = Robot(iface='eth0', domain_id=0)",
+        "state = robot.get_robot_state()",
+        "pose = robot.get_odom_pose()",
+        "yaw = robot.get_yaw()",
+        "joints = robot.get_joint_states()"
+      ],
+      "important_fields": [
+        "get_robot_state(): fsm, mode, gait, body_height, position, velocity, yaw, is_moving, imu, odom_pose, slam_pose, joint_count, sensor_timestamps, sensor_stale, slam_is_running, queued_path_points",
+        "get_joint_states(): timestamp, imu, joints, sources"
+      ],
+      "joint_name_examples": [
+        "left_leg.hip_pitch",
+        "right_leg.knee",
+        "waist.yaw",
+        "left_arm.shoulder_pitch",
+        "right_arm.elbow",
+        "left_hand.thumb_0",
+        "right_hand.index_1"
+      ]
+    },
+    {
+      "title": "Move the robot base with locomotion commands",
+      "category": "movement walking locomotion base velocity stop",
+      "source_files": ["../sdk_client.py"],
+      "question_triggers": [
+        "How do I make the robot walk?",
+        "How do I move the robot base?",
+        "How do I stop walking?",
+        "How do I command velocity?"
+      ],
+      "answer": "Use Robot.loco_move(vx, vy, vyaw) for continuous velocity control and Robot.move_for(duration, vx, vy, vyaw) for timed movement that stops in a finally block. Call Robot.stop() or Robot.stop_moving() to halt.",
+      "example_python": [
+        "from sdk_client import Robot",
+        "robot = Robot(iface='eth0', domain_id=0)",
+        "robot.move_for(duration=1.0, vx=0.2, vy=0.0, vyaw=0.0)",
+        "robot.stop()"
+      ],
+      "parameters": [
+        "vx is forward/back linear velocity.",
+        "vy is lateral velocity.",
+        "vyaw is yaw rate."
+      ],
+      "safety": [
+        "Use small velocities first.",
+        "Ensure the robot is in a safe walking mode and has clear space.",
+        "Always call stop on exceptions or when finished."
+      ]
+    },
+    {
+      "title": "Move upper body joints safely through Robot wrapper",
+      "category": "movement joints arms waist upper body rt arm_sdk",
+      "source_files": ["../sdk_client.py", "../arm_sdk.py", "FAQs.md"],
+      "question_triggers": [
+        "How do I move robot joints?",
+        "How do I move an arm joint?",
+        "How do I command upper body joints?",
+        "How do I move the elbow?",
+        "How do I move the waist?"
+      ],
+      "answer": "For waist and arm joints, prefer Robot.move_upper_body_joint(joint_index, target). It ramps one joint to a target in radians while holding the rest of the upper body. The upper body joint indices are waist 12-14, left arm 15-21, and right arm 22-28.",
+      "example_python": [
+        "from sdk_client import Robot",
+        "robot = Robot(iface='eth0', domain_id=0)",
+        "result = robot.move_upper_body_joint(25, -0.5, max_speed_rad_s=0.25)",
+        "print(result)"
+      ],
+      "joint_map": {
+        "12": "waist.yaw",
+        "13": "waist.roll",
+        "14": "waist.pitch",
+        "15": "left_arm.shoulder_pitch",
+        "16": "left_arm.shoulder_roll",
+        "17": "left_arm.shoulder_yaw",
+        "18": "left_arm.elbow",
+        "19": "left_arm.wrist_roll",
+        "20": "left_arm.wrist_pitch",
+        "21": "left_arm.wrist_yaw",
+        "22": "right_arm.shoulder_pitch",
+        "23": "right_arm.shoulder_roll",
+        "24": "right_arm.shoulder_yaw",
+        "25": "right_arm.elbow",
+        "26": "right_arm.wrist_roll",
+        "27": "right_arm.wrist_pitch",
+        "28": "right_arm.wrist_yaw"
+      },
+      "safety": [
+        "Targets are in radians.",
+        "Start with small changes and low max_speed_rad_s.",
+        "The underlying arm command path publishes rt/arm_sdk commands and uses upper body holding gains."
+      ]
+    },
+    {
+      "title": "Use ArmSdk directly for upper body joint and Cartesian IK movement",
+      "category": "movement arms arm_sdk inverse kinematics end effector rt arm_sdk",
+      "source_files": ["../arm_sdk.py"],
+      "question_triggers": [
+        "How do I use ArmSdk?",
+        "How do I move the end effector?",
+        "How do I move the hand in Cartesian space?",
+        "How do I command rt/arm_sdk directly?"
+      ],
+      "answer": "arm_sdk.ArmSdk controls waist and arms through rt/arm_sdk. Use move_joint({joint_index: q_rad}) for explicit joint targets or ik_move_EE([dx, dy, dz, droll, dpitch, dyaw], arm='right') for Cartesian increments.",
+      "example_python": [
+        "from arm_sdk import ArmSdk",
+        "sdk = ArmSdk(iface='eth0', domain_id=0)",
+        "sdk.move_joint({25: -0.4})",
+        "info = sdk.ik_move_EE([0.03, 0.0, 0.0, 0.0, 0.0, 0.0], arm='right')",
+        "pose = sdk.get_ee_pose('right')"
+      ],
+      "api": [
+        "resync(timeout=3.0): reset desired targets from current lowstate.",
+        "move_joint(targets, timeout=3.0): publish explicit upper-body joint targets.",
+        "ik_move_EE(pose_increment, arm='right', mirror=True, fixed_joints=None, position_only=False, max_dq=0.2): move end effector by a Cartesian increment.",
+        "get_ee_pose(arm='right'): return current measured 4x4 end-effector pose.",
+        "get_joint_targets(): return desired upper-body joint targets."
+      ],
+      "safety": [
+        "pose_increment is [dx, dy, dz, droll, dpitch, dyaw] in meters and radians.",
+        "Use small increments such as 0.02 to 0.05 m.",
+        "position_only=True can avoid forcing wrist orientation."
+      ]
+    },
+    {
+      "title": "Low-level whole-body joint control",
+      "category": "movement low level lowcmd legs arms whole body dangerous",
+      "source_files": ["../ll_sdk.py", "FAQs.md"],
+      "question_triggers": [
+        "How do I move leg joints?",
+        "How do I command all 29 joints?",
+        "How do I use lowcmd?",
+        "How do I use LLSdk?"
+      ],
+      "answer": "ll_sdk.LLSdk publishes to rt/lowcmd for all 29 body joints. It can move arbitrary joints with move_ll_joint and provides arm and leg IK. This bypasses more of the robot's balance stack than higher-level APIs, so use it only when you understand the risk.",
+      "example_python": [
+        "from ll_sdk import LLSdk",
+        "sdk = LLSdk(iface='eth0', domain_id=0)",
+        "sdk.enter_dev_mode()",
+        "sdk.move_ll_joint({25: -0.3}, ramp_speed_rad_s=0.2)",
+        "q = sdk.get_joint_positions()"
+      ],
+      "api": [
+        "enter_dev_mode(timeout=10.0): releases MotionSwitcher so rt/lowcmd is accepted.",
+        "move_ll_joint(targets, kp=None, kd=None, ramp_speed_rad_s=0.0): command selected joints while holding others at current lowstate.",
+        "ik_move_EE(...): arm Cartesian IK through rt/lowcmd.",
+        "ik_move_EE_leg(...): leg foot Cartesian IK.",
+        "get_joint_positions(): current 29-element body joint vector.",
+        "get_arm_ee_pose(arm='right') and get_foot_pose(leg='right') return 4x4 poses."
+      ],
+      "safety": [
+        "enter_dev_mode can make the robot go limp briefly.",
+        "Leg IK through rt/lowcmd bypasses locomotion balance; use only when the robot is supported externally or seated.",
+        "Do not use low-level leg motion while freestanding unless explicitly validated."
+      ]
+    },
+    {
+      "title": "High-level built-in arm actions",
+      "category": "movement gestures arms actions wave clap hug handshake high five",
+      "source_files": ["../sdk_client.py"],
+      "question_triggers": [
+        "How do I make the robot wave?",
+        "How do I make the robot clap?",
+        "How do I trigger high five?",
+        "How do I make the robot shake hands?"
+      ],
+      "answer": "sdk_client.Robot wraps high-level arm action IDs. Use helper methods such as high_wave(), clap(), high_five(), hug(), shake_hand(), heart(), hands_up(), x_ray(), right_hand_up(), reject(), left_kiss(), right_kiss(), or two_hand_kiss().",
+      "example_python": [
+        "from sdk_client import Robot",
+        "robot = Robot(iface='eth0', domain_id=0)",
+        "robot.high_wave()",
+        "robot.high_five()",
+        "robot.shake_hand()"
+      ],
+      "known_actions": {
+        "release arm": 99,
+        "two-hand kiss": 11,
+        "left kiss": 12,
+        "right kiss": 13,
+        "hands up": 15,
+        "clap": 17,
+        "high five": 18,
+        "hug": 19,
+        "heart": 20,
+        "right heart": 21,
+        "reject": 22,
+        "right hand up": 23,
+        "x-ray": 24,
+        "face wave": 25,
+        "high wave": 26,
+        "shake hand": 27
+      }
+    },
+    {
+      "title": "Extend and retract an arm forward",
+      "category": "movement arms reaching extend retract forward",
+      "source_files": ["../sdk_client.py", "../scripts/extend_hand_forward.py"],
+      "question_triggers": [
+        "How do I extend the arm forward?",
+        "How do I reach forward?",
+        "How do I retract the arm?"
+      ],
+      "answer": "Use Robot.extend_arm_forward(arm='right') or Robot.extend_arm_forward(arm='left') to execute the saved v3 pose trajectory.",
+      "example_python": [
+        "from sdk_client import Robot",
+        "robot = Robot(iface='eth0', domain_id=0)",
+        "robot.extend_arm_forward(arm='right', duration_s=4.0)",
+        "robot.extend_arm_forward(arm='left', duration_s=4.0)"
+      ],
+      "parameters": [
+        "arm is 'left' or 'right'.",
+        "duration_s controls total motion time.",
+        "command_rate_hz defaults to 50 Hz.",
+        "The method uses pose indices 1, 2, 3, and 4 from WBC/saved_ik_pose_cli_v3_poses.json by default."
+      ],
+      "safety": [
+        "The method clamps several joint targets to known arm limits.",
+        "Use a clear workspace in front of the selected arm."
+      ]
+    },
+    {
+      "title": "Open, close, release, and pose Dex3 hands",
+      "category": "hands fingers dex3 tactile gripper grasp",
+      "source_files": ["../sdk_client.py", "../sdk_hand.py"],
+      "question_triggers": [
+        "How do I open the hand?",
+        "How do I close the hand?",
+        "How do I move fingers?",
+        "How do I release fingers?",
+        "How do I read tactile pressure?"
+      ],
+      "answer": "Use sdk_client.Robot hand helpers for Dex3 hands. hand_open() and hand_close() open or close one side. hand_pose(targets) sets seven finger targets. hand_move_finger(finger_name) moves one named finger. get_hand_state_snapshot() and get_tactile_pressures() read state.",
+      "example_python": [
+        "from sdk_client import Robot",
+        "robot = Robot(iface='eth0', domain_id=0)",
+        "robot.hand_open('right')",
+        "robot.hand_close('right')",
+        "robot.hand_pose([0.0, 0.0, 0.0, 0.2, 0.2, 0.2, 0.2], hand='right')",
+        "snapshot = robot.get_hand_state_snapshot('right')",
+        "pressures = robot.get_tactile_pressures('right')"
+      ],
+      "hand_joint_names": [
+        "thumb_0",
+        "thumb_1",
+        "thumb_2",
+        "middle_0",
+        "middle_1",
+        "index_0",
+        "index_1"
+      ],
+      "state_topics": {
+        "left": "rt/dex3/left/state",
+        "right": "rt/dex3/right/state"
+      },
+      "api": [
+        "hand_open(hand='right', hold_s=0.6, rate_hz=50.0, ramp_s=None)",
+        "hand_close(hand='right', hold_s=0.6, rate_hz=50.0, ramp_s=None)",
+        "release_fingers(hand='right' or 'both', persistent=True)",
+        "stop_release_fingers(hand='both')",
+        "unrelease_fingers(hand='both')",
+        "zero_torque_fingers(hand='both')",
+        "hand_pose(targets, hand='right')",
+        "hand_move_finger(finger_name, hand='right')"
+      ]
+    },
+    {
+      "title": "Control Inspire hands over Modbus TCP",
+      "category": "hands inspire modbus fingers gripper",
+      "source_files": ["../inspire_sdk.py", "../inspire_finger_sdk.py", "../inspire_open_fingers_sequence.py"],
+      "question_triggers": [
+        "How do I control Inspire hands?",
+        "How do I open an Inspire hand?",
+        "How do I move an individual Inspire finger?"
+      ],
+      "answer": "Use inspire_sdk for simple open and close commands, or inspire_finger_sdk for individual fingers. These modules talk Modbus TCP to the hand controller.",
+      "example_python": [
+        "from inspire_sdk import open_hand, close_hand",
+        "open_hand('right', hold=1.0)",
+        "close_hand('right', hold=1.0)",
+        "",
+        "from inspire_finger_sdk import move_finger",
+        "move_finger('right', 'index', target=800, hold=1.0)"
+      ],
+      "cli_examples": [
+        "python3 inspire_finger_sdk.py --hand right --fingers index --target 800",
+        "python3 inspire_open_fingers_sequence.py"
+      ],
+      "notes": [
+        "Valid hand values are left and right; some CLIs also support both.",
+        "Targets are register-like integer angles, clamped by the module."
+      ]
+    },
+    {
+      "title": "Teach and replay arm and hand motions",
+      "category": "motion recording playback pbd teach replay arms hands",
+      "source_files": ["../sdk_client.py", "../scripts/arm_hand_pose_teach_ui.py", "../scripts/replay_saved_arm_pose.py", "../scripts/run_saved_arm_hand_pose_sequence.py"],
+      "question_triggers": [
+        "How do I record a motion?",
+        "How do I teach a pose?",
+        "How do I replay an arm motion?",
+        "How do I save arm and hand poses?"
+      ],
+      "answer": "sdk_client.Robot includes teach and replay-style helpers for programming by demonstration. teach() records arm and hand joint samples to an NPZ file and CSV log. Replay helpers consume saved motion files with joint columns or arrays.",
+      "example_python": [
+        "from sdk_client import Robot",
+        "robot = Robot(iface='eth0', domain_id=0)",
+        "result = robot.teach(arm='both', out='/tmp/pbd_motion.npz')",
+        "print(result)"
+      ],
+      "file_formats": [
+        "NPZ motion files are supported.",
+        "CSV motion files must include a time column such as t_s, ts, time_s, or time and joint columns like j22, j23."
+      ],
+      "notes": [
+        "Teach mode uses arm release/unrelease and zero torque fingers so the operator can guide the motion.",
+        "It samples hand state from rt/dex3/left/state and rt/dex3/right/state."
+      ]
+    },
+    {
+      "title": "Start, stop, inspect, and navigate with SLAM",
+      "category": "slam mapping navigation pose path localization",
+      "source_files": ["../sdk_client.py", "../sdk_slam.py", "../scripts/slam_web_app.py", "../scripts/slam_webapp_with_tasks.py", "../scripts/slam_points_viewer.py"],
+      "question_triggers": [
+        "How do I start SLAM?",
+        "How do I stop mapping?",
+        "How do I get SLAM pose?",
+        "How do I navigate to a point?",
+        "How do I queue path points?"
+      ],
+      "answer": "Use sdk_client.Robot SLAM helpers. start_slam('indoor') starts mapping. stop_slam(save_path) stops and optionally saves. get_slam_pose() returns x, y, yaw when available. Queue goals with set_path_point(x, y, yaw) and call navigate_path().",
+      "example_python": [
+        "from sdk_client import Robot",
+        "robot = Robot(iface='eth0', domain_id=0)",
+        "robot.start_slam('indoor')",
+        "pose = robot.get_slam_pose()",
+        "robot.set_path_point(1.0, 0.0, 0.0)",
+        "ok = robot.navigate_path()",
+        "robot.stop_slam('/home/unitree/map.pcd')"
+      ],
+      "api": [
+        "start_slam(slam_type='indoor') returns integer response code.",
+        "stop_slam(save_path=None) returns integer response code.",
+        "get_slam_info() and get_slam_key() read SLAM status topics.",
+        "get_slam_pose(timeout_s=0.4) returns tuple x, y, yaw or None.",
+        "get_slam_pose_status() reports whether pose is usable.",
+        "set_path_point(), get_path_points(), clear_path_points(), navigate_path()."
+      ],
+      "safety": [
+        "navigate_path() returns False if SLAM is not running or the pose is not usable.",
+        "The code checks for origin-like SLAM pose mismatches against sport pose before navigating."
+      ]
+    },
+    {
+      "title": "Make the robot speak and play audio",
+      "category": "audio speech tts piper wav volume say",
+      "source_files": ["../sdk_client.py", "../sdk_audio.py", "../scripts/robot_say_once.py", "chat.py"],
+      "question_triggers": [
+        "How do I make the robot speak?",
+        "How do I play a WAV file?",
+        "How do I set speech volume?",
+        "How does chat speak replies?"
+      ],
+      "answer": "Use Robot.say(text) for text-to-speech or Robot.play_wav(path) for audio files. The chat scripts call robot_say_once.py, which creates sdk_client.Robot and sends one spoken message through Robot.say.",
+      "example_python": [
+        "from sdk_client import Robot",
+        "robot = Robot(iface='eth0', domain_id=0)",
+        "robot.say('Hello, I am ready.', volume=80)",
+        "robot.play_wav('/tmp/example.wav', volume=60)"
+      ],
+      "cli_examples": [
+        "python3 robot_say_once.py 'Hello from the robot' --iface eth0 --domain-id 0 --volume 80"
+      ],
+      "implementation_details": [
+        "sdk_audio.RobotAudio can synthesize with Piper and converts WAV audio to robot-compatible mono 16 kHz PCM when needed.",
+        "Robot.say accepts optional language, voice_model, and speaker arguments."
+      ]
+    },
+    {
+      "title": "Control the robot headlight",
+      "category": "audio headlight led light color",
+      "source_files": ["../sdk_client.py", "../sdk_audio.py", "../scripts/robot_headlight_once.py", "chat.py"],
+      "question_triggers": [
+        "How do I set the headlight?",
+        "How do I change LED color?",
+        "How does chat set the startup light?"
+      ],
+      "answer": "Use Robot.headlight(color='white', intensity=100, duration=None). The chat scripts call robot_headlight_once.py at startup unless --no-headlight is passed.",
+      "example_python": [
+        "from sdk_client import Robot",
+        "robot = Robot(iface='eth0', domain_id=0)",
+        "robot.headlight(color='#123456', intensity=100, duration=2.0)"
+      ],
+      "cli_examples": [
+        "python3 robot_headlight_once.py --color '#123456' --intensity 100 --iface eth0 --domain-id 0"
+      ],
+      "notes": [
+        "sdk_audio.parse_color accepts named colors and hex-like RGB strings.",
+        "sdk_audio.scale_color applies intensity from 0 to 100."
+      ]
+    },
+    {
+      "title": "Use chat.py with Ollama and robot audio",
+      "category": "conversation chat ollama asr ros audio",
+      "source_files": ["chat.py", "chat_with_FAQs.py", "chat_with_knowledge.py"],
+      "question_triggers": [
+        "How does the chat script work?",
+        "Which topic does chat listen to?",
+        "How do I run robot chat?",
+        "Does chat start Ollama?"
+      ],
+      "answer": "chat.py subscribes to ROS 2 topic /audio_msg by default, expects std_msgs/String containing JSON or raw ASR text, sends a prompt to Ollama /api/chat, logs the interaction, and speaks the reply through robot_say_once.py. It now probes /api/tags and starts `ollama serve` if the local Ollama API is not running.",
+      "example_command": "python3 chat.py --iface eth0 --domain-id 0 --model qwen3.5:9b",
+      "default_files": [
+        "/tmp/robot_chat.jsonl",
+        "/tmp/robot_chat.txt",
+        "/tmp/ollama_chat_server.log"
+      ],
+      "important_flags": [
+        "--topic /audio_msg",
+        "--ollama-url http://127.0.0.1:11434",
+        "--model qwen3.5:9b",
+        "--no-start-ollama",
+        "--no-warmup",
+        "--no-reply",
+        "--no-headlight",
+        "--no-startup-speech"
+      ]
+    },
+    {
+      "title": "Use chat_with_knowledge.py for JSON RAG answers",
+      "category": "conversation chat rag json knowledge ollama",
+      "source_files": ["chat_with_knowledge.py", "robot_modules_knowledge.sample.json"],
+      "question_triggers": [
+        "How do I use JSON knowledge with chat?",
+        "How do I run RAG over a JSON file?",
+        "How does the robot answer questions about modules?"
+      ],
+      "answer": "Run chat_with_knowledge.py with one or more JSON files as positional arguments. It loads structured JSON, creates record-level chunks, ranks them lexically against the user's question, injects the best chunks into an Ollama system message, and speaks the answer through the normal RobotChat pipeline.",
+      "example_command": "python3 chat_with_knowledge.py robot_modules_knowledge.sample.json --iface eth0 --domain-id 0",
+      "important_flags": [
+        "--knowledge-top-k 4",
+        "--knowledge-min-score 0.06",
+        "--knowledge-max-chars 2600",
+        "--model qwen3.5:9b",
+        "--no-reply for dry text/log testing"
+      ],
+      "notes": [
+        "For module questions, answer from the retrieved context and say you do not know yet when context is missing.",
+        "This JSON file is a sample and should be updated when modules change."
+      ]
+    },
+    {
+      "title": "Discover DDS topics and troubleshoot SDK communication",
+      "category": "debug dds topics cyclonedds network troubleshooting",
+      "source_files": ["../scripts/dds_discover_topics.py", "../dds_env.py", "FAQs.md"],
+      "question_triggers": [
+        "How do I discover robot topics?",
+        "How do I debug DDS?",
+        "Why can the SDK not see the robot?",
+        "What CycloneDDS settings should I use?"
+      ],
+      "answer": "Use dds_discover_topics.py to list DDS publishers and subscribers. Use iface='eth0' and domain_id=0 unless the robot network is different. Ensure CycloneDDS environment variables point to the local CycloneDDS install and XML config.",
+      "cli_examples": [
+        "python3 dds_discover_topics.py --iface eth0 --domain-id 0 --seconds 6"
+      ],
+      "environment": {
+        "CYCLONEDDS_HOME": "/home/unitree/cyclonedds_ws/install/cyclonedds",
+        "CYCLONEDDS_URI": "/home/unitree/cyclonedds_ws/cyclonedds.xml"
+      },
+      "common_fix": "Run from the robot workspace environment and verify the selected network interface is connected to the robot network."
+    },
+    {
+      "title": "Robot safety modes and boot helpers",
+      "category": "safety boot mode fsm damp zero torque hanged secure",
+      "source_files": ["../sdk_client.py", "../secure_boot.py", "../sdk_boot.py"],
+      "question_triggers": [
+        "How do I put the robot in damp mode?",
+        "How do I zero torque?",
+        "How do I use secure boot?",
+        "How do I change FSM?"
+      ],
+      "answer": "sdk_client.Robot exposes safety and FSM helpers: zero_torque(), damp(), walk_mode(), run_mode(), enter_dev_mode(), hanged_boot(), and hanging_boot(). Use these carefully because they can change support, torque, and locomotion behavior.",
+      "example_python": [
+        "from sdk_client import Robot",
+        "robot = Robot(iface='eth0', domain_id=0)",
+        "robot.damp()",
+        "robot.zero_torque()",
+        "robot.walk_mode()"
+      ],
+      "api": [
+        "zero_torque() calls fsm_0_zt().",
+        "damp() calls fsm_1_damp().",
+        "walk_mode() sets FSM ID 501 if supported.",
+        "run_mode() sets FSM ID 802 if supported.",
+        "enter_dev_mode() attempts to set gait/balance dev mode.",
+        "hanged_boot() calls secure_boot() with configurable step, max_height, attempts, and confirmation."
+      ],
+      "safety": [
+        "Zero torque and low-level developer modes can make the robot limp.",
+        "Use confirmation and external support when required."
+      ]
+    }
+  ]
+}
