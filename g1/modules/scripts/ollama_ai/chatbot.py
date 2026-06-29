@@ -129,11 +129,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--no-speech", action="store_true")
     parser.add_argument("--enable-motion", action="store_true")
     parser.add_argument("--pose-file", default=str(WBC_DIR / "saved_ik_pose_cli_v3_poses.json"))
-    parser.add_argument("--motion-speed", type=float, default=0.22, help="IK joint ramp speed in rad/s.")
-    parser.add_argument("--thinking-speed", type=float, default=0.16)
-    parser.add_argument("--explain-speed", type=float, default=0.22)
-    parser.add_argument("--sequence-gap", type=float, default=0.15)
-    parser.add_argument("--pose-timeout-s", type=float, default=8.0)
+    parser.add_argument("--motion-speed", type=float, default=0.28, help="IK joint ramp speed in rad/s.")
+    parser.add_argument("--thinking-speed", type=float, default=0.20)
+    parser.add_argument("--explain-speed", type=float, default=0.30)
+    parser.add_argument("--sequence-gap", type=float, default=0.25)
+    parser.add_argument("--pose-timeout-s", type=float, default=11.0)
+    parser.add_argument("--post-sequence-hold-s", type=float, default=1.2,
+                        help="Seconds to hold the final pose before releasing arm gains.")
     parser.add_argument("--startup-speech", default="chatbot ready")
     parser.add_argument("--no-startup-speech", action="store_true")
     parser.add_argument("--audit-log", default="/tmp/ollama_chatbot.jsonl")
@@ -531,13 +533,15 @@ class MotionPlayer:
             self.sequence_active.clear()
 
     def _reengage_for_sequence(self) -> None:
-        with self.lock:
-            ctrl = self.ctrl
-        if ctrl is None:
-            return
         try:
-            ctrl._unrelease_arms(duration_s=0.8)
             with self.lock:
+                ctrl = self.ctrl
+                if ctrl is None:
+                    return
+                # Hold the worker lock across the whole ramp. The tick loop uses
+                # the same lock before publishing rt/arm_sdk, so this prevents
+                # release/reengage packets and normal target packets overlapping.
+                ctrl._unrelease_arms(duration_s=0.8)
                 ctrl.armed = True
                 ctrl._sync_targets_to_live()
             self.logger.info("Arms reengaged for motion sequence.")
@@ -545,13 +549,18 @@ class MotionPlayer:
             self.logger.warning(f"Could not reengage arms before sequence: {exc}")
 
     def _release_after_sequence(self) -> None:
-        with self.lock:
-            ctrl = self.ctrl
-        if ctrl is None:
-            return
         try:
-            ctrl._release_arms(duration_s=1.0)
+            hold_s = max(0.0, float(self.args.post_sequence_hold_s))
+            if hold_s:
+                time.sleep(hold_s)
             with self.lock:
+                ctrl = self.ctrl
+                if ctrl is None:
+                    return
+                # See _reengage_for_sequence: this must be serialized with the
+                # background tick publisher to avoid contradictory low-level arm
+                # commands on rt/arm_sdk.
+                ctrl._release_arms(duration_s=1.6)
                 ctrl.armed = False
             self.logger.info("Arms released after motion sequence.")
         except Exception as exc:
@@ -592,6 +601,7 @@ class MotionWorkerClient:
         self.logger = logger
         self.enabled = bool(args.enable_motion)
         self.proc: subprocess.Popen[str] | None = None
+        self.motion_requested = False
         if self.enabled:
             self._start_worker()
 
@@ -609,6 +619,7 @@ class MotionWorkerClient:
             "--explain-speed", str(float(self.args.explain_speed)),
             "--sequence-gap", str(float(self.args.sequence_gap)),
             "--pose-timeout-s", str(float(self.args.pose_timeout_s)),
+            "--post-sequence-hold-s", str(float(self.args.post_sequence_hold_s)),
             "--no-speech",
             "--no-startup-speech",
         ]
@@ -642,15 +653,21 @@ class MotionWorkerClient:
         if not self.enabled:
             self.logger.info("[motion disabled] would play: " + ", ".join(names))
             return
+        if self.motion_requested:
+            self.logger.warning("Motion request skipped; previous motion has not been stopped yet.")
+            return
+        self.motion_requested = True
         self._send({"cmd": "play", "names": names, "speed": speed, "loop": bool(loop)})
 
     def stop_sequence(self) -> None:
         if self.enabled:
             self._send({"cmd": "stop"})
+        self.motion_requested = False
 
     def close(self) -> None:
         if self.proc is None:
             return
+        self.motion_requested = False
         self._send({"cmd": "close"})
         try:
             self.proc.wait(timeout=2.0)
@@ -774,7 +791,6 @@ class ChatbotNode(Node):
                 return
             if intent == "thanks":
                 answer = announce or "You're welcome."
-                self.motion.play_async(THANKS_SEQUENCE, speed=float(self.args.explain_speed))
                 self.speaker.say_async(answer)
                 self._publish({"ok": True, "intent": intent, "answer": answer, "elapsed_s": time.time() - started})
                 return
@@ -782,15 +798,13 @@ class ChatbotNode(Node):
                 self.speaker.say(announce)
             if bool(route.get("needs_knowledge", intent == "rag_question")):
                 self.motion.play_async(THINK_SEQUENCE, speed=float(self.args.thinking_speed), loop=True)
-                answer = self._rag_answer(text)
+                answer, used_knowledge = self._rag_answer(text)
                 self.motion.stop_sequence()
-                self.motion.play_async(EXPLAIN_SEQUENCE, speed=float(self.args.explain_speed), loop=True)
+                if used_knowledge:
+                    self.motion.play_async(EXPLAIN_SEQUENCE, speed=float(self.args.explain_speed), loop=False)
                 self.speaker.say(answer)
-                self.motion.stop_sequence()
-                self.motion.play_async(["Explain_base"], speed=float(self.args.explain_speed))
             else:
                 answer = self._chat_answer(text)
-                self.motion.play_async(EXPLAIN_SEQUENCE, speed=float(self.args.explain_speed), loop=False)
                 self.speaker.say(answer)
             self.last_reply = answer
             self.last_reply_ts = time.time()
@@ -821,7 +835,7 @@ class ChatbotNode(Node):
         route = extract_json_object(raw)
         if isinstance(route, dict):
             return route
-        return {"intent": "chat", "announce": "", "needs_knowledge": False, "motion": "explain"}
+        return {"intent": "chat", "announce": "", "needs_knowledge": False, "motion": "none"}
 
     def _route_fast(self, text: str) -> dict[str, Any] | None:
         low = text.lower().strip()
@@ -834,7 +848,7 @@ class ChatbotNode(Node):
             return {"intent": "rag_question", "announce": "Let me think.", "needs_knowledge": True, "motion": "thinking"}
         return None
 
-    def _rag_answer(self, text: str) -> str:
+    def _rag_answer(self, text: str) -> tuple[str, bool]:
         context = ""
         if self.retriever is not None:
             context = self.retriever.format_context(
@@ -848,7 +862,8 @@ class ChatbotNode(Node):
             {"role": "system", "content": f"{KNOWLEDGE_SYSTEM_PROMPT}\n\nStructured knowledge context:\n{context}" if context else KNOWLEDGE_SYSTEM_PROMPT},
             {"role": "user", "content": text},
         ]
-        return self.ollama.chat(messages, temperature=float(self.args.temperature), num_predict=int(self.args.num_predict))
+        answer = self.ollama.chat(messages, temperature=float(self.args.temperature), num_predict=int(self.args.num_predict))
+        return answer, bool(context)
 
     def _chat_answer(self, text: str) -> str:
         history = self.history[-max(1, int(self.args.max_history)):]
