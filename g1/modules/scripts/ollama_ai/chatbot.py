@@ -51,12 +51,13 @@ DEFAULT_SYSTEM_PROMPT = (
 )
 ROUTER_PROMPT = (
     "Return only JSON with this schema: "
-    "{\"intent\":\"rag_question|chat|thanks|stop|unknown\","
+    "{\"intent\":\"rag_question|chat|thanks|stop|gesture|unknown\","
     "\"announce\":\"short phrase the robot should say before acting\","
     "\"needs_knowledge\":true,"
-    "\"motion\":\"thinking|explain|thanks|none\"}. "
+    "\"motion\":\"thinking|explain|thanks|face_wave|high_wave|clap|shake_hand|none\"}. "
     "Use rag_question for factual questions that need stored knowledge. "
     "Use chat for normal conversational questions. Use thanks for gratitude. "
+    "Use gesture for requests to wave, greet, clap, or shake hands. "
     "Use stop for stop/cancel requests."
 )
 KNOWLEDGE_SYSTEM_PROMPT = (
@@ -66,6 +67,26 @@ KNOWLEDGE_SYSTEM_PROMPT = (
 )
 WORD_RE = re.compile(r"[A-Za-z0-9_]+", re.UNICODE)
 FILLERS = {"ah", "eh", "er", "hmm", "hm", "mm", "uh", "um"}
+STOP_REQUESTS = {
+    "stop",
+    "stop talking",
+    "stop speaking",
+    "be quiet",
+    "quiet",
+    "cancel",
+    "halt",
+    "shut up",
+}
+UNINTELLIGIBLE_ASR = {
+    "japanese letter",
+    "japanese letters",
+    "chinese letter",
+    "chinese letters",
+    "korean letter",
+    "korean letters",
+    "foreign letter",
+    "foreign letters",
+}
 STOP_WORDS = {
     "a", "about", "and", "are", "as", "at", "be", "can", "could", "do",
     "does", "for", "from", "how", "i", "in", "is", "it", "me", "of",
@@ -87,6 +108,17 @@ EXPLAIN_SEQUENCE = [
 ]
 THINK_SEQUENCE = ["think"]
 THANKS_SEQUENCE = ["thanks"]
+HL_ACTIONS = {
+    "face_wave": "face_wave",
+    "high_wave": "high_wave",
+    "wave": "face_wave",
+    "clap": "clap",
+    "shake_hand": "shake_hand",
+    "handshake": "shake_hand",
+    "high_five": "high_five",
+    "heart": "heart",
+    "hands_up": "hands_up",
+}
 
 
 @dataclass(frozen=True)
@@ -129,9 +161,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--no-speech", action="store_true")
     parser.add_argument("--enable-motion", action="store_true")
     parser.add_argument("--pose-file", default=str(WBC_DIR / "saved_ik_pose_cli_v3_poses.json"))
-    parser.add_argument("--motion-speed", type=float, default=0.28, help="IK joint ramp speed in rad/s.")
-    parser.add_argument("--thinking-speed", type=float, default=0.20)
-    parser.add_argument("--explain-speed", type=float, default=0.30)
+    parser.add_argument("--motion-speed", type=float, default=0.32, help="IK joint ramp speed in rad/s.")
+    parser.add_argument("--thinking-speed", type=float, default=0.23)
+    parser.add_argument("--explain-speed", type=float, default=0.36)
     parser.add_argument("--sequence-gap", type=float, default=0.25)
     parser.add_argument("--pose-timeout-s", type=float, default=11.0)
     parser.add_argument("--post-sequence-hold-s", type=float, default=1.2,
@@ -355,6 +387,7 @@ class Speaker:
         self.args = args
         self.logger = logger
         self.lock = threading.Lock()
+        self.current_proc: subprocess.Popen[str] | None = None
 
     def say(self, text: str) -> int:
         text = compact_text(text)
@@ -380,15 +413,41 @@ class Speaker:
         env.setdefault("CYCLONEDDS_HOME", "/home/unitree/cyclonedds_ws/install/cyclonedds")
         env.setdefault("CYCLONEDDS_URI", "/home/unitree/cyclonedds_ws/cyclonedds.xml")
         with self.lock:
-            proc = subprocess.run(command, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        if proc.stdout.strip():
-            self.logger.info(proc.stdout.strip())
-        return int(proc.returncode)
+            proc = subprocess.Popen(
+                command,
+                env=env,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+            )
+            self.current_proc = proc
+        try:
+            output, _ = proc.communicate()
+        finally:
+            with self.lock:
+                if self.current_proc is proc:
+                    self.current_proc = None
+        if output and output.strip():
+            self.logger.info(output.strip())
+        return int(proc.returncode or 0)
 
     def say_async(self, text: str) -> threading.Thread:
         thread = threading.Thread(target=self.say, args=(text,), daemon=True)
         thread.start()
         return thread
+
+    def stop_current(self) -> None:
+        with self.lock:
+            proc = self.current_proc
+        if proc is None or proc.poll() is not None:
+            return
+        try:
+            proc.terminate()
+            proc.wait(timeout=0.8)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+        except Exception as exc:
+            self.logger.warning(f"Could not stop speech process: {exc}")
 
 
 class PrintLogger:
@@ -408,6 +467,7 @@ class MotionPlayer:
         self.logger = logger
         self.enabled = bool(args.enable_motion)
         self.ctrl: IKPoseCLI | None = None
+        self.robot: Any | None = None
         self.poses_by_name: dict[str, dict[str, Any]] = {}
         self.lock = threading.RLock()
         self.close_event = threading.Event()
@@ -532,6 +592,52 @@ class MotionPlayer:
             self._release_after_sequence()
             self.sequence_active.clear()
 
+    def play_hl_action(self, action: str) -> bool:
+        action_key = HL_ACTIONS.get(str(action).strip().lower())
+        if not action_key:
+            self.logger.warning(f"Unsupported high-level arm action: {action}")
+            return False
+        if not self.enabled:
+            self.logger.info(f"[motion disabled] would run high-level action: {action_key}")
+            return False
+        if self.sequence_active.is_set() or (self.sequence_thread and self.sequence_thread.is_alive()):
+            self.logger.warning("High-level action ignored because a sequence is already active.")
+            return False
+        self.sequence_active.set()
+        try:
+            with self.lock:
+                ctrl = self.ctrl
+                if ctrl is not None and not ctrl._closed:
+                    # High-level arm actions use the robot arm action service.
+                    # Release low-level arm_sdk authority first so the IK tick
+                    # loop is not holding gains against the HL controller.
+                    ctrl._release_arms(duration_s=1.0)
+                    ctrl.armed = False
+                robot = self._get_robot()
+                method = getattr(robot, action_key)
+                code = int(method())
+            self.logger.info(f"High-level arm action {action_key} returned {code}.")
+            return code == 0
+        except Exception as exc:
+            self.logger.warning(f"High-level arm action {action_key} failed: {exc}")
+            return False
+        finally:
+            self.sequence_active.clear()
+
+    def _get_robot(self) -> Any:
+        if self.robot is None:
+            from sdk_client import Robot
+            self.robot = Robot(
+                iface=str(self.args.iface),
+                domain_id=int(self.args.domain_id),
+                safety_boot=False,
+                recover_dev_mode_on_init=False,
+                auto_start_sensors=False,
+                ollama_url=str(self.args.ollama_url),
+                chat_model=str(self.args.model),
+            )
+        return self.robot
+
     def _reengage_for_sequence(self) -> None:
         try:
             with self.lock:
@@ -601,7 +707,6 @@ class MotionWorkerClient:
         self.logger = logger
         self.enabled = bool(args.enable_motion)
         self.proc: subprocess.Popen[str] | None = None
-        self.motion_requested = False
         if self.enabled:
             self._start_worker()
 
@@ -653,21 +758,21 @@ class MotionWorkerClient:
         if not self.enabled:
             self.logger.info("[motion disabled] would play: " + ", ".join(names))
             return
-        if self.motion_requested:
-            self.logger.warning("Motion request skipped; previous motion has not been stopped yet.")
-            return
-        self.motion_requested = True
         self._send({"cmd": "play", "names": names, "speed": speed, "loop": bool(loop)})
 
     def stop_sequence(self) -> None:
         if self.enabled:
             self._send({"cmd": "stop"})
-        self.motion_requested = False
+
+    def hl_action(self, action: str) -> None:
+        if not self.enabled:
+            self.logger.info(f"[motion disabled] would run high-level action: {action}")
+            return
+        self._send({"cmd": "hl_action", "action": str(action)})
 
     def close(self) -> None:
         if self.proc is None:
             return
-        self.motion_requested = False
         self._send({"cmd": "close"})
         try:
             self.proc.wait(timeout=2.0)
@@ -714,6 +819,8 @@ def run_motion_worker(args: argparse.Namespace) -> int:
                     )
             elif cmd == "stop":
                 motion.stop_sequence()
+            elif cmd == "hl_action":
+                motion.play_hl_action(str(payload.get("action", "")))
             elif cmd == "close":
                 break
             else:
@@ -743,6 +850,8 @@ class ChatbotNode(Node):
         self.last_reply = ""
         self.last_reply_ts = 0.0
         self.busy_lock = threading.Lock()
+        self.interrupt_event = threading.Event()
+        self.last_unintelligible_ts = 0.0
         self.response_pub = self.create_publisher(String, args.response_topic, 10)
         self.create_subscription(String, args.audio_topic, self.on_audio, 10)
         if str(args.filtered_audio_topic) and str(args.filtered_audio_topic) != str(args.audio_topic):
@@ -761,6 +870,16 @@ class ChatbotNode(Node):
         confidence = float(payload.get("confidence", 0.0) or 0.0)
         index = self._payload_index(payload)
         now = time.time()
+        if self._is_stop_request(text):
+            self.last_index = index
+            self.last_text = text
+            self._interrupt_now("audio")
+            return
+        if self._is_unintelligible_asr(text):
+            self.last_index = index
+            self.last_text = text
+            self._handle_unintelligible(now)
+            return
         if not self._should_answer(text, confidence, index, now):
             return
         self.last_index = index
@@ -771,12 +890,20 @@ class ChatbotNode(Node):
         payload = decode_payload(str(msg.data))
         text = compact_text(str(payload.get("text", payload.get("prompt", ""))))
         if text:
+            if self._is_stop_request(text):
+                self._interrupt_now("command")
+                return
+            if self._is_unintelligible_asr(text):
+                self._handle_unintelligible(time.time())
+                return
             threading.Thread(target=self._handle_text, args=(text, "command"), daemon=True).start()
 
     def _handle_text(self, text: str, source: str) -> None:
         if not self.busy_lock.acquire(blocking=False):
-            self.speaker.say_async("I am still finishing the previous answer.")
+            if not self._is_stop_request(text):
+                self.speaker.say_async("I am still finishing the previous answer.")
             return
+        self.interrupt_event.clear()
         started = time.time()
         try:
             route = self._route(text)
@@ -784,15 +911,24 @@ class ChatbotNode(Node):
             announce = compact_text(str(route.get("announce", "")))
             self._audit({"kind": "route", "source": source, "text": text, "route": route})
             if intent == "stop":
-                self.motion.stop_sequence()
+                self._interrupt_now(source)
                 answer = announce or "Stopping."
                 self.speaker.say_async(answer)
                 self._publish({"ok": True, "intent": intent, "answer": answer, "elapsed_s": time.time() - started})
                 return
             if intent == "thanks":
                 answer = announce or "You're welcome."
+                self.motion.play_async(THANKS_SEQUENCE, speed=float(self.args.explain_speed))
                 self.speaker.say_async(answer)
                 self._publish({"ok": True, "intent": intent, "answer": answer, "elapsed_s": time.time() - started})
+                return
+            if intent == "gesture":
+                action = self._hl_action_from_route(route)
+                answer = announce or self._gesture_reply(action)
+                if action:
+                    self.motion.hl_action(action)
+                self.speaker.say_async(answer)
+                self._publish({"ok": True, "intent": intent, "answer": answer, "motion": action, "elapsed_s": time.time() - started})
                 return
             if announce:
                 self.speaker.say(announce)
@@ -800,11 +936,17 @@ class ChatbotNode(Node):
                 self.motion.play_async(THINK_SEQUENCE, speed=float(self.args.thinking_speed), loop=True)
                 answer, used_knowledge = self._rag_answer(text)
                 self.motion.stop_sequence()
+                if self.interrupt_event.is_set():
+                    self._publish({"ok": True, "intent": intent, "answer": "", "interrupted": True, "elapsed_s": time.time() - started})
+                    return
                 if used_knowledge:
                     self.motion.play_async(EXPLAIN_SEQUENCE, speed=float(self.args.explain_speed), loop=False)
                 self.speaker.say(answer)
             else:
                 answer = self._chat_answer(text)
+                if self.interrupt_event.is_set():
+                    self._publish({"ok": True, "intent": intent, "answer": "", "interrupted": True, "elapsed_s": time.time() - started})
+                    return
                 self.speaker.say(answer)
             self.last_reply = answer
             self.last_reply_ts = time.time()
@@ -839,14 +981,81 @@ class ChatbotNode(Node):
 
     def _route_fast(self, text: str) -> dict[str, Any] | None:
         low = text.lower().strip()
-        if low in {"stop", "stop moving", "cancel", "halt"}:
+        if self._is_stop_request(text):
             return {"intent": "stop", "announce": "Stopping.", "needs_knowledge": False, "motion": "none"}
+        if any(phrase in low for phrase in ("say thank you", "say thanks", "thank them", "thank everyone")):
+            return {"intent": "thanks", "announce": "Thank you.", "needs_knowledge": False, "motion": "thanks"}
         if any(word in low for word in ("thank", "thanks", "danke")):
             return {"intent": "thanks", "announce": "You're welcome.", "needs_knowledge": False, "motion": "thanks"}
+        if "clap" in low or "applaud" in low:
+            return {"intent": "gesture", "announce": "I will clap.", "needs_knowledge": False, "motion": "clap"}
+        if "shake hand" in low or "handshake" in low:
+            return {"intent": "gesture", "announce": "Nice to meet you.", "needs_knowledge": False, "motion": "shake_hand"}
+        if "high five" in low:
+            return {"intent": "gesture", "announce": "High five.", "needs_knowledge": False, "motion": "high_five"}
+        if "wave" in low or "hello" in low or "hi " in f"{low} " or "greet" in low:
+            return {"intent": "gesture", "announce": "Hello.", "needs_knowledge": False, "motion": "face_wave"}
         question_mark = "?" in text or low.split(" ", 1)[0] in {"what", "why", "how", "when", "where", "who", "which"}
         if question_mark and self.retriever is not None:
             return {"intent": "rag_question", "announce": "Let me think.", "needs_knowledge": True, "motion": "thinking"}
         return None
+
+    def _interrupt_now(self, source: str) -> None:
+        self.interrupt_event.set()
+        self.speaker.stop_current()
+        self.motion.stop_sequence()
+        self.last_reply = "Stopping."
+        self.last_reply_ts = time.time()
+        self._publish({"ok": True, "intent": "stop", "source": source, "answer": "Stopping.", "interrupted": True})
+
+    def _handle_unintelligible(self, now: float) -> None:
+        if now - self.last_unintelligible_ts < 3.0:
+            return
+        self.last_unintelligible_ts = now
+        answer = "I wasn't able to understand that prompt."
+        self.last_reply = answer
+        self.last_reply_ts = time.time()
+        self.speaker.say_async(answer)
+        self._publish({"ok": False, "intent": "unintelligible_asr", "answer": answer})
+
+    @staticmethod
+    def _is_stop_request(text: str) -> bool:
+        low = " ".join(str(text).lower().strip().split())
+        if low in STOP_REQUESTS:
+            return True
+        return any(
+            phrase in low
+            for phrase in (
+                "stop talking",
+                "stop speaking",
+                "please stop",
+                "stop the answer",
+                "cancel the answer",
+                "interrupt",
+            )
+        )
+
+    @staticmethod
+    def _is_unintelligible_asr(text: str) -> bool:
+        low = " ".join(str(text).lower().strip().strip(string.punctuation + "，。！？、；：").split())
+        if low in UNINTELLIGIBLE_ASR:
+            return True
+        return bool(re.fullmatch(r"(japanese|chinese|korean)\s+(letter|letters|character|characters)", low))
+
+    @staticmethod
+    def _hl_action_from_route(route: dict[str, Any]) -> str:
+        motion = str(route.get("motion", "")).strip().lower()
+        return HL_ACTIONS.get(motion, "")
+
+    @staticmethod
+    def _gesture_reply(action: str) -> str:
+        if action == "clap":
+            return "Clapping."
+        if action in {"face_wave", "high_wave", "wave"}:
+            return "Hello."
+        if action in {"shake_hand", "handshake"}:
+            return "Nice to meet you."
+        return "Okay."
 
     def _rag_answer(self, text: str) -> tuple[str, bool]:
         context = ""
