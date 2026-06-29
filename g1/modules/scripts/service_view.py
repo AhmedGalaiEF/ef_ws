@@ -6,6 +6,7 @@ import importlib
 import json
 import shlex
 import sys
+sys.path.append("..")
 import time
 from dataclasses import dataclass
 from typing import Any
