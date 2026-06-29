@@ -1,0 +1,20 @@
+[Unit]
+Description=Unitree G1 IK Pose Dash v2
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=unitree
+Group=unitree
+WorkingDirectory=/home/unitree/EF/ef_ws_clean/ef_ws/g1/WBC
+Environment=HOME=/home/unitree
+Environment=G1_IFACE=eth0
+Environment=G1_DOMAIN_ID=0
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 /home/unitree/EF/ef_ws_clean/ef_ws/g1/WBC/ik_pose_dash_v2.py --host 0.0.0.0 --port 8050
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
