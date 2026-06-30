@@ -1165,8 +1165,7 @@ def action_buttons(*_):
                     try:
                         c._unrelease_arms()
                         c.armed = True
-                        c._sync_targets_to_live()
-                        c.status = "Reengaged — synced to live pose"
+                        c.status = "Reengaged — holding current arm pose"
                     except Exception as exc:
                         c.status = f"Reengage failed: {exc}"
             threading.Thread(target=_do, daemon=True).start()

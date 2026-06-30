@@ -175,15 +175,15 @@ DEFAULT_LOCK_FILE = "/tmp/ik_pose_cli_v3_rt_arm_sdk.lock"
 
 STABLE_HOLD_POSE_NAME = "stable_hold"
 STABLE_HOLD_ARM_JOINTS = {
-    str(LEFT_ARM_JOINTS[0]): 0.312,
-    str(LEFT_ARM_JOINTS[1]): 0.221,
+    str(LEFT_ARM_JOINTS[0]): 0.000,
+    str(LEFT_ARM_JOINTS[1]): 1.000,
     str(LEFT_ARM_JOINTS[2]): 0.105,
-    str(LEFT_ARM_JOINTS[3]): -0.684,
+    str(LEFT_ARM_JOINTS[3]): -0.100,
     str(LEFT_ARM_JOINTS[4]): -0.368,
     str(LEFT_ARM_JOINTS[5]): 0.164,
     str(LEFT_ARM_JOINTS[6]): 0.000,
     str(RIGHT_ARM_JOINTS[0]): 0.323,
-    str(RIGHT_ARM_JOINTS[1]): -0.207,
+    str(RIGHT_ARM_JOINTS[1]): -0.307,
     str(RIGHT_ARM_JOINTS[2]): -0.080,
     str(RIGHT_ARM_JOINTS[3]): -0.688,
     str(RIGHT_ARM_JOINTS[4]): 0.328,
@@ -526,9 +526,15 @@ class IKPoseCLI:
         snap = self.state_sub.snapshot()
         if snap:
             pos, _ = snap
-            self.latest_positions = dict(pos)
-        self.current_targets = dict(self.latest_positions)
-        self.desired_targets = dict(self.latest_positions)
+            self._set_targets_to_positions(pos)
+        else:
+            self._set_targets_to_positions(self.latest_positions)
+
+    def _set_targets_to_positions(self, positions: Dict[int, float]) -> None:
+        """Use measured joints as the held command target and EE IK target."""
+        self.latest_positions = dict(positions)
+        self.current_targets = dict(positions)
+        self.desired_targets = dict(positions)
         self._sync_ee_from_joints()
         for arm in ("left", "right"):
             self.ik_info[arm] = {
@@ -551,6 +557,7 @@ class IKPoseCLI:
 
     def _release_arms(self, duration_s: float = 3.0, command_rate_hz: float = 50.0) -> None:
         positions = self._wait_for_state(timeout=3.0)
+        self._set_targets_to_positions(positions)
         steps = max(1, int(max(0.0, float(duration_s)) * max(1.0, float(command_rate_hz))))
         dt = 1.0 / max(1.0, float(command_rate_hz))
         base_waist_pr_kp = self.waist_pr_kp if self.waist_enabled else 0.0
@@ -573,6 +580,7 @@ class IKPoseCLI:
 
     def _unrelease_arms(self, duration_s: float = 1.0, command_rate_hz: float = 50.0) -> None:
         positions = self._wait_for_state(timeout=3.0)
+        self._set_targets_to_positions(positions)
         steps = max(1, int(max(0.0, float(duration_s)) * max(1.0, float(command_rate_hz))))
         dt = 1.0 / max(1.0, float(command_rate_hz))
         waist_pr_kp = self.waist_pr_kp if self.waist_enabled else 0.0
@@ -1539,8 +1547,7 @@ class IKPoseCLI:
             try:
                 self._unrelease_arms()
                 self.armed = True
-                self._sync_targets_to_live()
-                self.status = "Reengaged — synced to live pose"
+                self.status = "Reengaged — holding current arm pose"
             except Exception as exc:
                 self.status = f"Reengage failed: {exc}"
             return

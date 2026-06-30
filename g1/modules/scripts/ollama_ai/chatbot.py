@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import http.server
 import json
 import math
 import os
@@ -51,10 +52,10 @@ DEFAULT_SYSTEM_PROMPT = (
 )
 ROUTER_PROMPT = (
     "Return only JSON with this schema: "
-    "{\"intent\":\"rag_question|chat|thanks|stop|gesture|unknown\","
+    "{\"intent\":\"one of: rag_question, chat, thanks, stop, gesture, unknown\","
     "\"announce\":\"short phrase the robot should say before acting\","
     "\"needs_knowledge\":true,"
-    "\"motion\":\"thinking|explain|thanks|face_wave|high_wave|clap|shake_hand|none\"}. "
+    "\"motion\":\"one of: thinking, explain, thanks, face_wave, high_wave, clap, shake_hand, none\"}. "
     "Use rag_question for factual questions that need stored knowledge. "
     "Use chat for normal conversational questions. Use thanks for gratitude. "
     "Use gesture for requests to wave, greet, clap, or shake hands. "
@@ -66,6 +67,18 @@ KNOWLEDGE_SYSTEM_PROMPT = (
     "answer, say you do not know yet. Keep it spoken and concise."
 )
 WORD_RE = re.compile(r"[A-Za-z0-9_]+", re.UNICODE)
+CJK_OR_KANA_RE = re.compile(r"[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af]")
+ASCII_LETTER_RE = re.compile(r"[A-Za-z]")
+SPOKEN_STATUS_ECHOES = (
+    "chatbot ready",
+    "let me think",
+    "i had trouble answering that",
+    "had trouble answering that",
+    "trouble answering that",
+    "trouble answer that",
+    "trouble answering it",
+    "answering that",
+)
 FILLERS = {"ah", "eh", "er", "hmm", "hm", "mm", "uh", "um"}
 STOP_REQUESTS = {
     "stop",
@@ -87,6 +100,12 @@ UNINTELLIGIBLE_ASR = {
     "foreign letter",
     "foreign letters",
 }
+VALID_INTENTS = {"rag_question", "chat", "thanks", "stop", "gesture", "unknown", "release_arms", "diagnostic", "locomotion", "self_intro"}
+VALID_MOTIONS = {"thinking", "explain", "thanks", "face_wave", "high_wave", "clap", "shake_hand", "none"}
+ROBOT_ACTION_INTENTS = {"release_arms", "diagnostic", "locomotion"}
+LOCO_DURATION_S = 1.0
+LOCO_LINEAR_SPEED_MPS = 0.18
+LOCO_YAW_SPEED_RPS = 0.45
 STOP_WORDS = {
     "a", "about", "and", "are", "as", "at", "be", "can", "could", "do",
     "does", "for", "from", "how", "i", "in", "is", "it", "me", "of",
@@ -108,6 +127,9 @@ EXPLAIN_SEQUENCE = [
 ]
 THINK_SEQUENCE = ["think"]
 THANKS_SEQUENCE = ["thanks"]
+REST_POSE = "unreleased"
+THANKS_RETURN_POSE = REST_POSE
+THINK_RETURN_POSE = REST_POSE
 HL_ACTIONS = {
     "face_wave": "face_wave",
     "high_wave": "high_wave",
@@ -139,6 +161,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--filtered-audio-topic", default="/audio_msg/filter")
     parser.add_argument("--command-topic", default="/model_api/chatbot_command")
     parser.add_argument("--response-topic", default="/model_api/chatbot_response")
+    parser.add_argument("--external-asr-server", action="store_true",
+                        help="Start an HTTP endpoint for external ASR/headset text input.")
+    parser.add_argument("--external-asr-host", default="0.0.0.0")
+    parser.add_argument("--external-asr-port", type=int, default=8095)
+    parser.add_argument("--external-asr-token", default="",
+                        help="Optional bearer/query/JSON token required by the external ASR endpoint.")
+    parser.add_argument("--external-asr-only", "--no-ros-audio", dest="external_asr_only",
+                        action="store_true",
+                        help="Do not subscribe to robot ROS ASR audio topics; use command/external ASR input only.")
     parser.add_argument("--ollama-url", default="http://127.0.0.1:11434")
     parser.add_argument("--model", default="qwen3.5:9b")
     parser.add_argument("--router-model", default="qwen2.5:0.5b")
@@ -153,6 +184,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--knowledge-max-chars", type=int, default=2600)
     parser.add_argument("--min-confidence", type=float, default=0.0)
     parser.add_argument("--post-speak-ignore-s", type=float, default=1.5)
+    parser.add_argument("--error-speech-cooldown-s", type=float, default=30.0,
+                        help="Minimum seconds between spoken backend error messages.")
     parser.add_argument("--answer-fillers", action="store_true")
     parser.add_argument("--iface", default=os.environ.get("G1_IFACE", "eth0"))
     parser.add_argument("--domain-id", type=int, default=int(os.environ.get("G1_DOMAIN_ID", "0")))
@@ -162,12 +195,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--enable-motion", action="store_true")
     parser.add_argument("--pose-file", default=str(WBC_DIR / "saved_ik_pose_cli_v3_poses.json"))
     parser.add_argument("--motion-speed", type=float, default=0.32, help="IK joint ramp speed in rad/s.")
+    parser.add_argument("--motion-kp", type=float, default=30.0, help="Arm hold kp for IK gesture motions.")
+    parser.add_argument("--motion-kd", type=float, default=1.5, help="Arm hold kd for IK gesture motions.")
     parser.add_argument("--thinking-speed", type=float, default=0.23)
     parser.add_argument("--explain-speed", type=float, default=0.36)
     parser.add_argument("--sequence-gap", type=float, default=0.25)
     parser.add_argument("--pose-timeout-s", type=float, default=11.0)
-    parser.add_argument("--post-sequence-hold-s", type=float, default=1.2,
-                        help="Seconds to hold the final pose before releasing arm gains.")
+    parser.add_argument("--post-sequence-hold-s", type=float, default=4.0,
+                        help="Seconds to wait at the final pose before finishing the sequence.")
+    parser.add_argument("--thanks-hold-s", type=float, default=7.0,
+                        help=f"Seconds to hold the thanks pose before returning to {THANKS_RETURN_POSE}.")
+    parser.add_argument("--release-after-sequence", action="store_true",
+                        help="Release arm gains after a gesture sequence instead of holding the final pose.")
     parser.add_argument("--startup-speech", default="chatbot ready")
     parser.add_argument("--no-startup-speech", action="store_true")
     parser.add_argument("--audit-log", default="/tmp/ollama_chatbot.jsonl")
@@ -393,6 +432,7 @@ class Speaker:
         text = compact_text(text)
         if not text:
             return 0
+        self.logger.info(f"robot response text={text!r}")
         if self.args.no_speech:
             self.logger.info(f"[speech disabled] {text}")
             return 0
@@ -487,6 +527,8 @@ class MotionPlayer:
             "--domain-id", str(int(self.args.domain_id)),
             "--file", str(self.args.pose_file),
             "--speed-rad-s", str(float(self.args.motion_speed)),
+            "--kp", str(float(self.args.motion_kp)),
+            "--kd", str(float(self.args.motion_kd)),
             "--arm-control", "both",
             "--hand-control", "off",
         ]
@@ -504,6 +546,7 @@ class MotionPlayer:
         self.tick_thread = threading.Thread(target=self._tick_loop, daemon=True)
         self.tick_thread.start()
         self._wait_seeded(timeout_s=5.0)
+        self._release_for_high_level_action(reason="startup")
         self._check_required_poses()
 
     def _load_pose_names_only(self) -> None:
@@ -538,7 +581,7 @@ class MotionPlayer:
         self.logger.warning("IK controller has not received lowstate yet; motions will start after seeding.")
 
     def _check_required_poses(self) -> None:
-        required = set(EXPLAIN_SEQUENCE + THINK_SEQUENCE + THANKS_SEQUENCE)
+        required = set(EXPLAIN_SEQUENCE + THINK_SEQUENCE + THANKS_SEQUENCE + [THANKS_RETURN_POSE, THINK_RETURN_POSE])
         missing = sorted(name for name in required if name not in self.poses_by_name)
         if missing:
             self.logger.warning("Missing saved pose(s): " + ", ".join(missing))
@@ -562,6 +605,23 @@ class MotionPlayer:
         self.sequence_thread.start()
         return self.sequence_thread
 
+    def play_thanks_async(self, *, speed: float | None = None) -> threading.Thread | None:
+        if not self.enabled:
+            self.logger.info(f"[motion disabled] would play thanks, hold, then {THANKS_RETURN_POSE}")
+            return None
+        if self.sequence_active.is_set() or (self.sequence_thread and self.sequence_thread.is_alive()):
+            self.logger.warning("Thanks motion ignored because a sequence is already active.")
+            return None
+        self.sequence_stop_event.clear()
+        self.sequence_active.set()
+        self.sequence_thread = threading.Thread(
+            target=self._play_thanks_sequence,
+            args=(speed,),
+            daemon=True,
+        )
+        self.sequence_thread.start()
+        return self.sequence_thread
+
     def stop_sequence(self) -> None:
         self.sequence_stop_event.set()
         if self.sequence_thread and self.sequence_thread.is_alive():
@@ -573,6 +633,7 @@ class MotionPlayer:
     def _play_sequence(self, names: list[str], speed: float | None, loop: bool) -> None:
         try:
             self._reengage_for_sequence()
+            self._move_to_rest_pose_before_sequence(speed=speed)
             while not self.sequence_stop_event.is_set():
                 for name in names:
                     if self.sequence_stop_event.is_set():
@@ -589,8 +650,57 @@ class MotionPlayer:
                 if not loop:
                     return
         finally:
+            if list(names) == THINK_SEQUENCE and not bool(getattr(self.args, "release_after_sequence", False)):
+                self._return_to_pose(THINK_RETURN_POSE, speed=speed)
             self._release_after_sequence()
             self.sequence_active.clear()
+
+    def _sleep_interruptible(self, duration_s: float) -> None:
+        deadline = time.time() + max(0.0, float(duration_s))
+        while time.time() < deadline and not self.sequence_stop_event.is_set():
+            time.sleep(min(0.05, max(0.0, deadline - time.time())))
+
+    def _play_thanks_sequence(self, speed: float | None) -> None:
+        try:
+            self._reengage_for_sequence()
+            self._move_to_rest_pose_before_sequence(speed=speed)
+            thanks_pose = self.poses_by_name.get("thanks")
+            return_pose = self.poses_by_name.get(THANKS_RETURN_POSE)
+            if thanks_pose is None:
+                self.logger.warning("Skipping thanks motion: missing pose 'thanks'")
+                return
+            self._apply_pose(thanks_pose, name="thanks", speed=speed)
+            self._wait_targets_reached(timeout_s=float(self.args.pose_timeout_s))
+            self._sleep_interruptible(float(self.args.thanks_hold_s))
+            if self.sequence_stop_event.is_set():
+                return
+            if return_pose is None:
+                self.logger.warning(f"Skipping thanks return: missing pose '{THANKS_RETURN_POSE}'")
+                return
+            self._apply_pose(return_pose, name=THANKS_RETURN_POSE, speed=speed)
+            self._wait_targets_reached(timeout_s=float(self.args.pose_timeout_s))
+        finally:
+            self._release_after_sequence()
+            self.sequence_active.clear()
+
+    def _return_to_pose(self, name: str, *, speed: float | None) -> None:
+        pose = self.poses_by_name.get(name)
+        if pose is None:
+            self.logger.warning(f"Skipping return motion: missing pose '{name}'")
+            return
+        self.sequence_stop_event.clear()
+        self._apply_pose(pose, name=name, speed=speed)
+        self._wait_targets_reached(timeout_s=float(self.args.pose_timeout_s))
+
+    def _move_to_rest_pose_before_sequence(self, *, speed: float | None) -> None:
+        if self.sequence_stop_event.is_set():
+            return
+        pose = self.poses_by_name.get(REST_POSE)
+        if pose is None:
+            self.logger.warning(f"Skipping sequence start pose: missing pose '{REST_POSE}'")
+            return
+        self._apply_pose(pose, name=REST_POSE, speed=speed)
+        self._wait_targets_reached(timeout_s=float(self.args.pose_timeout_s))
 
     def play_hl_action(self, action: str) -> bool:
         action_key = HL_ACTIONS.get(str(action).strip().lower())
@@ -605,21 +715,67 @@ class MotionPlayer:
             return False
         self.sequence_active.set()
         try:
-            with self.lock:
-                ctrl = self.ctrl
-                if ctrl is not None and not ctrl._closed:
-                    # High-level arm actions use the robot arm action service.
-                    # Release low-level arm_sdk authority first so the IK tick
-                    # loop is not holding gains against the HL controller.
-                    ctrl._release_arms(duration_s=1.0)
-                    ctrl.armed = False
-                robot = self._get_robot()
-                method = getattr(robot, action_key)
-                code = int(method())
+            self._release_for_high_level_action(reason=action_key)
+            robot = self._get_robot()
+            method = getattr(robot, action_key)
+            code = int(method())
             self.logger.info(f"High-level arm action {action_key} returned {code}.")
             return code == 0
         except Exception as exc:
             self.logger.warning(f"High-level arm action {action_key} failed: {exc}")
+            return False
+        finally:
+            self.sequence_active.clear()
+
+    def _release_for_high_level_action(self, *, reason: str) -> None:
+        with self.lock:
+            ctrl = self.ctrl
+            if ctrl is None or ctrl._closed:
+                return
+            if not ctrl.armed:
+                self.logger.info(f"Arms already released for high-level action ({reason}).")
+                return
+            # High-level arm actions use the robot arm action service. Release
+            # low-level arm_sdk authority first so the IK tick loop cannot hold
+            # gains against the HL controller.
+            ctrl._release_arms(duration_s=1.0)
+            ctrl.armed = False
+        self.logger.info(f"Arms released for high-level action ({reason}).")
+
+    def release_arms_for_user(self) -> bool:
+        if not self.enabled:
+            self.logger.info("[motion disabled] would release arms")
+            return False
+        if self.sequence_active.is_set() or (self.sequence_thread and self.sequence_thread.is_alive()):
+            self.stop_sequence()
+        try:
+            self._release_for_high_level_action(reason="user_release")
+            robot = self._get_robot()
+            code = int(robot.release_arm())
+            self.logger.info(f"High-level release arm returned {code}.")
+            return code == 0
+        except Exception as exc:
+            self.logger.warning(f"Release arms failed: {exc}")
+            return False
+
+    def move_for_user(self, vx: float, vy: float, vyaw: float) -> bool:
+        if not self.enabled:
+            self.logger.info(f"[motion disabled] would move vx={vx:.2f} vy={vy:.2f} vyaw={vyaw:.2f}")
+            return False
+        if self.sequence_active.is_set() or (self.sequence_thread and self.sequence_thread.is_alive()):
+            self.logger.warning("Locomotion command ignored because a sequence is already active.")
+            return False
+        self.sequence_active.set()
+        try:
+            robot = self._get_robot()
+            code = int(robot.move_for(LOCO_DURATION_S, vx=float(vx), vy=float(vy), vyaw=float(vyaw)))
+            self.logger.info(
+                f"Locomotion move_for returned {code}: duration={LOCO_DURATION_S:.1f}s "
+                f"vx={vx:.2f} vy={vy:.2f} vyaw={vyaw:.2f}"
+            )
+            return code == 0
+        except Exception as exc:
+            self.logger.warning(f"Locomotion command failed: {exc}")
             return False
         finally:
             self.sequence_active.clear()
@@ -649,8 +805,7 @@ class MotionPlayer:
                 # release/reengage packets and normal target packets overlapping.
                 ctrl._unrelease_arms(duration_s=0.8)
                 ctrl.armed = True
-                ctrl._sync_targets_to_live()
-            self.logger.info("Arms reengaged for motion sequence.")
+            self.logger.info("Arms reengaged for motion sequence at current pose.")
         except Exception as exc:
             self.logger.warning(f"Could not reengage arms before sequence: {exc}")
 
@@ -662,6 +817,20 @@ class MotionPlayer:
             with self.lock:
                 ctrl = self.ctrl
                 if ctrl is None:
+                    return
+                if not bool(getattr(self.args, "release_after_sequence", False)):
+                    ctrl.current_targets = dict(ctrl.desired_targets)
+                    ctrl.armed = True
+                    ctrl.status = "Chatbot sequence complete; holding final pose"
+                    ctrl.pub.publish(
+                        ctrl.current_targets,
+                        arm_kp=ctrl.arm_kp,
+                        arm_kd=ctrl.arm_kd,
+                        waist_pr_kp=ctrl.waist_pr_kp if ctrl.waist_enabled else 0.0,
+                        waist_y_kp=ctrl.waist_y_kp if ctrl.waist_enabled else 0.0,
+                        waist_kd=ctrl.waist_kd if ctrl.waist_enabled else 0.0,
+                    )
+                    self.logger.info("Holding final pose after motion sequence.")
                     return
                 # See _reengage_for_sequence: this must be serialized with the
                 # background tick publisher to avoid contradictory low-level arm
@@ -698,7 +867,10 @@ class MotionPlayer:
             self.tick_thread.join(timeout=0.8)
         with self.lock:
             if self.ctrl is not None and not self.ctrl._closed:
-                self.ctrl.close()
+                try:
+                    self.ctrl.close()
+                except KeyboardInterrupt:
+                    self.logger.warning("Interrupted while closing IK controller.")
 
 
 class MotionWorkerClient:
@@ -720,14 +892,19 @@ class MotionWorkerClient:
             "--domain-id", str(int(self.args.domain_id)),
             "--pose-file", str(self.args.pose_file),
             "--motion-speed", str(float(self.args.motion_speed)),
+            "--motion-kp", str(float(self.args.motion_kp)),
+            "--motion-kd", str(float(self.args.motion_kd)),
             "--thinking-speed", str(float(self.args.thinking_speed)),
             "--explain-speed", str(float(self.args.explain_speed)),
             "--sequence-gap", str(float(self.args.sequence_gap)),
             "--pose-timeout-s", str(float(self.args.pose_timeout_s)),
             "--post-sequence-hold-s", str(float(self.args.post_sequence_hold_s)),
+            "--thanks-hold-s", str(float(self.args.thanks_hold_s)),
             "--no-speech",
             "--no-startup-speech",
         ]
+        if bool(getattr(self.args, "release_after_sequence", False)):
+            command.append("--release-after-sequence")
         env = os.environ.copy()
         env.setdefault("CYCLONEDDS_HOME", "/home/unitree/cyclonedds_ws/install/cyclonedds")
         env.setdefault("CYCLONEDDS_URI", "/home/unitree/cyclonedds_ws/cyclonedds.xml")
@@ -760,6 +937,12 @@ class MotionWorkerClient:
             return
         self._send({"cmd": "play", "names": names, "speed": speed, "loop": bool(loop)})
 
+    def play_thanks_async(self, *, speed: float | None = None) -> None:
+        if not self.enabled:
+            self.logger.info(f"[motion disabled] would play thanks, hold, then {THANKS_RETURN_POSE}")
+            return
+        self._send({"cmd": "thanks", "speed": speed})
+
     def stop_sequence(self) -> None:
         if self.enabled:
             self._send({"cmd": "stop"})
@@ -770,12 +953,30 @@ class MotionWorkerClient:
             return
         self._send({"cmd": "hl_action", "action": str(action)})
 
+    def release_arms(self) -> None:
+        if not self.enabled:
+            self.logger.info("[motion disabled] would release arms")
+            return
+        self._send({"cmd": "release_arms"})
+
+    def move_for(self, *, vx: float = 0.0, vy: float = 0.0, vyaw: float = 0.0) -> None:
+        if not self.enabled:
+            self.logger.info(f"[motion disabled] would move vx={vx:.2f} vy={vy:.2f} vyaw={vyaw:.2f}")
+            return
+        self._send({"cmd": "move_for", "vx": float(vx), "vy": float(vy), "vyaw": float(vyaw)})
+
     def close(self) -> None:
         if self.proc is None:
             return
         self._send({"cmd": "close"})
         try:
             self.proc.wait(timeout=2.0)
+        except KeyboardInterrupt:
+            self.proc.terminate()
+            try:
+                self.proc.wait(timeout=0.5)
+            except Exception:
+                self.proc.kill()
         except subprocess.TimeoutExpired:
             self.proc.terminate()
             try:
@@ -817,14 +1018,26 @@ def run_motion_worker(args: argparse.Namespace) -> int:
                         speed=payload.get("speed"),
                         loop=bool(payload.get("loop", False)),
                     )
+            elif cmd == "thanks":
+                motion.play_thanks_async(speed=payload.get("speed"))
             elif cmd == "stop":
                 motion.stop_sequence()
             elif cmd == "hl_action":
                 motion.play_hl_action(str(payload.get("action", "")))
+            elif cmd == "release_arms":
+                motion.release_arms_for_user()
+            elif cmd == "move_for":
+                motion.move_for_user(
+                    vx=float(payload.get("vx", 0.0) or 0.0),
+                    vy=float(payload.get("vy", 0.0) or 0.0),
+                    vyaw=float(payload.get("vyaw", 0.0) or 0.0),
+                )
             elif cmd == "close":
                 break
             else:
                 print(f"unknown command: {cmd}", flush=True)
+    except KeyboardInterrupt:
+        pass
     finally:
         motion.close()
     return 0
@@ -837,6 +1050,7 @@ class ChatbotNode(Node):
         self.ollama = OllamaClient(args)
         self.speaker = Speaker(args, self.get_logger())
         self.motion = motion if motion is not None else MotionWorkerClient(args, self.get_logger())
+        self.diagnostic_robot: Any | None = None
         self.audit_path = Path(args.audit_log).expanduser()
         self.audit_path.parent.mkdir(parents=True, exist_ok=True)
         knowledge_paths = [Path(item).expanduser() for item in args.knowledge_file]
@@ -849,16 +1063,24 @@ class ChatbotNode(Node):
         self.last_text = ""
         self.last_reply = ""
         self.last_reply_ts = 0.0
+        self.last_error_speech_ts = 0.0
         self.busy_lock = threading.Lock()
         self.interrupt_event = threading.Event()
         self.last_unintelligible_ts = 0.0
+        self.external_asr_httpd: http.server.ThreadingHTTPServer | None = None
+        self.external_asr_thread: threading.Thread | None = None
         self.response_pub = self.create_publisher(String, args.response_topic, 10)
-        self.create_subscription(String, args.audio_topic, self.on_audio, 10)
-        if str(args.filtered_audio_topic) and str(args.filtered_audio_topic) != str(args.audio_topic):
-            self.create_subscription(String, args.filtered_audio_topic, self.on_audio, 10)
+        if not bool(args.external_asr_only):
+            self.create_subscription(String, args.audio_topic, self.on_audio, 10)
+            if str(args.filtered_audio_topic) and str(args.filtered_audio_topic) != str(args.audio_topic):
+                self.create_subscription(String, args.filtered_audio_topic, self.on_audio, 10)
+        else:
+            self.get_logger().info("robot ROS ASR audio subscriptions disabled; using command/external ASR input")
         self.create_subscription(String, args.command_topic, self.on_command, 10)
+        if bool(args.external_asr_server):
+            self._start_external_asr_server()
         self.get_logger().info(
-            f"chatbot ready audio={args.audio_topic} model={args.model} router={args.router_model} "
+            f"chatbot ready audio={'external-only' if args.external_asr_only else args.audio_topic} model={args.model} router={args.router_model} "
             f"motion={'on' if args.enable_motion else 'off'}"
         )
         if not args.no_startup_speech and compact_text(args.startup_speech):
@@ -870,37 +1092,228 @@ class ChatbotNode(Node):
         confidence = float(payload.get("confidence", 0.0) or 0.0)
         index = self._payload_index(payload)
         now = time.time()
+        self._log_heard("audio", text, confidence=confidence, index=index)
         if self._is_stop_request(text):
             self.last_index = index
             self.last_text = text
+            self.get_logger().info(f"ASR accepted stop request: {text!r}")
             self._interrupt_now("audio")
             return
         if self._is_unintelligible_asr(text):
             self.last_index = index
             self.last_text = text
+            self.get_logger().info(f"ASR marked unintelligible: {text!r}")
             self._handle_unintelligible(now)
             return
-        if not self._should_answer(text, confidence, index, now):
+        reject_reason = self._answer_filter_reason(text, confidence, index, now)
+        if reject_reason:
+            self.get_logger().info(f"ASR ignored: reason={reject_reason} text={text!r}")
             return
         self.last_index = index
         self.last_text = text
+        self.get_logger().info(f"ASR accepted: text={text!r}")
         threading.Thread(target=self._handle_text, args=(text, "audio"), daemon=True).start()
 
     def on_command(self, msg: String) -> None:
         payload = decode_payload(str(msg.data))
         text = compact_text(str(payload.get("text", payload.get("prompt", ""))))
+        self._log_heard("command", text, confidence=None, index=self._payload_index(payload))
         if text:
             if self._is_stop_request(text):
+                self.get_logger().info(f"Command accepted stop request: {text!r}")
                 self._interrupt_now("command")
                 return
             if self._is_unintelligible_asr(text):
+                self.get_logger().info(f"Command marked unintelligible: {text!r}")
                 self._handle_unintelligible(time.time())
                 return
+            self.get_logger().info(f"Command accepted: text={text!r}")
             threading.Thread(target=self._handle_text, args=(text, "command"), daemon=True).start()
+
+    def submit_external_asr(self, text: str, *, source: str = "external_asr") -> bool:
+        text = compact_text(text)
+        self._log_heard(source, text, confidence=None, index=None)
+        if not text:
+            self.get_logger().info(f"{source} ignored: empty text")
+            return False
+        if self._is_stop_request(text):
+            self.get_logger().info(f"{source} accepted stop request: {text!r}")
+            self._interrupt_now(source)
+            return True
+        if self._is_unintelligible_asr(text):
+            self.get_logger().info(f"{source} marked unintelligible: {text!r}")
+            self._handle_unintelligible(time.time())
+            return False
+        reject_reason = self._answer_filter_reason(text, 1.0, None, time.time())
+        if reject_reason in {"filler", "no_alphanumeric_text", "short_numeric_fragment", "non_english_asr_fragment"}:
+            self.get_logger().info(f"{source} ignored: reason={reject_reason} text={text!r}")
+            return False
+        self.get_logger().info(f"{source} accepted: text={text!r}")
+        threading.Thread(target=self._handle_text, args=(text, source), daemon=True).start()
+        return True
+
+    def _start_external_asr_server(self) -> None:
+        node = self
+        token = str(self.args.external_asr_token or "")
+
+        class ExternalAsrHandler(http.server.BaseHTTPRequestHandler):
+            server_version = "G1ExternalASR/1.0"
+
+            def log_message(self, fmt: str, *args: Any) -> None:
+                node.get_logger().info("external_asr_http " + (fmt % args))
+
+            def _send_json(self, status: int, payload: dict[str, Any]) -> None:
+                body = json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Access-Control-Allow-Headers", "authorization, content-type")
+                self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+                self.end_headers()
+                self.wfile.write(body)
+
+            def _authorized(self, payload: dict[str, Any] | None = None) -> bool:
+                if not token:
+                    return True
+                auth = str(self.headers.get("Authorization", ""))
+                if auth == f"Bearer {token}":
+                    return True
+                query = self.path.split("?", 1)[1] if "?" in self.path else ""
+                if f"token={token}" in query:
+                    return True
+                return bool(isinstance(payload, dict) and str(payload.get("token", "")) == token)
+
+            def do_OPTIONS(self) -> None:
+                self._send_json(200, {"ok": True})
+
+            def do_GET(self) -> None:
+                path = self.path.split("?", 1)[0]
+                if path == "/health":
+                    self._send_json(200, {"ok": True, "service": "external_asr"})
+                    return
+                if path in {"/", "/headset"}:
+                    body = node._headset_html().encode("utf-8")
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+                self._send_json(404, {"ok": False, "error": "not_found"})
+
+            def do_POST(self) -> None:
+                path = self.path.split("?", 1)[0]
+                if path not in {"/asr", "/command"}:
+                    self._send_json(404, {"ok": False, "error": "not_found"})
+                    return
+                length = int(self.headers.get("Content-Length", "0") or "0")
+                raw = self.rfile.read(min(length, 64_000)).decode("utf-8", errors="replace")
+                payload: dict[str, Any] | None = None
+                text = raw
+                try:
+                    parsed = json.loads(raw) if raw.strip() else {}
+                    if isinstance(parsed, dict):
+                        payload = parsed
+                        text = str(parsed.get("text", parsed.get("prompt", parsed.get("raw", ""))))
+                except Exception:
+                    payload = None
+                if not self._authorized(payload):
+                    self._send_json(401, {"ok": False, "error": "unauthorized"})
+                    return
+                accepted = node.submit_external_asr(text, source="external_asr")
+                self._send_json(200, {"ok": True, "accepted": accepted, "text": compact_text(text)})
+
+        host = str(self.args.external_asr_host)
+        port = int(self.args.external_asr_port)
+        self.external_asr_httpd = http.server.ThreadingHTTPServer((host, port), ExternalAsrHandler)
+        self.external_asr_thread = threading.Thread(target=self.external_asr_httpd.serve_forever, daemon=True)
+        self.external_asr_thread.start()
+        if not token and host not in {"127.0.0.1", "localhost"}:
+            self.get_logger().warning("External ASR server has no token; use --external-asr-token on shared networks.")
+        self.get_logger().info(f"external ASR endpoint listening on http://{host}:{port}/asr; headset page /headset")
+
+    def _headset_html(self) -> str:
+        token = str(self.args.external_asr_token or "")
+        return f"""<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>G1 Headset ASR</title>
+  <style>
+    body {{ font-family: sans-serif; margin: 2rem; max-width: 46rem; }}
+    button {{ font-size: 1rem; padding: .6rem 1rem; margin-right: .5rem; }}
+    #status {{ margin: 1rem 0; font-weight: 600; }}
+    #log {{ white-space: pre-wrap; border: 1px solid #ccc; padding: 1rem; min-height: 12rem; }}
+  </style>
+</head>
+<body>
+  <h1>G1 Headset ASR</h1>
+  <button id="start">Start</button>
+  <button id="stop">Stop</button>
+  <form id="manual">
+    <input id="manualText" autocomplete="off" placeholder="Type a command" style="font-size:1rem; padding:.55rem; width:70%; margin-top:1rem;">
+    <button type="submit">Send</button>
+  </form>
+  <div id="status">Idle</div>
+  <div id="log"></div>
+  <script>
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const log = document.getElementById('log');
+    const status = document.getElementById('status');
+    let rec = null;
+    function add(line) {{ log.textContent = new Date().toLocaleTimeString() + ' ' + line + '\\n' + log.textContent; }}
+    async function send(text) {{
+      add('send: ' + text);
+      const headers = {{'Content-Type': 'application/json'}};
+      const token = {json.dumps(token)};
+      if (token) headers.Authorization = 'Bearer ' + token;
+      const res = await fetch('/asr', {{method: 'POST', headers, body: JSON.stringify({{text}})}});
+      add('response: ' + await res.text());
+    }}
+    document.getElementById('manual').onsubmit = e => {{
+      e.preventDefault();
+      const input = document.getElementById('manualText');
+      const text = input.value.trim();
+      if (text) send(text);
+      input.value = '';
+    }};
+    document.getElementById('start').onclick = () => {{
+      if (!SpeechRecognition) {{ status.textContent = 'SpeechRecognition is not supported in this browser.'; return; }}
+      rec = new SpeechRecognition();
+      rec.lang = 'en-US';
+      rec.continuous = true;
+      rec.interimResults = false;
+      rec.onstart = () => status.textContent = 'Listening';
+      rec.onerror = e => {{
+        status.textContent = 'Speech recognition error: ' + e.error;
+        add('error: ' + e.error + (e.error === 'network' ? ' (browser speech service unavailable; use the text box)' : ''));
+      }};
+      rec.onend = () => status.textContent = 'Stopped';
+      rec.onresult = e => {{
+        for (let i = e.resultIndex; i < e.results.length; i++) {{
+          if (e.results[i].isFinal) send(e.results[i][0].transcript);
+        }}
+      }};
+      rec.start();
+    }};
+    document.getElementById('stop').onclick = () => {{ if (rec) rec.stop(); }};
+  </script>
+</body>
+</html>"""
 
     def _handle_text(self, text: str, source: str) -> None:
         if not self.busy_lock.acquire(blocking=False):
+            route = self._route_fast(text)
+            if route and str(route.get("intent", "")).lower() == "release_arms":
+                answer = compact_text(str(route.get("announce", ""))) or "Releasing my arms."
+                self.get_logger().info(f"{source} accepted release while busy: text={text!r}")
+                self.motion.release_arms()
+                self.speaker.say_async(answer)
+                self._publish({"ok": True, "intent": "release_arms", "answer": answer, "busy_override": True})
+                return
             if not self._is_stop_request(text):
+                self.get_logger().info(f"{source} ignored while busy: text={text!r}")
                 self.speaker.say_async("I am still finishing the previous answer.")
             return
         self.interrupt_event.clear()
@@ -909,7 +1322,11 @@ class ChatbotNode(Node):
             route = self._route(text)
             intent = str(route.get("intent", "chat")).lower()
             announce = compact_text(str(route.get("announce", "")))
+            self.get_logger().info(f"{source} routed: text={text!r} intent={intent} route={json.dumps(route, sort_keys=True, default=str)}")
             self._audit({"kind": "route", "source": source, "text": text, "route": route})
+            if intent == "unknown":
+                self._publish({"ok": False, "intent": intent, "answer": "", "ignored": True, "elapsed_s": time.time() - started})
+                return
             if intent == "stop":
                 self._interrupt_now(source)
                 answer = announce or "Stopping."
@@ -918,7 +1335,7 @@ class ChatbotNode(Node):
                 return
             if intent == "thanks":
                 answer = announce or "You're welcome."
-                self.motion.play_async(THANKS_SEQUENCE, speed=float(self.args.explain_speed))
+                self.motion.play_thanks_async(speed=float(self.args.explain_speed))
                 self.speaker.say_async(answer)
                 self._publish({"ok": True, "intent": intent, "answer": answer, "elapsed_s": time.time() - started})
                 return
@@ -929,6 +1346,38 @@ class ChatbotNode(Node):
                     self.motion.hl_action(action)
                 self.speaker.say_async(answer)
                 self._publish({"ok": True, "intent": intent, "answer": answer, "motion": action, "elapsed_s": time.time() - started})
+                return
+            if intent == "release_arms":
+                answer = announce or "Releasing my arms."
+                self.motion.release_arms()
+                self.speaker.say_async(answer)
+                self._publish({"ok": True, "intent": intent, "answer": answer, "elapsed_s": time.time() - started})
+                return
+            if intent == "locomotion":
+                vx, vy, vyaw = self._locomotion_vector_from_route(route)
+                answer = announce or self._locomotion_reply(vx, vy, vyaw)
+                self.motion.move_for(vx=vx, vy=vy, vyaw=vyaw)
+                self.speaker.say_async(answer)
+                self._publish({
+                    "ok": True,
+                    "intent": intent,
+                    "answer": answer,
+                    "duration_s": LOCO_DURATION_S,
+                    "vx": vx,
+                    "vy": vy,
+                    "vyaw": vyaw,
+                    "elapsed_s": time.time() - started,
+                })
+                return
+            if intent == "diagnostic":
+                answer = self._diagnostic_answer(str(route.get("diagnostic", "") or route.get("kind", "")))
+                self.speaker.say_async(answer)
+                self._publish({"ok": True, "intent": intent, "answer": answer, "elapsed_s": time.time() - started})
+                return
+            if intent == "self_intro":
+                answer = self._self_intro_answer()
+                self.speaker.say_async(answer)
+                self._publish({"ok": True, "intent": intent, "answer": answer, "elapsed_s": time.time() - started})
                 return
             if announce:
                 self.speaker.say(announce)
@@ -955,39 +1404,87 @@ class ChatbotNode(Node):
             self.get_logger().error(f"chatbot error: {exc}")
             self.motion.stop_sequence()
             answer = f"I hit an error: {exc}"
-            self.speaker.say_async("I had trouble answering that.")
+            spoken = "I had trouble answering that."
+            self.last_reply = spoken
+            self.last_reply_ts = time.time()
+            if self._should_speak_backend_error(source):
+                self.speaker.say_async(spoken)
             self._publish({"ok": False, "answer": answer, "error": str(exc), "elapsed_s": time.time() - started})
         finally:
             self.busy_lock.release()
+
+    def _should_speak_backend_error(self, source: str) -> bool:
+        if source == "audio":
+            return False
+        now = time.time()
+        cooldown_s = max(0.0, float(self.args.error_speech_cooldown_s))
+        if now - self.last_error_speech_ts < cooldown_s:
+            self.get_logger().info("Backend error speech suppressed by cooldown.")
+            return False
+        self.last_error_speech_ts = now
+        return True
 
     def _route(self, text: str) -> dict[str, Any]:
         fast = self._route_fast(text)
         if fast:
             return fast
-        raw = self.ollama.chat(
-            [
-                {"role": "system", "content": ROUTER_PROMPT},
-                {"role": "user", "content": text},
-            ],
-            model=str(self.args.router_model or self.args.model),
-            temperature=0.0,
-            num_predict=96,
-            timeout=min(12.0, float(self.args.timeout)),
-        )
+        try:
+            raw = self.ollama.chat(
+                [
+                    {"role": "system", "content": ROUTER_PROMPT},
+                    {"role": "user", "content": text},
+                ],
+                model=str(self.args.router_model or self.args.model),
+                temperature=0.0,
+                num_predict=96,
+                timeout=min(12.0, float(self.args.timeout)),
+            )
+        except Exception as exc:
+            self.get_logger().warning(f"Router unavailable; using fallback route: {exc}")
+            if self.retriever is not None and tokenize(text):
+                return {"intent": "rag_question", "announce": "Let me check my local knowledge.", "needs_knowledge": True, "motion": "thinking"}
+            return {"intent": "unknown", "announce": "", "needs_knowledge": False, "motion": "none"}
         route = extract_json_object(raw)
         if isinstance(route, dict):
-            return route
+            return self._normalize_route(route)
         return {"intent": "chat", "announce": "", "needs_knowledge": False, "motion": "none"}
+
+    def _normalize_route(self, route: dict[str, Any]) -> dict[str, Any]:
+        normalized = dict(route)
+        intent = str(normalized.get("intent", "chat")).strip().lower()
+        if intent not in VALID_INTENTS:
+            self.get_logger().warning(f"Router returned invalid intent {intent!r}; treating as unknown.")
+            intent = "unknown"
+        motion = str(normalized.get("motion", "none")).strip().lower()
+        if motion not in VALID_MOTIONS:
+            self.get_logger().warning(f"Router returned invalid motion {motion!r}; using none.")
+            motion = "none"
+        normalized["intent"] = intent
+        normalized["motion"] = motion
+        normalized["announce"] = compact_text(str(normalized.get("announce", "")))
+        normalized["needs_knowledge"] = bool(normalized.get("needs_knowledge", intent == "rag_question"))
+        return normalized
 
     def _route_fast(self, text: str) -> dict[str, Any] | None:
         low = text.lower().strip()
         if self._is_stop_request(text):
             return {"intent": "stop", "announce": "Stopping.", "needs_knowledge": False, "motion": "none"}
+        if any(phrase in low for phrase in ("release arm", "release arms", "release your arm", "release your arms", "release hand", "release hands", "release your hands")):
+            return {"intent": "release_arms", "announce": "Releasing my arms.", "needs_knowledge": False, "motion": "none"}
+        loco = self._route_locomotion_fast(low)
+        if loco is not None:
+            return loco
+        if any(phrase in low for phrase in ("fsm", "fsm mode", "which mode", "what mode", "in which mode", "self diagnosis", "self diagnostic", "diagnose yourself")):
+            return {"intent": "diagnostic", "announce": "", "needs_knowledge": False, "motion": "none", "diagnostic": "fsm"}
+        if any(phrase in low for phrase in ("wifi", "wi-fi", "wireless network", "which network", "connected network", "ssid")):
+            return {"intent": "diagnostic", "announce": "", "needs_knowledge": False, "motion": "none", "diagnostic": "wifi"}
+        if any(phrase in low for phrase in ("introduce yourself", "who are you", "what are you", "tell me who you are")):
+            return {"intent": "self_intro", "announce": "", "needs_knowledge": False, "motion": "none"}
         if any(phrase in low for phrase in ("say thank you", "say thanks", "thank them", "thank everyone")):
             return {"intent": "thanks", "announce": "Thank you.", "needs_knowledge": False, "motion": "thanks"}
         if any(word in low for word in ("thank", "thanks", "danke")):
             return {"intent": "thanks", "announce": "You're welcome.", "needs_knowledge": False, "motion": "thanks"}
-        if "clap" in low or "applaud" in low:
+        if "clap" in low or "applaud" in low or "lap your hands" in low or "sap your hands" in low:
             return {"intent": "gesture", "announce": "I will clap.", "needs_knowledge": False, "motion": "clap"}
         if "shake hand" in low or "handshake" in low:
             return {"intent": "gesture", "announce": "Nice to meet you.", "needs_knowledge": False, "motion": "shake_hand"}
@@ -995,10 +1492,54 @@ class ChatbotNode(Node):
             return {"intent": "gesture", "announce": "High five.", "needs_knowledge": False, "motion": "high_five"}
         if "wave" in low or "hello" in low or "hi " in f"{low} " or "greet" in low:
             return {"intent": "gesture", "announce": "Hello.", "needs_knowledge": False, "motion": "face_wave"}
-        question_mark = "?" in text or low.split(" ", 1)[0] in {"what", "why", "how", "when", "where", "who", "which"}
+        knowledge_request = (
+            low.startswith(("tell me about", "explain", "how to", "how do", "what is", "what are"))
+            or "tell me about" in low
+        )
+        question_mark = knowledge_request or "?" in text or low.split(" ", 1)[0] in {"what", "why", "how", "when", "where", "who", "which"}
         if question_mark and self.retriever is not None:
             return {"intent": "rag_question", "announce": "Let me think.", "needs_knowledge": True, "motion": "thinking"}
         return None
+
+    def _route_locomotion_fast(self, low: str) -> dict[str, Any] | None:
+        if not any(word in low for word in ("walk", "move", "go", "step", "turn")):
+            return None
+        vx = vy = vyaw = 0.0
+        direction = ""
+        if "forward" in low or "forwards" in low or "front" in low:
+            vx = LOCO_LINEAR_SPEED_MPS
+            direction = "forward"
+        elif "backward" in low or "backwards" in low or "back up" in low or "reverse" in low:
+            vx = -LOCO_LINEAR_SPEED_MPS
+            direction = "backward"
+        elif "right" in low:
+            if "turn" in low or "rotate" in low:
+                vyaw = -LOCO_YAW_SPEED_RPS
+                direction = "turn_right"
+            else:
+                vy = -LOCO_LINEAR_SPEED_MPS
+                direction = "right"
+        elif "left" in low:
+            if "turn" in low or "rotate" in low:
+                vyaw = LOCO_YAW_SPEED_RPS
+                direction = "turn_left"
+            else:
+                vy = LOCO_LINEAR_SPEED_MPS
+                direction = "left"
+        elif "turn" in low or "rotate" in low:
+            return None
+        else:
+            return None
+        return {
+            "intent": "locomotion",
+            "announce": "",
+            "needs_knowledge": False,
+            "motion": "none",
+            "direction": direction,
+            "vx": vx,
+            "vy": vy,
+            "vyaw": vyaw,
+        }
 
     def _interrupt_now(self, source: str) -> None:
         self.interrupt_event.set()
@@ -1012,11 +1553,7 @@ class ChatbotNode(Node):
         if now - self.last_unintelligible_ts < 3.0:
             return
         self.last_unintelligible_ts = now
-        answer = "I wasn't able to understand that prompt."
-        self.last_reply = answer
-        self.last_reply_ts = time.time()
-        self.speaker.say_async(answer)
-        self._publish({"ok": False, "intent": "unintelligible_asr", "answer": answer})
+        self._publish({"ok": False, "intent": "unintelligible_asr", "answer": "", "ignored": True})
 
     @staticmethod
     def _is_stop_request(text: str) -> bool:
@@ -1057,6 +1594,85 @@ class ChatbotNode(Node):
             return "Nice to meet you."
         return "Okay."
 
+    @staticmethod
+    def _self_intro_answer() -> str:
+        return (
+            "I am a Unitree G1 humanoid robot running a local chatbot interface. "
+            "I can answer from my loaded knowledge file, report basic status, move for short one-second commands, "
+            "and run arm gestures like wave or clap."
+        )
+
+    @staticmethod
+    def _locomotion_vector_from_route(route: dict[str, Any]) -> tuple[float, float, float]:
+        def bounded(value: Any, limit: float) -> float:
+            try:
+                numeric = float(value)
+            except Exception:
+                return 0.0
+            return max(-limit, min(limit, numeric))
+
+        return (
+            bounded(route.get("vx", 0.0), LOCO_LINEAR_SPEED_MPS),
+            bounded(route.get("vy", 0.0), LOCO_LINEAR_SPEED_MPS),
+            bounded(route.get("vyaw", 0.0), LOCO_YAW_SPEED_RPS),
+        )
+
+    @staticmethod
+    def _locomotion_reply(vx: float, vy: float, vyaw: float) -> str:
+        if abs(vyaw) > 0.0:
+            return "Turning right." if vyaw < 0.0 else "Turning left."
+        if abs(vx) >= abs(vy):
+            return "Walking forward." if vx >= 0.0 else "Walking backward."
+        return "Stepping right." if vy < 0.0 else "Stepping left."
+
+    def _diagnostic_answer(self, kind: str) -> str:
+        kind = str(kind).strip().lower()
+        if kind == "wifi":
+            return self._wifi_answer()
+        robot = self._get_diagnostic_robot()
+        try:
+            fsm = robot.get_fsm()
+            mode = robot.get_mode()
+            return f"My FSM id is {fsm.get('id')}, FSM mode is {fsm.get('mode')}, and sport mode is {mode}."
+        except Exception as exc:
+            self.get_logger().warning(f"Diagnostic query failed: {exc}")
+            return "I could not read my FSM mode right now."
+
+    def _wifi_answer(self) -> str:
+        try:
+            proc = subprocess.run(
+                ["nmcli", "-t", "-f", "active,ssid", "dev", "wifi"],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=2.0,
+            )
+        except Exception as exc:
+            self.get_logger().warning(f"Wi-Fi diagnostic failed: {exc}")
+            return "I could not read the Wi-Fi network right now."
+        if proc.returncode != 0:
+            self.get_logger().warning(f"Wi-Fi diagnostic failed: {proc.stderr.strip()}")
+            return "I could not read the Wi-Fi network right now."
+        for line in proc.stdout.splitlines():
+            active, _, ssid = line.partition(":")
+            if active.lower() == "yes" and ssid.strip():
+                return f"I am connected to Wi-Fi network {ssid.strip()}."
+        return "I do not see an active Wi-Fi network."
+
+    def _get_diagnostic_robot(self) -> Any:
+        if self.diagnostic_robot is None:
+            from sdk_client import Robot
+            self.diagnostic_robot = Robot(
+                iface=str(self.args.iface),
+                domain_id=int(self.args.domain_id),
+                safety_boot=False,
+                recover_dev_mode_on_init=False,
+                auto_start_sensors=True,
+                ollama_url=str(self.args.ollama_url),
+                chat_model=str(self.args.model),
+            )
+        return self.diagnostic_robot
+
     def _rag_answer(self, text: str) -> tuple[str, bool]:
         context = ""
         if self.retriever is not None:
@@ -1071,8 +1687,45 @@ class ChatbotNode(Node):
             {"role": "system", "content": f"{KNOWLEDGE_SYSTEM_PROMPT}\n\nStructured knowledge context:\n{context}" if context else KNOWLEDGE_SYSTEM_PROMPT},
             {"role": "user", "content": text},
         ]
-        answer = self.ollama.chat(messages, temperature=float(self.args.temperature), num_predict=int(self.args.num_predict))
-        return answer, bool(context)
+        try:
+            answer = self.ollama.chat(messages, temperature=float(self.args.temperature), num_predict=int(self.args.num_predict))
+            return answer, bool(context)
+        except Exception as exc:
+            self.get_logger().warning(f"Ollama RAG answer failed; using local knowledge fallback: {exc}")
+            if self.retriever is not None:
+                fallback = self._local_knowledge_answer(text)
+                if fallback:
+                    return fallback, True
+            raise
+
+    def _local_knowledge_answer(self, text: str) -> str:
+        if self.retriever is None:
+            return ""
+        matches = self.retriever.search(
+            text,
+            top_k=min(2, int(self.args.knowledge_top_k)),
+            min_score=float(self.args.knowledge_min_score),
+        )
+        if not matches:
+            return ""
+        parts: list[str] = []
+        for entry, _score in matches:
+            cleaned_lines = []
+            for line in entry.text.splitlines():
+                line = compact_text(line)
+                if not line or line.startswith("$.") or line.startswith("$["):
+                    continue
+                cleaned_lines.append(line)
+                if len(" ".join(cleaned_lines)) >= 260:
+                    break
+            summary = " ".join(cleaned_lines) or compact_text(entry.text)
+            if len(summary) > 280:
+                summary = summary[:280].rsplit(" ", 1)[0].strip()
+            parts.append(summary)
+        answer = "From my local knowledge: " + " ".join(parts)
+        if len(answer) > 650:
+            answer = answer[:650].rsplit(" ", 1)[0].strip()
+        return answer
 
     def _chat_answer(self, text: str) -> str:
         history = self.history[-max(1, int(self.args.max_history)):]
@@ -1083,23 +1736,40 @@ class ChatbotNode(Node):
         self.history = [*messages, {"role": "assistant", "content": answer}][-(int(self.args.max_history) + 1):]
         return answer or "I heard you, but I am not sure how to answer yet."
 
-    def _should_answer(self, text: str, confidence: float, index: int | None, received_at: float) -> bool:
+    def _answer_filter_reason(self, text: str, confidence: float, index: int | None, received_at: float) -> str | None:
         if not text or confidence < float(self.args.min_confidence):
-            return False
+            return f"empty_or_low_confidence confidence={confidence:.3f} min={float(self.args.min_confidence):.3f}"
         normalized = text.strip().lower().strip(string.punctuation + "，。！？、；：")
         if not self.args.answer_fillers and normalized in FILLERS:
-            return False
+            return "filler"
         if not any(char.isalnum() for char in text):
-            return False
+            return "no_alphanumeric_text"
+        if re.fullmatch(r"\d{1,2}", normalized):
+            return "short_numeric_fragment"
+        if CJK_OR_KANA_RE.search(normalized) and not ASCII_LETTER_RE.search(normalized):
+            return "non_english_asr_fragment"
+        if any(phrase in normalized for phrase in SPOKEN_STATUS_ECHOES):
+            return "spoken_status_echo"
         if index is not None and index == self.last_index:
-            return False
+            return f"duplicate_index index={index}"
         if index is None and text == self.last_text and received_at - self.last_reply_ts < 2.0:
-            return False
+            return f"duplicate_text age_s={received_at - self.last_reply_ts:.2f}"
         if received_at - self.last_reply_ts < float(self.args.post_speak_ignore_s):
-            return False
+            return f"post_speak_ignore age_s={received_at - self.last_reply_ts:.2f} window_s={float(self.args.post_speak_ignore_s):.2f}"
         if self.last_reply and SequenceMatcher(None, text.lower(), self.last_reply.lower()).ratio() >= 0.82:
-            return False
-        return True
+            return "looks_like_tts_echo"
+        return None
+
+    def _should_answer(self, text: str, confidence: float, index: int | None, received_at: float) -> bool:
+        return self._answer_filter_reason(text, confidence, index, received_at) is None
+
+    def _log_heard(self, source: str, text: str, *, confidence: float | None, index: int | None) -> None:
+        parts = [f"{source} heard text={text!r}"]
+        if confidence is not None:
+            parts.append(f"confidence={confidence:.3f}")
+        if index is not None:
+            parts.append(f"index={index}")
+        self.get_logger().info(" ".join(parts))
 
     def _publish(self, result: dict[str, Any]) -> None:
         result["time"] = time.time()
@@ -1120,6 +1790,12 @@ class ChatbotNode(Node):
             return None
 
     def destroy_node(self) -> bool:
+        if self.external_asr_httpd is not None:
+            self.external_asr_httpd.shutdown()
+            self.external_asr_httpd.server_close()
+            self.external_asr_httpd = None
+        if self.external_asr_thread is not None and self.external_asr_thread.is_alive():
+            self.external_asr_thread.join(timeout=0.5)
         self.motion.close()
         return super().destroy_node()
 

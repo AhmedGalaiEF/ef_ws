@@ -1010,6 +1010,10 @@ class Robot:
             values[int(joint_index)] = float(value)
         return values
 
+    def _read_upper_body_hold_pose(self, *, timeout: float = 3.0) -> dict[int, float]:
+        """Capture the live upper-body pose to hold during arm_sdk handoff."""
+        return self._read_joint_positions_or_raise(UPPER_BODY_JOINTS, timeout=timeout)
+
     @staticmethod
     def _with_upper_body_hold(
         joint_targets: dict[int, float],
@@ -1120,7 +1124,7 @@ class Robot:
         otherwise a fresh `rt/arm_sdk` command can leave the non-weight joints
         at their default values and the final handoff can feel abrupt.
         """
-        positions = self._read_joint_positions_or_raise(UPPER_BODY_JOINTS, timeout=timeout)
+        positions = self._read_upper_body_hold_pose(timeout=timeout)
         steps = max(1, int(max(0.0, float(duration_s)) * max(1.0, float(command_rate_hz))))
         dt = 1.0 / max(1.0, float(command_rate_hz))
         arm_sdk = self._get_arm_sdk()
@@ -1166,8 +1170,12 @@ class Robot:
         waist_kd: float = WAIST_HOLD_KD,
         timeout: float = 3.0,
     ) -> dict[str, Any]:
-        """Re-enable DDS arm_sdk control while holding the current pose."""
-        positions = self._read_joint_positions_or_raise(UPPER_BODY_JOINTS, timeout=timeout)
+        """Re-enable DDS arm_sdk control while holding the current pose.
+
+        The pose is captured from `rt/lowstate` before the ramp starts, then
+        published unchanged while arm_sdk authority returns.
+        """
+        positions = self._read_upper_body_hold_pose(timeout=timeout)
         steps = max(1, int(max(0.0, float(duration_s)) * max(1.0, float(command_rate_hz))))
         dt = 1.0 / max(1.0, float(command_rate_hz))
         arm_sdk = self._get_arm_sdk()
@@ -1277,7 +1285,7 @@ class Robot:
         waist_kd: float = WAIST_HOLD_KD,
         timeout: float = 3.0,
     ) -> dict[str, Any]:
-        positions = self._read_joint_positions_or_raise(UPPER_BODY_JOINTS, timeout=timeout)
+        positions = self._read_upper_body_hold_pose(timeout=timeout)
         steps = max(1, int(max(0.0, float(duration_s)) * max(1.0, float(command_rate_hz))))
         dt = 1.0 / max(1.0, float(command_rate_hz))
         arm_sdk = self._get_arm_sdk()
