@@ -3,9 +3,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import queue
+import select
 import sys
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -39,6 +42,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--language", default="en")
     parser.add_argument("--once", action="store_true", help="Transcribe one chunk and exit.")
     parser.add_argument("--dry-run", action="store_true", help="Print transcripts but do not POST.")
+    parser.add_argument("--toggle-key", default="space",
+                        help="Key used to stop/start recording. Use 'space', 'enter', or a single character.")
+    parser.add_argument("--start-paused", action="store_true",
+                        help="Start paused; press the toggle key to begin recording.")
+    parser.add_argument("--slice-seconds", type=float, default=0.25,
+                        help="Small recording slice used so the toggle key responds quickly.")
     return parser.parse_args()
 
 
@@ -97,6 +106,15 @@ def record_chunk(args: argparse.Namespace) -> tuple[Any, float]:
     audio = np.asarray(audio).reshape(-1)
     rms = float(np.sqrt(np.mean(audio * audio))) if audio.size else 0.0
     return audio, rms
+
+
+def record_seconds(args: argparse.Namespace, seconds: float) -> tuple[Any, float]:
+    old_chunk = args.chunk_seconds
+    args.chunk_seconds = float(seconds)
+    try:
+        return record_chunk(args)
+    finally:
+        args.chunk_seconds = old_chunk
 
 
 def write_wav(audio: Any, sample_rate: int) -> Path:
@@ -198,6 +216,71 @@ def post_text(args: argparse.Namespace, text: str) -> None:
         print(f"POST failed: {exc}", file=sys.stderr, flush=True)
 
 
+def normalize_toggle_key(key: str) -> str:
+    key = str(key).strip().lower()
+    if key in {"space", "spacebar", ""}:
+        return " "
+    if key in {"enter", "return"}:
+        return "\r"
+    return key[:1]
+
+
+def start_toggle_listener(toggle_key: str) -> queue.Queue[str]:
+    events: queue.Queue[str] = queue.Queue()
+    wanted = normalize_toggle_key(toggle_key)
+
+    def run_windows() -> None:
+        import msvcrt
+        while True:
+            ch = msvcrt.getwch()
+            if ch == wanted or (wanted == "\r" and ch in {"\r", "\n"}):
+                events.put("toggle")
+
+    def run_posix() -> None:
+        import termios
+        import tty
+        fd = sys.stdin.fileno()
+        old = termios.tcgetattr(fd)
+        try:
+            tty.setcbreak(fd)
+            while True:
+                readable, _, _ = select.select([sys.stdin], [], [], 0.1)
+                if not readable:
+                    continue
+                ch = sys.stdin.read(1)
+                if ch == wanted or (wanted == "\r" and ch in {"\r", "\n"}):
+                    events.put("toggle")
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old)
+
+    target = run_windows if os.name == "nt" else run_posix
+    thread = threading.Thread(target=target, daemon=True)
+    thread.start()
+    return events
+
+
+def transcribe_and_post(args: argparse.Namespace, backend: Any, audio: Any, rms: float) -> None:
+    np = require_module("numpy")
+    if audio.size == 0:
+        return
+    if rms < float(args.min_rms):
+        print(f"quiet rms={rms:.4f}", flush=True)
+        return
+    wav_path = write_wav(audio, int(args.sample_rate))
+    try:
+        text = backend.transcribe(wav_path).strip()
+    finally:
+        try:
+            wav_path.unlink()
+        except OSError:
+            pass
+    if text:
+        print(f"heard: {text}", flush=True)
+        post_text(args, text)
+    else:
+        print(f"no transcript rms={rms:.4f}", flush=True)
+
+
 def main() -> int:
     args = parse_args()
     if args.list_devices:
@@ -213,32 +296,48 @@ def main() -> int:
             flush=True,
         )
         return 130
-    print("Listening. Press Ctrl-C to stop.", flush=True)
+    np = require_module("numpy")
+    toggles = start_toggle_listener(str(args.toggle_key))
+    recording = not bool(args.start_paused)
+    chunks: list[Any] = []
+    print(
+        f"{'Recording' if recording else 'Paused'}. Press {args.toggle_key!r} to "
+        f"{'stop and transcribe' if recording else 'start recording'}; Ctrl-C exits.",
+        flush=True,
+    )
     try:
         while True:
-            audio, rms = record_chunk(args)
-            if rms < float(args.min_rms):
-                print(f"quiet rms={rms:.4f}", flush=True)
-                if args.once:
-                    break
+            while not toggles.empty():
+                toggles.get_nowait()
+                recording = not recording
+                if recording:
+                    chunks = []
+                    print("recording...", flush=True)
+                else:
+                    if chunks:
+                        audio = np.concatenate(chunks)
+                        rms = float(np.sqrt(np.mean(audio * audio))) if audio.size else 0.0
+                        print(f"stopped; transcribing {audio.size / float(args.sample_rate):.1f}s rms={rms:.4f}", flush=True)
+                        transcribe_and_post(args, backend, audio, rms)
+                    chunks = []
+                    print("paused", flush=True)
+            if not recording:
+                time.sleep(0.05)
                 continue
-            wav_path = write_wav(audio, int(args.sample_rate))
-            try:
-                text = backend.transcribe(wav_path).strip()
-            finally:
-                try:
-                    wav_path.unlink()
-                except OSError:
-                    pass
-            if text:
-                print(f"heard: {text}", flush=True)
-                post_text(args, text)
-            else:
-                print(f"no transcript rms={rms:.4f}", flush=True)
+            audio, _rms = record_seconds(args, max(0.05, float(args.slice_seconds)))
+            chunks.append(audio)
             if args.once:
+                audio = np.concatenate(chunks)
+                rms = float(np.sqrt(np.mean(audio * audio))) if audio.size else 0.0
+                transcribe_and_post(args, backend, audio, rms)
                 break
     except KeyboardInterrupt:
-        print("\nstopped", flush=True)
+        if recording and chunks:
+            audio = np.concatenate(chunks)
+            rms = float(np.sqrt(np.mean(audio * audio))) if audio.size else 0.0
+            print(f"\nstopped; transcribing {audio.size / float(args.sample_rate):.1f}s rms={rms:.4f}", flush=True)
+            transcribe_and_post(args, backend, audio, rms)
+        print("\nexiting", flush=True)
     return 0
 
 
