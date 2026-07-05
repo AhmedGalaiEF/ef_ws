@@ -28,6 +28,9 @@ Options
     --rate-hz HZ      rt/lowcmd publish rate (default 50)
     --no-color        Disable ANSI colour
     --dry-run         Connect to robot but skip Kimodo — useful for testing standup
+    --no-robot        Skip robot connection entirely (unitree_sdk2py is never imported) —
+                       useful for testing Kimodo generation and safety analysis up to the
+                       replay confirmation without the SDK/robot set up
 """
 from __future__ import annotations
 
@@ -295,10 +298,10 @@ def print_summary(stats: MotionStats, use_color: bool) -> None:
     print(f"  Limit viols : {_c(str(stats.limit_violations), viols_color, use_color)}")
     ramp_color  = _Y if stats.ramp_warnings else _G
     print(f"  RAMP>FRAME  : {_c(str(stats.ramp_warnings), ramp_color, use_color)}  joint-frames  "
-          f"(ll_sdk default {_RAMP_SPEED} rad/s would overrun)")
-    uf_color    = _R if stats.unsafe_frames else _G
-    print(f"  VEL UNSAFE  : {_c(str(stats.unsafe_frames), uf_color, use_color)}  frames  "
-          f"(vel > {_UNSAFE_VEL:.1f} rad/s)")
+          f"(ramp speed {_RAMP_SPEED} rad/s needs >1 frame here — playback will lag fps, ramp still enforced)")
+    uf_color    = _Y if stats.unsafe_frames else _G
+    print(f"  HIGH VEL    : {_c(str(stats.unsafe_frames), uf_color, use_color)}  frames  "
+          f"(implied source vel > {_UNSAFE_VEL:.1f} rad/s — likely fast motion or bad data; ramp still caps it)")
 
 
 def print_frame_table(frames: np.ndarray, fps: float, use_color: bool,
@@ -324,7 +327,7 @@ def print_frame_table(frames: np.ndarray, fps: float, use_color: bool,
                 if abs(dq) / _RAMP_SPEED * 1000 > fi * 1000:
                     flags.append("RAMP>FRAME"); color = _Y
                 if vel > _UNSAFE_VEL:
-                    flags.append("UNSAFE"); color = _R
+                    flags.append("HIGH-VEL"); color = _Y
             if val < lo or val > hi:
                 flags.append("LIMIT"); color = _R
             status = ", ".join(flags) if flags else "ok"
@@ -393,13 +396,49 @@ class RobotSession:
             self.publish(q_step, mm)
             if step < steps: time.sleep(dt)
 
-    def play_frames(self, frames: np.ndarray, fps: float) -> None:
-        """Execute pre-converted frames (shape n_frames × 29) at fps."""
+    def _ramp_publish(self, q_start: List[float], q_target: List[float], mm: int,
+                       *, speed_rad_s: float, rate_hz: float) -> None:
+        """Speed-limited move from q_start to q_target — mirrors ll_sdk._ramp_publish
+        so Kimodo-generated motion is capped by the same safety ramp as every
+        other move_* helper in this codebase, instead of jumping straight to
+        each frame's raw target."""
+        speed = float(speed_rad_s)
+        rate  = max(1.0, float(rate_hz))
+        if speed <= 0.0:
+            self.publish(q_target, mm)
+            return
+        max_delta = max(abs(a - b) for a, b in zip(q_start, q_target))
+        steps = max(1, int(math.ceil(max_delta / max(1e-6, speed / rate))))
+        if steps <= 1:
+            self.publish(q_target, mm)
+            return
+        dt = 1.0 / rate
+        for step_idx in range(1, steps + 1):
+            alpha  = step_idx / steps
+            q_step = [a + alpha * (b - a) for a, b in zip(q_start, q_target)]
+            self.publish(q_step, mm)
+            if step_idx < steps:
+                time.sleep(dt)
+
+    def play_frames(self, frames: np.ndarray, fps: float, *,
+                     ramp_speed_rad_s: float = _RAMP_SPEED,
+                     ramp_rate_hz: float = 50.0) -> None:
+        """Execute pre-converted frames (shape n_frames × 29) at fps.
+
+        Frame-to-frame motion is speed-limited via the same ramp algorithm as
+        ll_sdk._ramp_publish, so a joint can never be commanded faster than
+        the ll_sdk safety ramp speed. If a frame's delta needs more time than
+        1/fps, this call blocks longer and playback falls behind the source
+        fps for that frame — it is never sent as an instant jump.
+        """
         fi = 1.0 / fps
-        _, mm = self.state.wait(3.0)
+        q_prev, mm = self.state.wait(3.0)
         for f in range(len(frames)):
             t0 = time.monotonic()
-            self.publish(list(frames[f]), mm)
+            q_target = list(frames[f])
+            self._ramp_publish(q_prev, q_target, mm,
+                                speed_rad_s=ramp_speed_rad_s, rate_hz=ramp_rate_hz)
+            q_prev = q_target
             elapsed = time.monotonic() - t0
             rem = fi - elapsed
             if rem > 0: time.sleep(rem)
@@ -448,6 +487,11 @@ def main() -> None:
     ap.add_argument("--no-color",  action="store_true")
     ap.add_argument("--dry-run",   action="store_true",
                     help="Stand and prompt loop, but skip Kimodo inference and replay")
+    ap.add_argument("--no-robot",  action="store_true",
+                    help="Skip robot connection entirely (unitree_sdk2py is never imported). "
+                         "Runs Kimodo generation and the safety analysis normally, stopping at "
+                         "the replay confirmation instead of actually publishing to rt/lowcmd. "
+                         "Useful for testing motion generation without the SDK/robot set up.")
     args = ap.parse_args()
 
     uc = not args.no_color and sys.stdout.isatty()
@@ -473,25 +517,35 @@ def main() -> None:
         print(_c("No walk pose found — robot will hold its current pose as the base.", _Y, uc))
 
     # ── Connect to robot ───────────────────────────────────────────────────────
-    print("\nConnecting to robot …")
-    print(_c("WARNING: entering developer mode (rt/lowcmd). Robot must be on hanger.", _Y, uc))
-    if _input("Type 'yes' to connect: ") != "yes":
-        print("Aborted."); sys.exit(0)
+    bot: Optional[RobotSession] = None
+    stand_q: Optional[List[float]] = None
 
-    bot = RobotSession(args.iface, args.domain)
-    bot.enter_dev_mode()
-    q_now, _ = bot.state.wait(5.0)
-    print(f"  lowstate received ({N_JOINTS} joints).")
-
-    # ── Stand up ───────────────────────────────────────────────────────────────
-    if walk_pose:
-        print(f"\nRamping to standing pose over {args.ramp_s:.1f}s …")
-        bot.ramp(q_now, walk_pose, args.ramp_s, args.rate_hz)
-        print(_c("  Standing. Robot is now in developer-mode standing pose.", _G, uc))
-        stand_q = list(walk_pose)
+    if args.no_robot:
+        print()
+        print(_c("  --no-robot: skipping robot connection (unitree_sdk2py is not imported).", _Y, uc))
+        print(_c("  Generation and safety analysis will run normally; replay stops at the "
+                 "confirmation prompt.", _Y, uc))
+        stand_q = list(walk_pose) if walk_pose else None
     else:
-        stand_q = list(q_now)
-        print(_c("  Holding current pose as standing reference.", _Y, uc))
+        print("\nConnecting to robot …")
+        print(_c("WARNING: entering developer mode (rt/lowcmd). Robot must be on hanger.", _Y, uc))
+        if _input("Type 'yes' to connect: ") != "yes":
+            print("Aborted."); sys.exit(0)
+
+        bot = RobotSession(args.iface, args.domain)
+        bot.enter_dev_mode()
+        q_now, _ = bot.state.wait(5.0)
+        print(f"  lowstate received ({N_JOINTS} joints).")
+
+        # ── Stand up ───────────────────────────────────────────────────────────
+        if walk_pose:
+            print(f"\nRamping to standing pose over {args.ramp_s:.1f}s …")
+            bot.ramp(q_now, walk_pose, args.ramp_s, args.rate_hz)
+            print(_c("  Standing. Robot is now in developer-mode standing pose.", _G, uc))
+            stand_q = list(walk_pose)
+        else:
+            stand_q = list(q_now)
+            print(_c("  Holding current pose as standing reference.", _Y, uc))
 
     # ── REPL ───────────────────────────────────────────────────────────────────
     print()
@@ -509,6 +563,9 @@ def main() -> None:
         if not raw or raw.lower() in ("q", "quit", "exit"):
             break
         if raw.lower() in ("r", "return"):
+            if bot is None:
+                print(_c("  [no-robot] No robot connected — nothing to return to stand.", _Y, uc))
+                continue
             print(f"Returning to standing pose …")
             q_cur, _ = bot.state.wait(3.0)
             bot.ramp(q_cur, stand_q, args.ramp_s, args.rate_hz)
@@ -565,9 +622,10 @@ def main() -> None:
 
             if choice in ("q", "quit"):
                 print("Quit.")
-                # ramp back to stand before exit
-                q_cur, _ = bot.state.wait(3.0)
-                bot.ramp(q_cur, stand_q, args.ramp_s, args.rate_hz)
+                if bot is not None:
+                    # ramp back to stand before exit
+                    q_cur, _ = bot.state.wait(3.0)
+                    bot.ramp(q_cur, stand_q, args.ramp_s, args.rate_hz)
                 sys.exit(0)
 
             elif choice in ("n", "new", "s", "skip", ""):
@@ -589,9 +647,17 @@ def main() -> None:
                     if warn not in ("y", "yes"):
                         continue
 
+                if bot is None:
+                    print(_c(
+                        f"  [no-robot] Reached replay confirmation for {stats.n_frames} frames "
+                        f"({stats.duration_s:.1f}s) — no robot connected, skipping actual playback.",
+                        _Y, uc,
+                    ))
+                    break
+
                 print(f"\n  Playing {stats.n_frames} frames "
                       f"({stats.duration_s:.1f}s) …")
-                bot.play_frames(frames, args.fps)
+                bot.play_frames(frames, args.fps, ramp_rate_hz=args.rate_hz)
                 print(_c("  Replay complete.", _G, uc))
 
                 # After replay: offer return to stand
@@ -605,10 +671,11 @@ def main() -> None:
 
     # ── Clean exit: return to stand ────────────────────────────────────────────
     print("\nExiting …")
-    q_cur, _ = bot.state.wait(3.0)
-    if q_cur != stand_q:
-        print(f"Ramping back to standing pose …")
-        bot.ramp(q_cur, stand_q, args.ramp_s, args.rate_hz)
+    if bot is not None:
+        q_cur, _ = bot.state.wait(3.0)
+        if q_cur != stand_q:
+            print(f"Ramping back to standing pose …")
+            bot.ramp(q_cur, stand_q, args.ramp_s, args.rate_hz)
     print("Done.")
 
 

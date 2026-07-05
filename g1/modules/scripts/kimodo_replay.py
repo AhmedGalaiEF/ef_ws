@@ -8,12 +8,16 @@ full joint-target table and safety analysis are displayed, and confirmation
 is required.
 
 Safety analysis cross-checks every frame against two constraints from ll_sdk:
-  1. Ramp speed  — ll_sdk._ramp_publish defaults to 0.35 rad/s at 50 Hz.
-                   If a frame delta would require more ramp time than the
-                   frame interval allows, the motion will run slower than
-                   generated (RAMP>FRAME).  We send with ramp_speed=0 to
-                   honour the frame rate, so large deltas arrive instantly —
-                   flagged as INSTANT UNSAFE when |Δq|/Δt > 1.5 rad/s.
+  1. Ramp speed  — every frame is sent through ll_sdk.move_ll_joint() with its
+                   real ramp_speed_rad_s (0.35 rad/s at 50 Hz), so no joint is
+                   ever commanded faster than the ll_sdk safety ramp allows.
+                   If a frame delta needs more ramp time than the frame
+                   interval, that frame's send blocks longer than 1/fps and
+                   playback falls behind the source frame rate (RAMP>FRAME) —
+                   it is never sent instantly.  A delta whose implied source
+                   velocity is extreme (|Δq|/Δt > 1.4 rad/s) is flagged
+                   HIGH-Δq as a likely motion-data problem, independent of the
+                   ramp (which will still cap the actual joint speed).
   2. Joint limits — from ll_sdk._LEG_LIMITS, arm_fk.JOINT_LIMITS, and
                     low_level_commands.py waist limits.
 
@@ -153,15 +157,18 @@ _JOINT_LIMITS: List[Tuple[float, float]] = [
 # ── ll_sdk ramp safety constants ──────────────────────────────────────────────
 # From ll_sdk.py: ik_move_EE defaults ramp_speed_rad_s=0.35, ramp_rate_hz=50
 # Per-step increment = 0.35/50 = 0.007 rad.
-# We replay with ramp_speed=0 (instant) to honour frame timing, so we flag
-# joints whose implied velocity exceeds a safe threshold instead.
+# Every frame is sent through this exact ramp (see move_ll_joint call below),
+# so these constants are used both to drive the send and to predict, ahead of
+# time, which frames will make playback lag behind the source fps.
 _RAMP_SPEED_RAD_S = 0.35      # ll_sdk default ramp speed
 _RAMP_RATE_HZ     = 50.0      # ll_sdk default ramp publish rate
 _RAMP_STEP_RAD    = _RAMP_SPEED_RAD_S / _RAMP_RATE_HZ   # 0.007 rad/step
 
-# Velocity threshold above which an instant send is considered mechanically risky.
-# Set to 4× the ramp speed — generous but non-trivial.
-_INSTANT_UNSAFE_VEL = _RAMP_SPEED_RAD_S * 4.0   # 1.4 rad/s
+# Implied-velocity threshold above which a frame delta looks like bad motion
+# data rather than an intentionally fast motion. Set to 4× the ramp speed —
+# generous but non-trivial. This does NOT bypass the ramp: it only flags the
+# source data for a closer look before sending.
+_HIGH_VELOCITY_THRESH = _RAMP_SPEED_RAD_S * 4.0   # 1.4 rad/s
 
 # ── ANSI helpers ──────────────────────────────────────────────────────────────
 _R  = "\033[91m"   # red
@@ -278,9 +285,10 @@ def analyse_frame(
                 if row_color == _G:
                     row_color = _Y
 
-            if vel > _INSTANT_UNSAFE_VEL:
-                # Sending instantly at this velocity is mechanically risky
-                status_parts.append(f"INSTANT UNSAFE (>{_INSTANT_UNSAFE_VEL:.1f} rad/s)")
+            if vel > _HIGH_VELOCITY_THRESH:
+                # Ramp still caps the actual joint speed, but a delta this
+                # large usually means the source motion data is suspect.
+                status_parts.append(f"HIGH-Δq (>{_HIGH_VELOCITY_THRESH:.1f} rad/s)")
                 has_errors = True
                 row_color  = _R
 
@@ -325,11 +333,11 @@ def _frame_summary(
         f"ramp_time={ramp_s * 1000:.1f} ms  frame_interval={fi_s * 1000:.1f} ms  "
     )
     if ok:
-        summary += "→ ramp fits in frame (safe to use ll_sdk ramp)"
+        summary += "→ ramp fits in frame (plays at full fps)"
     else:
         summary += (
             f"→ ramp overruns by {(ramp_s - fi_s) * 1000:.1f} ms  "
-            f"[sending instantly — bypasses ll_sdk._ramp_publish safety]"
+            f"[ll_sdk ramp still enforced — this frame will lag behind fps]"
         )
     color = _G if ok else _Y
     return _c(summary, color, use_color)
@@ -379,13 +387,13 @@ def main() -> None:
     print()
 
     # ── Safety legend ─────────────────────────────────────────────────────────
-    print(_c("Safety thresholds (cross-checked against ll_sdk._ramp_publish):", _B, use_color))
+    print(_c("Safety thresholds (every frame is sent through ll_sdk._ramp_publish):", _B, use_color))
     print(f"  Ramp speed    : {_RAMP_SPEED_RAD_S} rad/s  ({_RAMP_RATE_HZ:.0f} Hz)  → "
           f"{_RAMP_STEP_RAD*1000:.1f} mrad/step")
-    print(f"  RAMP>FRAME    : {_c('yellow', _Y, use_color)} — ll_sdk ramp would exceed frame interval; "
-          f"sent instantly (bypasses ramp safety)")
-    print(f"  INSTANT UNSAFE: {_c('red', _R, use_color)} — implied velocity > {_INSTANT_UNSAFE_VEL:.1f} rad/s "
-          f"(4× ramp speed); mechanically risky")
+    print(f"  RAMP>FRAME    : {_c('yellow', _Y, use_color)} — ll_sdk ramp needs more time than the frame "
+          f"interval; playback lags fps for this frame (ramp still enforced, never sent instantly)")
+    print(f"  HIGH-Δq       : {_c('red', _R, use_color)} — implied source velocity > {_HIGH_VELOCITY_THRESH:.1f} "
+          f"rad/s (4× ramp speed); likely bad motion data, review before sending")
     print(f"  LIMIT         : {_c('red', _R, use_color)} — joint value outside URDF hard limits")
     print()
 
@@ -473,9 +481,16 @@ def main() -> None:
                 print("  Unrecognised input — skipping frame.")
                 continue
 
-        # Send frame
+        # Send frame — always through ll_sdk's speed-limited ramp, never
+        # instant. If the ramp needs more time than one frame interval, this
+        # call simply blocks longer and playback falls behind fps for that
+        # frame (see RAMP>FRAME above), rather than skipping the ramp.
         t0 = time.monotonic()
-        sdk.move_ll_joint(targets, ramp_speed_rad_s=0.0)
+        sdk.move_ll_joint(
+            targets,
+            ramp_speed_rad_s=_RAMP_SPEED_RAD_S,
+            ramp_rate_hz=_RAMP_RATE_HZ,
+        )
         elapsed = time.monotonic() - t0
         sleep_s = max(0.0, frame_interval - elapsed)
         if sleep_s > 0:
