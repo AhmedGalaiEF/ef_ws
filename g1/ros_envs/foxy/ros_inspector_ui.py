@@ -1,63 +1,30 @@
 #!/usr/bin/env python3
-"""Jetson Board Inspection Summary - htop-style Rich TUI viewer."""
+"""Interactive ROS 2 topic inspector - Textual TUI.
 
-import time
-from rich.console import Console
-from rich.layout import Layout
-from rich.panel import Panel
-from rich.table import Table
-from rich.text import Text
-from rich.columns import Columns
-from rich.progress import BarColumn, Progress, TextColumn
-from rich import box
-from rich.live import Live
-from rich.align import Align
-from rich.rule import Rule
+Sidebar lists topics grouped by category; selecting one streams its live
+`ros2 topic echo` output into the main panel. Requires the `textual`
+package (`pip install textual`) and a sourced ROS 2 environment on PATH.
+If `ros2` isn't reachable, the sidebar falls back to the last known
+topic list captured in summary.md so the layout can still be browsed.
+"""
 
-# ── Data extracted from summary.md ──────────────────────────────────────────
+import asyncio
+import subprocess
 
-SYSTEM = {
-    "Hostname": "ubuntu",
-    "OS": "Ubuntu 20.04.6 LTS (focal)",
-    "Kernel": "5.10.104-tegra",
-    "Arch": "aarch64",
-    "ROS Distro": "foxy (ROS 2)",
-    "RMW": "rmw_cyclonedds_cpp",
-    "Uptime": "~6 min at capture",
-}
+try:
+    from textual.app import App, ComposeResult
+    from textual.containers import Horizontal, Vertical
+    from textual.widgets import Header, Footer, Tree, Static, RichLog
+except ImportError as exc:  # pragma: no cover
+    raise SystemExit(
+        "This tool requires the 'textual' package. Install it with:\n"
+        "    pip install textual\n"
+        f"(import failed: {exc})"
+    )
 
-RESOURCES = {
-    "RAM Used": (2.38, 15.4),   # (used, total) GB
-    "Swap Used": (0.0, 7.5),
-    "CPU": "light-moderate",
-    "GPU": "0%",
-    "Temps": "39–42 °C",
-    "Disk": (21, 1900),         # GB used / total
-}
+# ── Fallback topic set, used only when `ros2 topic list` is unreachable ─────
 
-SERVICES = [
-    "ssh.service", "docker.service", "containerd.service",
-    "master_service.service", "unitree-upgrade.service",
-    "nvargus-daemon.service", "NetworkManager.service", "gdm.service",
-]
-
-UNITREE_PROCS = [
-    "/unitree/module/master_service/master_service",
-    "/unitree/ota/pipe/ota_pipe_service",
-    "/unitree/module/video_hub_pc4/videohub_pc4 /dev/video4",
-    "/unitree/module/video_hub_pc4/videohub_pc4_chest /dev/video10",
-]
-
-PORTS = [
-    ("22", "ssh"),
-    ("80", "http"),
-    ("4000", "TCP+UDP board svc"),
-    ("7400/7401", "DDS / CycloneDDS"),
-    ("7001", "localhost / IPv6"),
-    ("111", "rpcbind"),
-]
-
-TOPICS = {
+FALLBACK_TOPICS = {
     "Robot State / Cmd": [
         "/lowcmd", "/lowstate", "/user_lowcmd",
         "/multiplestate", "/sportmodestate", "/odommodestate",
@@ -94,214 +61,166 @@ TOPICS = {
     ],
 }
 
-GRAPH_STATUS = {
-    "Topics": ("ACTIVE", "green"),
-    "Nodes":   ("EMPTY",  "red"),
-    "Services":("EMPTY",  "red"),
-    "Actions": ("EMPTY",  "red"),
-}
-
-WORKSPACES = [
-    ("cyclonedds_ws", "CycloneDDS + RMW build", "ROS 2"),
-    ("Odometer_service", "SVO/VIO visual odometry", "ROS 1 / catkin"),
-]
-
-TAKEAWAYS = [
-    "ROS 2 Foxy installed and sourced",
-    "CycloneDDS is the active middleware",
-    "Unitree services, video & DDS traffic are active",
-    "Rich topic graph: motion, SLAM, LiDAR, audio, video, arm",
-    "Node/service/action discovery returned empty (DDS namespace / discovery quirk)",
-    "No explicit ROS 2 application workspace or launch files found",
-]
-
 CATEGORY_COLORS = {
-    "Robot State / Cmd":    "cyan",
-    "API Request/Response": "yellow",
-    "SLAM / Mapping":       "magenta",
-    "LiDAR / IMU":          "blue",
-    "Camera / WebRTC":      "green",
-    "Arm / Dexterous Hand": "red",
+    "Robot State / Cmd":     "cyan",
+    "API Request/Response":  "yellow",
+    "SLAM / Mapping":        "magenta",
+    "LiDAR / IMU":           "blue",
+    "Camera / WebRTC":       "green",
+    "Arm / Dexterous Hand":  "red",
+    "Other":                 "white",
 }
 
-# ── Builder helpers ──────────────────────────────────────────────────────────
 
-def header_bar() -> Panel:
-    txt = Text()
-    txt.append("  JETSON BOARD INSPECTION SUMMARY  ", style="bold white on dark_blue")
-    txt.append("  ROS 2 Foxy / CycloneDDS / aarch64  ", style="bold white on dark_blue")
-    txt.append("  [CAPTURED SNAPSHOT]  ", style="bold yellow on dark_blue")
-    return Panel(Align.center(txt), style="bold blue", box=box.HEAVY, padding=(0, 1))
+def discover_live_topics() -> dict[str, list[str]] | None:
+    """Return {category: [topics]} from a live `ros2 topic list`, or None if unreachable."""
+    try:
+        result = subprocess.run(
+            ["ros2", "topic", "list"],
+            capture_output=True, text=True, timeout=5,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+    if result.returncode != 0 or not result.stdout.strip():
+        return None
 
-
-def resource_bar(label: str, used: float, total: float, color: str) -> Text:
-    pct = used / total
-    filled = int(pct * 30)
-    bar = "[" + "█" * filled + " " * (30 - filled) + "]"
-    t = Text()
-    t.append(f"{label:<5}", style="bold white")
-    t.append(bar, style=color)
-    t.append(f"  {used:.1f}/{total:.1f} GB  ({pct*100:.0f}%)", style="white")
-    return t
-
-
-def system_panel() -> Panel:
-    tbl = Table(box=None, show_header=False, padding=(0, 1))
-    tbl.add_column(style="bold cyan", no_wrap=True)
-    tbl.add_column(style="white")
-    for k, v in SYSTEM.items():
-        tbl.add_row(k, v)
-    return Panel(tbl, title="[bold cyan]System[/]", border_style="cyan", box=box.ROUNDED)
+    live_topics = result.stdout.strip().splitlines()
+    categorized: dict[str, list[str]] = {cat: [] for cat in FALLBACK_TOPICS}
+    categorized["Other"] = []
+    for topic in live_topics:
+        for cat, known in FALLBACK_TOPICS.items():
+            if topic in known:
+                categorized[cat].append(topic)
+                break
+        else:
+            categorized["Other"].append(topic)
+    return {cat: topics for cat, topics in categorized.items() if topics}
 
 
-def resource_panel() -> Panel:
-    lines = [
-        resource_bar("RAM", *RESOURCES["RAM Used"], "green"),
-        resource_bar("Swap", *RESOURCES["Swap Used"], "yellow"),
-        resource_bar("Disk", *RESOURCES["Disk"], "blue"),
+class ROSInspectorApp(App):
+    """Sidebar topic browser + live `ros2 topic echo` viewer."""
+
+    CSS = """
+    #sidebar {
+        width: 40;
+        border: solid $accent;
+    }
+    #main {
+        width: 1fr;
+    }
+    #topic_info {
+        height: 3;
+        border: solid $accent;
+        padding: 0 1;
+        content-align: left middle;
+    }
+    #echo_log {
+        border: solid $accent;
+        height: 1fr;
+    }
+    """
+
+    BINDINGS = [
+        ("q", "quit", "Quit"),
+        ("r", "refresh_topics", "Refresh topic list"),
     ]
-    extra = Text()
-    extra.append(f"\n  CPU: ", style="bold white")
-    extra.append(RESOURCES["CPU"], style="white")
-    extra.append("   GPU: ", style="bold white")
-    extra.append(RESOURCES["GPU"], style="white")
-    extra.append("   Temp: ", style="bold white")
-    extra.append(RESOURCES["Temps"], style="red")
-    from rich.console import Group
-    content = Group(*lines, extra)
-    return Panel(content, title="[bold green]Resources[/]", border_style="green", box=box.ROUNDED)
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.current_topic: str | None = None
+
+    def compose(self) -> ComposeResult:
+        yield Header(show_clock=True)
+        with Horizontal():
+            yield Tree("Topics", id="sidebar")
+            with Vertical(id="main"):
+                yield Static("Select a topic from the sidebar to inspect it.", id="topic_info")
+                yield RichLog(id="echo_log", wrap=True, highlight=True, markup=True)
+        yield Footer()
+
+    def on_mount(self) -> None:
+        self.title = "ROS 2 Topic Inspector"
+        self.populate_tree()
+
+    def populate_tree(self) -> None:
+        tree = self.query_one("#sidebar", Tree)
+        tree.clear()
+        tree.root.expand()
+
+        categorized = discover_live_topics()
+        live = categorized is not None
+        if categorized is None:
+            categorized = FALLBACK_TOPICS
+        tree.root.label = "Topics (live)" if live else "Topics (offline snapshot - ros2 unreachable)"
+
+        for category, topics in categorized.items():
+            color = CATEGORY_COLORS.get(category, "white")
+            cat_node = tree.root.add(f"[{color}]{category}[/] ({len(topics)})", expand=True)
+            for topic in topics:
+                cat_node.add_leaf(topic, data=topic)
+
+    def action_refresh_topics(self) -> None:
+        self.populate_tree()
+        self.query_one("#topic_info", Static).update(
+            "Topic list refreshed. Select a topic from the sidebar."
+        )
+
+    def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
+        topic = event.node.data
+        if not topic:
+            return  # a category header was selected, not a leaf topic
+        self.select_topic(topic)
+
+    def select_topic(self, topic: str) -> None:
+        self.current_topic = topic
+        self.query_one("#echo_log", RichLog).clear()
+        self.query_one("#topic_info", Static).update(f"[bold]{topic}[/bold]  [dim](resolving type...)[/dim]")
+        self.run_worker(self._stream_echo(topic), exclusive=True, group="echo")
+        self.run_worker(self._fetch_topic_type(topic), exclusive=True, group="type")
+
+    async def _fetch_topic_type(self, topic: str) -> None:
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "ros2", "topic", "type", topic,
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
+            )
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
+            msg_type = stdout.decode().strip() or "unknown"
+        except (FileNotFoundError, asyncio.TimeoutError):
+            msg_type = "unavailable"
+
+        if self.current_topic == topic:
+            self.query_one("#topic_info", Static).update(
+                f"[bold]{topic}[/bold]  [dim]type:[/dim] {msg_type}"
+            )
+
+    async def _stream_echo(self, topic: str) -> None:
+        log = self.query_one("#echo_log", RichLog)
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "ros2", "topic", "echo", topic,
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+            )
+        except FileNotFoundError:
+            log.write("[bold red]ros2 CLI not found - source your ROS 2 environment first.[/]")
+            return
+
+        assert proc.stdout is not None
+        try:
+            while True:
+                line = await proc.stdout.readline()
+                if not line:
+                    break
+                log.write(line.decode(errors="replace").rstrip())
+        except asyncio.CancelledError:
+            raise
+        finally:
+            if proc.returncode is None:
+                proc.terminate()
 
 
-def graph_status_panel() -> Panel:
-    tbl = Table(box=None, show_header=False, padding=(0, 2))
-    tbl.add_column(style="bold white", no_wrap=True)
-    tbl.add_column()
-    for name, (status, color) in GRAPH_STATUS.items():
-        tbl.add_row(name, f"[bold {color}]{status}[/]")
-    return Panel(tbl, title="[bold yellow]ROS Graph[/]", border_style="yellow", box=box.ROUNDED)
-
-
-def services_panel() -> Panel:
-    tbl = Table(box=None, show_header=False, padding=(0, 1))
-    tbl.add_column(style="green")
-    for s in SERVICES:
-        tbl.add_row(f"● {s}")
-    return Panel(tbl, title="[bold green]Services[/]", border_style="green", box=box.ROUNDED)
-
-
-def ports_panel() -> Panel:
-    tbl = Table(box=None, show_header=False, padding=(0, 1))
-    tbl.add_column(style="bold yellow", no_wrap=True, min_width=12)
-    tbl.add_column(style="white")
-    for port, desc in PORTS:
-        tbl.add_row(port, desc)
-    return Panel(tbl, title="[bold yellow]Open Ports[/]", border_style="yellow", box=box.ROUNDED)
-
-
-def workspaces_panel() -> Panel:
-    tbl = Table(box=None, show_header=True, padding=(0, 1))
-    tbl.add_column("Workspace", style="bold magenta", no_wrap=True)
-    tbl.add_column("Description", style="white")
-    tbl.add_column("Type", style="cyan", no_wrap=True)
-    for ws, desc, kind in WORKSPACES:
-        tbl.add_row(ws, desc, kind)
-    return Panel(tbl, title="[bold magenta]Workspaces[/]", border_style="magenta", box=box.ROUNDED)
-
-
-def topic_panel(category: str, topics: list) -> Panel:
-    color = CATEGORY_COLORS[category]
-    tbl = Table(box=None, show_header=False, padding=(0, 0))
-    tbl.add_column(style=color)
-    for t in topics:
-        tbl.add_row(t)
-    count = f"[bold {color}]({len(topics)} topics)[/]"
-    return Panel(
-        tbl,
-        title=f"[bold {color}]{category}[/] {count}",
-        border_style=color,
-        box=box.ROUNDED,
-    )
-
-
-def topics_section() -> Columns:
-    panels = [topic_panel(cat, topics) for cat, topics in TOPICS.items()]
-    return Columns(panels, equal=False, expand=True)
-
-
-def procs_panel() -> Panel:
-    tbl = Table(box=None, show_header=False, padding=(0, 1))
-    tbl.add_column(style="dim white")
-    for p in UNITREE_PROCS:
-        tbl.add_row(p)
-    return Panel(tbl, title="[bold red]Unitree Processes[/]", border_style="red", box=box.ROUNDED)
-
-
-def takeaways_panel() -> Panel:
-    tbl = Table(box=None, show_header=False, padding=(0, 1))
-    tbl.add_column()
-    for i, t in enumerate(TAKEAWAYS):
-        icon = "[bold green]✔[/]" if i < 4 else "[bold yellow]⚠[/]"
-        tbl.add_row(f"{icon}  {t}")
-    return Panel(
-        tbl,
-        title="[bold white]Key Takeaways[/]",
-        border_style="white",
-        box=box.HEAVY,
-    )
-
-
-# ── Main ─────────────────────────────────────────────────────────────────────
-
-def build_page() -> Layout:
-    layout = Layout()
-
-    layout.split_column(
-        Layout(name="header", size=3),
-        Layout(name="top", size=10),
-        Layout(name="mid_info", size=8),
-        Layout(name="topics_label", size=1),
-        Layout(name="topics", size=None),
-        Layout(name="takeaways", size=12),
-    )
-
-    layout["top"].split_row(
-        Layout(name="sys", ratio=3),
-        Layout(name="res", ratio=4),
-        Layout(name="graph", ratio=2),
-    )
-
-    layout["mid_info"].split_row(
-        Layout(name="svcs", ratio=3),
-        Layout(name="ports", ratio=2),
-        Layout(name="procs", ratio=4),
-        Layout(name="ws", ratio=3),
-    )
-
-    layout["header"].update(header_bar())
-    layout["top"]["sys"].update(system_panel())
-    layout["top"]["res"].update(resource_panel())
-    layout["top"]["graph"].update(graph_status_panel())
-
-    layout["mid_info"]["svcs"].update(services_panel())
-    layout["mid_info"]["ports"].update(ports_panel())
-    layout["mid_info"]["procs"].update(procs_panel())
-    layout["mid_info"]["ws"].update(workspaces_panel())
-
-    layout["topics_label"].update(
-        Rule("[bold white]━  ACTIVE ROS 2 TOPICS  ━[/]", style="bold blue")
-    )
-    layout["topics"].update(topics_section())
-    layout["takeaways"].update(takeaways_panel())
-
-    return layout
-
-
-def main():
-    console = Console()
-    console.clear()
-    page = build_page()
-    console.print(page)
-    console.print()
+def main() -> None:
+    ROSInspectorApp().run()
 
 
 if __name__ == "__main__":
