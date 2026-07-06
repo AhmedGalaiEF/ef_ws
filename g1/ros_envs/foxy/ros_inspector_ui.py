@@ -9,7 +9,11 @@ topic list captured in summary.md so the layout can still be browsed.
 """
 
 import asyncio
+import contextlib
+import re
 import subprocess
+from functools import lru_cache
+from pathlib import Path
 
 try:
     from textual.app import App, ComposeResult
@@ -22,9 +26,11 @@ except ImportError as exc:  # pragma: no cover
         f"(import failed: {exc})"
     )
 
-# ── Fallback topic set, used only when `ros2 topic list` is unreachable ─────
+# ── Fallback topic set, used when `ros2 topic list` is unreachable ───────────
 
-FALLBACK_TOPICS = {
+SUMMARY_PATH = Path(__file__).with_name("summary.md")
+
+DEFAULT_TOPICS = {
     "Robot State / Cmd": [
         "/lowcmd", "/lowstate", "/user_lowcmd",
         "/multiplestate", "/sportmodestate", "/odommodestate",
@@ -71,6 +77,90 @@ CATEGORY_COLORS = {
     "Other":                 "white",
 }
 
+SUMMARY_CATEGORY_ALIASES = {
+    "low-level robot state and command topics": "Robot State / Cmd",
+    "api request/response topics": "API Request/Response",
+    "slam / mapping topics": "SLAM / Mapping",
+    "lidar / imu topics": "LiDAR / IMU",
+    "camera / media / webrtc topics": "Camera / WebRTC",
+    "arm / dexterous hand topics": "Arm / Dexterous Hand",
+}
+
+
+def infer_topic_category(topic: str) -> str:
+    """Infer a display category for topics not already in the known catalog."""
+    if topic.startswith("/api/"):
+        return "API Request/Response"
+    if topic.startswith("/dex3/"):
+        return "Arm / Dexterous Hand"
+    if topic.startswith("/utlidar/") or "imu" in topic or "lidar" in topic:
+        return "LiDAR / IMU"
+    if any(part in topic for part in ("webrtc", "video", "camera", "image")):
+        return "Camera / WebRTC"
+    if any(part in topic for part in ("slam", "map", "waypoint")):
+        return "SLAM / Mapping"
+    if topic in DEFAULT_TOPICS["Robot State / Cmd"]:
+        return "Robot State / Cmd"
+    return "Other"
+
+
+def categorize_topics(topics: list[str], known_topics: dict[str, list[str]]) -> dict[str, list[str]]:
+    """Return ordered topic groups, deduplicated and enriched with inferred categories."""
+    topic_to_category = {
+        topic: category
+        for category, category_topics in known_topics.items()
+        for topic in category_topics
+    }
+
+    categorized: dict[str, list[str]] = {category: [] for category in known_topics}
+    categorized["Other"] = []
+    for topic in sorted(set(topics)):
+        category = topic_to_category.get(topic, infer_topic_category(topic))
+        categorized.setdefault(category, []).append(topic)
+    return {category: category_topics for category, category_topics in categorized.items() if category_topics}
+
+
+@lru_cache(maxsize=1)
+def load_fallback_topics() -> dict[str, list[str]]:
+    """Load the offline topic catalog from summary.md when available."""
+    if not SUMMARY_PATH.exists():
+        return DEFAULT_TOPICS
+
+    extracted: dict[str, list[str]] = {}
+    current_category: str | None = None
+    in_topic_section = False
+    for line in SUMMARY_PATH.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped == "### Topics":
+            in_topic_section = True
+            continue
+        if in_topic_section and stripped.startswith("## "):
+            break
+        if not in_topic_section:
+            continue
+
+        category_match = re.match(r"^- (.+ topics):$", stripped, flags=re.IGNORECASE)
+        if category_match:
+            label = category_match.group(1).strip().lower()
+            current_category = SUMMARY_CATEGORY_ALIASES.get(label)
+            if current_category:
+                extracted.setdefault(current_category, [])
+            continue
+
+        if current_category is None:
+            continue
+
+        topic_matches = re.findall(r"/[A-Za-z0-9_./-]+", stripped)
+        extracted[current_category].extend(topic_matches)
+
+    if not extracted:
+        return DEFAULT_TOPICS
+
+    merged = {category: list(topics) for category, topics in DEFAULT_TOPICS.items()}
+    for category, topics in extracted.items():
+        merged[category] = sorted(set(topics))
+    return merged
+
 
 def discover_live_topics() -> dict[str, list[str]] | None:
     """Return {category: [topics]} from a live `ros2 topic list`, or None if unreachable."""
@@ -85,16 +175,7 @@ def discover_live_topics() -> dict[str, list[str]] | None:
         return None
 
     live_topics = result.stdout.strip().splitlines()
-    categorized: dict[str, list[str]] = {cat: [] for cat in FALLBACK_TOPICS}
-    categorized["Other"] = []
-    for topic in live_topics:
-        for cat, known in FALLBACK_TOPICS.items():
-            if topic in known:
-                categorized[cat].append(topic)
-                break
-        else:
-            categorized["Other"].append(topic)
-    return {cat: topics for cat, topics in categorized.items() if topics}
+    return categorize_topics(live_topics, load_fallback_topics())
 
 
 class ROSInspectorApp(App):
@@ -150,8 +231,13 @@ class ROSInspectorApp(App):
         categorized = discover_live_topics()
         live = categorized is not None
         if categorized is None:
-            categorized = FALLBACK_TOPICS
-        tree.root.label = "Topics (live)" if live else "Topics (offline snapshot - ros2 unreachable)"
+            categorized = load_fallback_topics()
+        topic_count = sum(len(topics) for topics in categorized.values())
+        tree.root.label = (
+            f"Topics (live, {topic_count})"
+            if live
+            else f"Topics (offline snapshot, {topic_count})"
+        )
 
         for category, topics in categorized.items():
             color = CATEGORY_COLORS.get(category, "white")
@@ -213,10 +299,15 @@ class ROSInspectorApp(App):
                     break
                 log.write(line.decode(errors="replace").rstrip())
         except asyncio.CancelledError:
+            with contextlib.suppress(ProcessLookupError):
+                proc.terminate()
             raise
         finally:
             if proc.returncode is None:
-                proc.terminate()
+                with contextlib.suppress(ProcessLookupError):
+                    proc.terminate()
+                with contextlib.suppress(asyncio.TimeoutError):
+                    await asyncio.wait_for(proc.wait(), timeout=1)
 
 
 def main() -> None:
