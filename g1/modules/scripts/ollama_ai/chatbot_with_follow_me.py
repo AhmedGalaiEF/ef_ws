@@ -110,6 +110,10 @@ LOCO_YAW_SPEED_RPS = 0.45
 FOLLOW_TARGET_DISTANCE_M = 1.25
 FOLLOW_MAX_VX_MPS = 0.16
 FOLLOW_MAX_YAW_RPS = 0.35
+FOLLOW_MAX_RANGE_M = 4.5
+FOLLOW_MIN_PERSON_SCORE = 0.65
+FOLLOW_MIN_BOX_DEPTH_FRACTION = 0.18
+FOLLOW_LIDAR_CONFIRM_TOLERANCE_M = 0.65
 STOP_WORDS = {
     "a", "about", "and", "are", "as", "at", "be", "can", "could", "do",
     "does", "for", "from", "how", "i", "in", "is", "it", "me", "of",
@@ -218,6 +222,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--follow-rgbd-port", type=int, default=int(os.environ.get("G1_RGBD_PORT", "5555")))
     parser.add_argument("--follow-rgbd-topic", default=os.environ.get("G1_RGBD_TOPIC", ""))
     parser.add_argument("--follow-max-lidar-points", type=int, default=5000)
+    parser.add_argument("--follow-disable-lidar-confirm", action="store_true",
+                        help="Do not use lidar points to confirm/refine follow-me RGBD person targets.")
     parser.add_argument("--startup-speech", default="chatbot ready")
     parser.add_argument("--no-startup-speech", action="store_true")
     parser.add_argument("--audit-log", default="/tmp/ollama_chatbot.jsonl")
@@ -1080,6 +1086,7 @@ class FollowMeController:
         self.motion = motion
         self.zmq_context: Any | None = None
         self.zmq_socket: Any | None = None
+        self.lidar_robot: Any | None = None
         self.lock = threading.RLock()
         self.rgbd_lock = threading.Lock()
         self.stop_event = threading.Event()
@@ -1095,6 +1102,7 @@ class FollowMeController:
             "lidar_ok": False,
             "odom_pose": None,
             "rgbd_source": f"tcp://{self.args.follow_rgbd_host}:{self.args.follow_rgbd_port}",
+            "last_frame_age_s": None,
             "last_error": "",
             "last_update": 0.0,
         }
@@ -1135,6 +1143,12 @@ class FollowMeController:
         if self.http_thread and self.http_thread.is_alive():
             self.http_thread.join(timeout=0.5)
         self._close_rgbd_socket()
+        if self.lidar_robot is not None:
+            try:
+                self.lidar_robot.close()
+            except Exception:
+                pass
+            self.lidar_robot = None
 
     def _run(self) -> None:
         while not self.stop_event.is_set():
@@ -1146,9 +1160,9 @@ class FollowMeController:
                         "active": True,
                         "phase": "tracking" if target else "recognizing",
                         "target": target,
-                        "lidar_ok": False,
                         "odom_pose": None,
                         "last_error": "",
+                        "last_frame_age_s": self._latest_frame_age_s(),
                         "last_update": time.time(),
                     })
                 if target:
@@ -1174,6 +1188,7 @@ class FollowMeController:
         socket = self.zmq_context.socket(zmq.SUB)
         socket.setsockopt(zmq.SUBSCRIBE, str(self.args.follow_rgbd_topic).encode("utf-8"))
         socket.setsockopt(zmq.RCVTIMEO, 250)
+        socket.setsockopt(zmq.RCVHWM, 1)
         endpoint = f"tcp://{self.args.follow_rgbd_host}:{int(self.args.follow_rgbd_port)}"
         socket.connect(endpoint)
         self.zmq_socket = socket
@@ -1189,6 +1204,13 @@ class FollowMeController:
             except Exception:
                 pass
 
+    def _latest_frame_age_s(self) -> float | None:
+        with self.lock:
+            updated = float(self.status.get("last_update", 0.0) or 0.0)
+        if updated <= 0.0 or self.latest_jpeg is None:
+            return None
+        return max(0.0, time.time() - updated)
+
     def _recv_rgbd_frame(self, timeout: float = 0.35) -> dict[str, Any]:
         try:
             import zmq
@@ -1198,10 +1220,13 @@ class FollowMeController:
             socket = self._ensure_rgbd_socket()
             deadline = time.time() + max(0.1, float(timeout))
             last_error = ""
+            latest: list[bytes] | None = None
             while time.time() < deadline:
                 try:
                     parts = socket.recv_multipart()
                 except zmq.Again:
+                    if latest is not None:
+                        break
                     continue
                 except Exception as exc:
                     self._close_rgbd_socket()
@@ -1211,6 +1236,22 @@ class FollowMeController:
                 if len(parts) < 2:
                     last_error = f"expected RGBD multipart frame, got {len(parts)} part(s)"
                     continue
+                latest = [bytes(part) for part in parts]
+                while True:
+                    try:
+                        newer = socket.recv_multipart(flags=zmq.NOBLOCK)
+                    except zmq.Again:
+                        break
+                    except Exception as exc:
+                        self._close_rgbd_socket()
+                        raise RuntimeError(f"RGBD receive failed while draining: {exc}") from exc
+                    if len(newer) >= 4:
+                        newer = newer[-3:]
+                    if len(newer) >= 2:
+                        latest = [bytes(part) for part in newer]
+                if latest is None:
+                    continue
+                parts = latest
                 depth_scale = 0.001
                 if len(parts) >= 3 and len(parts[2]) >= 4:
                     try:
@@ -1219,8 +1260,8 @@ class FollowMeController:
                         depth_scale = 0.001
                 return {
                     "timestamp": time.time(),
-                    "rgb_jpeg": bytes(parts[0]),
-                    "depth_png": bytes(parts[1]),
+                    "rgb_jpeg": parts[0],
+                    "depth_png": parts[1],
                     "depth_scale_m_per_unit": depth_scale,
                 }
         endpoint = f"tcp://{self.args.follow_rgbd_host}:{int(self.args.follow_rgbd_port)}"
@@ -1231,13 +1272,15 @@ class FollowMeController:
         try:
             frame = self._recv_rgbd_frame(timeout=0.35)
             frame = self._decode_rgbd_frame(frame)
-            rgb_jpeg = bytes(frame["rgb_jpeg"])
-            self.latest_jpeg = self._draw_human_box(rgb_jpeg)
             target = self._target_from_rgbd(frame)
+            if target is not None and not bool(self.args.follow_disable_lidar_confirm):
+                target = self._confirm_target_with_lidar(target)
+            self.latest_jpeg = self._draw_human_box(frame, target)
             with self.lock:
                 self.status["rgbd_ok"] = True
                 self.status["last_rgbd_error"] = ""
                 self.status["rgbd_source"] = f"tcp://{self.args.follow_rgbd_host}:{int(self.args.follow_rgbd_port)}"
+                self.status["last_frame_age_s"] = 0.0
                 self.status["last_update"] = time.time()
             return target
         except Exception as exc:
@@ -1287,14 +1330,53 @@ class FollowMeController:
         return frame
 
     def _target_from_rgbd(self, frame: dict[str, Any]) -> dict[str, Any] | None:
-        depth = frame.get("center_depth_m")
         try:
-            depth_m = float(depth)
+            import numpy as np
         except Exception:
             return None
-        if not math.isfinite(depth_m) or depth_m <= 0.25 or depth_m > 4.5:
+
+        rgb = frame.get("rgb_bgr")
+        depth_m = frame.get("depth_m")
+        if rgb is None or depth_m is None:
             return None
-        return {"source": "rgbd_center", "x_m": depth_m, "y_m": 0.0, "confidence": 0.35}
+        h, w = rgb.shape[:2]
+        candidates = self._detect_people(rgb)
+        frame["person_candidates"] = candidates
+        best: dict[str, Any] | None = None
+        best_score = -1.0
+        for cand in candidates:
+            x, y, bw, bh = (int(cand["x"]), int(cand["y"]), int(cand["w"]), int(cand["h"]))
+            pad_x = max(2, int(bw * 0.12))
+            pad_top = max(2, int(bh * 0.12))
+            pad_bottom = max(2, int(bh * 0.08))
+            x0 = max(0, x + pad_x)
+            x1 = min(w, x + bw - pad_x)
+            y0 = max(0, y + pad_top)
+            y1 = min(h, y + bh - pad_bottom)
+            if x1 <= x0 or y1 <= y0:
+                continue
+            roi = depth_m[y0:y1, x0:x1]
+            valid = roi[(roi > 0.25) & (roi <= FOLLOW_MAX_RANGE_M)]
+            valid_fraction = float(valid.size) / float(max(1, roi.size))
+            if valid_fraction < FOLLOW_MIN_BOX_DEPTH_FRACTION:
+                continue
+            distance_m = float(np.median(valid))
+            if not math.isfinite(distance_m) or distance_m <= 0.25 or distance_m > FOLLOW_MAX_RANGE_M:
+                continue
+            center_px = float(x + bw * 0.5)
+            image_y_m = ((center_px / max(1.0, float(w))) - 0.5) * 2.0 * distance_m * 0.55
+            score = float(cand.get("score", 0.0)) + min(0.35, valid_fraction * 0.35)
+            if score > best_score:
+                best_score = score
+                best = {
+                    "source": "rgbd_person",
+                    "x_m": distance_m,
+                    "y_m": image_y_m,
+                    "confidence": min(0.95, score),
+                    "box": {"x": x, "y": y, "w": bw, "h": bh},
+                    "depth_valid_fraction": valid_fraction,
+                }
+        return best
 
     def _target_from_lidar(self, robot: Any) -> dict[str, Any] | None:
         points = robot.get_lidar_points(max_points=max(100, int(self.args.follow_max_lidar_points)))
@@ -1319,6 +1401,110 @@ class FollowMeController:
         mid = len(xs) // 2
         return {"source": "lidar_front_cluster", "x_m": xs[mid], "y_m": ys[mid], "confidence": min(1.0, len(xs) / 200.0)}
 
+    def _get_lidar_robot(self) -> Any:
+        if self.lidar_robot is None:
+            from sdk_client import Robot
+            self.lidar_robot = Robot(
+                iface=str(self.args.iface),
+                domain_id=int(self.args.domain_id),
+                safety_boot=False,
+                recover_dev_mode_on_init=False,
+                auto_start_sensors=True,
+                ollama_url=str(self.args.ollama_url),
+                chat_model=str(self.args.model),
+            )
+        return self.lidar_robot
+
+    def _confirm_target_with_lidar(self, target: dict[str, Any]) -> dict[str, Any] | None:
+        try:
+            robot = self._get_lidar_robot()
+            points = robot.get_lidar_points(max_points=max(100, int(self.args.follow_max_lidar_points)))
+        except Exception as exc:
+            with self.lock:
+                self.status["lidar_ok"] = False
+                self.status["last_lidar_error"] = str(exc)
+            return target
+        if not points:
+            with self.lock:
+                self.status["lidar_ok"] = False
+                self.status["last_lidar_error"] = "no lidar points"
+            return target
+
+        x_hint = float(target.get("x_m", 0.0) or 0.0)
+        y_hint = float(target.get("y_m", 0.0) or 0.0)
+        xs: list[float] = []
+        ys: list[float] = []
+        for point in points:
+            try:
+                x = float(point["x"])
+                y = float(point["y"])
+                z = float(point["z"])
+            except Exception:
+                continue
+            if not (0.35 <= x <= FOLLOW_MAX_RANGE_M and -0.55 <= z <= 1.9):
+                continue
+            if abs(x - x_hint) <= FOLLOW_LIDAR_CONFIRM_TOLERANCE_M and abs(y - y_hint) <= 0.65:
+                xs.append(x)
+                ys.append(y)
+        if len(xs) < 8:
+            with self.lock:
+                self.status["lidar_ok"] = True
+                self.status["last_lidar_error"] = "no confirming cluster near RGBD person"
+            if float(target.get("confidence", 0.0) or 0.0) < 0.82:
+                return None
+            return target
+
+        xs.sort()
+        ys.sort()
+        mid = len(xs) // 2
+        refined = dict(target)
+        refined.update({
+            "source": "rgbd_person_lidar",
+            "x_m": float(xs[mid]),
+            "y_m": float(ys[mid]),
+            "confidence": min(0.99, float(target.get("confidence", 0.0) or 0.0) + min(0.25, len(xs) / 120.0)),
+            "lidar_points": len(xs),
+        })
+        with self.lock:
+            self.status["lidar_ok"] = True
+            self.status["last_lidar_error"] = ""
+        return refined
+
+    def _detect_people(self, image: Any) -> list[dict[str, Any]]:
+        try:
+            import cv2
+        except Exception:
+            return []
+        h, w = image.shape[:2]
+        scale = 1.0
+        detect_image = image
+        if w > 640:
+            scale = 640.0 / float(w)
+            detect_h = max(1, int(h * scale))
+            detect_image = cv2.resize(image, (640, detect_h), interpolation=cv2.INTER_AREA)
+        dh, dw = detect_image.shape[:2]
+        min_height = max(64, int(h * 0.22))
+        hog = cv2.HOGDescriptor()
+        hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
+        boxes, weights = hog.detectMultiScale(detect_image, winStride=(8, 8), padding=(8, 8), scale=1.05)
+        candidates: list[dict[str, Any]] = []
+        for (dx, dy, dbw, dbh), weight in zip(boxes, weights):
+            x = int(dx / scale)
+            y = int(dy / scale)
+            bw = int(dbw / scale)
+            bh = int(dbh / scale)
+            score = float(weight)
+            aspect = float(bw) / float(max(1, bh))
+            if score < FOLLOW_MIN_PERSON_SCORE:
+                continue
+            if bh < min_height or not (0.22 <= aspect <= 0.85):
+                continue
+            if bw * bh < 0.015 * w * h or dbw * dbh < 0.015 * dw * dh:
+                continue
+            candidates.append({"x": int(x), "y": int(y), "w": int(bw), "h": int(bh), "score": score})
+        candidates.sort(key=lambda item: float(item["score"]), reverse=True)
+        return candidates[:4]
+
     def _follow_target(self, target: dict[str, Any]) -> None:
         if not bool(self.args.enable_motion):
             return
@@ -1340,22 +1526,27 @@ class FollowMeController:
         with self.lock:
             self.status["last_command"] = {"vx": vx, "vy": 0.0, "vyaw": vyaw, "duration_s": 0.35}
 
-    def _draw_human_box(self, rgb_jpeg: bytes) -> bytes:
+    def _draw_human_box(self, frame: dict[str, Any], target: dict[str, Any] | None) -> bytes:
+        rgb_jpeg = bytes(frame.get("rgb_jpeg", b""))
         try:
             import cv2
             import numpy as np
-            image = cv2.imdecode(np.frombuffer(rgb_jpeg, dtype=np.uint8), cv2.IMREAD_COLOR)
+            image = frame.get("rgb_bgr")
+            if image is not None:
+                image = image.copy()
+            else:
+                image = cv2.imdecode(np.frombuffer(rgb_jpeg, dtype=np.uint8), cv2.IMREAD_COLOR)
             if image is None:
                 return rgb_jpeg
-            hog = cv2.HOGDescriptor()
-            hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
-            boxes, weights = hog.detectMultiScale(image, winStride=(8, 8), padding=(8, 8), scale=1.08)
-            for (x, y, w, h), weight in zip(boxes, weights):
-                if float(weight) < 0.25:
-                    continue
-                cv2.rectangle(image, (int(x), int(y)), (int(x + w), int(y + h)), (0, 255, 0), 2)
-                cv2.putText(image, "human", (int(x), max(20, int(y) - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-                break
+            for cand in frame.get("person_candidates", []) or []:
+                x, y, w, h = int(cand["x"]), int(cand["y"]), int(cand["w"]), int(cand["h"])
+                cv2.rectangle(image, (x, y), (x + w, y + h), (80, 140, 255), 1)
+            if target and target.get("box"):
+                box = target["box"]
+                x, y, w, h = int(box["x"]), int(box["y"]), int(box["w"]), int(box["h"])
+                cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                label = f"human {float(target.get('confidence', 0.0)):.2f} {float(target.get('x_m', 0.0)):.1f}m"
+                cv2.putText(image, label, (x, max(20, y - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 0), 2)
             ok, encoded = cv2.imencode(".jpg", image, [int(cv2.IMWRITE_JPEG_QUALITY), 82])
             return encoded.tobytes() if ok else rgb_jpeg
         except Exception:
@@ -1378,7 +1569,6 @@ class FollowMeController:
                     self._send_json(controller.snapshot())
                     return
                 if path == "/rgb.jpg":
-                    controller._update_rgb()
                     data = controller.latest_jpeg
                     if data:
                         self.send_response(200)
