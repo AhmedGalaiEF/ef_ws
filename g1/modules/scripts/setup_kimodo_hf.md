@@ -32,9 +32,11 @@ The int8/nf4/fp4 modes come from a third-party fork,
 [matbeedotcom/kimodo](https://github.com/matbeedotcom/kimodo), which adds
 `bitsandbytes` quantization of the text encoder — **it is not official NVIDIA
 code**, and neither that fork nor `bitsandbytes` documents Jetson/aarch64 support.
-The script installs a Jetson-built `bitsandbytes` wheel if one is available on the
-[jetson-ai-lab](https://pypi.jetson-ai-lab.io/) community index; if it isn't,
-quantization can't proceed without building `bitsandbytes` from source yourself.
+On JetPack 5, the current upstream `bitsandbytes` path does not match this robot's
+Python 3.8 / PyTorch 2.0 / CUDA 11.4 stack. The script can install CUDA PyTorch,
+but current Kimodo's dependency tree also pulls Python 3.10+ packages. That means
+JetPack 5 can be prepared for torch, but full Kimodo installation is not a
+compatible on-robot path on this image.
 
 None of the numbers above include the RAM your robot's ROS/DDS control stack is
 already using on that same Jetson. `--quantize nf4` (the script's default) is the
@@ -64,12 +66,9 @@ standalone/tetherless operation is a hard requirement.
 4. **~40 GB free disk** as a starting point (default `--min-free-gb 40`); more if
    you use `--quantize cpu`/`none`, which pull the full fp16 Llama-3-8B weights.
 5. Know your **JetPack version** ahead of time if possible (`cat /etc/nv_tegra_release`).
-   The script currently only has a wheel-index mapping for **JetPack 6.x**
-   (via `pypi.jetson-ai-lab.io/jp6/cu126`). JetPack 5.x Jetsons need a manual
-   `--index-url` — the community index no longer publishes `jp5` wheels; you'd
-   need NVIDIA's official per-version wheel from the
-   [Jetson PyTorch forum thread](https://forums.developer.nvidia.com/t/pytorch-for-jetson/72048)
-   instead.
+   JetPack 5.x uses NVIDIA's direct Python 3.8 (`cp38`) torch wheel. JetPack 6.x
+   can use the `pypi.jetson-ai-lab.io/jp6/...` indexes. The `jp6` devpi links do
+   not help JetPack 5.
 
 ## Usage
 
@@ -88,8 +87,13 @@ Full install with the default (most likely to fit) quantization mode:
 ./setup_kimodo_hf.bash --run-smoke-test
 ```
 
-Skip quantization entirely and run the text encoder on CPU (only realistic if
-you have more than 16 GB of unified memory, e.g. a future 32 GB Jetson variant):
+On this JetPack 5 robot, the script will use `~/.guv/envs/base` because NVIDIA's
+JetPack 5 torch wheels are Python 3.8 wheels. It will not use
+`~/.guv/envs/unitree` for torch unless torch is already installed there.
+
+Skip quantization entirely and run the text encoder on CPU. This still requires
+a compatible Kimodo/Python/torch stack, so it is not a workaround for JetPack 5's
+Python 3.8 CUDA torch versus Kimodo Python 3.10+ dependency conflict:
 
 ```bash
 ./setup_kimodo_hf.bash --quantize cpu
@@ -101,11 +105,39 @@ Non-interactive (CI-style) run, no confirmation prompts:
 ./setup_kimodo_hf.bash --yes --run-smoke-test
 ```
 
-Override the PyTorch wheel index (e.g. you found a `jp5` wheel manually):
+Override the PyTorch wheel source:
 
 ```bash
-./setup_kimodo_hf.bash --index-url https://example.invalid/your-jp5-index
+./setup_kimodo_hf.bash --torch-wheel https://example.invalid/torch-cp38-linux_aarch64.whl
+./setup_kimodo_hf.bash --index-url https://example.invalid/your-jp6-index
 ```
+
+Install just PyTorch on JetPack 5 and stop before Kimodo/bitsandbytes:
+
+```bash
+./setup_kimodo_hf.bash --torch-only
+```
+
+Try the active Python 3.10 `unitree` environment with generic PyTorch instead
+of NVIDIA's JetPack 5 CUDA wheel:
+
+```bash
+source ~/.guv/envs/unitree/bin/activate
+./setup_kimodo_hf.bash --generic-torch --quantize cpu
+```
+
+This may satisfy Kimodo's Python 3.10+ dependency side, but generic PyTorch is
+not the NVIDIA JetPack CUDA wheel. Check `torch.cuda.is_available()` before
+expecting GPU acceleration.
+
+On JetPack 5/aarch64 this mode installs base `kimodo`, not `kimodo[all]`.
+The `all` extra pulls `py-soma-x`, which depends on `usd-core`; current
+`usd-core` wheels are not published for aarch64 Python 3.10.
+It also skips Kimodo's bundled `motion_correction` C++ extension because its
+current CMake configuration uses x86-only SIMD flags on ARM.
+The script installs Kimodo model/runtime dependencies and skips visualization
+dependencies such as `scenepic` and Gradio, because `scenepic` currently fails
+to build from sdist on this aarch64 Python 3.10 stack.
 
 Full option list: `./setup_kimodo_hf.bash --help`.
 
@@ -117,12 +149,12 @@ Full option list: `./setup_kimodo_hf.bash --help`.
    GO/NO-GO for the chosen `--quantize` mode (see table above for the
    estimates it uses).
 3. Installs system packages via `apt-get` (`git`, `build-essential`, `cmake`,
-   `ninja-build`, `python3.10`, `python3.10-venv`) — prompts for confirmation
-   before running (needs `sudo`). Kimodo requires Python 3.10; on JetPack 5
-   (Python 3.8 by default) it offers to add the `deadsnakes` PPA.
-4. Creates a venv (default `~/kimodo_venv`) and installs `torch`/`torchvision`
-   from the Jetson-specific wheel index, then `bitsandbytes` from the same
-   index if a quantized mode was selected.
+   `ninja-build`, plus Jetson torch runtime libraries on JetPack 5) — prompts
+   for confirmation before running (needs `sudo`).
+4. Reuses a compatible virtual environment. On JetPack 5 that means Python 3.8
+   (`~/.guv/envs/base` on this robot); on JetPack 6 that means Python 3.10.
+   It installs `torch` from a Jetson-specific direct wheel or index, plus
+   `bitsandbytes` from the configured index if a quantized mode was selected.
 5. `pip install`s `kimodo[all]` — from the official `nv-tlabs/kimodo` repo for
    `--quantize cpu|none`, or the `matbeedotcom/kimodo` quantization fork for
    `--quantize nf4|fp4|int8`.
@@ -150,6 +182,14 @@ source ~/kimodo_venv/bin/activate
 python3 kimodo_interactive.py --snapshot dev_stand_snapshot.json --no-robot
 ```
 
+If the script used the onboard JetPack 5 `guv` base environment, activate that
+environment for later runs:
+
+```bash
+source ~/.guv/envs/base/bin/activate
+python kimodo_interactive.py --snapshot dev_stand_snapshot.json --no-robot
+```
+
 `--no-robot` runs Kimodo generation and the full safety analysis (limit
 violations, ramp warnings, high-velocity frames) and stops at the replay
 confirmation — nothing is sent to the robot. Drop `--no-robot` (and confirm
@@ -162,21 +202,54 @@ ready to actually replay one on the hanging robot.
 than the onboard Jetson (e.g. your workstation). SSH into the robot's onboard
 computer first.
 
-**`No known Jetson PyTorch wheel index for this JetPack version`** — you're on
-JetPack 5.x (L4T R35) or older. The `jetson-ai-lab` community index currently
-only serves JetPack 6 wheels. Find a matching official NVIDIA wheel on the
-[Jetson PyTorch forum thread](https://forums.developer.nvidia.com/t/pytorch-for-jetson/72048)
-for your exact JetPack/CUDA version and pass it with `--index-url`.
+**`Selected Python is 3.10 ... JetPack 5 torch wheels require Python 3.8`** —
+JetPack 5 NVIDIA torch wheels are `cp38`. Activate `~/.guv/envs/base`, or let
+the script auto-select it. A `jp6` index cannot install a JetPack 5 CUDA wheel.
+
+**`No torch wheel configured for this JetPack`** — pass a direct NVIDIA wheel
+with `--torch-wheel`. `--index-url` is mainly for JetPack 6 indexes.
+
+**`current Kimodo cannot be installed on this JetPack 5 Python 3.8 environment`** —
+torch CUDA works on JetPack 5 only through NVIDIA's Python 3.8 (`cp38`) wheel,
+but current Kimodo dependencies require Python 3.10+ packages. Use `--torch-only`,
+upgrade to JetPack 6, or run Kimodo off-board on a workstation and send motions
+to the robot.
+
+**Using `--generic-torch`** — this keeps the active Python 3.10 environment and
+installs generic PyTorch from the configured/default package index. It is useful
+for testing Kimodo dependency resolution, but it is not expected to provide
+JetPack 5 CUDA acceleration unless your index supplies a compatible aarch64 CUDA
+build. On aarch64, avoid `--kimodo-extra all` because `py-soma-x`/`usd-core`
+does not resolve for Python 3.10 on this platform. The script also sets
+`SKIP_MOTION_CORRECTION_IN_SETUP=1` for this mode, so Kimodo postprocessing that
+imports `motion_correction` will not be available. This path is intended for
+`kimodo.model.load_model`, not the full Kimodo web demo/visualization stack.
 
 **`bitsandbytes install failed`** — no prebuilt wheel exists for your
-JetPack/CUDA combination on the community index. Building `bitsandbytes` from
-source for Jetson's compute capability is not automated by this script.
-Re-run with `--quantize cpu` to skip quantization (only advisable if you have
-enough unified RAM — see the table above), or investigate a source build.
+JetPack/CUDA combination on the community index. Current upstream
+`bitsandbytes` requires newer Python/PyTorch/CUDA than JetPack 5 provides.
+This is separate from the Kimodo Python-version conflict above.
 
 **HF download returns 403 on `meta-llama/Meta-Llama-3-8B-Instruct`** — you
 haven't accepted the Llama 3 license on huggingface.co with the account whose
 token you're using. Accept it on the model page, then retry.
+
+Check login state:
+
+```bash
+hf auth whoami
+```
+
+If it says `Not logged in`, create a read token at
+`https://huggingface.co/settings/tokens`, accept the Llama 3 license at
+`https://huggingface.co/meta-llama/Meta-Llama-3-8B-Instruct`, then run:
+
+```bash
+hf auth login
+```
+
+The setup script now verifies access to the gated Llama config before reporting
+that Hugging Face auth is ready.
 
 **Generation runs but is extremely slow, or the process gets OOM-killed** —
 the peak-memory estimates in this script are approximate; real usage depends
