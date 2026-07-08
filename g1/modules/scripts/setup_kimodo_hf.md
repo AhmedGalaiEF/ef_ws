@@ -182,6 +182,14 @@ source ~/kimodo_venv/bin/activate
 python3 kimodo_interactive.py --snapshot dev_stand_snapshot.json --no-robot
 ```
 
+If you are using a text encoder service on another machine, force API mode so
+Kimodo does not fall back to loading the local 8B Llama encoder:
+
+```bash
+TEXT_ENCODER_MODE=api TEXT_ENCODER_URL=http://HOST:9550/ \
+  python3 kimodo_interactive.py --snapshot dev_stand_snapshot.json --no-robot
+```
+
 If the script used the onboard JetPack 5 `guv` base environment, activate that
 environment for later runs:
 
@@ -256,6 +264,22 @@ the peak-memory estimates in this script are approximate; real usage depends
 on prompt length, number of frames, and denoising steps. Reduce `--num-frames`
 and `--steps` in `kimodo_interactive.py`, and check `dmesg` for OOM-killer
 messages if the process dies without a Python traceback.
+
+If startup prints `Text encoder service is unreachable, falling back to local
+LLM2Vec encoder` and then the process is killed, no text encoder API was
+reachable and Kimodo loaded the local Llama-3-8B encoder. Start
+`python -m kimodo.scripts.run_text_encoder_server` on a machine with enough
+RAM/VRAM and run with `TEXT_ENCODER_MODE=api TEXT_ENCODER_URL=http://HOST:9550/`,
+or use a quantized local install and export `LLM2VEC_QUANTIZE=nf4` before
+running.
+
+If Kimodo reports that `kimodo.model.text_encoder_api.TextEncoderAPI` cannot be
+located, make sure the active robot-side Python environment has the API client
+dependency installed:
+
+```bash
+uv pip install gradio_client
+```
 
 **Robot control gets sluggish or drops out while Kimodo is loaded** — this is
 the unified-memory/CPU-contention tradeoff described above: the onboard Jetson

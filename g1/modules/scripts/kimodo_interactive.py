@@ -35,12 +35,14 @@ Options
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import math
 import os
 import sys
 import threading
 import time
+import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -92,6 +94,9 @@ BODY_JOINTS: List[Tuple[str, int, float, float]] = [
     ("right_arm.wrist_yaw",     28,  -1.6144,   1.6144),
 ]
 N_JOINTS = len(BODY_JOINTS)   # 29
+
+_DEFAULT_TEXT_ENCODER_URL = "http://127.0.0.1:9550/"
+_LOW_RAM_TEXT_ENCODER_GIB = 20.0
 
 _KP: List[float] = [60,60,60,100,40,40, 60,60,60,100,40,40, 60,40,40,
                      40,40,40,40,40,40,40, 40,40,40,40,40,40,40]
@@ -467,6 +472,82 @@ def _input(prompt:str) -> str:
         print(); return "q"
 
 
+def _system_ram_gib() -> Optional[float]:
+    """Return total system RAM in GiB without importing optional deps."""
+    try:
+        pages = os.sysconf("SC_PHYS_PAGES")
+        page_size = os.sysconf("SC_PAGE_SIZE")
+        return (pages * page_size) / (1024 ** 3)
+    except (AttributeError, OSError, ValueError):
+        return None
+
+
+def _text_encoder_service_reachable(url: str, timeout_s: float = 1.0) -> bool:
+    try:
+        with urllib.request.urlopen(url, timeout=timeout_s):
+            return True
+    except Exception:
+        return False
+
+
+def _gradio_client_installed() -> bool:
+    return importlib.util.find_spec("gradio_client") is not None
+
+
+def _configure_text_encoder_env(args: argparse.Namespace) -> None:
+    if args.text_encoder_mode:
+        os.environ["TEXT_ENCODER_MODE"] = args.text_encoder_mode
+    if args.text_encoder_url:
+        os.environ["TEXT_ENCODER_URL"] = args.text_encoder_url
+
+
+def _guard_kimodo_text_encoder(args: argparse.Namespace) -> None:
+    """Avoid Kimodo's default local 8B text-encoder fallback on low-RAM hosts."""
+    if args.allow_local_text_encoder:
+        return
+
+    mode = os.environ.get("TEXT_ENCODER_MODE", "auto").lower()
+    url = os.environ.get("TEXT_ENCODER_URL", _DEFAULT_TEXT_ENCODER_URL)
+    has_quantized_encoder = bool(os.environ.get("LLM2VEC_QUANTIZE"))
+    total_ram_gib = _system_ram_gib()
+    low_ram = total_ram_gib is not None and total_ram_gib < _LOW_RAM_TEXT_ENCODER_GIB
+
+    if mode in ("api", "auto") and not _gradio_client_installed():
+        raise SystemExit(
+            "Kimodo TEXT_ENCODER_MODE needs the Python package gradio_client for "
+            "the TextEncoderAPI client, but it is not installed in this environment.\n\n"
+            "Install it in the active venv, for example:\n"
+            "  uv pip install gradio_client\n\n"
+            "Then run with a reachable text encoder service:\n"
+            "  TEXT_ENCODER_MODE=api TEXT_ENCODER_URL=http://HOST:9550/ "
+            "python kimodo_interactive.py --no-robot"
+        )
+
+    if mode == "api":
+        return
+    if mode == "auto" and _text_encoder_service_reachable(url):
+        return
+    if has_quantized_encoder:
+        return
+    if not low_ram:
+        return
+
+    ram_text = f"{total_ram_gib:.1f} GiB" if total_ram_gib is not None else "unknown RAM"
+    raise SystemExit(
+        "Kimodo is about to use the local LLM2Vec/Llama-3-8B text encoder on "
+        f"this {ram_text} system. That path typically exceeds the G1 Jetson's "
+        "memory and gets killed by the kernel.\n\n"
+        "Use one of these instead:\n"
+        "  1. Start a text encoder service on a larger machine, then run:\n"
+        "     TEXT_ENCODER_MODE=api TEXT_ENCODER_URL=http://HOST:9550/ "
+        "python kimodo_interactive.py --no-robot\n"
+        "  2. If you really have a quantized local Kimodo install, export "
+        "LLM2VEC_QUANTIZE=nf4 (or fp4/int8) before running.\n"
+        "  3. To force the risky local fallback anyway, pass "
+        "--allow-local-text-encoder."
+    )
+
+
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -492,15 +573,25 @@ def main() -> None:
                          "Runs Kimodo generation and the safety analysis normally, stopping at "
                          "the replay confirmation instead of actually publishing to rt/lowcmd. "
                          "Useful for testing motion generation without the SDK/robot set up.")
+    ap.add_argument("--text-encoder-mode", choices=("api", "auto", "local"),
+                    help="Set Kimodo TEXT_ENCODER_MODE before loading the model. "
+                         "Use 'api' to avoid the local Llama-3-8B fallback.")
+    ap.add_argument("--text-encoder-url",
+                    help=f"Set Kimodo TEXT_ENCODER_URL (default: {_DEFAULT_TEXT_ENCODER_URL})")
+    ap.add_argument("--allow-local-text-encoder", action="store_true",
+                    help="Allow Kimodo to load the local LLM2Vec/Llama-3-8B text encoder even "
+                         "on low-RAM hosts. This can OOM-kill Python on the G1 Jetson.")
     args = ap.parse_args()
 
     uc = not args.no_color and sys.stdout.isatty()
+    _configure_text_encoder_env(args)
 
     # ── Load Kimodo ────────────────────────────────────────────────────────────
     kimodo_model = None
     if not args.dry_run:
         print("Loading Kimodo model …")
         try:
+            _guard_kimodo_text_encoder(args)
             from kimodo.model import load_model
             kimodo_model = load_model("nvidia/Kimodo-G1-SEED-v1")
             print("  Kimodo ready.\n")
