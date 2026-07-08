@@ -52,12 +52,12 @@ DEFAULT_SYSTEM_PROMPT = (
 )
 ROUTER_PROMPT = (
     "Return only JSON with this schema: "
-    "{\"intent\":\"one of: rag_question, chat, thanks, stop, gesture, unknown\","
+    "{\"intent\":\"one of: rag_question, chat, thanks, stop, gesture, holding_status, unknown\","
     "\"announce\":\"short phrase the robot should say before acting\","
     "\"needs_knowledge\":true,"
     "\"motion\":\"one of: thinking, explain, thanks, face_wave, high_wave, clap, shake_hand, none\"}. "
     "Use rag_question for factual questions that need stored knowledge. "
-    "Use chat for normal conversational questions. Use thanks for gratitude. "
+    "Use chat for normal conversational questions. Use holding_status when asked whether the robot is holding something. Use thanks for gratitude. "
     "Use gesture for requests to wave, greet, clap, or shake hands. "
     "Use stop for stop/cancel requests."
 )
@@ -100,7 +100,7 @@ UNINTELLIGIBLE_ASR = {
     "foreign letter",
     "foreign letters",
 }
-VALID_INTENTS = {"rag_question", "chat", "thanks", "stop", "gesture", "unknown", "release_arms", "diagnostic", "locomotion", "self_intro"}
+VALID_INTENTS = {"rag_question", "chat", "thanks", "stop", "gesture", "unknown", "release_arms", "diagnostic", "locomotion", "self_intro", "holding_status"}
 VALID_MOTIONS = {"thinking", "explain", "thanks", "face_wave", "high_wave", "clap", "shake_hand", "none"}
 ROBOT_ACTION_INTENTS = {"release_arms", "diagnostic", "locomotion"}
 LOCO_DURATION_S = 1.0
@@ -211,6 +211,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--no-startup-speech", action="store_true")
     parser.add_argument("--audit-log", default="/tmp/ollama_chatbot.jsonl")
     parser.add_argument("--motion-worker", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--no-tactile-status", action="store_true",
+                        help="Disable Dex3 tactile status answers.")
+    parser.add_argument("--tactile-threshold", type=float, default=100000.0,
+                        help="Raw tactile pressure threshold for deciding that a hand is holding something.")
+    parser.add_argument("--tactile-timeout-s", type=float, default=2.0,
+                        help="Seconds to wait for initial Dex3 tactile state at startup.")
+    parser.add_argument("--tactile-max-age-s", type=float, default=2.0,
+                        help="Maximum age of tactile data used for holding status answers.")
     return parser.parse_args()
 
 
@@ -488,6 +496,88 @@ class Speaker:
             proc.kill()
         except Exception as exc:
             self.logger.warning(f"Could not stop speech process: {exc}")
+
+
+class TactileHoldingMonitor:
+    def __init__(self, args: argparse.Namespace, logger: Any) -> None:
+        self.args = args
+        self.logger = logger
+        self.enabled = not bool(args.no_tactile_status)
+        self.ready = False
+        self.error = ""
+        self.subscribers: list[Any] = []
+        if not self.enabled:
+            return
+        try:
+            from test_dex3_tactile import (
+                HAND_STATE_TOPIC_BY_SIDE,
+                LatestTactileState,
+                collect_latest_snapshots,
+                ensure_channel_factory_initialized,
+                wait_for_initial_snapshots,
+            )
+
+            self._collect_latest_snapshots = collect_latest_snapshots
+            ensure_channel_factory_initialized(int(args.domain_id), str(args.iface))
+            self.subscribers = [
+                LatestTactileState(hand, HAND_STATE_TOPIC_BY_SIDE[hand], 20)
+                for hand in ("left", "right")
+            ]
+            wait_for_initial_snapshots(self.subscribers, float(args.tactile_timeout_s))
+            self.ready = True
+            logger.info(
+                "Dex3 tactile status ready: "
+                + ", ".join(getattr(sub, "topic", "?") for sub in self.subscribers)
+            )
+        except Exception as exc:
+            self.enabled = False
+            self.error = str(exc)
+            logger.warning(f"Dex3 tactile status unavailable: {exc}")
+
+    def answer(self) -> tuple[str, dict[str, Any]]:
+        if not self.enabled or not self.ready:
+            answer = "I cannot read my hand sensors right now."
+            return answer, {"ok": False, "answer": answer, "error": self.error or "tactile status disabled"}
+        snapshots = self._collect_latest_snapshots(self.subscribers)
+        threshold = float(self.args.tactile_threshold)
+        max_age_s = float(self.args.tactile_max_age_s)
+        holding: list[str] = []
+        details: dict[str, Any] = {}
+        fresh_hands = 0
+        for hand in ("left", "right"):
+            snapshot = snapshots.get(hand)
+            if snapshot is None:
+                details[hand] = {"ok": False, "reason": "missing"}
+                continue
+            age_s = max(0.0, time.time() - float(snapshot.timestamp))
+            max_value = snapshot.max_value
+            fresh = age_s <= max_age_s
+            if fresh:
+                fresh_hands += 1
+            is_holding = fresh and max_value is not None and float(max_value) >= threshold
+            if is_holding:
+                holding.append(hand)
+            details[hand] = {
+                "ok": fresh,
+                "age_s": round(age_s, 3),
+                "max": max_value,
+                "threshold": threshold,
+                "holding": is_holding,
+                "valid_count": snapshot.valid_count,
+                "active_count": snapshot.active_count,
+            }
+        if fresh_hands == 0:
+            answer = "I cannot read my hand sensors right now."
+            return answer, {"ok": False, "answer": answer, "holding": holding, "hands": details}
+        if holding == ["left", "right"]:
+            answer = "Yes, I am holding something in both hands."
+        elif holding == ["left"]:
+            answer = "Yes, I am holding something in my left hand."
+        elif holding == ["right"]:
+            answer = "Yes, I am holding something in my right hand."
+        else:
+            answer = "No."
+        return answer, {"ok": True, "answer": answer, "holding": holding, "hands": details}
 
 
 class PrintLogger:
@@ -1049,6 +1139,7 @@ class ChatbotNode(Node):
         self.args = args
         self.ollama = OllamaClient(args)
         self.speaker = Speaker(args, self.get_logger())
+        self.tactile = TactileHoldingMonitor(args, self.get_logger())
         self.motion = motion if motion is not None else MotionWorkerClient(args, self.get_logger())
         self.diagnostic_robot: Any | None = None
         self.audit_path = Path(args.audit_log).expanduser()
@@ -1379,6 +1470,16 @@ class ChatbotNode(Node):
                 self.speaker.say_async(answer)
                 self._publish({"ok": True, "intent": intent, "answer": answer, "elapsed_s": time.time() - started})
                 return
+            if intent == "holding_status":
+                answer, tactile_result = self.tactile.answer()
+                self.speaker.say_async(answer)
+                self._publish({
+                    **tactile_result,
+                    "intent": intent,
+                    "answer": answer,
+                    "elapsed_s": time.time() - started,
+                })
+                return
             if announce:
                 self.speaker.say(announce)
             if bool(route.get("needs_knowledge", intent == "rag_question")):
@@ -1469,6 +1570,8 @@ class ChatbotNode(Node):
         low = text.lower().strip()
         if self._is_stop_request(text):
             return {"intent": "stop", "announce": "Stopping.", "needs_knowledge": False, "motion": "none"}
+        if self._is_holding_status_question(low):
+            return {"intent": "holding_status", "announce": "", "needs_knowledge": False, "motion": "none"}
         if any(phrase in low for phrase in ("release arm", "release arms", "release your arm", "release your arms", "release hand", "release hands", "release your hands")):
             return {"intent": "release_arms", "announce": "Releasing my arms.", "needs_knowledge": False, "motion": "none"}
         loco = self._route_locomotion_fast(low)
@@ -1540,6 +1643,33 @@ class ChatbotNode(Node):
             "vy": vy,
             "vyaw": vyaw,
         }
+
+    @staticmethod
+    def _is_holding_status_question(low: str) -> bool:
+        normalized = " ".join(str(low).strip().strip(string.punctuation + "，。！？、；：").split())
+        if not normalized:
+            return False
+        direct_phrases = (
+            "are you holding something",
+            "are you holding anything",
+            "are you holding an object",
+            "do you hold something",
+            "do you hold anything",
+            "do you have something in your hand",
+            "do you have something in your hands",
+            "is there something in your hand",
+            "is there something in your hands",
+            "what are you holding",
+            "which hand is holding something",
+            "which hand are you holding something in",
+        )
+        if any(phrase in normalized for phrase in direct_phrases):
+            return True
+        has_holding_word = any(word in normalized for word in ("holding", "hold", "gripping", "grip"))
+        has_object_word = any(word in normalized for word in ("something", "anything", "object", "thing"))
+        has_robot_word = any(word in normalized for word in ("you", "your"))
+        has_hand_word = "hand" in normalized or "hands" in normalized
+        return has_holding_word and (has_object_word or has_hand_word) and has_robot_word
 
     def _interrupt_now(self, source: str) -> None:
         self.interrupt_event.set()
