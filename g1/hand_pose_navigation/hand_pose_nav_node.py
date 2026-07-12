@@ -75,7 +75,12 @@ class HandPoseNavNode(Node):
     same executor context.
     """
 
-    def __init__(self, config: Optional[Dict] = None, robot=None) -> None:
+    def __init__(
+        self,
+        config: Optional[Dict] = None,
+        robot=None,
+        fixed_result=None,
+    ) -> None:
         super().__init__("hand_pose_nav_node")
         config = config or {}
 
@@ -146,6 +151,7 @@ class HandPoseNavNode(Node):
             method=detection_method,
             aruco_id=aruco_id,
             marker_size_m=marker_size_m,
+            fixed_result=fixed_result,
         )
         self.get_logger().info(
             f"[Step 2] TargetDetector({detection_method}) created."

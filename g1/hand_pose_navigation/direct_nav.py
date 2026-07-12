@@ -62,7 +62,11 @@ class DirectTFUtils:
 
 
 class DirectHandPoseNav:
-    def __init__(self, config: Dict) -> None:
+    def __init__(
+        self,
+        config: Dict,
+        fixed_result: Optional[DetectionResult] = None,
+    ) -> None:
         self._config = dict(config)
         arm = config.get("arm", "right")
         detection_method = config.get("detection_method", "aruco")
@@ -72,6 +76,7 @@ class DirectHandPoseNav:
             method=detection_method,
             aruco_id=config.get("aruco_id", 0),
             marker_size_m=config.get("marker_size_m", 0.05),
+            fixed_result=fixed_result,
         )
         self._fk = ArmFK(arm=arm)
         self._tf_utils = DirectTFUtils(

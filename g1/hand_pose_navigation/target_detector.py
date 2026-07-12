@@ -109,17 +109,21 @@ class TargetDetector:
         aruco_dict: int = cv2.aruco.DICT_4X4_50,
         aruco_id: int = 0,
         marker_size_m: float = 0.05,
+        marker_sizes: Optional[Dict[int, float]] = None,
         hsv_lower: Tuple[int, int, int] = (100, 150, 50),
         hsv_upper: Tuple[int, int, int] = (130, 255, 255),
         min_area_px: int = 500,
+        fixed_result: Optional["DetectionResult"] = None,
     ) -> None:
         self.method = method
         self.K = intrinsics or CameraIntrinsics()
         self.aruco_id = aruco_id
         self.marker_size_m = marker_size_m
+        self.marker_sizes = dict(marker_sizes or {})
         self.hsv_lower = np.array(hsv_lower, dtype=np.uint8)
         self.hsv_upper = np.array(hsv_upper, dtype=np.uint8)
         self.min_area_px = min_area_px
+        self._fixed_result = fixed_result
 
         # ArUco detector (OpenCV 4.7+)
         self._aruco_dict = cv2.aruco.getPredefinedDictionary(aruco_dict)
@@ -133,6 +137,16 @@ class TargetDetector:
             [0, 0, 1],
         ], dtype=np.float64)
         self._dist = np.zeros((4,), dtype=np.float64)
+
+    # ------------------------------------------------------------------
+    def set_fixed_result(self, result: Optional["DetectionResult"]) -> None:
+        """Set (or clear) the pose returned by method="fixed".
+
+        Used by the grab launcher scripts: perception/selection happens once
+        in the recognition UI, and the grab run should keep tracking that
+        exact pre-computed pose rather than re-running detection every tick.
+        """
+        self._fixed_result = result
 
     # ------------------------------------------------------------------
     def detect(
@@ -156,8 +170,65 @@ class TargetDetector:
             return self._detect_color_blob(rgb_bgr, depth_m)
         elif self.method == "center":
             return self._detect_center(rgb_bgr, depth_m)
+        elif self.method == "fixed":
+            return self._fixed_result
         else:
             raise ValueError(f"Unknown detection method: {self.method!r}")
+
+    # ------------------------------------------------------------------
+    # Multi-marker scan — every visible tag, not just self.aruco_id.
+    # Used by the recognition UI to show the hand tag + any tagged objects
+    # at once, rather than tracking a single fixed id.
+    # ------------------------------------------------------------------
+
+    def detect_all_aruco(
+        self,
+        rgb_bgr: np.ndarray,
+        depth_m: np.ndarray,
+    ) -> Dict[int, DetectionResult]:
+        """Detect every ArUco marker visible in the frame.
+
+        Returns a dict keyed by marker id. Each DetectionResult uses
+        ``marker_sizes.get(id, marker_size_m)`` as the physical tag size, so
+        differently-sized hand vs. object tags are decoded correctly.
+        """
+        gray = cv2.cvtColor(rgb_bgr, cv2.COLOR_BGR2GRAY)
+        corners, ids, _ = self._aruco_detector.detectMarkers(gray)
+        results: Dict[int, DetectionResult] = {}
+        if ids is None:
+            return results
+
+        for idx, marker_id in enumerate(ids.flatten()):
+            marker_id = int(marker_id)
+            size_m = self.marker_sizes.get(marker_id, self.marker_size_m)
+            s = size_m / 2.0
+            obj_pts = np.array([
+                [-s, s, 0], [s, s, 0], [s, -s, 0], [-s, -s, 0]
+            ], dtype=np.float64)
+
+            ok, rvec, tvec = cv2.solvePnP(
+                obj_pts, corners[idx].reshape(4, 2),
+                self._cam_mat, self._dist,
+                flags=cv2.SOLVEPNP_IPPE_SQUARE,
+            )
+            if not ok:
+                continue
+
+            R, _ = cv2.Rodrigues(rvec)
+            T = _make_T(tvec.flatten(), R)
+
+            cx_px = float(corners[idx][0, :, 0].mean())
+            cy_px = float(corners[idx][0, :, 1].mean())
+            d = _median_depth_roi(depth_m, int(cx_px), int(cy_px))
+
+            results[marker_id] = DetectionResult(
+                T_camera_object=T,
+                confidence=0.95,
+                method="aruco",
+                pixel_uv=(cx_px, cy_px),
+                depth_m=d,
+            )
+        return results
 
     # ------------------------------------------------------------------
     # ArUco-marker detection (solvePnP gives full 6-DOF pose)
