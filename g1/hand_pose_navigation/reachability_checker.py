@@ -92,7 +92,7 @@ class ReachabilityChecker:
         self.torso_z = torso_axis_z
         self._limits = JOINT_LIMITS[arm]
         self._joint_indices = LEFT_ARM_JOINTS if arm == "left" else RIGHT_ARM_JOINTS
-        self._fk = ArmFK(arm=arm, backend="dh")
+        self._fk = ArmFK(arm=arm, backend="urdf")
 
     # ------------------------------------------------------------------
     def check(

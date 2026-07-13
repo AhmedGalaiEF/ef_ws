@@ -98,7 +98,12 @@ class DirectHandPoseNav:
             arm=arm,
             standoff_m=config.get("standoff_m", 0.08),
         )
-        self._ik = ArmIK(arm=arm, solver=config.get("ik_solver", "dls"))
+        self._ik = ArmIK(
+            arm=arm,
+            solver=config.get("ik_solver", "dls"),
+            tol_pos_m=config.get("ik_tol_pos_m", 0.003),
+            tol_rot_rad=config.get("ik_tol_rot_rad", 0.01),
+        )
         self._checker = ReachabilityChecker(arm=arm)
 
         self._robot_mode = "mock"
@@ -134,6 +139,8 @@ class DirectHandPoseNav:
             executor=self._executor_obj,
             arm=arm,
             rate_hz=config.get("rate_hz", 10.0),
+            convergence_pos_m=config.get("convergence_pos_m", 0.015),
+            convergence_rot_rad=config.get("convergence_rot_rad", 0.05),
             timeout_s=config.get("timeout_s", 30.0),
         )
         self._tracking_loop.start(blocking=False)

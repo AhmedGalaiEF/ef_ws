@@ -94,6 +94,7 @@ class SharedState:
         }
         self.arm_override = "auto"
         self.backend = "direct"
+        self.auto_step_base = False
         self.vision_classes: List[str] = []
         self.status_msg = "starting…"
         self.grab_log: List[str] = []
@@ -360,6 +361,12 @@ app.layout = dbc.Container([
                 ],
                 value="auto", inline=True, className="mb-2",
             ),
+            dbc.Checkbox(
+                id="auto-step-base",
+                label="Step base closer if target is outside arm reach",
+                value=False,
+                className="mb-2",
+            ),
             dbc.Button("Grab selected object", id="grab-btn", color="success",
                         className="mb-2", disabled=True),
             html.Div(id="grab-selected-label", className="mb-2", style={"fontSize": "13px"}),
@@ -547,6 +554,17 @@ def _sync_arm(value):
 
 
 @app.callback(
+    Output("auto-step-base", "value"),
+    Input("auto-step-base", "value"),
+)
+def _sync_auto_step(value):
+    enabled = bool(value)
+    with STATE.lock:
+        STATE.auto_step_base = enabled
+    return enabled
+
+
+@app.callback(
     Output("safety-status", "children"),
     Input("grab-btn", "n_clicks"),
     Input("release-arms-btn", "n_clicks"),
@@ -608,6 +626,7 @@ def _run_grab() -> None:
         cam = dict(STATE.camera_extrinsic)
         arm_override = STATE.arm_override
         backend = STATE.backend
+        auto_step_base = STATE.auto_step_base
         STATE.grab_running = True
 
     if det is None:
@@ -651,10 +670,15 @@ def _run_grab() -> None:
            "--iface", _ARGS.iface, "--domain-id", str(_ARGS.domain_id)]
     if _ARGS.mock and backend == "direct":
         cmd.append("--mock")
+    if auto_step_base and backend == "direct":
+        cmd.append("--auto-step-base")
 
     p_cam = det.T_camera_object[:3, 3]
     p_base = T_base_object[:3, 3]
-    _log(f"[recognition_app] arm={arm} label={det.label!r} backend={backend}")
+    _log(
+        f"[recognition_app] arm={arm} label={det.label!r} "
+        f"backend={backend} auto_step_base={auto_step_base}"
+    )
     _log(
         "[recognition_app] object camera xyz="
         f"({p_cam[0]:+.3f}, {p_cam[1]:+.3f}, {p_cam[2]:+.3f}) m  "

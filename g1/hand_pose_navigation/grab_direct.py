@@ -42,6 +42,7 @@ if _MODULES not in sys.path:
 
 from hand_pose_navigation.direct_nav import DirectHandPoseNav, _make_transform
 from hand_pose_navigation.grasp_planner import GraspPlanner
+from hand_pose_navigation.reachability_checker import ReachabilityChecker
 from hand_pose_navigation.target_detector import DetectionResult
 
 
@@ -56,6 +57,14 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--mock", action="store_true")
     p.add_argument("--no-close-hand", action="store_true")
     p.add_argument("--hand-hold-s", type=float, default=0.6)
+    p.add_argument(
+        "--auto-step-base",
+        action="store_true",
+        help="If the target is just outside arm reach, step the robot forward before arm IK.",
+    )
+    p.add_argument("--max-base-step-m", type=float, default=0.30)
+    p.add_argument("--base-step-speed", type=float, default=0.05)
+    p.add_argument("--reach-margin-m", type=float, default=0.04)
     return p.parse_args()
 
 
@@ -65,6 +74,7 @@ def main() -> int:
         target = json.load(f)
 
     arm = target.get("arm", "right")
+    source = str(target.get("source") or "")
     T_camera_object = np.array(target["T_camera_object"], dtype=np.float64)
     cam = target.get("camera_extrinsic", {})
     fixed_result = DetectionResult(
@@ -73,10 +83,11 @@ def main() -> int:
         method="fixed",
     )
 
+    requested_standoff = float(target.get("standoff_m", 0.08))
     config = {
         "arm": arm,
         "detection_method": "fixed",
-        "standoff_m": float(target.get("standoff_m", 0.08)),
+        "standoff_m": requested_standoff,
         "rate_hz": args.rate_hz,
         "timeout_s": args.timeout_s,
         "ik_solver": args.ik_solver,
@@ -89,6 +100,10 @@ def main() -> int:
         "camera_roll": float(cam.get("roll", 0.0)),
         "camera_pitch": float(cam.get("pitch", 0.0)),
         "camera_yaw": float(cam.get("yaw", 0.0)),
+        "ik_tol_pos_m": 0.035 if source == "vision" else 0.003,
+        "ik_tol_rot_rad": 3.14 if source == "vision" else 0.01,
+        "convergence_pos_m": 0.035 if source == "vision" else 0.015,
+        "convergence_rot_rad": 3.14 if source == "vision" else 0.05,
     }
 
     label = target.get("label", "<object>")
@@ -106,16 +121,70 @@ def main() -> int:
         ),
     )
     T_base_object = T_base_camera @ T_camera_object
-    T_base_desired = GraspPlanner(
+    checker = ReachabilityChecker(arm=arm)
+    standoff_m, T_base_desired, reach_dist, excess_m = _choose_grasp(
         arm=arm,
-        standoff_m=config["standoff_m"],
-    ).compute(T_base_object)
+        T_base_object=T_base_object,
+        requested_standoff_m=requested_standoff,
+        checker=checker,
+    )
+    config["standoff_m"] = standoff_m
+
+    base_step_m = 0.0
+    if excess_m > 0.0:
+        needed_m = excess_m + max(0.0, float(args.reach_margin_m))
+        base_step_m = min(max(0.0, needed_m), max(0.0, float(args.max_base_step_m)))
+        print(
+            "[grab_direct] target outside arm workspace: "
+            f"reach_dist={reach_dist:.3f} m max={checker.max_reach_m:.3f} m "
+            f"excess={excess_m:.3f} m"
+        )
+        if not args.auto_step_base:
+            print(
+                "[grab_direct] Move the object/robot closer, or rerun with "
+                f"--auto-step-base to step forward up to {args.max_base_step_m:.2f} m."
+            )
+            return 1
+        if base_step_m <= 0.0:
+            print("[grab_direct] Auto-step requested, but allowed step distance is zero.")
+            return 1
+
+        _step_base_forward(
+            step_m=base_step_m,
+            speed_m_s=max(0.01, float(args.base_step_speed)),
+            iface=args.iface,
+            domain_id=args.domain_id,
+            mock=args.mock,
+        )
+
+        T_base_object = T_base_object.copy()
+        T_base_object[0, 3] -= base_step_m
+        T_camera_object = np.linalg.inv(T_base_camera) @ T_base_object
+        fixed_result = DetectionResult(
+            T_camera_object=T_camera_object,
+            confidence=float(target.get("confidence", 1.0)),
+            method="fixed",
+        )
+        standoff_m, T_base_desired, reach_dist, excess_m = _choose_grasp(
+            arm=arm,
+            T_base_object=T_base_object,
+            requested_standoff_m=requested_standoff,
+            checker=checker,
+        )
+        config["standoff_m"] = standoff_m
+        if excess_m > 0.0:
+            print(
+                "[grab_direct] Still outside workspace after base step: "
+                f"reach_dist={reach_dist:.3f} m max={checker.max_reach_m:.3f} m."
+            )
+            return 1
+
     print(
         "[grab_direct] object_base_xyz="
         f"({T_base_object[0, 3]:+.3f}, {T_base_object[1, 3]:+.3f}, {T_base_object[2, 3]:+.3f}) m "
         "desired_wrist_xyz="
         f"({T_base_desired[0, 3]:+.3f}, {T_base_desired[1, 3]:+.3f}, {T_base_desired[2, 3]:+.3f}) m "
-        f"standoff={config['standoff_m']:.3f} m"
+        f"standoff={config['standoff_m']:.3f} m base_step={base_step_m:.3f} m"
     )
     nav = DirectHandPoseNav(config, fixed_result=fixed_result)
 
@@ -142,6 +211,67 @@ def main() -> int:
         _close_hand(arm, args.iface, args.domain_id, args.hand_hold_s)
     print("[grab_direct] Done.")
     return 0
+
+
+def _choose_grasp(
+    arm: str,
+    T_base_object: np.ndarray,
+    requested_standoff_m: float,
+    checker: ReachabilityChecker,
+) -> tuple[float, np.ndarray, float, float]:
+    candidates = [
+        requested_standoff_m,
+        min(requested_standoff_m, 0.06),
+        min(requested_standoff_m, 0.04),
+        min(requested_standoff_m, 0.02),
+        0.0,
+    ]
+    unique_candidates = []
+    for value in candidates:
+        value = max(0.0, float(value))
+        if value not in unique_candidates:
+            unique_candidates.append(value)
+
+    best = None
+    for standoff_m in unique_candidates:
+        T_desired = GraspPlanner(arm=arm, standoff_m=standoff_m).compute(T_base_object)
+        reach_dist = _target_reach_distance(arm, T_desired)
+        excess_m = max(0.0, reach_dist - checker.max_reach_m)
+        if best is None or excess_m < best[3]:
+            best = (standoff_m, T_desired, reach_dist, excess_m)
+        if checker.check_target_reachable(T_desired).safe:
+            return standoff_m, T_desired, reach_dist, 0.0
+
+    assert best is not None
+    return best
+
+
+def _target_reach_distance(arm: str, T_base_desired: np.ndarray) -> float:
+    shoulder_y = 0.10 if arm == "left" else -0.10
+    shoulder = np.array([0.0, shoulder_y, 0.292], dtype=np.float64)
+    return float(np.linalg.norm(T_base_desired[:3, 3] - shoulder))
+
+
+def _step_base_forward(
+    step_m: float,
+    speed_m_s: float,
+    iface: str,
+    domain_id: int,
+    mock: bool,
+) -> None:
+    duration_s = abs(float(step_m)) / max(0.01, abs(float(speed_m_s)))
+    print(
+        f"[grab_direct] stepping base forward {step_m:.3f} m "
+        f"at {speed_m_s:.3f} m/s for {duration_s:.2f} s"
+    )
+    if mock:
+        return
+    try:
+        from sdk_client import Robot
+    except Exception as exc:
+        raise RuntimeError(f"Cannot auto-step base; sdk_client import failed: {exc}") from exc
+    robot = Robot(iface=iface, domain_id=domain_id, auto_start_sensors=False)
+    robot.move_for(duration=duration_s, vx=speed_m_s, vy=0.0, vyaw=0.0)
 
 
 def _close_hand(arm: str, iface: str, domain_id: int, hold_s: float) -> None:
