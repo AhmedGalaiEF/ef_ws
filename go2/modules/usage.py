@@ -3,9 +3,17 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
+import sys
 import time
+from typing import TYPE_CHECKING
 
-from sdk_client import Robot
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+if TYPE_CHECKING:
+    from sdk_client import Robot
 
 
 def print_section(title: str, payload) -> None:
@@ -48,12 +56,37 @@ def basic_posture(robot: Robot, height: float) -> None:
     print_section("Body Height", {"requested_height_m": height, "code": code})
 
 
-def main() -> None:
+def confirm_motion(args: argparse.Namespace) -> None:
+    if args.yes:
+        return
+    selected_motion = args.locomotion or args.posture or args.all
+    if not selected_motion:
+        return
+    print(
+        "This example can move the robot. Re-run with --yes to confirm, "
+        "or select --sensors for a read-only check."
+    )
+    raise SystemExit(2)
+
+
+def main() -> int:
     parser = argparse.ArgumentParser(description="Basic usage example for the Go2 Robot wrapper.")
     parser.add_argument("--iface", default="eth0")
     parser.add_argument("--domain-id", type=int, default=0)
     parser.add_argument("--body-height", type=float, default=0.16)
+    parser.add_argument("--yes", action="store_true", help="Confirm that motion-capable examples may run.")
+    parser.add_argument("--all", action="store_true", help="Run all examples.")
+    parser.add_argument("--locomotion", action="store_true", help="Run the locomotion example.")
+    parser.add_argument("--sensors", action="store_true", help="Print the current robot state.")
+    parser.add_argument("--posture", action="store_true", help="Run the body-height example.")
     args = parser.parse_args()
+
+    if not any((args.all, args.locomotion, args.sensors, args.posture)):
+        args.sensors = True
+
+    confirm_motion(args)
+
+    from sdk_client import Robot
 
     robot = Robot(
         iface=args.iface,
@@ -61,10 +94,22 @@ def main() -> None:
         auto_start_sensors=True,
     )
 
-    basic_locomotion(robot)
-    basic_sensors(robot)
-    basic_posture(robot, height=args.body_height)
+    try:
+        if args.all or args.locomotion:
+            basic_locomotion(robot)
+        if args.all or args.sensors:
+            basic_sensors(robot)
+        if args.all or args.posture:
+            basic_posture(robot, height=args.body_height)
+    finally:
+        if args.all or args.locomotion:
+            try:
+                robot.stop()
+            except Exception as exc:
+                print_section("Stop Warning", str(exc))
+
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

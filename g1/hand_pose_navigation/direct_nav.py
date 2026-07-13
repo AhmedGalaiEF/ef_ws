@@ -113,6 +113,8 @@ class DirectHandPoseNav:
                     iface=config.get("iface", "eth0"),
                     domain_id=config.get("domain_id", 0),
                     auto_start_sensors=True,
+                    rgbd_host=config.get("rgbd_host", "192.168.2.41"),
+                    rgbd_port=config.get("rgbd_port", 5555),
                 )
                 self._robot_mode = "sdk"
             except Exception as exc:

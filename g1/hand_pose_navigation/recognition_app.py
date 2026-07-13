@@ -656,6 +656,8 @@ def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="G1 recognition layer web app.")
     p.add_argument("--iface", default="eth0")
     p.add_argument("--domain-id", type=int, default=0)
+    p.add_argument("--rgbd-host", default="192.168.2.41")
+    p.add_argument("--rgbd-port", type=int, default=5555)
     p.add_argument("--rate-hz", type=float, default=3.0, help="perception loop rate")
     p.add_argument("--vision-model", default="yolov8s-world.pt")
     p.add_argument("--mock", action="store_true", help="use a synthetic camera feed")
@@ -670,7 +672,13 @@ _ARGS = _parse_args()
 if _ARGS.mock or not _ROBOT_AVAILABLE:
     _ROBOT = _MockRobot()
 else:
-    _ROBOT = Robot(iface=_ARGS.iface, domain_id=_ARGS.domain_id, auto_start_sensors=True)
+    _ROBOT = Robot(
+        iface=_ARGS.iface,
+        domain_id=_ARGS.domain_id,
+        auto_start_sensors=True,
+        rgbd_host=_ARGS.rgbd_host,
+        rgbd_port=_ARGS.rgbd_port,
+    )
 
 _DETECTOR = TargetDetector(
     method="aruco",  # unused directly; detect_all_aruco() is what's called

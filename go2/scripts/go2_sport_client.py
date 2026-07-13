@@ -1,16 +1,11 @@
-import time
-import sys
+from __future__ import annotations
+
+import argparse
 import json
-from unitree_sdk2py.core.channel import ChannelSubscriber, ChannelFactoryInitialize
-from unitree_sdk2py.idl.default import unitree_go_msg_dds__SportModeState_
-from unitree_sdk2py.idl.unitree_go.msg.dds_ import SportModeState_
-from unitree_sdk2py.go2.sport.sport_client import (
-    SportClient,
-    PathPoint,
-    SPORT_PATH_POINT_SIZE,
-)
-import math
+import time
+from typing import Any
 from dataclasses import dataclass
+
 
 @dataclass
 class TestOption:
@@ -44,7 +39,7 @@ LOWER_BODY_HEIGHT = 0.16  # meters; adjust if too low for your robot
 BODYHEIGHT_API_ID = 1013
 
 
-def try_set_body_height(sport_client: SportClient, height: float) -> bool:
+def try_set_body_height(sport_client: Any, height: float) -> bool:
     # BodyHeight is not registered in the Go2 client, so register and call it.
     sport_client._RegistApi(BODYHEIGHT_API_ID, 0)
     code, _ = sport_client._Call(BODYHEIGHT_API_ID, json.dumps({"data": height}))
@@ -53,126 +48,146 @@ def try_set_body_height(sport_client: SportClient, height: float) -> bool:
         return False
     return True
 
-class UserInterface:
-    def __init__(self):
-        self.test_option_ = None
 
-    def convert_to_int(self, input_str):
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Interactive Go2 SportClient command runner.")
+    parser.add_argument("legacy_iface", nargs="?", help=argparse.SUPPRESS)
+    parser.add_argument("--iface", help="Robot network interface. Defaults to SDK auto-detect.")
+    parser.add_argument("--domain-id", type=int, default=0)
+    parser.add_argument("--timeout", type=float, default=10.0)
+    parser.add_argument("--yes", action="store_true", help="Confirm commands that can move the robot.")
+    parser.add_argument("--list", action="store_true", help="List available commands and exit.")
+    parser.add_argument("--once", help="Run one command by id or exact name, then exit.")
+    return parser.parse_args()
+
+
+def print_options() -> None:
+    for option in option_list:
+        print(f"{option.name}, id: {option.id}")
+
+
+def resolve_option(value: str) -> TestOption | None:
+    cleaned = str(value).strip()
+    for option in option_list:
+        if cleaned == option.name or cleaned == str(option.id):
+            return option
+    return None
+
+
+def run_option(sport_client: Any, option: TestOption) -> None:
+    print(f"Running: {option.name}, id: {option.id}")
+    if option.id == 0:
+        print("ret:", sport_client.Damp())
+    elif option.id == 1:
+        print("ret:", sport_client.StandUp())
+    elif option.id == 2:
+        print("ret:", sport_client.StandDown())
+    elif option.id == 3:
+        print("ret:", sport_client.Move(0.3, 0, 0))
+    elif option.id == 4:
+        print("ret:", sport_client.Move(0, 0.3, 0))
+    elif option.id == 5:
+        print("ret:", sport_client.Move(0, 0, 0.5))
+    elif option.id == 6:
+        print("ret:", sport_client.StopMove())
+    elif option.id == 7:
+        print("ret:", sport_client.HandStand(True))
+        time.sleep(4)
+        print("ret:", sport_client.HandStand(False))
+    elif option.id == 9:
+        print("ret:", sport_client.BalanceStand())
+    elif option.id == 10:
+        print("ret:", sport_client.RecoveryStand())
+    elif option.id == 11:
+        print("ret:", sport_client.LeftFlip())
+    elif option.id == 12:
+        print("ret:", sport_client.BackFlip())
+    elif option.id == 13:
+        print("ret:", sport_client.FreeWalk())
+    elif option.id == 14:
+        print("ret:", sport_client.FreeBound(True))
+        time.sleep(2)
+        print("ret:", sport_client.FreeBound(False))
+    elif option.id == 15:
+        print("ret:", sport_client.FreeAvoid(True))
+        time.sleep(2)
+        print("ret:", sport_client.FreeAvoid(False))
+    elif option.id == 17:
+        print("ret:", sport_client.WalkUpright(True))
+        time.sleep(4)
+        print("ret:", sport_client.WalkUpright(False))
+    elif option.id == 18:
+        print("ret:", sport_client.CrossStep(True))
+        time.sleep(4)
+        print("ret:", sport_client.CrossStep(False))
+    elif option.id == 19:
+        print("ret:", sport_client.FreeJump(True))
+        time.sleep(4)
+        print("ret:", sport_client.FreeJump(False))
+    elif option.id == 20:
+        try_set_body_height(sport_client, LOWER_BODY_HEIGHT)
+        print("ret:", sport_client.BalanceStand())
+    elif option.id == 21:
+        try_set_body_height(sport_client, LOWER_BODY_HEIGHT)
+        print("ret:", sport_client.Move(0.3, 0, 0))
+
+
+def main() -> int:
+    args = parse_args()
+    if args.list:
+        print_options()
+        return 0
+    if not args.yes:
+        print("This script can move the robot. Re-run with --yes to confirm.")
+        return 2
+
+    try:
+        from unitree_sdk2py.core.channel import ChannelFactoryInitialize
+        from unitree_sdk2py.go2.sport.sport_client import SportClient
+    except ImportError as exc:
+        raise SystemExit(
+            "unitree_sdk2py is not installed. Install it with:\n"
+            "  pip install -e <path-to-unitree_sdk2_python>"
+        ) from exc
+
+    iface = args.iface or args.legacy_iface
+    if iface:
+        ChannelFactoryInitialize(args.domain_id, iface)
+    else:
+        ChannelFactoryInitialize(args.domain_id)
+
+    sport_client = SportClient()
+    sport_client.SetTimeout(float(args.timeout))
+    sport_client.Init()
+
+    if args.once:
+        option = resolve_option(args.once)
+        if option is None:
+            print(f"No matching command: {args.once!r}")
+            print_options()
+            return 2
+        run_option(sport_client, option)
+        return 0
+
+    print("Type 'list' to show commands, 'q' to quit.")
+    while True:
         try:
-            return int(input_str)
-        except ValueError:
-            return None
+            raw = input("Enter id or name: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return 0
+        if raw in {"q", "quit", "exit"}:
+            return 0
+        if raw == "list":
+            print_options()
+            continue
+        option = resolve_option(raw)
+        if option is None:
+            print("No matching test option found.")
+            continue
+        run_option(sport_client, option)
+        time.sleep(1)
 
-    def terminal_handle(self):
-        input_str = input("Enter id or name: \n")
-
-        if input_str == "list":
-            self.test_option_.name = None
-            self.test_option_.id = None
-            for option in option_list:
-                print(f"{option.name}, id: {option.id}")
-            return
-
-        for option in option_list:
-            if input_str == option.name or self.convert_to_int(input_str) == option.id:
-                self.test_option_.name = option.name
-                self.test_option_.id = option.id
-                print(f"Test: {self.test_option_.name}, test_id: {self.test_option_.id}")
-                return
-
-        print("No matching test option found.")
 
 if __name__ == "__main__":
-
-
-    print("WARNING: Please ensure there are no obstacles around the robot while running this example.")
-    input("Press Enter to continue...")
-    if len(sys.argv)>1:
-        ChannelFactoryInitialize(0, sys.argv[1])
-    else:
-        ChannelFactoryInitialize(0)
-
-    test_option = TestOption(name=None, id=None) 
-    user_interface = UserInterface()
-    user_interface.test_option_ = test_option
-
-    sport_client = SportClient()  
-    sport_client.SetTimeout(10.0)
-    sport_client.Init()
-    while True:
-
-        user_interface.terminal_handle()
-
-        print(f"Updated Test Option: Name = {test_option.name}, ID = {test_option.id}\n")
-
-        if test_option.id == 0:
-            sport_client.Damp()
-        elif test_option.id == 1:
-            sport_client.StandUp()
-        elif test_option.id == 2:
-            sport_client.StandDown()
-        elif test_option.id == 3:
-            ret = sport_client.Move(0.3,0,0)
-            print("ret: ",ret)
-        elif test_option.id == 4:
-            sport_client.Move(0,0.3,0)
-        elif test_option.id == 5:
-            sport_client.Move(0,0,0.5)
-        elif test_option.id == 6:
-            sport_client.StopMove()
-        elif test_option.id == 7:
-            sport_client.HandStand(True)
-            time.sleep(4)
-            sport_client.HandStand(False)
-        elif test_option.id == 9:
-            sport_client.BalanceStand()
-        elif test_option.id == 10:
-            sport_client.RecoveryStand()
-        elif test_option.id == 11:
-            ret = sport_client.LeftFlip()
-            print("ret: ",ret)
-        elif test_option.id == 12:
-            ret = sport_client.BackFlip()
-            print("ret: ",ret)
-        elif test_option.id == 13:
-            ret = sport_client.FreeWalk()
-            print("ret: ",ret)
-        elif test_option.id == 14:
-            ret = sport_client.FreeBound(True)
-            print("ret: ",ret)
-            time.sleep(2)
-            ret = sport_client.FreeBound(False)
-            print("ret: ",ret)
-        elif test_option.id == 15:
-            ret = sport_client.FreeAvoid(True)
-            print("ret: ",ret)
-            time.sleep(2)
-            ret = sport_client.FreeAvoid(False)
-            print("ret: ",ret)
-        elif test_option.id == 17:
-            ret = sport_client.WalkUpright(True)
-            print("ret: ",ret)
-            time.sleep(4)
-            ret = sport_client.WalkUpright(False)
-            print("ret: ",ret)
-        elif test_option.id == 18:
-            ret = sport_client.CrossStep(True)
-            print("ret: ",ret)
-            time.sleep(4)
-            ret = sport_client.CrossStep(False)
-            print("ret: ",ret)
-        elif test_option.id == 19:
-            ret = sport_client.FreeJump(True)
-            print("ret: ",ret)
-            time.sleep(4)
-            ret = sport_client.FreeJump(False)
-            print("ret: ",ret)
-        elif test_option.id == 20:
-            try_set_body_height(sport_client, LOWER_BODY_HEIGHT)
-            sport_client.BalanceStand()
-        elif test_option.id == 21:
-            try_set_body_height(sport_client, LOWER_BODY_HEIGHT)
-            ret = sport_client.Move(0.3, 0, 0)
-            print("ret: ",ret)
-
-        time.sleep(1)
+    raise SystemExit(main())

@@ -73,16 +73,41 @@ def basic_slam(robot: Robot, slam_type: str, save_path: str | None) -> None:
     print_section("SLAM Stop", {"code": stop_code, "save_path": save_path})
 
 
-def main() -> None:
+def confirm_motion(args: argparse.Namespace) -> None:
+    if args.yes:
+        return
+    selected_motion = args.locomotion or args.arm or args.all
+    if not selected_motion:
+        return
+    print(
+        "This example can move the robot. Re-run with --yes to confirm, "
+        "or select non-motion checks such as --sensors/--tts/--slam."
+    )
+    raise SystemExit(2)
+
+
+def main() -> int:
     parser = argparse.ArgumentParser(description="Basic usage example for the G1 Robot wrapper.")
     parser.add_argument("--iface", default="eth0")
     parser.add_argument("--domain-id", type=int, default=0)
     parser.add_argument("--hand", choices=("left", "right"), default="right")
     parser.add_argument("--no-safety-boot", action="store_true")
-    parser.add_argument("--skip-slam", action="store_true")
+    parser.add_argument("--yes", action="store_true", help="Confirm that motion-capable examples may run.")
+    parser.add_argument("--all", action="store_true", help="Run all examples.")
+    parser.add_argument("--locomotion", action="store_true", help="Run the locomotion example.")
+    parser.add_argument("--arm", action="store_true", help="Run the hand open/close example.")
+    parser.add_argument("--sensors", action="store_true", help="Print state, IMU, odom, and lidar samples.")
+    parser.add_argument("--tts", action="store_true", help="Run the text-to-speech example.")
+    parser.add_argument("--slam", action="store_true", help="Run the SLAM start/stop example.")
     parser.add_argument("--slam-type", default="indoor")
     parser.add_argument("--slam-save-path")
     args = parser.parse_args()
+
+    if not any((args.all, args.locomotion, args.arm, args.sensors, args.tts, args.slam)):
+        args.sensors = True
+
+    confirm_motion(args)
+
     from sdk_client import Robot
 
     robot = Robot(
@@ -92,14 +117,26 @@ def main() -> None:
         auto_start_sensors=True,
     )
 
-    basic_locomotion(robot)
-    basic_arm_motion(robot, hand=args.hand)
-    basic_sensors(robot)
-    basic_text_to_speech(robot)
+    try:
+        if args.all or args.locomotion:
+            basic_locomotion(robot)
+        if args.all or args.arm:
+            basic_arm_motion(robot, hand=args.hand)
+        if args.all or args.sensors:
+            basic_sensors(robot)
+        if args.all or args.tts:
+            basic_text_to_speech(robot)
+        if args.all or args.slam:
+            basic_slam(robot, slam_type=args.slam_type, save_path=args.slam_save_path)
+    finally:
+        if args.all or args.locomotion:
+            try:
+                robot.stop()
+            except Exception as exc:
+                print_section("Stop Warning", str(exc))
 
-    if not args.skip_slam:
-        basic_slam(robot, slam_type=args.slam_type, save_path=args.slam_save_path)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

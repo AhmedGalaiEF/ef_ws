@@ -44,6 +44,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--iface", default="eth0")
     parser.add_argument("--domain-id", type=int, default=0)
+    parser.add_argument("--rgbd-host", default="192.168.2.41")
+    parser.add_argument("--rgbd-port", type=int, default=5555)
     parser.add_argument(
         "--use-ros-tf",
         action="store_true",
@@ -103,6 +105,8 @@ def config_from_args(args: argparse.Namespace) -> Dict:
         "ik_solver": args.ik_solver,
         "iface": args.iface,
         "domain_id": args.domain_id,
+        "rgbd_host": args.rgbd_host,
+        "rgbd_port": args.rgbd_port,
         "mock": args.mock,
         "camera_x": args.camera_x,
         "camera_y": args.camera_y,
@@ -176,6 +180,8 @@ def main() -> int:
                 iface=args.iface,
                 domain_id=args.domain_id,
                 auto_start_sensors=True,
+                rgbd_host=args.rgbd_host,
+                rgbd_port=args.rgbd_port,
             )
             print("[SDK] Robot pre-initialized before ROS node startup.")
         except Exception as exc:

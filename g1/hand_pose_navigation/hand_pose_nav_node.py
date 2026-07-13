@@ -113,6 +113,8 @@ class HandPoseNavNode(Node):
         )
         self.declare_parameter("iface", config.get("iface", "eth0"))
         self.declare_parameter("domain_id", config.get("domain_id", 0))
+        self.declare_parameter("rgbd_host", config.get("rgbd_host", "192.168.2.41"))
+        self.declare_parameter("rgbd_port", config.get("rgbd_port", 5555))
 
         arm = self.get_parameter("arm").value
         detection_method = self.get_parameter("detection_method").value
@@ -133,6 +135,8 @@ class HandPoseNavNode(Node):
             "ik_solver": ik_solver,
             "iface": self.get_parameter("iface").value,
             "domain_id": self.get_parameter("domain_id").value,
+            "rgbd_host": self.get_parameter("rgbd_host").value,
+            "rgbd_port": self.get_parameter("rgbd_port").value,
             "mock": bool(config.get("mock", False)),
             "sdk_preinit_error": config.get("sdk_preinit_error", ""),
         }
@@ -190,8 +194,15 @@ class HandPoseNavNode(Node):
         elif _ROBOT_AVAILABLE and not config.get("mock", False):
             iface = self.get_parameter("iface").value
             domain_id = self.get_parameter("domain_id").value
+            rgbd_host = self.get_parameter("rgbd_host").value
+            rgbd_port = self.get_parameter("rgbd_port").value
             try:
-                self._robot = Robot(iface=iface, domain_id=domain_id)
+                self._robot = Robot(
+                    iface=iface,
+                    domain_id=domain_id,
+                    rgbd_host=rgbd_host,
+                    rgbd_port=rgbd_port,
+                )
                 self._robot.start_sensors()
                 self._robot_mode = "sdk"
                 self._sdk_error = ""
