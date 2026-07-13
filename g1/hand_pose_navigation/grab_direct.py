@@ -40,7 +40,8 @@ _MODULES = os.path.join(_G1_DIR, "modules")
 if _MODULES not in sys.path:
     sys.path.insert(0, _MODULES)
 
-from hand_pose_navigation.direct_nav import DirectHandPoseNav
+from hand_pose_navigation.direct_nav import DirectHandPoseNav, _make_transform
+from hand_pose_navigation.grasp_planner import GraspPlanner
 from hand_pose_navigation.target_detector import DetectionResult
 
 
@@ -92,6 +93,30 @@ def main() -> int:
 
     label = target.get("label", "<object>")
     print(f"[grab_direct] arm={arm} label={label!r} source={target.get('source')}")
+    T_base_camera = _make_transform(
+        xyz=(
+            config["camera_x"],
+            config["camera_y"],
+            config["camera_z"],
+        ),
+        rpy=(
+            config["camera_roll"],
+            config["camera_pitch"],
+            config["camera_yaw"],
+        ),
+    )
+    T_base_object = T_base_camera @ T_camera_object
+    T_base_desired = GraspPlanner(
+        arm=arm,
+        standoff_m=config["standoff_m"],
+    ).compute(T_base_object)
+    print(
+        "[grab_direct] object_base_xyz="
+        f"({T_base_object[0, 3]:+.3f}, {T_base_object[1, 3]:+.3f}, {T_base_object[2, 3]:+.3f}) m "
+        "desired_wrist_xyz="
+        f"({T_base_desired[0, 3]:+.3f}, {T_base_desired[1, 3]:+.3f}, {T_base_desired[2, 3]:+.3f}) m "
+        f"standoff={config['standoff_m']:.3f} m"
+    )
     nav = DirectHandPoseNav(config, fixed_result=fixed_result)
 
     ok = False

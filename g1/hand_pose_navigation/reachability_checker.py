@@ -71,7 +71,7 @@ class ReachabilityChecker:
 
     Args:
         arm:            "left" | "right"
-        max_reach_m:    maximum arm reach (metres); default 0.75 m
+        max_reach_m:    maximum arm reach (metres); default 0.42 m
         min_wrist_z_m:  wrist must stay above this height in base frame
         torso_radius_m: approximate torso cylinder radius
         torso_axis_z:   [z_lo, z_hi] for the torso cylinder extent
@@ -80,7 +80,7 @@ class ReachabilityChecker:
     def __init__(
         self,
         arm: str = "right",
-        max_reach_m: float = 0.75,
+        max_reach_m: float = 0.42,
         min_wrist_z_m: float = -0.05,
         torso_radius_m: float = 0.18,
         torso_axis_z: Tuple[float, float] = (-0.1, 0.55),
@@ -144,7 +144,7 @@ class ReachabilityChecker:
         if T_base_desired is not None:
             target_pos = T_base_desired[:3, 3]
             # Approximate shoulder position
-            shoulder_y = 0.15 if self.arm == "left" else -0.15
+            shoulder_y = 0.10 if self.arm == "left" else -0.10
             shoulder = np.array([0.0, shoulder_y, 0.30])
             dist = float(np.linalg.norm(target_pos - shoulder))
             if dist > self.max_reach_m:
@@ -169,7 +169,7 @@ class ReachabilityChecker:
         """Quick pre-IK workspace check — no FK required."""
         reasons = []
         target_pos = T_base_target[:3, 3]
-        shoulder_y = 0.15 if self.arm == "left" else -0.15
+        shoulder_y = 0.10 if self.arm == "left" else -0.10
         shoulder = np.array([0.0, shoulder_y, 0.30])
         dist = float(np.linalg.norm(target_pos - shoulder))
         if dist > self.max_reach_m:

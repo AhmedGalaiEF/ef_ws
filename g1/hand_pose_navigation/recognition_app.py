@@ -90,7 +90,7 @@ class SharedState:
         self.selected_id: Optional[str] = None
         self.camera_extrinsic = {
             "x": 0.0, "y": 0.0, "z": 0.30,
-            "roll": 0.0, "pitch": 0.0, "yaw": 0.0,
+            "roll": -1.5708, "pitch": 0.0, "yaw": -1.5708,
         }
         self.arm_override = "auto"
         self.backend = "direct"
@@ -102,7 +102,8 @@ class SharedState:
 
 
 STATE = SharedState()
-K = CameraIntrinsics()  # default 640x480 RealSense-ish intrinsics
+BASE_K = CameraIntrinsics()  # default 640x480 RealSense-ish intrinsics
+K = CameraIntrinsics()
 
 # The object list must reflect what the robot can see *right now*, not the
 # last thing it happened to see. If the perception loop hasn't produced a
@@ -134,6 +135,7 @@ class _MockRobot:
 # ---------------------------------------------------------------------------
 
 def _perception_loop(robot, detector: TargetDetector, vision: VisionDetector, rate_hz: float) -> None:
+    global K
     period = 1.0 / max(0.5, rate_hz)
     while True:
         t0 = time.time()
@@ -146,6 +148,20 @@ def _perception_loop(robot, detector: TargetDetector, vision: VisionDetector, ra
                 STATE.status_msg = f"camera error: {exc}"
             time.sleep(period)
             continue
+
+        h, w = rgb.shape[:2]
+        if w != K.width or h != K.height:
+            sx = float(w) / float(BASE_K.width)
+            sy = float(h) / float(BASE_K.height)
+            K = CameraIntrinsics(
+                fx=BASE_K.fx * sx,
+                fy=BASE_K.fy * sy,
+                cx=BASE_K.cx * sx,
+                cy=BASE_K.cy * sy,
+                width=w,
+                height=h,
+            )
+            detector.set_intrinsics(K)
 
         tags = detector.detect_all_aruco(rgb, depth)
         vis_dets = vision.detect(rgb) if vision.available else []
@@ -608,6 +624,12 @@ def _run_grab() -> None:
         )
         T_base_object = T_base_camera @ det.T_camera_object
         arm = "left" if T_base_object[1, 3] > 0 else "right"
+    else:
+        T_base_camera = _make_transform(
+            xyz=(cam["x"], cam["y"], cam["z"]),
+            rpy=(cam["roll"], cam["pitch"], cam["yaw"]),
+        )
+        T_base_object = T_base_camera @ det.T_camera_object
 
     target = {
         "arm": arm,
@@ -630,7 +652,15 @@ def _run_grab() -> None:
     if _ARGS.mock and backend == "direct":
         cmd.append("--mock")
 
+    p_cam = det.T_camera_object[:3, 3]
+    p_base = T_base_object[:3, 3]
     _log(f"[recognition_app] arm={arm} label={det.label!r} backend={backend}")
+    _log(
+        "[recognition_app] object camera xyz="
+        f"({p_cam[0]:+.3f}, {p_cam[1]:+.3f}, {p_cam[2]:+.3f}) m  "
+        "base xyz="
+        f"({p_base[0]:+.3f}, {p_base[1]:+.3f}, {p_base[2]:+.3f}) m"
+    )
     _log(f"[recognition_app] $ {' '.join(cmd)}")
     try:
         proc = subprocess.Popen(

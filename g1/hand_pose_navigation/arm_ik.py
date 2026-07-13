@@ -125,7 +125,15 @@ class ArmIK:
         q = _clamp(q_init.copy(), self._limits)
 
         if self.solver == "dls":
-            return self._solve_dls(T_base_desired, q)
+            q_sol, info = self._solve_dls(T_base_desired, q)
+            if q_sol is not None:
+                return q_sol, info
+            q_pos, pos_info = self._solve_position_dls(T_base_desired, q)
+            if q_pos is not None:
+                pos_info["fallback"] = "position_dls"
+                return q_pos, pos_info
+            info["fallback_error_pos_m"] = pos_info["error_pos_m"]
+            return None, info
         elif self.solver == "scipy":
             return self._solve_scipy(T_base_desired, q)
         elif self.solver == "pin":
@@ -172,6 +180,47 @@ class ArmIK:
             "success": False,
             "error_pos_m": float(np.linalg.norm(err[:3])),
             "error_rot_rad": float(np.linalg.norm(err[3:])),
+            "iterations": self.max_iter,
+        }
+
+    def _solve_position_dls(
+        self, T_des: np.ndarray, q: np.ndarray
+    ) -> Tuple[Optional[np.ndarray], Dict]:
+        """DLS fallback that reaches the wrist position and ignores orientation.
+
+        Vision detections only provide a coarse PCA orientation. Requiring the
+        wrist to match that full 6-DoF pose can reject reachable object
+        positions, so this fallback is intentionally position-first.
+        """
+        lam = self.damping
+        target_pos = T_des[:3, 3]
+        for iteration in range(self.max_iter):
+            T_cur = self._fk.compute_arm(q)
+            pos_err = target_pos - T_cur[:3, 3]
+            err_pos = float(np.linalg.norm(pos_err))
+            if err_pos < self.tol_pos_m:
+                return q, {
+                    "success": True,
+                    "error_pos_m": err_pos,
+                    "error_rot_rad": 0.0,
+                    "iterations": iteration,
+                }
+
+            J_pos = _numerical_jacobian(q, self._fk)[:3, :]
+            JJT = J_pos @ J_pos.T
+            dq = J_pos.T @ np.linalg.solve(JJT + lam**2 * np.eye(3), pos_err)
+
+            norm_dq = float(np.linalg.norm(dq))
+            if norm_dq > 0.3:
+                dq *= 0.3 / norm_dq
+            q = _clamp(q + dq, self._limits)
+
+        T_cur = self._fk.compute_arm(q)
+        err_pos = float(np.linalg.norm(target_pos - T_cur[:3, 3]))
+        return None, {
+            "success": False,
+            "error_pos_m": err_pos,
+            "error_rot_rad": 0.0,
             "iterations": self.max_iter,
         }
 

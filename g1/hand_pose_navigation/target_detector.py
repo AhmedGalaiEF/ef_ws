@@ -138,6 +138,15 @@ class TargetDetector:
         ], dtype=np.float64)
         self._dist = np.zeros((4,), dtype=np.float64)
 
+    def set_intrinsics(self, intrinsics: CameraIntrinsics) -> None:
+        """Update camera intrinsics used for depth backprojection and solvePnP."""
+        self.K = intrinsics
+        self._cam_mat = np.array([
+            [self.K.fx, 0, self.K.cx],
+            [0, self.K.fy, self.K.cy],
+            [0, 0, 1],
+        ], dtype=np.float64)
+
     # ------------------------------------------------------------------
     def set_fixed_result(self, result: Optional["DetectionResult"]) -> None:
         """Set (or clear) the pose returned by method="fixed".

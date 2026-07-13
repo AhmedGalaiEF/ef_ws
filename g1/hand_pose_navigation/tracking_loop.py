@@ -238,6 +238,11 @@ class TrackingLoop:
                 self._status.record(
                     f"[Step 8] Workspace fail: {reach_check.reasons}"
                 )
+                if getattr(self.detector, "method", "") == "fixed":
+                    self._status.record(
+                        "[Step 8] Fixed selected target is unreachable — stopping grab."
+                    )
+                    break
                 self._sleep(dt, t0)
                 continue
 
@@ -269,11 +274,18 @@ class TrackingLoop:
             )
             if q_arm_desired is None:
                 self._status.ik_failures += 1
+                p_des = T_base_desired[:3, 3]
                 self._status.record(
-                    f"[Step 7] IK failed: pos_err={ik_info['error_pos_m']:.4f}"
+                    f"[Step 7] IK failed: pos_err={ik_info['error_pos_m']:.4f} "
+                    f"target=({p_des[0]:+.3f},{p_des[1]:+.3f},{p_des[2]:+.3f})"
                 )
                 self._sleep(dt, t0)
                 continue
+            if ik_info.get("fallback"):
+                self._status.record(
+                    f"[Step 7] IK fallback={ik_info['fallback']} "
+                    f"pos_err={ik_info['error_pos_m']:.4f}"
+                )
 
             # ── Step 8: safety check ─────────────────────────────────
             safety = self.checker.check(q_arm_desired, T_base_desired)
