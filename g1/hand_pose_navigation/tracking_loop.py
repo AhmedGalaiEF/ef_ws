@@ -119,6 +119,7 @@ class TrackingLoop:
         rate_hz: float = 10.0,
         convergence_pos_m: float = 0.015,
         convergence_rot_rad: float = 0.05,
+        max_joint_step_rad: float = 0.08,
         timeout_s: float = 30.0,
         on_converge: Optional[Callable[[], None]] = None,
     ) -> None:
@@ -135,6 +136,7 @@ class TrackingLoop:
         self.rate_hz = rate_hz
         self.convergence_pos_m = convergence_pos_m
         self.convergence_rot_rad = convergence_rot_rad
+        self.max_joint_step_rad = max(0.0, float(max_joint_step_rad))
         self.timeout_s = timeout_s
         self.on_converge = on_converge
 
@@ -188,20 +190,24 @@ class TrackingLoop:
                 break
 
             # ── Step 1-2: get frame + detect ──────────────────────────
-            try:
-                frame = self.robot.get_rgbd(timeout=0.5)
-                rgb_bgr = frame.get("rgb_bgr")
-                depth_m = frame.get("depth_m")
-                if rgb_bgr is None or depth_m is None:
+            if getattr(self.detector, "method", "") == "fixed":
+                rgb_bgr = np.zeros((1, 1, 3), dtype=np.uint8)
+                depth_m = np.ones((1, 1), dtype=np.float32)
+            else:
+                try:
+                    frame = self.robot.get_rgbd(timeout=0.5)
+                    rgb_bgr = frame.get("rgb_bgr")
+                    depth_m = frame.get("depth_m")
+                    if rgb_bgr is None or depth_m is None:
+                        self._status.detection_failures += 1
+                        self._status.record("[Step 2] No RGBD frame — skipping.")
+                        self._sleep(dt, t0)
+                        continue
+                except Exception as exc:
                     self._status.detection_failures += 1
-                    self._status.record("[Step 2] No RGBD frame — skipping.")
+                    self._status.record(f"[Step 2] get_rgbd error: {exc}")
                     self._sleep(dt, t0)
                     continue
-            except Exception as exc:
-                self._status.detection_failures += 1
-                self._status.record(f"[Step 2] get_rgbd error: {exc}")
-                self._sleep(dt, t0)
-                continue
 
             detection: Optional[DetectionResult] = self.detector.detect(
                 rgb_bgr,
@@ -295,6 +301,17 @@ class TrackingLoop:
                 self._sleep(dt, t0)
                 continue
 
+            if self.max_joint_step_rad > 0.0:
+                delta = q_arm_desired - q_arm_cur
+                max_abs_delta = float(np.max(np.abs(delta))) if delta.size else 0.0
+                if max_abs_delta > self.max_joint_step_rad:
+                    scale = self.max_joint_step_rad / max_abs_delta
+                    q_arm_desired = q_arm_cur + delta * scale
+                    self._status.record(
+                        f"[Step 9] Joint increment capped: "
+                        f"max_delta={max_abs_delta:.3f}rad cap={self.max_joint_step_rad:.3f}rad"
+                    )
+
             # ── Step 9: send command ─────────────────────────────────
             move_duration = min(
                 dt * 1.5,
@@ -305,6 +322,7 @@ class TrackingLoop:
                 duration_s=move_duration,
                 q_arm_start=q_arm_cur,
                 T_base_desired=T_base_desired,
+                stop_event=self._stop_event,
             )
             q_arm_prev = q_arm_desired
 

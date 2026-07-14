@@ -15,6 +15,7 @@ check `.available` before calling `.detect()`.
 from __future__ import annotations
 
 import re
+import threading
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
@@ -29,7 +30,13 @@ class VisionDetection:
 
 
 # A default open-vocab class list used when no NL prompt has been set yet.
-_DEFAULT_CLASSES = ["cup", "mug", "bottle", "can", "bowl", "box", "ball"]
+_DEFAULT_CLASSES = [
+    "phone", "cell phone", "smartphone", "mobile phone",
+    "cup", "mug", "bottle", "can", "bowl", "box", "ball",
+]
+_ALIASES = {
+    "phone": ["phone", "cell phone", "smartphone", "mobile phone"],
+}
 
 
 def parse_prompt_to_classes(text: str) -> List[str]:
@@ -57,8 +64,12 @@ def parse_prompt_to_classes(text: str) -> List[str]:
         cleaned = filler.sub(" ", part).strip()
         cleaned = re.sub(r"\s+", " ", cleaned)
         if cleaned:
-            classes.append(cleaned)
-    return classes or list(_DEFAULT_CLASSES)
+            classes.extend(_ALIASES.get(cleaned.lower(), [cleaned]))
+    deduped = []
+    for cls in classes:
+        if cls not in deduped:
+            deduped.append(cls)
+    return deduped or list(_DEFAULT_CLASSES)
 
 
 class VisionDetector:
@@ -85,6 +96,7 @@ class VisionDetector:
         self.error = ""
         self._model = None
         self._classes: List[str] = list(_DEFAULT_CLASSES)
+        self._lock = threading.RLock()
         self._load()
 
     # ------------------------------------------------------------------
@@ -115,9 +127,10 @@ class VisionDetector:
         Returns the parsed class list so the caller can show it in the UI.
         """
         classes = parse_prompt_to_classes(text)
-        self._classes = classes
-        if self._model is not None:
-            self._model.set_classes(classes)
+        with self._lock:
+            self._classes = classes
+            if self._model is not None:
+                self._model.set_classes(classes)
         return classes
 
     @property
@@ -130,9 +143,10 @@ class VisionDetector:
         if not self.available or self._model is None:
             return []
         try:
-            results = self._model.predict(
-                rgb_bgr, conf=self.conf, verbose=False,
-            )
+            with self._lock:
+                results = self._model.predict(
+                    rgb_bgr, conf=self.conf, verbose=False,
+                )
         except Exception as exc:
             self.error = f"Inference failed: {exc}"
             return []
@@ -149,7 +163,13 @@ class VisionDetector:
         for xyxy, conf_t, cls_t in zip(
             boxes.xyxy.tolist(), boxes.conf.tolist(), boxes.cls.tolist()
         ):
-            label = names.get(int(cls_t), str(int(cls_t))) if names else str(int(cls_t))
+            cls_i = int(cls_t)
+            if isinstance(names, dict):
+                label = names.get(cls_i, str(cls_i))
+            elif isinstance(names, (list, tuple)) and 0 <= cls_i < len(names):
+                label = names[cls_i]
+            else:
+                label = str(cls_i)
             detections.append(
                 VisionDetection(
                     box_xyxy=(

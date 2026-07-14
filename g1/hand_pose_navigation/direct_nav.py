@@ -66,6 +66,7 @@ class DirectHandPoseNav:
         self,
         config: Dict,
         fixed_result: Optional[DetectionResult] = None,
+        robot=None,
     ) -> None:
         self._config = dict(config)
         arm = config.get("arm", "right")
@@ -104,11 +105,15 @@ class DirectHandPoseNav:
             tol_pos_m=config.get("ik_tol_pos_m", 0.003),
             tol_rot_rad=config.get("ik_tol_rot_rad", 0.01),
         )
-        self._checker = ReachabilityChecker(arm=arm)
+        max_reach_m = config.get("max_reach_m", 0.42)
+        self._checker = ReachabilityChecker(arm=arm, max_reach_m=max_reach_m)
 
         self._robot_mode = "mock"
         self._sdk_error = ""
-        if config.get("mock", False) or not _ROBOT_AVAILABLE:
+        if robot is not None:
+            self._robot = robot
+            self._robot_mode = "sdk"
+        elif config.get("mock", False) or not _ROBOT_AVAILABLE:
             self._robot = _MockRobot()
             if not _ROBOT_AVAILABLE and not config.get("mock", False):
                 self._sdk_error = "sdk_client import failed"
@@ -126,7 +131,11 @@ class DirectHandPoseNav:
                 self._robot = _MockRobot()
                 self._sdk_error = repr(exc)
 
-        self._executor_obj = ArmExecutor(self._robot, arm=arm)
+        self._executor_obj = ArmExecutor(
+            self._robot,
+            arm=arm,
+            max_reach_m=max_reach_m,
+        )
         self._tracking_loop = TrackingLoop(
             robot=self._robot,
             detector=self._detector,
@@ -141,6 +150,7 @@ class DirectHandPoseNav:
             rate_hz=config.get("rate_hz", 10.0),
             convergence_pos_m=config.get("convergence_pos_m", 0.015),
             convergence_rot_rad=config.get("convergence_rot_rad", 0.05),
+            max_joint_step_rad=config.get("max_joint_step_rad", 0.08),
             timeout_s=config.get("timeout_s", 30.0),
         )
         self._tracking_loop.start(blocking=False)

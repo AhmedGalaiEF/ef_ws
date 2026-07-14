@@ -65,6 +65,7 @@ class ArmExecutor:
         kd: float = _KD_ARM,
         rate_hz: float = 50.0,
         safety_gate: bool = True,
+        max_reach_m: float = 0.42,
     ) -> None:
         self.robot = robot
         self.arm = arm
@@ -74,7 +75,7 @@ class ArmExecutor:
         self.safety_gate = safety_gate
         self._joint_indices = LEFT_ARM_JOINTS if arm == "left" else RIGHT_ARM_JOINTS
         self._fk = ArmFK(arm=arm, backend="dh")
-        self._checker = ReachabilityChecker(arm=arm)
+        self._checker = ReachabilityChecker(arm=arm, max_reach_m=max_reach_m)
 
     # ------------------------------------------------------------------
     def execute(
@@ -83,6 +84,7 @@ class ArmExecutor:
         duration_s: float = 2.0,
         q_arm_start: Optional[np.ndarray] = None,
         T_base_desired: Optional[np.ndarray] = None,
+        stop_event=None,
     ) -> Dict:
         """
         Interpolate from current arm pose to q_arm_desired and send commands.
@@ -117,6 +119,14 @@ class ArmExecutor:
         final_q = q_arm_start.copy()
 
         for i in range(steps):
+            if stop_event is not None and stop_event.is_set():
+                return {
+                    "success": False,
+                    "reason": "stopped",
+                    "duration_s": duration_s,
+                    "steps": i,
+                    "final_q": final_q,
+                }
             alpha = _smooth_step((i + 1) / steps)
             q_cmd = (1 - alpha) * q_arm_start + alpha * q_arm_desired
             self._send_command(q_cmd)
@@ -182,15 +192,17 @@ class ArmExecutor:
         kp_by_joint = {idx: self.kp for idx in self._joint_indices}
         kd_by_joint = {idx: self.kd for idx in self._joint_indices}
 
-        # Build 30-element target array: NaN keeps loco in control of non-arm joints
-        targets = [float("nan")] * 30
-        for i, joint_idx in enumerate(self._joint_indices):
-            targets[joint_idx] = float(q_arm[i])
+        targets = {
+            int(joint_idx): float(q_arm[i])
+            for i, joint_idx in enumerate(self._joint_indices)
+        }
 
-        # Replace NaN with 0 for indices that must be specified; arm SDK only
-        # acts on joints where the weight blending has authority.
         try:
-            self.robot._arm_pub.publish_targets(
+            if hasattr(self.robot, "_get_arm_sdk"):
+                arm_pub = self.robot._get_arm_sdk()
+            else:
+                arm_pub = self.robot._arm_pub
+            arm_pub.publish_targets(
                 joint_targets=targets,
                 kp=self.kp,
                 kd=self.kd,

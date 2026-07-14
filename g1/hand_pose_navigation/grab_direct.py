@@ -105,6 +105,13 @@ def main() -> int:
         "convergence_pos_m": 0.035 if source == "vision" else 0.015,
         "convergence_rot_rad": 3.14 if source == "vision" else 0.05,
     }
+    shared_robot = None
+    if not args.mock:
+        try:
+            shared_robot = _make_shared_robot(args.iface, args.domain_id)
+        except Exception as exc:
+            print(f"[grab_direct] Unitree DDS/Robot init failed: {exc}")
+            return 1
 
     label = target.get("label", "<object>")
     print(f"[grab_direct] arm={arm} label={label!r} source={target.get('source')}")
@@ -149,13 +156,19 @@ def main() -> int:
             print("[grab_direct] Auto-step requested, but allowed step distance is zero.")
             return 1
 
-        _step_base_forward(
-            step_m=base_step_m,
-            speed_m_s=max(0.01, float(args.base_step_speed)),
-            iface=args.iface,
-            domain_id=args.domain_id,
-            mock=args.mock,
-        )
+        try:
+            _step_base_forward(
+                step_m=base_step_m,
+                speed_m_s=max(0.01, float(args.base_step_speed)),
+                iface=args.iface,
+                domain_id=args.domain_id,
+                mock=args.mock,
+                robot=shared_robot,
+            )
+        except Exception as exc:
+            print(f"[grab_direct] Auto-step failed: {exc}")
+            print("[grab_direct] Move the object/robot closer manually, then press Grab again.")
+            return 1
 
         T_base_object = T_base_object.copy()
         T_base_object[0, 3] -= base_step_m
@@ -186,7 +199,7 @@ def main() -> int:
         f"({T_base_desired[0, 3]:+.3f}, {T_base_desired[1, 3]:+.3f}, {T_base_desired[2, 3]:+.3f}) m "
         f"standoff={config['standoff_m']:.3f} m base_step={base_step_m:.3f} m"
     )
-    nav = DirectHandPoseNav(config, fixed_result=fixed_result)
+    nav = DirectHandPoseNav(config, fixed_result=fixed_result, robot=shared_robot)
 
     ok = False
     try:
@@ -258,6 +271,7 @@ def _step_base_forward(
     iface: str,
     domain_id: int,
     mock: bool,
+    robot=None,
 ) -> None:
     duration_s = abs(float(step_m)) / max(0.01, abs(float(speed_m_s)))
     print(
@@ -266,12 +280,51 @@ def _step_base_forward(
     )
     if mock:
         return
+    if robot is not None:
+        robot.move_for(duration=duration_s, vx=speed_m_s, vy=0.0, vyaw=0.0)
+        return
+    try:
+        from sdk_boot import create_loco_client
+    except Exception as exc:
+        raise RuntimeError(f"Cannot auto-step base; sdk_boot import failed: {exc}") from exc
+
+    try:
+        loco = create_loco_client(domain_id=domain_id, iface=iface, timeout=2.0)
+    except Exception as exc:
+        raise RuntimeError(
+            "Cannot auto-step base; failed to create Unitree locomotion DDS client. "
+            f"iface={iface!r} domain_id={domain_id}. Original error: {exc!r}"
+        ) from exc
+
+    try:
+        if not hasattr(loco, "Move"):
+            raise AttributeError("Current locomotion client does not support Move().")
+        loco.Move(speed_m_s, 0.0, 0.0, continous_move=True)
+        time.sleep(duration_s)
+    finally:
+        if hasattr(loco, "StopMove"):
+            loco.StopMove()
+        elif hasattr(loco, "Move"):
+            loco.Move(0.0, 0.0, 0.0, continous_move=False)
+
+
+def _make_shared_robot(iface: str, domain_id: int):
+    try:
+        from dds_env import ensure_channel_factory_initialized
+        ensure_channel_factory_initialized(int(domain_id), iface)
+    except Exception as exc:
+        raise RuntimeError(
+            f"ChannelFactoryInitialize failed for iface={iface!r} domain_id={domain_id}: {exc}"
+        ) from exc
     try:
         from sdk_client import Robot
+        return Robot(
+            iface=iface,
+            domain_id=domain_id,
+            auto_start_sensors=True,
+        )
     except Exception as exc:
-        raise RuntimeError(f"Cannot auto-step base; sdk_client import failed: {exc}") from exc
-    robot = Robot(iface=iface, domain_id=domain_id, auto_start_sensors=False)
-    robot.move_for(duration=duration_s, vx=speed_m_s, vy=0.0, vyaw=0.0)
+        raise RuntimeError(f"Robot construction failed after DDS init: {exc!r}") from exc
 
 
 def _close_hand(arm: str, iface: str, domain_id: int, hold_s: float) -> None:

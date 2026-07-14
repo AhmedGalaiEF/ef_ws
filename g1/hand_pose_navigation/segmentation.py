@@ -170,12 +170,13 @@ def draw_detection_boxes(
 
 def draw_segmentation_overlay(
     rgb_bgr: np.ndarray,
-    masks: List[Tuple[str, np.ndarray]],
+    masks: List[Tuple],
     alpha: float = 0.45,
 ) -> np.ndarray:
-    """Blend each (label, boolean mask) as a semi-transparent color region."""
+    """Blend each mask tuple as a semi-transparent color region."""
     out = rgb_bgr.copy().astype(np.float32)
-    for i, (_label, mask) in enumerate(masks):
+    for i, item in enumerate(masks):
+        mask = item[-1]
         color = np.array(_color_for(i), dtype=np.float32)
         out[mask] = (1 - alpha) * out[mask] + alpha * color
     return np.clip(out, 0, 255).astype(np.uint8)
