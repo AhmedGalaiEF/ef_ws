@@ -34,6 +34,23 @@ from .arm_ik import ArmIK
 from .reachability_checker import ReachabilityChecker
 from .arm_executor import ArmExecutor
 
+_BODY_JOINT_INDEX_BY_LABEL = {
+    "left_arm.shoulder_pitch": 15,
+    "left_arm.shoulder_roll": 16,
+    "left_arm.shoulder_yaw": 17,
+    "left_arm.elbow": 18,
+    "left_arm.wrist_roll": 19,
+    "left_arm.wrist_pitch": 20,
+    "left_arm.wrist_yaw": 21,
+    "right_arm.shoulder_pitch": 22,
+    "right_arm.shoulder_roll": 23,
+    "right_arm.shoulder_yaw": 24,
+    "right_arm.elbow": 25,
+    "right_arm.wrist_roll": 26,
+    "right_arm.wrist_pitch": 27,
+    "right_arm.wrist_yaw": 28,
+}
+
 
 # ---------------------------------------------------------------------------
 # Status
@@ -224,6 +241,11 @@ class TrackingLoop:
 
             # ── Step 4: get current hand pose (FK) ────────────────────
             q_full = self._read_q_full()
+            if q_full is None:
+                self._status.safety_rejections += 1
+                self._status.record("[Step 4] Joint state unavailable — skipping command.")
+                self._sleep(dt, t0)
+                continue
             T_base_hand = self.fk.compute(q_full)
             q_arm_cur = q_full[self._joint_indices]
 
@@ -337,17 +359,23 @@ class TrackingLoop:
         self._status.running = False
 
     # ------------------------------------------------------------------
-    def _read_q_full(self) -> np.ndarray:
+    def _read_q_full(self) -> Optional[np.ndarray]:
         try:
             js = self.robot.get_joint_states()
+            if not js:
+                return None
             q = np.zeros(30)
+            seen_indices = set()
             for name, data in js.get("joints", {}).items():
-                idx = data.get("index", -1)
+                idx = _joint_entry_index(name, data)
                 if 0 <= idx < 30:
                     q[idx] = data.get("position", 0.0)
+                    seen_indices.add(int(idx))
+            if not all(idx in seen_indices for idx in self._joint_indices):
+                return None
             return q
         except Exception:
-            return np.zeros(30)
+            return None
 
     @staticmethod
     def _pose_error_scalars(
@@ -376,3 +404,12 @@ class TrackingLoop:
         remaining = dt - elapsed
         if remaining > 0:
             time.sleep(remaining)
+
+
+def _joint_entry_index(label: str, data: Dict) -> int:
+    if "index" in data:
+        try:
+            return int(data.get("index", -1))
+        except Exception:
+            return -1
+    return int(_BODY_JOINT_INDEX_BY_LABEL.get(str(label), -1))

@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import math
 import os
 import subprocess
 import sys
@@ -52,6 +53,9 @@ from hand_pose_navigation.direct_nav import DirectHandPoseNav, _make_transform
 from hand_pose_navigation.grasp_planner import GraspPlanner
 from hand_pose_navigation.reachability_checker import ReachabilityChecker
 from hand_pose_navigation.arm_fk import ArmFK
+from hand_pose_navigation.arm_ik import ArmIK
+from hand_pose_navigation.arm_executor import ArmExecutor
+from hand_pose_navigation.arm_fk import LEFT_ARM_JOINTS, RIGHT_ARM_JOINTS, JOINT_LIMITS
 
 import dash
 from dash import dcc, html, Input, Output, State, callback_context, no_update, ALL
@@ -81,6 +85,63 @@ class Detection:
     role: str = "object"  # "object" | "hand" (aruco only)
 
 
+# Unitree G1 depth-camera drawing:
+# optical ray is 42 deg from vertical -> 48 deg below horizontal.
+_UNITREE_CAMERA_X_M = 47.64571478 / 1000.0
+_UNITREE_CAMERA_Z_M = 462.68178553 / 1000.0
+_UNITREE_CAMERA_DOWN_PITCH_RAD = math.radians(90.0 - 42.0)
+DEFAULT_CAMERA_EXTRINSIC = {
+    "x": _UNITREE_CAMERA_X_M,
+    "y": 0.0,
+    "z": _UNITREE_CAMERA_Z_M,
+    "roll": -math.pi / 2.0 - _UNITREE_CAMERA_DOWN_PITCH_RAD,
+    "pitch": 0.0,
+    "yaw": -math.pi / 2.0,
+}
+DEFAULT_MAX_JOINT_STEP_RAD = 0.05
+ABSOLUTE_MAX_JOINT_STEP_RAD = 0.10
+DEFAULT_MAX_JOINT_SPEED_RAD_S = 0.15
+ABSOLUTE_MAX_JOINT_SPEED_RAD_S = 0.60
+BODY_JOINT_INDEX_BY_LABEL = {
+    "left_arm.shoulder_pitch": 15,
+    "left_arm.shoulder_roll": 16,
+    "left_arm.shoulder_yaw": 17,
+    "left_arm.elbow": 18,
+    "left_arm.wrist_roll": 19,
+    "left_arm.wrist_pitch": 20,
+    "left_arm.wrist_yaw": 21,
+    "right_arm.shoulder_pitch": 22,
+    "right_arm.shoulder_roll": 23,
+    "right_arm.shoulder_yaw": 24,
+    "right_arm.elbow": 25,
+    "right_arm.wrist_roll": 26,
+    "right_arm.wrist_pitch": 27,
+    "right_arm.wrist_yaw": 28,
+}
+
+
+def _copy_detection(det: Detection) -> Detection:
+    return Detection(
+        id=det.id,
+        label=det.label,
+        source=det.source,
+        score=float(det.score),
+        T_camera_object=det.T_camera_object.copy(),
+        box=None if det.box is None else tuple(det.box),
+        marker_id=det.marker_id,
+        role=det.role,
+    )
+
+
+def _joint_entry_index(label: str, data: Dict[str, Any]) -> int:
+    if "index" in data:
+        try:
+            return int(data.get("index", -1))
+        except Exception:
+            return -1
+    return int(BODY_JOINT_INDEX_BY_LABEL.get(str(label), -1))
+
+
 class SharedState:
     def __init__(self) -> None:
         self.lock = threading.RLock()
@@ -92,13 +153,14 @@ class SharedState:
         self.boxes_for_draw: List[Dict] = []
         self.masks_for_draw: List[Tuple[str, str, np.ndarray]] = []
         self.tags_for_draw: Dict[int, DetectionResult] = {}
+        self.hand_tag_T_camera: Optional[np.ndarray] = None
+        self.hand_tag_ts: float = 0.0
         self.max_visible_detections = 5
+        self.max_joint_step_rad = DEFAULT_MAX_JOINT_STEP_RAD
+        self.max_joint_speed_rad_s = DEFAULT_MAX_JOINT_SPEED_RAD_S
         self.selected_id: Optional[str] = None
-        self.camera_extrinsic = {
-            "x": 0.0, "y": 0.0, "z": 0.30,
-            "roll": -1.5708, "pitch": 0.0, "yaw": -1.5708,
-        }
-        self.camera_tf_status = "camera TF: manual default"
+        self.camera_extrinsic = dict(DEFAULT_CAMERA_EXTRINSIC)
+        self.camera_tf_status = "camera TF: Unitree drawing fallback"
         self.use_ros_camera_tf = False
         self.use_aruco = True
         self.arm_override = "auto"
@@ -114,6 +176,7 @@ class SharedState:
         self.last_detection_ts: float = 0.0
         self.frame_seq: int = 0
         self.hand_fk_base: Dict[str, np.ndarray] = {}
+        self.hand_fk_T_base: Dict[str, np.ndarray] = {}
         self.hand_fk_ts: float = 0.0
         self.hand_fk_status: str = "FK hand: starting"
 
@@ -153,6 +216,9 @@ DEFAULT_GRASP_STANDOFF_M = 0.08
 DEFAULT_MAX_BASE_STEP_M = 0.30
 DEFAULT_REACH_MARGIN_M = 0.04
 DEFAULT_DIRECT_MAX_REACH_M = 0.52
+DEFAULT_SLOW_GRAB_RATE_HZ = 3.0
+DEFAULT_SLOW_GRAB_TIMEOUT_S = 180.0
+DEFAULT_EXTEND_STAGE_DURATION_S = 1.2
 
 
 class _MockRobot:
@@ -380,6 +446,13 @@ def _perception_loop(detector: TargetDetector, vision: VisionDetector, rate_hz: 
             STATE.boxes_for_draw = boxes_for_draw
             STATE.masks_for_draw = masks_for_draw
             STATE.tags_for_draw = tags
+            hand_tag = tags.get(aruco_assets.HAND_MARKER_ID)
+            if hand_tag is not None:
+                STATE.hand_tag_T_camera = hand_tag.T_camera_object.copy()
+                STATE.hand_tag_ts = time.time()
+            elif STATE.hand_tag_ts and time.time() - STATE.hand_tag_ts > STALE_AFTER_S:
+                STATE.hand_tag_T_camera = None
+                STATE.hand_tag_ts = 0.0
             STATE.last_detection_ts = time.time()
             n_vision = "on" if vision.available else f"off ({vision.error})"
             STATE.status_msg = (
@@ -419,12 +492,17 @@ def _hand_fk_loop(iface: str, domain_id: int) -> None:
             q_full = np.zeros(30, dtype=np.float64)
             n = min(len(snap.joint_positions), q_full.size)
             q_full[:n] = np.asarray(snap.joint_positions[:n], dtype=np.float64)
-            hands = {
-                side: fk[side].compute(q_full)[:3, 3].copy()
+            hand_T = {
+                side: fk[side].compute(q_full).copy()
                 for side in ("left", "right")
+            }
+            hands = {
+                side: T_base_hand[:3, 3].copy()
+                for side, T_base_hand in hand_T.items()
             }
             with STATE.lock:
                 STATE.hand_fk_base = hands
+                STATE.hand_fk_T_base = hand_T
                 STATE.hand_fk_ts = float(ts or time.time())
                 STATE.hand_fk_status = "FK hand: rt/lowstate"
         except Exception as exc:
@@ -541,6 +619,93 @@ def _colorize_depth(depth_m: np.ndarray, max_m: float = 3.0) -> np.ndarray:
     return cv2.applyColorMap(scaled, cv2.COLORMAP_JET)
 
 
+def _draw_pose_axis(
+    image: np.ndarray,
+    T_camera_pose: np.ndarray,
+    label: str,
+    color: Tuple[int, int, int],
+    axis_len_m: float = 0.05,
+) -> bool:
+    cam_mat = np.array(
+        [[K.fx, 0.0, K.cx], [0.0, K.fy, K.cy], [0.0, 0.0, 1.0]],
+        dtype=np.float64,
+    )
+    dist = np.zeros((4,), dtype=np.float64)
+    R = T_camera_pose[:3, :3]
+    t = T_camera_pose[:3, 3].reshape(3, 1)
+    if float(t[2, 0]) <= 0.05:
+        return False
+    try:
+        rvec, _ = cv2.Rodrigues(R)
+        cv2.drawFrameAxes(image, cam_mat, dist, rvec, t, float(axis_len_m))
+        uv, _ = cv2.projectPoints(
+            np.zeros((1, 3), dtype=np.float64),
+            rvec,
+            t,
+            cam_mat,
+            dist,
+        )
+        u, v = (int(x) for x in uv.reshape(-1)[:2])
+        cv2.putText(
+            image,
+            label,
+            (u + 8, v + 18),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            color,
+            2,
+            cv2.LINE_AA,
+        )
+        return True
+    except Exception:
+        return False
+
+
+def _draw_detection_gizmos(
+    image: np.ndarray,
+    selected: Optional[Detection],
+    cam: Dict[str, float],
+    arm_override: str,
+    hand_fk_T_base: Dict[str, np.ndarray],
+    hand_tag_T_camera: Optional[np.ndarray],
+) -> np.ndarray:
+    out = image.copy()
+    T_base_camera = _make_transform(
+        xyz=(cam["x"], cam["y"], cam["z"]),
+        rpy=(cam["roll"], cam["pitch"], cam["yaw"]),
+    )
+    T_camera_base = np.linalg.inv(T_base_camera)
+    arm = arm_override
+    if selected is not None:
+        arm, _T_base_camera, _T_base_object = _resolve_arm_and_base_pose(
+            selected,
+            cam,
+            arm_override,
+        )
+        _draw_pose_axis(out, selected.T_camera_object, "object", (0, 220, 255), axis_len_m=0.055)
+    if arm == "auto":
+        arm = "right"
+    T_base_hand = hand_fk_T_base.get(arm)
+    drew_hand = False
+    if T_base_hand is not None:
+        drew_hand = _draw_pose_axis(
+            out,
+            T_camera_base @ T_base_hand,
+            f"{arm} hand",
+            (255, 255, 80),
+            axis_len_m=0.06,
+        )
+    if not drew_hand and hand_tag_T_camera is not None:
+        _draw_pose_axis(
+            out,
+            hand_tag_T_camera,
+            f"{arm} hand tag",
+            (255, 255, 80),
+            axis_len_m=0.06,
+        )
+    return out
+
+
 def _resolve_arm_and_base_pose(
     det: Detection,
     cam: Dict[str, float],
@@ -632,6 +797,26 @@ def _options_card() -> dbc.Card:
             min=1,
             step=1,
             value=STATE.max_visible_detections,
+            className="mb-2",
+        ),
+        dbc.Label("Max arm joint increment per command (rad)", className="mt-2"),
+        dbc.Input(
+            id="max-joint-step-rad",
+            type="number",
+            min=0.005,
+            max=ABSOLUTE_MAX_JOINT_STEP_RAD,
+            step=0.005,
+            value=STATE.max_joint_step_rad,
+            className="mb-2",
+        ),
+        dbc.Label("Max arm joint speed (rad/s)", className="mt-2"),
+        dbc.Input(
+            id="max-joint-speed-rad-s",
+            type="number",
+            min=0.02,
+            max=ABSOLUTE_MAX_JOINT_SPEED_RAD_S,
+            step=0.01,
+            value=STATE.max_joint_speed_rad_s,
             className="mb-2",
         ),
         html.Small(
@@ -837,6 +1022,11 @@ def _refresh(_n, view_name):
         last_detection_ts = STATE.last_detection_ts
         cam = dict(STATE.camera_extrinsic)
         arm_override = STATE.arm_override
+        hand_fk_T_base = {k: v.copy() for k, v in STATE.hand_fk_T_base.items()}
+        hand_tag_T_camera = (
+            None if STATE.hand_tag_T_camera is None else STATE.hand_tag_T_camera.copy()
+        )
+        hand_tag_ts = STATE.hand_tag_ts
         camera_tf_status = STATE.camera_tf_status
         max_visible_detections = STATE.max_visible_detections
 
@@ -872,6 +1062,8 @@ def _refresh(_n, view_name):
                 f"{status_msg} | showing {len(detections)}/{total_detections} "
                 f"detections"
             )
+    if hand_tag_ts > 0.0 and (time.time() - hand_tag_ts) <= STALE_AFTER_S:
+        camera_tf_status = f"{camera_tf_status} | hand tag visible"
 
     view_name = view_name or "detections"
     if view_name == "rgb":
@@ -886,7 +1078,16 @@ def _refresh(_n, view_name):
         view_src = _encode_jpeg_src(draw_aruco_overlay(base, tags, K))
     else:
         base = detection_rgb if detection_rgb is not None else rgb
-        view_src = _encode_jpeg_src(draw_detection_boxes(base, boxes))
+        selected = detections.get(selected_id or "")
+        boxed = draw_detection_boxes(base, boxes)
+        view_src = _encode_jpeg_src(_draw_detection_gizmos(
+            boxed,
+            selected,
+            cam,
+            arm_override,
+            hand_fk_T_base,
+            hand_tag_T_camera,
+        ))
 
     items = []
     for det_id, det in sorted(detections.items()):
@@ -1050,6 +1251,36 @@ def _sync_max_visible_detections(value):
 
 
 @app.callback(
+    Output("max-joint-step-rad", "value"),
+    Input("max-joint-step-rad", "value"),
+)
+def _sync_max_joint_step_rad(value):
+    try:
+        step = float(value)
+    except Exception:
+        step = DEFAULT_MAX_JOINT_STEP_RAD
+    step = max(0.005, min(ABSOLUTE_MAX_JOINT_STEP_RAD, step))
+    with STATE.lock:
+        STATE.max_joint_step_rad = step
+    return step
+
+
+@app.callback(
+    Output("max-joint-speed-rad-s", "value"),
+    Input("max-joint-speed-rad-s", "value"),
+)
+def _sync_max_joint_speed_rad_s(value):
+    try:
+        speed = float(value)
+    except Exception:
+        speed = DEFAULT_MAX_JOINT_SPEED_RAD_S
+    speed = max(0.02, min(ABSOLUTE_MAX_JOINT_SPEED_RAD_S, speed))
+    with STATE.lock:
+        STATE.max_joint_speed_rad_s = speed
+    return speed
+
+
+@app.callback(
     Output("use-ros-camera-tf", "value"),
     Input("use-ros-camera-tf", "value"),
 )
@@ -1060,7 +1291,7 @@ def _sync_use_ros_camera_tf(value):
         if enabled:
             STATE.camera_tf_status = "camera TF: waiting for ROS 2 TF"
         else:
-            STATE.camera_tf_status = "camera TF: fixed default"
+            STATE.camera_tf_status = "camera TF: Unitree drawing fallback"
     return enabled
 
 
@@ -1302,6 +1533,132 @@ def _run_stop_grabbing() -> None:
         ARM_CONTROL_LOCK.release()
 
 
+def _read_current_arm_q(robot, arm: str) -> np.ndarray:
+    js = robot.get_joint_states()
+    joints = js.get("joints", {}) if js else {}
+    joint_indices = LEFT_ARM_JOINTS if arm == "left" else RIGHT_ARM_JOINTS
+    seen_indices = set()
+    q_full = np.zeros(30, dtype=np.float64)
+    for name, data in joints.items():
+        idx = _joint_entry_index(name, data)
+        if 0 <= idx < q_full.size and data.get("position") is not None:
+            q_full[idx] = float(data.get("position"))
+            seen_indices.add(idx)
+    missing = [idx for idx in joint_indices if idx not in seen_indices]
+    if missing:
+        raise RuntimeError(f"cannot read current {arm} arm joints from lowstate; missing indices {missing}")
+    return q_full[joint_indices]
+
+
+def _extend_arm_forward_joint_waypoints(q_start: np.ndarray, arm: str) -> List[Tuple[str, np.ndarray]]:
+    side = str(arm).strip().lower()
+    if side not in ("left", "right"):
+        raise ValueError("arm must be 'left' or 'right'")
+    limits = JOINT_LIMITS[side]
+
+    def clamp_i(i: int, value: float) -> float:
+        lo, hi = limits[i]
+        return max(lo, min(hi, float(value)))
+
+    roll_delta = 0.50 if side == "left" else -0.50
+    pitch_delta = -0.35
+    restore_fraction = 0.45
+
+    start = np.asarray(q_start, dtype=np.float64).copy()
+    roll_pose = start.copy()
+    roll_pose[1] = clamp_i(1, start[1] + roll_delta)
+
+    pitch_pose = roll_pose.copy()
+    pitch_pose[0] = clamp_i(0, roll_pose[0] + pitch_delta)
+
+    restored_roll_pose = pitch_pose.copy()
+    restored_roll_pose[1] = clamp_i(1, roll_pose[1] - (roll_delta * restore_fraction))
+
+    target_pose = restored_roll_pose.copy()
+    target_pose[3] = clamp_i(3, start[3] - 0.90)
+    target_pose[4] = clamp_i(4, start[4] + 0.40)
+    target_pose[5] = clamp_i(5, start[5] - 0.40)
+
+    final_pose = target_pose.copy()
+    final_pose[0] = clamp_i(0, target_pose[0] - 0.08)
+    final_pose[1] = clamp_i(1, target_pose[1] - np.copysign(0.10, roll_delta))
+    final_pose[3] = clamp_i(3, target_pose[3] - 0.10)
+    final_pose[5] = clamp_i(5, target_pose[5] - 0.08)
+
+    return [
+        ("shoulder_roll_clearance", roll_pose),
+        ("shoulder_pitch_forward", pitch_pose),
+        ("partial_shoulder_roll_restore", restored_roll_pose),
+        ("elbow_and_wrist_pitch", target_pose),
+        ("final_forward_up_and_in", final_pose),
+    ]
+
+
+def _run_extend_arm_ee_ik(
+    robot,
+    arm: str,
+    max_joint_step_rad: float,
+    max_joint_speed_rad_s: float,
+) -> Dict[str, Any]:
+    if hasattr(robot, "unrelease_arms"):
+        robot.unrelease_arms(duration_s=0.4)
+    q_cur = _read_current_arm_q(robot, arm)
+    fk = ArmFK(arm=arm, backend="urdf")
+    ik = ArmIK(
+        arm=arm,
+        solver="dls",
+        tol_pos_m=0.012,
+        tol_rot_rad=0.20,
+    )
+    executor = ArmExecutor(
+        robot,
+        arm=arm,
+        kp=30.0,
+        kd=1.5,
+        max_reach_m=DEFAULT_DIRECT_MAX_REACH_M,
+        max_joint_step_rad=max_joint_step_rad,
+        max_joint_speed_rad_s=max_joint_speed_rad_s,
+    )
+    results = []
+    for stage_name, q_stage_nominal in _extend_arm_forward_joint_waypoints(q_cur, arm):
+        if ARM_CANCEL_EVENT.is_set():
+            return {"success": False, "reason": "cancelled", "stage_results": results}
+        T_desired = fk.compute_arm(q_stage_nominal)
+        q_solution, info = ik.solve(T_desired, q_init=q_cur)
+        if q_solution is None:
+            return {
+                "success": False,
+                "reason": f"ik failed at {stage_name}",
+                "ik_info": info,
+                "stage_results": results,
+            }
+        result = executor.execute(
+            q_solution,
+            duration_s=DEFAULT_EXTEND_STAGE_DURATION_S,
+            q_arm_start=q_cur,
+            T_base_desired=T_desired,
+            stop_event=ARM_CANCEL_EVENT,
+        )
+        results.append({"stage": stage_name, "ik": info, "execute": result})
+        _log(
+            "[recognition_app] extend stage "
+            f"{stage_name}: success={result.get('success')} "
+            f"duration={result.get('duration_s', 0.0):.2f}s "
+            f"requested={result.get('requested_duration_s', 0.0):.2f}s "
+            f"final_err={result.get('final_error_rad', 0.0):.4f}rad "
+            f"capped_samples={result.get('capped_samples', 0)}"
+        )
+        if not result.get("success"):
+            return {"success": False, "reason": result.get("reason"), "stage_results": results}
+        q_cur = np.asarray(result.get("final_q", q_solution), dtype=np.float64)
+    return {
+        "success": True,
+        "arm": arm,
+        "controller": "ee_ik",
+        "stages": [item["stage"] for item in results],
+    }
+
+
 def _run_extend_arm() -> None:
     if not ARM_CONTROL_LOCK.acquire(blocking=False):
         with STATE.lock:
@@ -1314,22 +1671,27 @@ def _run_extend_arm() -> None:
             STATE.arm_motion_label = "extend arm"
         if _CONTROL_ROBOT is None:
             raise RuntimeError(_CONTROL_STATUS)
-        if not hasattr(_CONTROL_ROBOT, "extend_arm_forward"):
-            raise AttributeError("control robot has no extend_arm_forward()")
         with STATE.lock:
             arm_override = STATE.arm_override
             selected_id = STATE.selected_id
             det = STATE.detections.get(selected_id) if selected_id else None
             cam = dict(STATE.camera_extrinsic)
+            max_joint_step_rad = STATE.max_joint_step_rad
+            max_joint_speed_rad_s = STATE.max_joint_speed_rad_s
         arm = arm_override
         if arm == "auto":
             if det is not None:
                 arm, _T_base_camera, _T_base_object = _resolve_arm_and_base_pose(det, cam, arm_override)
             else:
                 arm = "right"
-        result = _CONTROL_ROBOT.extend_arm_forward(arm=arm)
+        result = _run_extend_arm_ee_ik(
+            _CONTROL_ROBOT,
+            arm,
+            max_joint_step_rad,
+            max_joint_speed_rad_s,
+        )
         with STATE.lock:
-            STATE.status_msg = f"extend_arm_forward({arm}) done: {result.get('duration_s', '?')}s"
+            STATE.status_msg = f"extend arm EE IK ({arm}) done: {result}"
     except Exception as exc:
         with STATE.lock:
             STATE.status_msg = f"extend arm failed: {exc}"
@@ -1352,6 +1714,8 @@ def _run_direct_grab_inline(
     cam: Dict[str, float],
     auto_step_base: bool,
     T_base_object: np.ndarray,
+    max_joint_step_rad: float,
+    max_joint_speed_rad_s: float,
 ) -> None:
     global ACTIVE_DIRECT_NAV
     if _CONTROL_ROBOT is None:
@@ -1411,8 +1775,8 @@ def _run_direct_grab_inline(
             "arm": arm,
             "detection_method": "fixed",
             "standoff_m": DEFAULT_GRASP_STANDOFF_M,
-            "rate_hz": 10.0,
-            "timeout_s": 25.0,
+            "rate_hz": DEFAULT_SLOW_GRAB_RATE_HZ,
+            "timeout_s": DEFAULT_SLOW_GRAB_TIMEOUT_S,
             "ik_solver": "dls",
             "iface": _ARGS.iface,
             "domain_id": _ARGS.domain_id,
@@ -1427,13 +1791,25 @@ def _run_direct_grab_inline(
             "ik_tol_rot_rad": 3.14 if det.source == "vision" else 0.01,
             "convergence_pos_m": 0.035 if det.source == "vision" else 0.015,
             "convergence_rot_rad": 3.14 if det.source == "vision" else 0.05,
-            "max_joint_step_rad": 0.08,
+            "max_joint_step_rad": max_joint_step_rad,
+            "max_joint_speed_rad_s": max_joint_speed_rad_s,
             "max_reach_m": DEFAULT_DIRECT_MAX_REACH_M,
         }
         _log(
             "[recognition_app] object_base_xyz="
             f"({T_base_object[0, 3]:+.3f}, {T_base_object[1, 3]:+.3f}, {T_base_object[2, 3]:+.3f}) m "
             f"base_step={base_step_m:.3f} m"
+        )
+        _log(
+            "[recognition_app] using fixed selected-object XYZ for this grab; "
+            "camera detections will not retarget the arm mid-grab."
+        )
+        _log(
+            "[recognition_app] slow grab config: "
+            f"rate={config['rate_hz']:.1f}Hz "
+            f"max_joint_step={config['max_joint_step_rad']:.3f}rad "
+            f"max_joint_speed={config['max_joint_speed_rad_s']:.3f}rad/s "
+            f"timeout={config['timeout_s']:.1f}s"
         )
         if hasattr(_CONTROL_ROBOT, "unrelease_arms"):
             _log("[recognition_app] Re-engaging arm SDK control before direct grab.")
@@ -1503,12 +1879,15 @@ def _run_direct_grab_inline(
 def _run_grab_impl() -> None:
     with STATE.lock:
         selected_id = STATE.selected_id
-        det = STATE.detections.get(selected_id) if selected_id else None
+        live_det = STATE.detections.get(selected_id) if selected_id else None
+        det = _copy_detection(live_det) if live_det is not None else None
         detection_age_s = time.time() - STATE.last_detection_ts if STATE.last_detection_ts else float("inf")
         cam = dict(STATE.camera_extrinsic)
         arm_override = STATE.arm_override
         backend = STATE.backend
         auto_step_base = STATE.auto_step_base
+        max_joint_step_rad = STATE.max_joint_step_rad
+        max_joint_speed_rad_s = STATE.max_joint_speed_rad_s
         STATE.grab_running = True
 
     if det is None or detection_age_s > STALE_AFTER_S:
@@ -1541,6 +1920,11 @@ def _run_grab_impl() -> None:
     p_cam = det.T_camera_object[:3, 3]
     p_base = T_base_object[:3, 3]
     _log(
+        "[recognition_app] Grab target coordinate snapshot: "
+        f"id={det.id!r} label={det.label!r} source={det.source} "
+        f"confidence={det.score:.2f}"
+    )
+    _log(
         f"[recognition_app] arm={arm} label={det.label!r} "
         f"backend={backend} auto_step_base={auto_step_base}"
     )
@@ -1553,7 +1937,15 @@ def _run_grab_impl() -> None:
 
     if backend == "direct":
         try:
-            _run_direct_grab_inline(det, arm, cam, auto_step_base, T_base_object)
+            _run_direct_grab_inline(
+                det,
+                arm,
+                cam,
+                auto_step_base,
+                T_base_object,
+                max_joint_step_rad,
+                max_joint_speed_rad_s,
+            )
         finally:
             with STATE.lock:
                 STATE.grab_running = False

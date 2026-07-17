@@ -135,7 +135,14 @@ class DirectHandPoseNav:
             self._robot,
             arm=arm,
             max_reach_m=max_reach_m,
+            max_joint_step_rad=config.get("max_joint_step_rad", 0.08),
+            max_joint_speed_rad_s=config.get("max_joint_speed_rad_s", 0.15),
         )
+        control_rate_hz = float(config.get("rate_hz", 10.0))
+        max_joint_step_rad = float(config.get("max_joint_step_rad", 0.08))
+        max_joint_speed_rad_s = float(config.get("max_joint_speed_rad_s", 0.15))
+        if control_rate_hz > 0.0 and max_joint_speed_rad_s > 0.0:
+            max_joint_step_rad = min(max_joint_step_rad, max_joint_speed_rad_s / control_rate_hz)
         self._tracking_loop = TrackingLoop(
             robot=self._robot,
             detector=self._detector,
@@ -147,10 +154,10 @@ class DirectHandPoseNav:
             checker=self._checker,
             executor=self._executor_obj,
             arm=arm,
-            rate_hz=config.get("rate_hz", 10.0),
+            rate_hz=control_rate_hz,
             convergence_pos_m=config.get("convergence_pos_m", 0.015),
             convergence_rot_rad=config.get("convergence_rot_rad", 0.05),
-            max_joint_step_rad=config.get("max_joint_step_rad", 0.08),
+            max_joint_step_rad=max_joint_step_rad,
             timeout_s=config.get("timeout_s", 30.0),
         )
         self._tracking_loop.start(blocking=False)

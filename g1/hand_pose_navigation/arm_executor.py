@@ -42,6 +42,22 @@ _DEFAULT_KD: Dict[int, float] = {}
 
 _KP_ARM = 60.0   # position gain for arm joints
 _KD_ARM = 2.0    # damping gain for arm joints
+_BODY_JOINT_INDEX_BY_LABEL = {
+    "left_arm.shoulder_pitch": 15,
+    "left_arm.shoulder_roll": 16,
+    "left_arm.shoulder_yaw": 17,
+    "left_arm.elbow": 18,
+    "left_arm.wrist_roll": 19,
+    "left_arm.wrist_pitch": 20,
+    "left_arm.wrist_yaw": 21,
+    "right_arm.shoulder_pitch": 22,
+    "right_arm.shoulder_roll": 23,
+    "right_arm.shoulder_yaw": 24,
+    "right_arm.elbow": 25,
+    "right_arm.wrist_roll": 26,
+    "right_arm.wrist_pitch": 27,
+    "right_arm.wrist_yaw": 28,
+}
 
 
 class ArmExecutor:
@@ -66,6 +82,8 @@ class ArmExecutor:
         rate_hz: float = 50.0,
         safety_gate: bool = True,
         max_reach_m: float = 0.42,
+        max_joint_step_rad: float = 0.1,
+        max_joint_speed_rad_s: float = 0.15,
     ) -> None:
         self.robot = robot
         self.arm = arm
@@ -73,9 +91,12 @@ class ArmExecutor:
         self.kd = kd
         self.rate_hz = rate_hz
         self.safety_gate = safety_gate
+        self.max_joint_step_rad = max(0.0, float(max_joint_step_rad))
+        self.max_joint_speed_rad_s = max(0.0, float(max_joint_speed_rad_s))
         self._joint_indices = LEFT_ARM_JOINTS if arm == "left" else RIGHT_ARM_JOINTS
         self._fk = ArmFK(arm=arm, backend="dh")
         self._checker = ReachabilityChecker(arm=arm, max_reach_m=max_reach_m)
+        self._last_command_q: Optional[np.ndarray] = None
 
     # ------------------------------------------------------------------
     def execute(
@@ -113,10 +134,28 @@ class ArmExecutor:
         # Get start configuration
         if q_arm_start is None:
             q_arm_start = self._read_current_arm_q()
+            if q_arm_start is None:
+                return {
+                    "success": False,
+                    "reason": "joint_state_unavailable",
+                    "duration_s": 0.0,
+                    "steps": 0,
+                }
+        q_arm_start = np.asarray(q_arm_start, dtype=np.float64).copy()
+        q_arm_desired = np.asarray(q_arm_desired, dtype=np.float64).copy()
+        if self._last_command_q is None:
+            self._last_command_q = q_arm_start.copy()
 
+        requested_duration_s = max(0.0, float(duration_s))
+        duration_s = self._duration_for_speed_limit(
+            q_arm_start,
+            q_arm_desired,
+            requested_duration_s,
+        )
         steps = max(1, int(duration_s * self.rate_hz))
         dt = duration_s / steps
         final_q = q_arm_start.copy()
+        capped_samples = 0
 
         for i in range(steps):
             if stop_event is not None and stop_event.is_set():
@@ -129,6 +168,9 @@ class ArmExecutor:
                 }
             alpha = _smooth_step((i + 1) / steps)
             q_cmd = (1 - alpha) * q_arm_start + alpha * q_arm_desired
+            q_cmd, was_capped = self._cap_command_step(q_cmd, dt)
+            if was_capped:
+                capped_samples += 1
             self._send_command(q_cmd)
             final_q = q_cmd
             time.sleep(dt)
@@ -136,8 +178,11 @@ class ArmExecutor:
         return {
             "success": True,
             "duration_s": duration_s,
+            "requested_duration_s": requested_duration_s,
             "steps": steps,
             "final_q": final_q,
+            "final_error_rad": float(np.max(np.abs(q_arm_desired - final_q))) if final_q.size else 0.0,
+            "capped_samples": capped_samples,
         }
 
     # ------------------------------------------------------------------
@@ -163,22 +208,76 @@ class ArmExecutor:
     def stop(self) -> None:
         """Hold current position by re-sending current joint state."""
         q_cur = self._read_current_arm_q()
+        if q_cur is None:
+            return
         self._send_command(q_cur)
 
     # ------------------------------------------------------------------
-    def _read_current_arm_q(self) -> np.ndarray:
+    def _read_current_arm_q(self) -> Optional[np.ndarray]:
         """Read current arm joint angles from the robot."""
         try:
             js = self.robot.get_joint_states()
+            if not js:
+                return None
             joints = js.get("joints", {})
             q = np.zeros(30)
+            seen_indices = set()
             for name, data in joints.items():
-                idx = data.get("index", -1)
+                idx = _joint_entry_index(name, data)
                 if 0 <= idx < 30:
                     q[idx] = data.get("position", 0.0)
+                    seen_indices.add(int(idx))
+            if not all(int(idx) in seen_indices for idx in self._joint_indices):
+                return None
             return q[self._joint_indices]
         except Exception:
-            return np.zeros(7)
+            return None
+
+    # ------------------------------------------------------------------
+    def _cap_command_step(self, q_arm: np.ndarray, dt: float) -> Tuple[np.ndarray, bool]:
+        """Hard-cap every low-level published sample against the previous one."""
+        q_arm = np.asarray(q_arm, dtype=np.float64)
+        caps = []
+        if self.max_joint_step_rad > 0.0:
+            caps.append(self.max_joint_step_rad)
+        if self.max_joint_speed_rad_s > 0.0 and dt > 0.0:
+            caps.append(self.max_joint_speed_rad_s * float(dt))
+        if not caps:
+            self._last_command_q = q_arm.copy()
+            return q_arm, False
+        cap = min(caps)
+        if self._last_command_q is None:
+            self._last_command_q = q_arm.copy()
+            return q_arm, False
+        delta = q_arm - self._last_command_q
+        max_abs_delta = float(np.max(np.abs(delta))) if delta.size else 0.0
+        if max_abs_delta <= cap:
+            self._last_command_q = q_arm.copy()
+            return q_arm, False
+        scale = cap / max_abs_delta
+        capped = self._last_command_q + delta * scale
+        self._last_command_q = capped.copy()
+        return capped, True
+
+    # ------------------------------------------------------------------
+    def _duration_for_speed_limit(
+        self,
+        q_start: np.ndarray,
+        q_desired: np.ndarray,
+        requested_duration_s: float,
+    ) -> float:
+        """Stretch command duration so slow speed caps still reach the target."""
+        duration_s = max(0.02, float(requested_duration_s))
+        delta = np.asarray(q_desired, dtype=np.float64) - np.asarray(q_start, dtype=np.float64)
+        max_delta = float(np.max(np.abs(delta))) if delta.size else 0.0
+        if max_delta <= 1e-9:
+            return duration_s
+        # Smooth-step reaches about 1.5x average velocity at mid-trajectory.
+        if self.max_joint_speed_rad_s > 0.0:
+            duration_s = max(duration_s, 2.0 * max_delta / self.max_joint_speed_rad_s)
+        if self.max_joint_step_rad > 0.0 and self.rate_hz > 0.0:
+            duration_s = max(duration_s, 2.0 * max_delta / (self.max_joint_step_rad * self.rate_hz))
+        return duration_s
 
     # ------------------------------------------------------------------
     def _send_command(self, q_arm: np.ndarray) -> None:
@@ -229,3 +328,12 @@ def _smooth_step(t: float) -> float:
     """Smooth-step ease: 3t²-2t³ (zero velocity at endpoints)."""
     t = max(0.0, min(1.0, t))
     return t * t * (3 - 2 * t)
+
+
+def _joint_entry_index(label: str, data: Dict) -> int:
+    if "index" in data:
+        try:
+            return int(data.get("index", -1))
+        except Exception:
+            return -1
+    return int(_BODY_JOINT_INDEX_BY_LABEL.get(str(label), -1))

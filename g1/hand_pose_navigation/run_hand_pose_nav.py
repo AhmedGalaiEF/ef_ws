@@ -8,6 +8,7 @@ internally because the pipeline relies on ROS 2 TF.
 from __future__ import annotations
 
 import argparse
+import math
 import os
 import sys
 from typing import Dict
@@ -20,6 +21,12 @@ if G1_DIR not in sys.path:
 MODULES_DIR = os.path.join(G1_DIR, "modules")
 if MODULES_DIR not in sys.path:
     sys.path.insert(0, MODULES_DIR)
+
+UNITREE_CAMERA_X_M = 47.64571478 / 1000.0
+UNITREE_CAMERA_Z_M = 681.7855 / 1000.0
+UNITREE_CAMERA_DOWN_PITCH_RAD = math.radians(90.0 - 42.0)
+UNITREE_CAMERA_ROLL_RAD = -math.pi / 2.0 - UNITREE_CAMERA_DOWN_PITCH_RAD
+UNITREE_CAMERA_YAW_RAD = -math.pi / 2.0
 
 
 def parse_args() -> argparse.Namespace:
@@ -71,12 +78,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--web-host", default="0.0.0.0")
     parser.add_argument("--web-port", type=int, default=8088)
-    parser.add_argument("--camera-x", type=float, default=0.0)
+    parser.add_argument("--camera-x", type=float, default=UNITREE_CAMERA_X_M)
     parser.add_argument("--camera-y", type=float, default=0.0)
-    parser.add_argument("--camera-z", type=float, default=0.0)
-    parser.add_argument("--camera-roll", type=float, default=0.0)
+    parser.add_argument("--camera-z", type=float, default=UNITREE_CAMERA_Z_M)
+    parser.add_argument("--camera-roll", type=float, default=UNITREE_CAMERA_ROLL_RAD)
     parser.add_argument("--camera-pitch", type=float, default=0.0)
-    parser.add_argument("--camera-yaw", type=float, default=0.0)
+    parser.add_argument("--camera-yaw", type=float, default=UNITREE_CAMERA_YAW_RAD)
     parser.add_argument(
         "--no-web",
         action="store_true",
