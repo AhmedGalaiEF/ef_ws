@@ -116,13 +116,28 @@ def _T_from_axis_q(axis, q: float) -> np.ndarray:
     return T
 
 
+# _URDF_CHAIN above ends at the wrist_yaw JOINT's own frame — it does not
+# include the fixed wrist_yaw_link -> hand_palm_link joint, so without this
+# offset the "hand" pose this module returns is actually the wrist, short of
+# the real palm by ~4cm. Sourced verbatim from the right_hand_palm_joint /
+# left_hand_palm_joint <origin> in g1_29dof_with_hand_rev_1_0_pkg.urdf
+# (fixed joint, identity rotation, only a small lateral sign flip by side).
+_HAND_PALM_OFFSET: Dict[str, Tuple[List[float], List[float]]] = {
+    "right": ([0.0415, -0.003, 0.0], [0.0, 0.0, 0.0]),
+    "left": ([0.0415, 0.003, 0.0], [0.0, 0.0, 0.0]),
+}
+
+
 def _fk_urdf(q_arm: np.ndarray, arm: str) -> np.ndarray:
-    """URDF-exact 7-DOF FK from base_link origin; returns 4×4 T_base_hand."""
+    """URDF-exact 7-DOF FK from base_link origin; returns 4×4 T_base_hand
+    (hand = hand_palm_link, i.e. wrist_yaw_link plus the fixed palm offset).
+    """
     T = np.eye(4, dtype=np.float64)
     T[:3, 3] = _TORSO_IN_BASE.copy()
     for i, (xyz, rpy, axis) in enumerate(_URDF_CHAIN[arm]):
         T = T @ _T_from_xyz_rpy(xyz, rpy) @ _T_from_axis_q(axis, float(q_arm[i]))
-    return T
+    palm_xyz, palm_rpy = _HAND_PALM_OFFSET[arm]
+    return T @ _T_from_xyz_rpy(palm_xyz, palm_rpy)
 
 
 def _fk_urdf_partial(q_arm: np.ndarray, arm: str, n_joints: int) -> np.ndarray:

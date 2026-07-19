@@ -2249,6 +2249,9 @@ class Robot:
     def damp(self) -> None:
         self.fsm_1_damp()
 
+    def prepare(self) -> None:
+        self.fsm_4_prepare()
+
     def _usb_controller_loop(
         self,
         *,
@@ -2439,6 +2442,10 @@ class Robot:
     def fsm_2_airborne(self) -> None:
         if hasattr(self._client, "SetFsmId"):
             self._client.SetFsmId(2)
+
+    def fsm_4_prepare(self) -> None:
+        if hasattr(self._client, "SetFsmId"):
+            self._client.SetFsmId(4)
 
     def fsm_2_squat(self) -> None:
         self.fsm_2_squat_placeholder()

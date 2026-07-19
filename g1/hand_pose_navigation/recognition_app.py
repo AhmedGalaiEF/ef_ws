@@ -190,6 +190,17 @@ ARM_CONTROL_LOCK = threading.Lock()
 ARM_CANCEL_EVENT = threading.Event()
 ACTIVE_NAV_LOCK = threading.Lock()
 ACTIVE_DIRECT_NAV = None
+
+# unrelease_arms() always ramps arm_sdk_weight 0 -> 1 over its duration,
+# *regardless* of the weight it's already at. Calling it again while
+# authority is already engaged (e.g. Grab starting right after Extend arm)
+# drops weight to 0 and ramps back up, handing the arm to the low-level
+# default controller for a moment -> the "snappy transition" between
+# controllers. All arm-motion entry points funnel through
+# _ensure_arm_authority() instead of calling unrelease_arms() directly, so
+# the ramp only ever runs when authority isn't already known-engaged.
+# Only ever touched while ARM_CONTROL_LOCK is held, so no separate lock.
+_ARM_AUTHORITY_ENGAGED = False
 BASE_K = CameraIntrinsics()  # default 640x480 RealSense-ish intrinsics
 K = CameraIntrinsics()
 KNOWN_INTRINSICS = {
@@ -596,6 +607,25 @@ def _make_control_robot(iface: str, domain_id: int):
         return robot, "control robot ready"
     except Exception as exc:
         return None, f"control robot unavailable: {exc!r}"
+
+
+def _ensure_arm_authority(robot, duration_s: float) -> None:
+    """Ramp arm_sdk authority to 1.0 only if it isn't already engaged.
+
+    Call this instead of robot.unrelease_arms() directly from any
+    arm-motion entry point (Extend arm, Grab, ...). Must be called while
+    ARM_CONTROL_LOCK is held.
+    """
+    global _ARM_AUTHORITY_ENGAGED
+    if _ARM_AUTHORITY_ENGAGED:
+        _log("[recognition_app] Arm authority already engaged; skipping re-ramp.")
+        return
+    if robot is None or not hasattr(robot, "unrelease_arms"):
+        return
+    _log("[recognition_app] Re-engaging arm SDK control.")
+    result = robot.unrelease_arms(duration_s=duration_s)
+    _log(f"[recognition_app] unrelease_arms() done: {result}")
+    _ARM_AUTHORITY_ENGAGED = True
 
 
 # ---------------------------------------------------------------------------
@@ -1359,6 +1389,8 @@ def _run_release_arms() -> None:
         if _CONTROL_ROBOT is None:
             raise RuntimeError(_CONTROL_STATUS)
         result = _CONTROL_ROBOT.release_arms()
+        global _ARM_AUTHORITY_ENGAGED
+        _ARM_AUTHORITY_ENGAGED = False
         with STATE.lock:
             STATE.status_msg = f"release_arms() done: {result}"
     except Exception as exc:
@@ -1387,6 +1419,8 @@ def _run_unrelease_arms() -> None:
         if not hasattr(_CONTROL_ROBOT, "unrelease_arms"):
             raise AttributeError("control robot has no unrelease_arms()")
         result = _CONTROL_ROBOT.unrelease_arms()
+        global _ARM_AUTHORITY_ENGAGED
+        _ARM_AUTHORITY_ENGAGED = True
         with STATE.lock:
             STATE.status_msg = f"unrelease_arms() done: {result}"
     except Exception as exc:
@@ -1413,6 +1447,8 @@ def _run_damp() -> None:
         if _CONTROL_ROBOT is None:
             raise RuntimeError(_CONTROL_STATUS)
         _CONTROL_ROBOT.damp()
+        global _ARM_AUTHORITY_ENGAGED
+        _ARM_AUTHORITY_ENGAGED = False
         with STATE.lock:
             STATE.status_msg = "damp() sent."
     except Exception as exc:
@@ -1430,10 +1466,13 @@ def _run_prepare() -> None:
     try:
         if _CONTROL_ROBOT is None:
             raise RuntimeError(_CONTROL_STATUS)
-        client = getattr(_CONTROL_ROBOT, "_client", None)
-        if client is None or not hasattr(client, "SetFsmId"):
-            raise AttributeError("control robot has no SetFsmId client")
-        client.SetFsmId(4)
+        if hasattr(_CONTROL_ROBOT, "prepare"):
+            _CONTROL_ROBOT.prepare()
+        else:
+            client = getattr(_CONTROL_ROBOT, "_client", None)
+            if client is None or not hasattr(client, "SetFsmId"):
+                raise AttributeError("control robot has no prepare or SetFsmId")
+            client.SetFsmId(4)
         with STATE.lock:
             STATE.status_msg = "prepare FSM 4 sent."
     except Exception as exc:
@@ -1504,6 +1543,8 @@ def _run_stop_grabbing() -> None:
         if not hasattr(_CONTROL_ROBOT, "release_arms"):
             raise AttributeError("control robot has no release_arms()")
         result = _CONTROL_ROBOT.release_arms(duration_s=0.5)
+        global _ARM_AUTHORITY_ENGAGED
+        _ARM_AUTHORITY_ENGAGED = False
         _log(f"[recognition_app] stop grabbing release_arms() done: {result}")
         with STATE.lock:
             STATE.status_msg = "grab stopped; arms released."
@@ -1586,8 +1627,7 @@ def _run_extend_arm_ee_ik(
     max_joint_step_rad: float,
     max_joint_speed_rad_s: float,
 ) -> Dict[str, Any]:
-    if hasattr(robot, "unrelease_arms"):
-        robot.unrelease_arms(duration_s=0.4)
+    _ensure_arm_authority(robot, duration_s=0.4)
     q_cur = _read_current_arm_q(robot, arm)
     fk = ArmFK(arm=arm, backend="urdf")
     ik = ArmIK(
@@ -1797,13 +1837,10 @@ def _run_direct_grab_inline(
             f"max_joint_speed={config['max_joint_speed_rad_s']:.3f}rad/s "
             f"timeout={config['timeout_s']:.1f}s"
         )
-        if hasattr(_CONTROL_ROBOT, "unrelease_arms"):
-            _log("[recognition_app] Re-engaging arm SDK control before direct grab.")
-            try:
-                result = _CONTROL_ROBOT.unrelease_arms(duration_s=0.5)
-                _log(f"[recognition_app] unrelease_arms() done: {result}")
-            except Exception as exc:
-                _log(f"[recognition_app] unrelease_arms() before grab failed: {exc}")
+        try:
+            _ensure_arm_authority(_CONTROL_ROBOT, duration_s=0.5)
+        except Exception as exc:
+            _log(f"[recognition_app] unrelease_arms() before grab failed: {exc}")
         nav = DirectHandPoseNav(config, fixed_result=fixed_result, robot=_CONTROL_ROBOT)
         with ACTIVE_NAV_LOCK:
             ACTIVE_DIRECT_NAV = nav
