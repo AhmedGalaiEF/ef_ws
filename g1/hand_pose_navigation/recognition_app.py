@@ -5,11 +5,16 @@ Recognition layer — sensors-to-UI web app for the G1 + Dex3 grasp pipeline.
 Shows the RGB-D feed, a segmentation overlay, a labeled-detections overlay
 (open-vocabulary vision model, NL-prompted), and an ArUco tag overlay
 (object tags + the optional Dex3 hand tag) side by side. Pick a detected
-object from the list, hit Grab, and one of the two existing hand_pose_navigation
-backends (direct_nav.DirectHandPoseNav or hand_pose_nav_node.HandPoseNavNode,
-launched as a separate subprocess via grab_direct.py / grab_ros2.py) drives
-the arm to it and closes the hand. Release Arms and Damp are also exposed as
-one-click safety controls (sdk_client.Robot.release_arms() / .damp()).
+object from the list, hit Grab, and direct_nav.DirectHandPoseNav drives the
+arm to it (no ROS 2) and closes the hand. Release Arms and Damp are also
+exposed as one-click safety controls (sdk_client.Robot.release_arms() /
+.damp()).
+
+The ROS 2/TF backend (hand_pose_nav_node.HandPoseNavNode via grab_ros2.py)
+was removed from this app: it was never exercised past the initial scaffold
+and its camera extrinsic was disconnected from the one calibrated/drawn here
+(see camera_tf_publisher.py's own hardcoded default). Use
+run_hand_pose_nav.py --use-ros-tf directly if you need that pipeline.
 
 Run:
     python3 recognition_app.py [--iface eth0] [--domain-id 0] [--mock]
@@ -164,7 +169,6 @@ class SharedState:
         self.use_ros_camera_tf = False
         self.use_aruco = True
         self.arm_override = "auto"
-        self.backend = "direct"
         self.auto_step_base = False
         self.vision_classes: List[str] = []
         self.status_msg = "starting…"
@@ -936,14 +940,6 @@ app.layout = dbc.Container([
         dbc.Col([
             html.H5("Grab"),
             dbc.RadioItems(
-                id="backend-select",
-                options=[
-                    {"label": "Direct (no ROS 2)", "value": "direct"},
-                    {"label": "ROS 2 / TF (needs ROS 2 set up)", "value": "ros2"},
-                ],
-                value="direct", inline=True, className="mb-2",
-            ),
-            dbc.RadioItems(
                 id="arm-select",
                 options=[
                     {"label": "Auto (pick by target side)", "value": "auto"},
@@ -1183,16 +1179,6 @@ def _select_detection(_clicks, ids):
     with STATE.lock:
         STATE.selected_id = det_id
     return det_id
-
-
-@app.callback(
-    Output("backend-select", "value"),
-    Input("backend-select", "value"),
-)
-def _sync_backend(value):
-    with STATE.lock:
-        STATE.backend = value
-    return value
 
 
 @app.callback(
@@ -1884,7 +1870,6 @@ def _run_grab_impl() -> None:
         detection_age_s = time.time() - STATE.last_detection_ts if STATE.last_detection_ts else float("inf")
         cam = dict(STATE.camera_extrinsic)
         arm_override = STATE.arm_override
-        backend = STATE.backend
         auto_step_base = STATE.auto_step_base
         max_joint_step_rad = STATE.max_joint_step_rad
         max_joint_speed_rad_s = STATE.max_joint_speed_rad_s
@@ -1905,17 +1890,16 @@ def _run_grab_impl() -> None:
     arm, _T_base_camera, T_base_object = _resolve_arm_and_base_pose(
         det, cam, arm_override,
     )
-    if backend == "direct":
-        _arm, reach_dist, max_reach, excess_m, suggested_step_m = _reach_preview(
-            det, cam, arm_override,
+    _arm, reach_dist, max_reach, excess_m, suggested_step_m = _reach_preview(
+        det, cam, arm_override,
+    )
+    if excess_m > 0.0 and not auto_step_base:
+        _log(
+            "[recognition_app] Selected target is outside arm-only reach: "
+            f"reach_dist={reach_dist:.3f} m max={max_reach:.3f} m "
+            f"excess={excess_m:.3f} m. Enable 'Step base closer' "
+            f"or move the object/robot about {suggested_step_m:.3f} m closer."
         )
-        if excess_m > 0.0 and not auto_step_base:
-            _log(
-                "[recognition_app] Selected target is outside arm-only reach: "
-                f"reach_dist={reach_dist:.3f} m max={max_reach:.3f} m "
-                f"excess={excess_m:.3f} m. Enable 'Step base closer' "
-                f"or move the object/robot about {suggested_step_m:.3f} m closer."
-            )
 
     p_cam = det.T_camera_object[:3, 3]
     p_base = T_base_object[:3, 3]
@@ -1926,7 +1910,7 @@ def _run_grab_impl() -> None:
     )
     _log(
         f"[recognition_app] arm={arm} label={det.label!r} "
-        f"backend={backend} auto_step_base={auto_step_base}"
+        f"auto_step_base={auto_step_base}"
     )
     _log(
         "[recognition_app] object camera xyz="
@@ -1935,53 +1919,17 @@ def _run_grab_impl() -> None:
         f"({p_base[0]:+.3f}, {p_base[1]:+.3f}, {p_base[2]:+.3f}) m"
     )
 
-    if backend == "direct":
-        try:
-            _run_direct_grab_inline(
-                det,
-                arm,
-                cam,
-                auto_step_base,
-                T_base_object,
-                max_joint_step_rad,
-                max_joint_speed_rad_s,
-            )
-        finally:
-            with STATE.lock:
-                STATE.grab_running = False
-        return
-
-    target = {
-        "arm": arm,
-        "T_camera_object": det.T_camera_object.tolist(),
-        "camera_extrinsic": cam,
-        "standoff_m": DEFAULT_GRASP_STANDOFF_M,
-        "label": det.label,
-        "source": det.source,
-        "confidence": det.score,
-    }
-
-    fd, path = tempfile.mkstemp(prefix="grab_target_", suffix=".json")
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
-        json.dump(target, f)
-
-    script = "grab_ros2.py"
-    script_path = os.path.join(_DIR, script)
-    cmd = [sys.executable, script_path, "--target-json", path,
-           "--iface", _ARGS.iface, "--domain-id", str(_ARGS.domain_id)]
-    _log(f"[recognition_app] $ {' '.join(cmd)}")
     try:
-        proc = subprocess.Popen(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+        _run_direct_grab_inline(
+            det,
+            arm,
+            cam,
+            auto_step_base,
+            T_base_object,
+            max_joint_step_rad,
+            max_joint_speed_rad_s,
         )
-        for line in proc.stdout:
-            _log(line.rstrip())
-        proc.wait()
-        _log(f"[recognition_app] Grab process exited with code {proc.returncode}")
-    except Exception as exc:
-        _log(f"[recognition_app] Failed to launch grab script: {exc}")
     finally:
-        os.remove(path) if os.path.exists(path) else None
         with STATE.lock:
             STATE.grab_running = False
 
