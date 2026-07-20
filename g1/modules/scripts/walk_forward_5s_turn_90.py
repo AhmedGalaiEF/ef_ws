@@ -12,9 +12,6 @@ PARENT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 if PARENT_DIR not in sys.path:
     sys.path.insert(0, PARENT_DIR)
 
-from sdk_client import Robot
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Walk forward for 5 seconds, then turn 90 degrees."
@@ -45,11 +42,21 @@ def parse_args() -> argparse.Namespace:
         default=10.0,
         help="Timeout for the 90 degree turn.",
     )
+    parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="Confirm that this script may move the robot.",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
+    if not args.yes:
+        print("This script moves the robot. Re-run with --yes to confirm.")
+        return 2
+
+    from sdk_client import Robot
 
     try:
         robot = Robot(

@@ -1,13 +1,5 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-from secure_boot import force_normal_gait
-from sdk_boot import (
-    BALANCED_STAND_FSM_IDS,
-    create_loco_client,
-    fsm_mode,
-    is_balanced_stand_state,
-    read_fsm_state,
-)
 
 import argparse
 import os
@@ -19,6 +11,15 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 MODULES_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 if MODULES_DIR not in sys.path:
     sys.path.insert(0, MODULES_DIR)
+
+from secure_boot import force_normal_gait
+from sdk_boot import (
+    BALANCED_STAND_FSM_IDS,
+    create_loco_client,
+    fsm_mode,
+    is_balanced_stand_state,
+    read_fsm_state,
+)
 
 
 BALANCED_STAND_FSM_LABEL = "/".join(str(fsm_id) for fsm_id in sorted(BALANCED_STAND_FSM_IDS))

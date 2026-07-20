@@ -201,7 +201,7 @@ class TrackingLoop:
     def _run(self) -> None:
         dt = 1.0 / self.rate_hz
         start_t = time.time()
-        q_arm_prev: Optional[np.ndarray] = None
+        q_arm_commanded: Optional[np.ndarray] = None
 
         while not self._stop_event.is_set():
             t0 = time.time()
@@ -332,12 +332,14 @@ class TrackingLoop:
                 self._sleep(dt, t0)
                 continue
 
+            q_arm_start_cmd = q_arm_commanded if q_arm_commanded is not None else q_arm_cur
+            q_arm_next = q_arm_desired.copy()
             if self.max_joint_step_rad > 0.0:
-                delta = q_arm_desired - q_arm_cur
+                delta = q_arm_desired - q_arm_start_cmd
                 max_abs_delta = float(np.max(np.abs(delta))) if delta.size else 0.0
                 if max_abs_delta > self.max_joint_step_rad:
                     scale = self.max_joint_step_rad / max_abs_delta
-                    q_arm_desired = q_arm_cur + delta * scale
+                    q_arm_next = q_arm_start_cmd + delta * scale
                     self._status.record(
                         f"[Step 9] Joint increment capped: "
                         f"max_delta={max_abs_delta:.3f}rad cap={self.max_joint_step_rad:.3f}rad"
@@ -364,9 +366,9 @@ class TrackingLoop:
                 0.3,
             )  # short smooth step each iteration
             exec_result = self.executor.execute(
-                q_arm_desired,
+                q_arm_next,
                 duration_s=move_duration,
-                q_arm_start=q_arm_cur,
+                q_arm_start=q_arm_start_cmd,
                 T_base_desired=T_base_desired,
                 stop_event=self._stop_event,
                 obstacles=obstacles,
@@ -378,7 +380,17 @@ class TrackingLoop:
                 )
                 self._sleep(dt, t0)
                 continue
-            q_arm_prev = q_arm_desired
+            if not exec_result.get("success"):
+                self._status.safety_rejections += 1
+                self._status.record(
+                    f"[Step 9] Command failed: reason={exec_result.get('reason')}"
+                )
+                self._sleep(dt, t0)
+                continue
+            q_arm_commanded = np.asarray(
+                exec_result.get("final_q", q_arm_next),
+                dtype=np.float64,
+            )
 
             self._status.record(
                 f"[Step 10] it={self._status.iteration:4d}  "

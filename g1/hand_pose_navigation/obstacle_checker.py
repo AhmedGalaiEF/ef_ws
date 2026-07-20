@@ -83,9 +83,9 @@ def check_swept_path(
         alpha = i / n_samples if n_samples > 0 else 1.0
         q = (1.0 - alpha) * q_start + alpha * q_goal
         elbow = fk.compute_arm_partial(q, 4)[:3, 3]
-        wrist = fk.compute_arm_partial(q, 7)[:3, 3]
+        hand = fk.compute_arm(q)[:3, 3]
 
-        for label, point in (("elbow", elbow), ("wrist/hand", wrist)):
+        for label, point in (("elbow", elbow), ("hand", hand)):
             if obstacles.table is not None:
                 t = obstacles.table
                 within_x = (
@@ -105,11 +105,15 @@ def check_swept_path(
                         f"{obstacles.table_margin_m:.3f}m margin)"
                     )
 
-            torso_dist = _point_segment_distance(point, torso_start, torso_end, obstacles.torso_radius_m)
-            if torso_dist < 0.02:
-                reasons.append(
-                    f"[alpha={alpha:.2f}] {label} too close to torso (clearance={torso_dist:.3f}m)"
+            if label == "hand":
+                torso_dist = _point_segment_distance(
+                    point, torso_start, torso_end, obstacles.torso_radius_m
                 )
+                if torso_dist < 0.02:
+                    reasons.append(
+                        f"[alpha={alpha:.2f}] {label} too close to torso "
+                        f"(clearance={torso_dist:.3f}m)"
+                    )
 
             if have_opposite_arm:
                 self_dist = _point_segment_distance(

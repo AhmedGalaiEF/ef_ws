@@ -188,6 +188,7 @@ class SharedState:
         self.hand_fk_T_base: Dict[str, np.ndarray] = {}
         self.hand_fk_ts: float = 0.0
         self.hand_fk_status: str = "FK hand: starting"
+        self.extended_hand_R_base: Dict[str, np.ndarray] = {}
 
 
 STATE = SharedState()
@@ -233,6 +234,8 @@ KNOWN_INTRINSICS = {
 # stale rather than silently keeping possibly-gone objects selectable.
 STALE_AFTER_S = 2.0
 DEFAULT_GRASP_STANDOFF_M = 0.08
+DEFAULT_VISION_GRASP_LIFT_M = 0.08
+DEFAULT_VISION_TABLE_CLEARANCE_M = 0.14
 DEFAULT_MAX_BASE_STEP_M = 0.30
 DEFAULT_REACH_MARGIN_M = 0.04
 DEFAULT_DIRECT_MAX_REACH_M = 0.52
@@ -739,6 +742,131 @@ def _draw_pose_axis(
         return False
 
 
+def _project_camera_point(point_camera: np.ndarray) -> Optional[Tuple[int, int]]:
+    x, y, z = (float(v) for v in point_camera[:3])
+    if z <= 0.05:
+        return None
+    u = int(round(K.fx * x / z + K.cx))
+    v = int(round(K.fy * y / z + K.cy))
+    if u < -200 or u > K.width + 200 or v < -200 or v > K.height + 200:
+        return None
+    return u, v
+
+
+def _draw_base_polyline(
+    image: np.ndarray,
+    T_camera_base: np.ndarray,
+    points_base: List[np.ndarray],
+    color: Tuple[int, int, int],
+    thickness: int = 2,
+) -> None:
+    projected: List[Tuple[int, int]] = []
+    for point in points_base:
+        p_h = np.ones(4, dtype=np.float64)
+        p_h[:3] = np.asarray(point, dtype=np.float64)[:3]
+        uv = _project_camera_point((T_camera_base @ p_h)[:3])
+        if uv is not None:
+            projected.append(uv)
+    for a, b in zip(projected, projected[1:]):
+        cv2.line(image, a, b, color, thickness, cv2.LINE_AA)
+    for uv in projected:
+        cv2.circle(image, uv, 3, color, -1, cv2.LINE_AA)
+
+
+def _palm_visual_point(T_base_hand: np.ndarray) -> np.ndarray:
+    return T_base_hand[:3, 3] + T_base_hand[:3, :3] @ np.array(
+        [_PALM_VISUAL_OFFSET_M, 0.0, 0.0],
+        dtype=np.float64,
+    )
+
+
+def _stable_vision_object_pose(
+    T_base_object: np.ndarray,
+    table: Optional[TablePlane] = None,
+) -> np.ndarray:
+    """Return a synthetic object frame for vision detections.
+
+    Mask-PCA orientation is noisy for cups/bottles and can make the standoff
+    offset move downward or sideways as the mask jitters. Use the measured
+    object position, but make the approach come from the robot side in base
+    coordinates and keep the palm comfortably above the table.
+    """
+    T = np.eye(4, dtype=np.float64)
+    pos = T_base_object[:3, 3].copy()
+    min_z = pos[2] + DEFAULT_VISION_GRASP_LIFT_M
+    if table is not None:
+        min_z = max(min_z, float(table.z_base_m) + DEFAULT_VISION_TABLE_CLEARANCE_M)
+    pos[2] = min_z
+
+    z_axis = np.array([-1.0, 0.0, 0.0], dtype=np.float64)
+    y_axis = np.array([0.0, 0.0, 1.0], dtype=np.float64)
+    x_axis = np.cross(y_axis, z_axis)
+    x_axis /= max(1e-9, np.linalg.norm(x_axis))
+    y_axis = np.cross(z_axis, x_axis)
+    y_axis /= max(1e-9, np.linalg.norm(y_axis))
+
+    T[:3, :3] = np.column_stack([x_axis, y_axis, z_axis])
+    T[:3, 3] = pos
+    return T
+
+
+def _direct_grasp_object_pose(
+    det: Detection,
+    T_base_object: np.ndarray,
+    obstacles: Optional[Obstacles] = None,
+) -> np.ndarray:
+    if det.source == "vision":
+        return _stable_vision_object_pose(
+            T_base_object,
+            table=obstacles.table if obstacles is not None else None,
+        )
+    return T_base_object
+
+
+def _direct_grasp_hand_pose(
+    det: Detection,
+    T_base_object: np.ndarray,
+    arm: str,
+    obstacles: Optional[Obstacles] = None,
+    fixed_R_base: Optional[np.ndarray] = None,
+) -> np.ndarray:
+    T_base_hand = GraspPlanner(
+        arm=arm,
+        standoff_m=DEFAULT_GRASP_STANDOFF_M,
+    ).compute(_direct_grasp_object_pose(det, T_base_object, obstacles))
+    if fixed_R_base is not None:
+        T_base_hand = T_base_hand.copy()
+        T_base_hand[:3, :3] = np.asarray(fixed_R_base, dtype=np.float64)
+    return T_base_hand
+
+
+def _grasp_offset_transform(arm: str) -> np.ndarray:
+    return GraspPlanner(
+        arm=arm,
+        standoff_m=DEFAULT_GRASP_STANDOFF_M,
+    ).compute(np.eye(4, dtype=np.float64))
+
+
+def _direct_nav_target_frame_from_hand_pose(
+    T_base_hand_desired: np.ndarray,
+    arm: str,
+) -> np.ndarray:
+    return T_base_hand_desired @ np.linalg.inv(_grasp_offset_transform(arm))
+
+
+def _direct_nav_target_frame(
+    det: Detection,
+    T_base_object: np.ndarray,
+    arm: str,
+    obstacles: Optional[Obstacles] = None,
+    fixed_R_base: Optional[np.ndarray] = None,
+) -> np.ndarray:
+    return _direct_nav_target_frame_from_hand_pose(
+        _direct_grasp_hand_pose(det, T_base_object, arm, obstacles, fixed_R_base),
+        arm,
+    )
+
+
 # ArmFK's "hand" frame is hand_palm_link, i.e. the fixed wrist_yaw -> palm
 # mount flange (see arm_fk.py's _HAND_PALM_OFFSET). That's the right target
 # frame for control/IK, but visually it's still ~7.8cm short of where the
@@ -757,6 +885,7 @@ def _draw_detection_gizmos(
     arm_override: str,
     hand_fk_T_base: Dict[str, np.ndarray],
     hand_tag_T_camera: Optional[np.ndarray],
+    extended_hand_R_base: Dict[str, np.ndarray],
 ) -> np.ndarray:
     out = image.copy()
     T_base_camera = _make_transform(
@@ -788,6 +917,46 @@ def _draw_detection_gizmos(
             (255, 255, 80),
             axis_len_m=0.06,
         )
+    if selected is not None:
+        try:
+            _arm, _T_base_camera, T_base_object = _resolve_arm_and_base_pose(
+                selected,
+                cam,
+                arm_override,
+            )
+            T_base_plan = _direct_grasp_hand_pose(
+                selected,
+                T_base_object,
+                arm,
+                fixed_R_base=extended_hand_R_base.get(arm),
+            )
+            plan_color = (80, 255, 255)
+            if T_base_hand is not None:
+                _draw_base_polyline(
+                    out,
+                    T_camera_base,
+                    [_palm_visual_point(T_base_hand), _palm_visual_point(T_base_plan)],
+                    plan_color,
+                    thickness=2,
+                )
+            _draw_pose_axis(
+                out,
+                T_camera_base @ T_base_plan,
+                "planned hand",
+                plan_color,
+                axis_len_m=0.055,
+            )
+        except Exception as exc:
+            cv2.putText(
+                out,
+                f"plan unavailable: {exc}",
+                (10, 26),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                (80, 80, 255),
+                2,
+                cv2.LINE_AA,
+            )
     if not drew_hand and hand_tag_T_camera is not None:
         _draw_pose_axis(
             out,
@@ -819,13 +988,11 @@ def _reach_preview(
     det: Detection,
     cam: Dict[str, float],
     arm_override: str,
+    obstacles: Optional[Obstacles] = None,
 ) -> Tuple[str, float, float, float, float]:
     arm, _T_base_camera, T_base_object = _resolve_arm_and_base_pose(det, cam, arm_override)
     checker = ReachabilityChecker(arm=arm, max_reach_m=DEFAULT_DIRECT_MAX_REACH_M)
-    T_base_desired = GraspPlanner(
-        arm=arm,
-        standoff_m=DEFAULT_GRASP_STANDOFF_M,
-    ).compute(T_base_object)
+    T_base_desired = _direct_grasp_hand_pose(det, T_base_object, arm, obstacles)
     shoulder_y = 0.10 if arm == "left" else -0.10
     shoulder = np.array([0.0, shoulder_y, 0.292], dtype=np.float64)
     reach_dist = float(np.linalg.norm(T_base_desired[:3, 3] - shoulder))
@@ -1127,6 +1294,9 @@ def _refresh(_n, view_name):
         cam = dict(STATE.camera_extrinsic)
         arm_override = STATE.arm_override
         hand_fk_T_base = {k: v.copy() for k, v in STATE.hand_fk_T_base.items()}
+        extended_hand_R_base = {
+            k: v.copy() for k, v in STATE.extended_hand_R_base.items()
+        }
         hand_tag_T_camera = (
             None if STATE.hand_tag_T_camera is None else STATE.hand_tag_T_camera.copy()
         )
@@ -1192,6 +1362,7 @@ def _refresh(_n, view_name):
             arm_override,
             hand_fk_T_base,
             hand_tag_T_camera,
+            extended_hand_R_base,
         ))
 
     items = []
@@ -1799,7 +1970,12 @@ def _run_extend_arm_ee_ik(
     results = []
     for stage_name, q_stage_nominal in _extend_arm_forward_joint_waypoints(q_cur, arm):
         if ARM_CANCEL_EVENT.is_set():
-            return {"success": False, "reason": "cancelled", "stage_results": results}
+            return {
+                "success": False,
+                "reason": "cancelled",
+                "stage_results": results,
+                "final_q": q_cur.copy() if results else None,
+            }
         T_desired = fk.compute_arm(q_stage_nominal)
         q_solution, info = ik.solve(T_desired, q_init=q_cur)
         if q_solution is None:
@@ -1828,19 +2004,27 @@ def _run_extend_arm_ee_ik(
         _log(
             "[recognition_app] extend stage "
             f"{stage_name}: success={result.get('success')} "
+            f"reason={result.get('reason', '')} "
             f"duration={result.get('duration_s', 0.0):.2f}s "
-            f"requested={result.get('requested_duration_s', 0.0):.2f}s "
+            f"requested={result.get('requested_duration_s', DEFAULT_EXTEND_STAGE_DURATION_S):.2f}s "
             f"final_err={result.get('final_error_rad', 0.0):.4f}rad "
-            f"capped_samples={result.get('capped_samples', 0)}"
+            f"capped_samples={result.get('capped_samples', 0)} "
+            f"violations={result.get('violations', [])}"
         )
         if not result.get("success"):
-            return {"success": False, "reason": result.get("reason"), "stage_results": results}
+            return {
+                "success": False,
+                "reason": result.get("reason"),
+                "stage_results": results,
+                "final_q": q_cur.copy() if len(results) > 1 else None,
+            }
         q_cur = np.asarray(result.get("final_q", q_solution), dtype=np.float64)
     return {
         "success": True,
         "arm": arm,
         "controller": "ee_ik",
         "stages": [item["stage"] for item in results],
+        "final_q": q_cur.copy(),
     }
 
 
@@ -1876,6 +2060,12 @@ def _run_extend_arm() -> None:
             max_joint_speed_rad_s,
             cam,
         )
+        if result.get("final_q") is not None:
+            q_final = np.asarray(result["final_q"], dtype=np.float64)
+            T_final = ArmFK(arm=arm, backend="urdf").compute_arm(q_final)
+            with STATE.lock:
+                STATE.extended_hand_R_base[arm] = T_final[:3, :3].copy()
+            _log(f"[recognition_app] saved {arm} EE orientation from extend arm.")
         with STATE.lock:
             STATE.status_msg = f"extend arm EE IK ({arm}) done: {result}"
     except Exception as exc:
@@ -1957,17 +2147,21 @@ def _run_direct_grab_inline(
         with STATE.lock:
             STATE.arm_motion_running = True
             STATE.arm_motion_label = "direct grab"
+            fixed_R_base = (
+                None
+                if arm not in STATE.extended_hand_R_base
+                else STATE.extended_hand_R_base[arm].copy()
+            )
 
         obstacles = _estimate_obstacles(cam)
 
         _arm, reach_dist, max_reach, excess_m, suggested_step_m = _reach_preview(
-            det, cam, arm,
+            det, cam, arm, obstacles,
         )
         T_base_camera = _make_transform(
             xyz=(cam["x"], cam["y"], cam["z"]),
             rpy=(cam["roll"], cam["pitch"], cam["yaw"]),
         )
-        T_camera_object = det.T_camera_object.copy()
         base_step_m = 0.0
         if excess_m > 0.0:
             _log(
@@ -1991,10 +2185,22 @@ def _run_direct_grab_inline(
             _CONTROL_ROBOT.move_for(duration=duration_s, vx=speed_m_s, vy=0.0, vyaw=0.0)
             T_base_object = T_base_object.copy()
             T_base_object[0, 3] -= base_step_m
-            T_camera_object = np.linalg.inv(T_base_camera) @ T_base_object
+
+        T_base_direct_hand = _direct_grasp_hand_pose(
+            det,
+            T_base_object,
+            arm,
+            obstacles,
+            fixed_R_base=fixed_R_base,
+        )
+        T_base_direct_target = _direct_nav_target_frame_from_hand_pose(
+            T_base_direct_hand,
+            arm,
+        )
+        T_camera_direct_target = np.linalg.inv(T_base_camera) @ T_base_direct_target
 
         fixed_result = DetectionResult(
-            T_camera_object=T_camera_object,
+            T_camera_object=T_camera_direct_target,
             confidence=float(det.score),
             method="fixed",
         )
@@ -2027,8 +2233,20 @@ def _run_direct_grab_inline(
             f"({T_base_object[0, 3]:+.3f}, {T_base_object[1, 3]:+.3f}, {T_base_object[2, 3]:+.3f}) m "
             f"base_step={base_step_m:.3f} m"
         )
+        if det.source == "vision":
+            p_hand = T_base_direct_hand[:3, 3]
+            _log(
+                "[recognition_app] vision desired hand xyz="
+                f"({p_hand[0]:+.3f}, {p_hand[1]:+.3f}, {p_hand[2]:+.3f}) m "
+                "with stable robot-side approach"
+            )
+        if fixed_R_base is not None:
+            _log(
+                "[recognition_app] direct hand orientation fixed from last "
+                f"extend arm ({arm}); moving XYZ only."
+            )
         _log(
-            "[recognition_app] using fixed selected-object XYZ for this grab; "
+            "[recognition_app] using fixed selected direct target for this grab; "
             "camera detections will not retarget the arm mid-grab."
         )
         _log(
