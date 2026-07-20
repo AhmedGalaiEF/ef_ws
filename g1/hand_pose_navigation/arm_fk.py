@@ -64,6 +64,13 @@ _TORSO_IN_BASE = np.array([-0.003964, 0.0, 0.044], dtype=np.float64)
 _RIGHT_SHOULDER_IN_BASE = np.array([0.0, -0.100, 0.292], dtype=np.float64)
 _LEFT_SHOULDER_IN_BASE = np.array([0.0, 0.100, 0.292], dtype=np.float64)
 
+# Public: shoulder origins, keyed by side — used by obstacle_checker.py to
+# build the opposite-arm self-collision capsule (shoulder -> live wrist).
+SHOULDER_IN_BASE: Dict[str, np.ndarray] = {
+    "right": _RIGHT_SHOULDER_IN_BASE,
+    "left": _LEFT_SHOULDER_IN_BASE,
+}
+
 # Kinematic chain: one entry per joint (shoulder_pitch … wrist_yaw)
 # Format: (xyz_in_parent, rpy_of_link_frame, joint_axis)
 # Sourced verbatim from g1_29dof_with_hand_rev_1_0_pkg.urdf
@@ -290,6 +297,14 @@ class ArmFK:
             # pinocchio needs full q — fall back to urdf for arm-only input
             return _fk_urdf(q_arm, self.arm)
         return _fk_dh(q_arm, _DH_RIGHT, self._shoulder)
+
+    def compute_arm_partial(self, q_arm: np.ndarray, n_joints: int) -> np.ndarray:
+        """URDF-chain FK stopped after n_joints (e.g. 4 = elbow, 7 = hand).
+
+        Backend-independent (always uses the exact URDF chain) — intended
+        for cheap collision-proxy points (elbow/wrist), not for IK targets.
+        """
+        return _fk_urdf_partial(q_arm, self.arm, n_joints)
 
     # ------------------------------------------------------------------
     def _fk_pin(self, q_full: np.ndarray) -> np.ndarray:

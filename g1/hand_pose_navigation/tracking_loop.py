@@ -27,12 +27,13 @@ import numpy as np
 
 from .target_detector import TargetDetector, DetectionResult
 from .detected_pose_publisher import DetectedPosePublisher
-from .arm_fk import ArmFK
+from .arm_fk import ArmFK, SHOULDER_IN_BASE
 from .tf_utils import TFUtils
 from .grasp_planner import GraspPlanner
 from .arm_ik import ArmIK
 from .reachability_checker import ReachabilityChecker
 from .arm_executor import ArmExecutor
+from .obstacle_checker import Obstacles
 
 _BODY_JOINT_INDEX_BY_LABEL = {
     "left_arm.shoulder_pitch": 15,
@@ -139,6 +140,7 @@ class TrackingLoop:
         max_joint_step_rad: float = 0.08,
         timeout_s: float = 30.0,
         on_converge: Optional[Callable[[], None]] = None,
+        static_obstacles: Optional[Obstacles] = None,
     ) -> None:
         self.robot = robot
         self.detector = detector
@@ -156,6 +158,11 @@ class TrackingLoop:
         self.max_joint_step_rad = max(0.0, float(max_joint_step_rad))
         self.timeout_s = timeout_s
         self.on_converge = on_converge
+        # Table plane etc. — doesn't move during a grab, computed once by the
+        # caller from the frame at grab start. The opposite-arm proxy is
+        # recomputed every iteration below from live joint state instead,
+        # since that arm can move mid-grab.
+        self.static_obstacles = static_obstacles
 
         self._stop_event = threading.Event()
         self._status = LoopStatus()
@@ -164,6 +171,8 @@ class TrackingLoop:
         self._joint_indices = (
             list(range(15, 22)) if arm == "left" else list(range(22, 29))
         )
+        self._opposite_arm = "left" if arm == "right" else "right"
+        self._opposite_fk = ArmFK(arm=self._opposite_arm, backend="urdf")
 
     # ------------------------------------------------------------------
     def start(self, blocking: bool = True) -> LoopStatus:
@@ -334,18 +343,41 @@ class TrackingLoop:
                         f"max_delta={max_abs_delta:.3f}rad cap={self.max_joint_step_rad:.3f}rad"
                     )
 
+            # ── Step 8b: swept-path obstacle check ────────────────────
+            obstacles = None
+            if self.static_obstacles is not None:
+                T_opposite = self._opposite_fk.compute(q_full)
+                obstacles = Obstacles(
+                    table=self.static_obstacles.table,
+                    opposite_shoulder_base=SHOULDER_IN_BASE[self._opposite_arm],
+                    opposite_wrist_base=T_opposite[:3, 3],
+                    torso_radius_m=self.static_obstacles.torso_radius_m,
+                    torso_z=self.static_obstacles.torso_z,
+                    self_collision_radius_m=self.static_obstacles.self_collision_radius_m,
+                    table_margin_m=self.static_obstacles.table_margin_m,
+                    table_xy_margin_m=self.static_obstacles.table_xy_margin_m,
+                )
+
             # ── Step 9: send command ─────────────────────────────────
             move_duration = min(
                 dt * 1.5,
                 0.3,
             )  # short smooth step each iteration
-            self.executor.execute(
+            exec_result = self.executor.execute(
                 q_arm_desired,
                 duration_s=move_duration,
                 q_arm_start=q_arm_cur,
                 T_base_desired=T_base_desired,
                 stop_event=self._stop_event,
+                obstacles=obstacles,
             )
+            if not exec_result.get("success") and exec_result.get("reason") == "obstacle_gate":
+                self._status.safety_rejections += 1
+                self._status.record(
+                    f"[Step 8b] Obstacle in swept path: {exec_result.get('violations')}"
+                )
+                self._sleep(dt, t0)
+                continue
             q_arm_prev = q_arm_desired
 
             self._status.record(

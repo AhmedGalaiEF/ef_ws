@@ -32,6 +32,7 @@ except ImportError:
 
 from .arm_fk import ArmFK
 from .reachability_checker import ReachabilityChecker
+from .obstacle_checker import Obstacles, check_swept_path
 
 
 # ---------------------------------------------------------------------------
@@ -94,7 +95,9 @@ class ArmExecutor:
         self.max_joint_step_rad = max(0.0, float(max_joint_step_rad))
         self.max_joint_speed_rad_s = max(0.0, float(max_joint_speed_rad_s))
         self._joint_indices = LEFT_ARM_JOINTS if arm == "left" else RIGHT_ARM_JOINTS
-        self._fk = ArmFK(arm=arm, backend="dh")
+        # URDF-exact (not the legacy DH approximation) — used for the swept-path
+        # obstacle check below, where elbow/wrist accuracy matters.
+        self._fk = ArmFK(arm=arm, backend="urdf")
         self._checker = ReachabilityChecker(arm=arm, max_reach_m=max_reach_m)
         self._last_command_q: Optional[np.ndarray] = None
 
@@ -106,6 +109,7 @@ class ArmExecutor:
         q_arm_start: Optional[np.ndarray] = None,
         T_base_desired: Optional[np.ndarray] = None,
         stop_event=None,
+        obstacles: Optional[Obstacles] = None,
     ) -> Dict:
         """
         Interpolate from current arm pose to q_arm_desired and send commands.
@@ -115,23 +119,16 @@ class ArmExecutor:
             duration_s:    total move duration
             q_arm_start:   override start configuration (default: read from robot)
             T_base_desired: optional target pose for safety check context
+            obstacles:      optional Obstacles (table plane, opposite-arm
+                             proxy) — when given, the whole interpolated path
+                             from q_arm_start to q_arm_desired is checked,
+                             not just the endpoint.
 
         Returns:
             dict with "success", "duration_s", "steps", "final_q"
         """
-        # Safety check
-        if self.safety_gate:
-            result = self._checker.check(q_arm_desired, T_base_desired)
-            if not result.safe:
-                return {
-                    "success": False,
-                    "reason": "safety_gate",
-                    "violations": result.reasons,
-                    "duration_s": 0.0,
-                    "steps": 0,
-                }
-
-        # Get start configuration
+        # Get start configuration first — needed by both the swept-path
+        # obstacle check and the interpolation below.
         if q_arm_start is None:
             q_arm_start = self._read_current_arm_q()
             if q_arm_start is None:
@@ -143,6 +140,29 @@ class ArmExecutor:
                 }
         q_arm_start = np.asarray(q_arm_start, dtype=np.float64).copy()
         q_arm_desired = np.asarray(q_arm_desired, dtype=np.float64).copy()
+
+        # Safety check
+        if self.safety_gate:
+            result = self._checker.check(q_arm_desired, T_base_desired)
+            if not result.safe:
+                return {
+                    "success": False,
+                    "reason": "safety_gate",
+                    "violations": result.reasons,
+                    "duration_s": 0.0,
+                    "steps": 0,
+                }
+            if obstacles is not None:
+                sweep = check_swept_path(self._fk, q_arm_start, q_arm_desired, obstacles)
+                if not sweep.safe:
+                    return {
+                        "success": False,
+                        "reason": "obstacle_gate",
+                        "violations": sweep.reasons,
+                        "duration_s": 0.0,
+                        "steps": 0,
+                    }
+
         if self._last_command_q is None:
             self._last_command_q = q_arm_start.copy()
 

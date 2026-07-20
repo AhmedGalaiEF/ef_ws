@@ -60,7 +60,10 @@ from hand_pose_navigation.reachability_checker import ReachabilityChecker
 from hand_pose_navigation.arm_fk import ArmFK
 from hand_pose_navigation.arm_ik import ArmIK
 from hand_pose_navigation.arm_executor import ArmExecutor
-from hand_pose_navigation.arm_fk import LEFT_ARM_JOINTS, RIGHT_ARM_JOINTS, JOINT_LIMITS
+from hand_pose_navigation.arm_fk import LEFT_ARM_JOINTS, RIGHT_ARM_JOINTS, JOINT_LIMITS, SHOULDER_IN_BASE
+from hand_pose_navigation.table_estimator import estimate_table_plane, TablePlane
+from hand_pose_navigation.obstacle_checker import Obstacles
+from hand_pose_navigation.vla_planner import DEFAULT_VLA_POLICY
 
 import dash
 from dash import dcc, html, Input, Output, State, callback_context, no_update, ALL
@@ -160,7 +163,7 @@ class SharedState:
         self.tags_for_draw: Dict[int, DetectionResult] = {}
         self.hand_tag_T_camera: Optional[np.ndarray] = None
         self.hand_tag_ts: float = 0.0
-        self.max_visible_detections = 5
+        self.max_visible_detections = 1
         self.max_joint_step_rad = DEFAULT_MAX_JOINT_STEP_RAD
         self.max_joint_speed_rad_s = DEFAULT_MAX_JOINT_SPEED_RAD_S
         self.selected_id: Optional[str] = None
@@ -168,8 +171,10 @@ class SharedState:
         self.camera_tf_status = "camera TF: Unitree drawing fallback"
         self.use_ros_camera_tf = False
         self.use_aruco = True
-        self.arm_override = "auto"
+        self.arm_override = "right"
         self.auto_step_base = False
+        self.planning_mode = "direct"  # "direct" | "vla" (vla is scaffolding-only, see vla_planner.py)
+        self.obstacle_status = "obstacles: not checked yet"
         self.vision_classes: List[str] = []
         self.status_msg = "starting…"
         self.grab_log: List[str] = []
@@ -234,6 +239,7 @@ DEFAULT_DIRECT_MAX_REACH_M = 0.52
 DEFAULT_SLOW_GRAB_RATE_HZ = 3.0
 DEFAULT_SLOW_GRAB_TIMEOUT_S = 180.0
 DEFAULT_EXTEND_STAGE_DURATION_S = 1.2
+DEFAULT_DETECTION_PROMPT = "coffee cup"
 
 
 class _MockRobot:
@@ -399,9 +405,30 @@ def _camera_loop(robot, detector: TargetDetector, rate_hz: float) -> None:
         time.sleep(max(0.0, period - dt))
 
 
+# Perception (aruco + vision model) runs at its own, slower rate_hz while the
+# UI polls every 500ms — a single perception pass that misses a detection
+# (motion blur, brief occlusion, one bad vision-model call) used to blank the
+# whole overlay/list until the next pass caught up, reading as "detection
+# keeps failing". Held over below for a short window so one missed pass
+# doesn't flicker the UI; DETECTION_HOLD_S stays well under STALE_AFTER_S so
+# an object that's genuinely gone still clears within STALE_AFTER_S.
+DETECTION_HOLD_S = 0.6
+
+
 def _perception_loop(detector: TargetDetector, vision: VisionDetector, rate_hz: float) -> None:
     period = 1.0 / max(0.5, rate_hz)
     last_processed_seq = -1
+    held_detections: Dict[str, Tuple[Detection, float]] = {}
+    held_boxes: Dict[str, Tuple[Dict, float]] = {}
+    held_masks: Dict[str, Tuple[Tuple[str, str, np.ndarray], float]] = {}
+    held_tags: Dict[int, Tuple[DetectionResult, float]] = {}
+
+    def _merge_and_prune(held: Dict, now: float) -> Dict:
+        for k in list(held.keys()):
+            if now - held[k][1] > DETECTION_HOLD_S:
+                del held[k]
+        return {k: v for k, (v, _ts) in held.items()}
+
     while True:
         t0 = time.time()
         with STATE.lock:
@@ -453,6 +480,23 @@ def _perception_loop(detector: TargetDetector, vision: VisionDetector, rate_hz: 
                 T_camera_object=pose.T_camera_object, box=vd.box_xyxy,
             )
             masks_for_draw.append((det_id, vd.label, mask))
+
+        now = time.time()
+        for det_id, det in detections.items():
+            held_detections[det_id] = (det, now)
+        for b in boxes_for_draw:
+            held_boxes[b["id"]] = (b, now)
+        for mask_entry in masks_for_draw:
+            held_masks[mask_entry[0]] = (mask_entry, now)
+        for marker_id, result in tags.items():
+            held_tags[marker_id] = (result, now)
+
+        detections = _merge_and_prune(held_detections, now)
+        boxes_for_draw = list(_merge_and_prune(held_boxes, now).values())
+        for b in boxes_for_draw:
+            b["selected"] = b["id"] == selected_id
+        masks_for_draw = list(_merge_and_prune(held_masks, now).values())
+        tags = _merge_and_prune(held_tags, now)
 
         with STATE.lock:
             STATE.detection_rgb_bgr = rgb
@@ -695,6 +739,17 @@ def _draw_pose_axis(
         return False
 
 
+# ArmFK's "hand" frame is hand_palm_link, i.e. the fixed wrist_yaw -> palm
+# mount flange (see arm_fk.py's _HAND_PALM_OFFSET). That's the right target
+# frame for control/IK, but visually it's still ~7.8cm short of where the
+# fingers actually start (right_hand_index_0_joint / right_hand_middle_0_joint
+# origin xyz="0.0777 ..." in g1_29dof_with_hand_rev_1_0_pkg.urdf, in
+# hand_palm_link's own frame). Nudge the on-screen gizmo out to that surface
+# so it reads as "the palm" rather than the mount plate — display only, does
+# not touch anything used for actual arm motion.
+_PALM_VISUAL_OFFSET_M = 0.075
+
+
 def _draw_detection_gizmos(
     image: np.ndarray,
     selected: Optional[Detection],
@@ -722,9 +777,13 @@ def _draw_detection_gizmos(
     T_base_hand = hand_fk_T_base.get(arm)
     drew_hand = False
     if T_base_hand is not None:
+        T_base_palm = T_base_hand.copy()
+        T_base_palm[:3, 3] += T_base_hand[:3, :3] @ np.array(
+            [_PALM_VISUAL_OFFSET_M, 0.0, 0.0]
+        )
         drew_hand = _draw_pose_axis(
             out,
-            T_camera_base @ T_base_hand,
+            T_camera_base @ T_base_palm,
             f"{arm} hand",
             (255, 255, 80),
             axis_len_m=0.06,
@@ -951,7 +1010,11 @@ app.layout = dbc.Container([
         dbc.Col([
             dbc.Label("Describe what to look for"),
             dbc.InputGroup([
-                dbc.Input(id="nl-prompt", placeholder="e.g. red mug, soda can"),
+                dbc.Input(
+                    id="nl-prompt",
+                    placeholder="e.g. red mug, soda can",
+                    value=DEFAULT_DETECTION_PROMPT,
+                ),
                 dbc.Button("Set prompt", id="set-prompt-btn", color="primary"),
             ]),
             html.Div(id="prompt-status", className="mt-1", style={"fontSize": "12px"}),
@@ -976,7 +1039,18 @@ app.layout = dbc.Container([
                     {"label": "Left", "value": "left"},
                     {"label": "Right", "value": "right"},
                 ],
-                value="auto", inline=True, className="mb-2",
+                value="right", inline=True, className="mb-2",
+            ),
+            dbc.RadioItems(
+                id="planning-mode-select",
+                options=[
+                    {"label": "Direct (analytic IK)", "value": "direct"},
+                    {
+                        "label": "VLA — obstacle-aware trajectory planning (experimental, no model wired in)",
+                        "value": "vla",
+                    },
+                ],
+                value="direct", inline=False, className="mb-2",
             ),
             dbc.Checkbox(
                 id="auto-step-base",
@@ -987,6 +1061,7 @@ app.layout = dbc.Container([
             dbc.Button("Grab selected object", id="grab-btn", color="success",
                         className="mb-2", disabled=True),
             html.Div(id="grab-selected-label", className="mb-2", style={"fontSize": "13px"}),
+            html.Div(id="obstacle-status", className="mb-2", style={"fontSize": "12px", "color": "#aad"}),
             html.Hr(),
             dbc.ButtonGroup([
                 dbc.Button("Prepare", id="prepare-btn", color="secondary"),
@@ -996,6 +1071,8 @@ app.layout = dbc.Container([
                 dbc.Button("Stop grabbing", id="stop-grabbing-btn", color="danger"),
                 dbc.Button("Release arms", id="release-arms-btn", color="warning"),
                 dbc.Button("Re-engage arms", id="unrelease-arms-btn", color="primary"),
+                dbc.Button("Open hand", id="hand-open-btn", color="info"),
+                dbc.Button("Close hand", id="hand-close-btn", color="info"),
                 dbc.Button("Damp", id="damp-btn", color="danger"),
             ]),
             html.Div(id="safety-status", className="mt-2", style={"fontSize": "12px"}),
@@ -1025,6 +1102,7 @@ app.layout = dbc.Container([
     Output("grab-log", "children"),
     Output("grab-btn", "disabled"),
     Output("grab-selected-label", "children"),
+    Output("obstacle-status", "children"),
     Input("refresh-interval", "n_intervals"),
     Input("view-select", "value"),
 )
@@ -1055,10 +1133,11 @@ def _refresh(_n, view_name):
         hand_tag_ts = STATE.hand_tag_ts
         camera_tf_status = STATE.camera_tf_status
         max_visible_detections = STATE.max_visible_detections
+        obstacle_status = STATE.obstacle_status
 
     if rgb is None:
         ph = _placeholder_src("waiting for camera…")
-        return ph, "No detections yet.", status_msg, camera_tf_status, "\n".join(grab_log), True, ""
+        return ph, "No detections yet.", status_msg, camera_tf_status, "\n".join(grab_log), True, "", obstacle_status
 
     # A frozen/erroring camera feed must not keep offering stale objects as
     # if the robot could still see them — the list only reflects detections
@@ -1171,7 +1250,7 @@ def _refresh(_n, view_name):
 
     return (
         view_src, det_list, status_msg, camera_tf_status,
-        "\n".join(grab_log), grab_disabled, selected_label,
+        "\n".join(grab_log), grab_disabled, selected_label, obstacle_status,
     )
 
 
@@ -1312,6 +1391,19 @@ def _sync_use_ros_camera_tf(value):
 
 
 @app.callback(
+    Output("planning-mode-select", "value"),
+    Input("planning-mode-select", "value"),
+)
+def _sync_planning_mode(value):
+    mode = value if value in ("direct", "vla") else "direct"
+    with STATE.lock:
+        STATE.planning_mode = mode
+        if mode == "vla":
+            STATE.obstacle_status = f"obstacles: VLA mode selected — {DEFAULT_VLA_POLICY.unavailable_reason}"
+    return mode
+
+
+@app.callback(
     Output("safety-status", "children"),
     Input("grab-btn", "n_clicks"),
     Input("prepare-btn", "n_clicks"),
@@ -1321,6 +1413,8 @@ def _sync_use_ros_camera_tf(value):
     Input("stop-grabbing-btn", "n_clicks"),
     Input("release-arms-btn", "n_clicks"),
     Input("unrelease-arms-btn", "n_clicks"),
+    Input("hand-open-btn", "n_clicks"),
+    Input("hand-close-btn", "n_clicks"),
     Input("damp-btn", "n_clicks"),
     prevent_initial_call=True,
 )
@@ -1333,6 +1427,8 @@ def _buttons(
     stop_grabbing_clicks,
     release_clicks,
     unrelease_clicks,
+    hand_open_clicks,
+    hand_close_clicks,
     damp_clicks,
 ):
     ctx = callback_context
@@ -1365,6 +1461,12 @@ def _buttons(
     if trigger == "unrelease-arms-btn":
         threading.Thread(target=_run_unrelease_arms, daemon=True).start()
         return "Re-engaging arms..."
+    if trigger == "hand-open-btn":
+        threading.Thread(target=_run_hand_open, daemon=True).start()
+        return "Opening hand..."
+    if trigger == "hand-close-btn":
+        threading.Thread(target=_run_hand_close, daemon=True).start()
+        return "Closing hand..."
     if trigger == "damp-btn":
         threading.Thread(target=_run_damp, daemon=True).start()
         return "Damping…"
@@ -1431,6 +1533,52 @@ def _run_unrelease_arms() -> None:
             STATE.arm_motion_running = False
             STATE.arm_motion_label = ""
         ARM_CONTROL_LOCK.release()
+
+
+def _hand_side_from_override(arm_override: str) -> str:
+    side = str(arm_override).strip().lower()
+    if side not in ("left", "right"):
+        side = "right"
+    return side
+
+
+def _run_hand_open() -> None:
+    _run_hand_action("open")
+
+
+def _run_hand_close() -> None:
+    _run_hand_action("close")
+
+
+def _run_hand_action(action: str) -> None:
+    with STATE.lock:
+        arm_override = STATE.arm_override
+    side = _hand_side_from_override(arm_override)
+    try:
+        if _CONTROL_ROBOT is None:
+            raise RuntimeError(_CONTROL_STATUS)
+        # The Dex3 hand boards occasionally fail to enumerate on boot; if that
+        # happens there is no rt/dex3/<side>/state publisher and any command
+        # to that hand is silently dropped. Check for live state feedback
+        # first so we can surface a clear error instead of a no-op.
+        try:
+            snapshot = _CONTROL_ROBOT.get_hand_state_snapshot(side)
+        except Exception:
+            snapshot = None
+        if snapshot is None:
+            raise RuntimeError(
+                f"{side} Dex3 hand not detected (no rt/dex3/{side}/state "
+                "messages) — check hand cabling/power and reboot if needed."
+            )
+        if action == "open":
+            _CONTROL_ROBOT.hand_open(hand=side)
+        else:
+            _CONTROL_ROBOT.hand_close(hand=side)
+        with STATE.lock:
+            STATE.status_msg = f"hand_{action}({side}) sent."
+    except Exception as exc:
+        with STATE.lock:
+            STATE.status_msg = f"hand_{action}({side}) failed: {exc}"
 
 
 def _run_damp() -> None:
@@ -1626,9 +1774,12 @@ def _run_extend_arm_ee_ik(
     arm: str,
     max_joint_step_rad: float,
     max_joint_speed_rad_s: float,
+    cam: Dict[str, float],
 ) -> Dict[str, Any]:
     _ensure_arm_authority(robot, duration_s=0.4)
     q_cur = _read_current_arm_q(robot, arm)
+    static_obstacles = _estimate_obstacles(cam)
+    opposite_arm = "left" if arm == "right" else "right"
     fk = ArmFK(arm=arm, backend="urdf")
     ik = ArmIK(
         arm=arm,
@@ -1658,12 +1809,20 @@ def _run_extend_arm_ee_ik(
                 "ik_info": info,
                 "stage_results": results,
             }
+        with STATE.lock:
+            T_opposite = STATE.hand_fk_T_base.get(opposite_arm)
+        stage_obstacles = Obstacles(
+            table=static_obstacles.table,
+            opposite_shoulder_base=SHOULDER_IN_BASE[opposite_arm] if T_opposite is not None else None,
+            opposite_wrist_base=T_opposite[:3, 3].copy() if T_opposite is not None else None,
+        )
         result = executor.execute(
             q_solution,
             duration_s=DEFAULT_EXTEND_STAGE_DURATION_S,
             q_arm_start=q_cur,
             T_base_desired=T_desired,
             stop_event=ARM_CANCEL_EVENT,
+            obstacles=stage_obstacles,
         )
         results.append({"stage": stage_name, "ik": info, "execute": result})
         _log(
@@ -1715,6 +1874,7 @@ def _run_extend_arm() -> None:
             arm,
             max_joint_step_rad,
             max_joint_speed_rad_s,
+            cam,
         )
         with STATE.lock:
             STATE.status_msg = f"extend arm EE IK ({arm}) done: {result}"
@@ -1732,6 +1892,45 @@ def _log(line: str) -> None:
     with STATE.lock:
         STATE.grab_log.append(line)
         STATE.grab_log = STATE.grab_log[-300:]
+
+
+def _estimate_obstacles(cam: Dict[str, float]) -> Obstacles:
+    """Fit a table plane from the current depth frame for obstacle-aware
+    trajectory checking (Step 8b — see obstacle_checker.py). Table is None
+    when no confident horizontal plane is found; the returned Obstacles is
+    still valid and still gates torso/self-collision in that case.
+    """
+    with STATE.lock:
+        depth = None if STATE.depth_m is None else STATE.depth_m.copy()
+    table: Optional[TablePlane] = None
+    if depth is not None:
+        T_base_camera = _make_transform(
+            xyz=(cam["x"], cam["y"], cam["z"]),
+            rpy=(cam["roll"], cam["pitch"], cam["yaw"]),
+        )
+        cam_mat = np.array(
+            [[K.fx, 0.0, K.cx], [0.0, K.fy, K.cy], [0.0, 0.0, 1.0]],
+            dtype=np.float64,
+        )
+        try:
+            table = estimate_table_plane(depth, cam_mat, T_base_camera)
+        except Exception as exc:
+            _log(f"[recognition_app] table plane estimation failed: {exc}")
+            table = None
+
+    if table is not None:
+        status = (
+            f"obstacles: table z={table.z_base_m:+.3f}m "
+            f"x=[{table.x_range_m[0]:+.2f},{table.x_range_m[1]:+.2f}] "
+            f"y=[{table.y_range_m[0]:+.2f},{table.y_range_m[1]:+.2f}] "
+            f"confidence={table.confidence:.2f} (n={table.inlier_count})"
+        )
+    else:
+        status = "obstacles: no confident table plane found in current depth frame"
+    _log(f"[recognition_app] {status}")
+    with STATE.lock:
+        STATE.obstacle_status = status
+    return Obstacles(table=table)
 
 
 def _run_direct_grab_inline(
@@ -1758,6 +1957,8 @@ def _run_direct_grab_inline(
         with STATE.lock:
             STATE.arm_motion_running = True
             STATE.arm_motion_label = "direct grab"
+
+        obstacles = _estimate_obstacles(cam)
 
         _arm, reach_dist, max_reach, excess_m, suggested_step_m = _reach_preview(
             det, cam, arm,
@@ -1841,7 +2042,9 @@ def _run_direct_grab_inline(
             _ensure_arm_authority(_CONTROL_ROBOT, duration_s=0.5)
         except Exception as exc:
             _log(f"[recognition_app] unrelease_arms() before grab failed: {exc}")
-        nav = DirectHandPoseNav(config, fixed_result=fixed_result, robot=_CONTROL_ROBOT)
+        nav = DirectHandPoseNav(
+            config, fixed_result=fixed_result, robot=_CONTROL_ROBOT, obstacles=obstacles,
+        )
         with ACTIVE_NAV_LOCK:
             ACTIVE_DIRECT_NAV = nav
         ok = False
@@ -1910,6 +2113,7 @@ def _run_grab_impl() -> None:
         auto_step_base = STATE.auto_step_base
         max_joint_step_rad = STATE.max_joint_step_rad
         max_joint_speed_rad_s = STATE.max_joint_speed_rad_s
+        planning_mode = STATE.planning_mode
         STATE.grab_running = True
 
     if det is None or detection_age_s > STALE_AFTER_S:
@@ -1947,7 +2151,7 @@ def _run_grab_impl() -> None:
     )
     _log(
         f"[recognition_app] arm={arm} label={det.label!r} "
-        f"auto_step_base={auto_step_base}"
+        f"auto_step_base={auto_step_base} planning_mode={planning_mode}"
     )
     _log(
         "[recognition_app] object camera xyz="
@@ -1955,6 +2159,25 @@ def _run_grab_impl() -> None:
         "base xyz="
         f"({p_base[0]:+.3f}, {p_base[1]:+.3f}, {p_base[2]:+.3f}) m"
     )
+
+    if planning_mode == "vla":
+        obstacles = _estimate_obstacles(cam)
+        try:
+            q_cur = _read_current_arm_q(_CONTROL_ROBOT, arm) if _CONTROL_ROBOT is not None else None
+        except Exception:
+            q_cur = None
+        with STATE.lock:
+            rgb = None if STATE.rgb_bgr is None else STATE.rgb_bgr.copy()
+            depth = None if STATE.depth_m is None else STATE.depth_m.copy()
+        plan = DEFAULT_VLA_POLICY.plan(
+            rgb_bgr=rgb, depth_m=depth, instruction=det.label,
+            q_arm_current=q_cur, arm=arm, obstacles=obstacles,
+        )
+        _log(f"[recognition_app] VLA plan: success={plan.success} reason={plan.reason}")
+        with STATE.lock:
+            STATE.status_msg = f"VLA grab not executed: {plan.reason}"
+            STATE.grab_running = False
+        return
 
     try:
         _run_direct_grab_inline(
@@ -2059,6 +2282,8 @@ _DETECTOR = TargetDetector(
     intrinsics=K,
 )
 _VISION = VisionDetector(model_name=_ARGS.vision_model)
+with STATE.lock:
+    STATE.vision_classes = _VISION.set_prompt(DEFAULT_DETECTION_PROMPT)
 
 threading.Thread(
     target=_camera_loop, args=(_ROBOT, _DETECTOR, _ARGS.camera_rate_hz),

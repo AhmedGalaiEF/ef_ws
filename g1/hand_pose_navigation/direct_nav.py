@@ -13,6 +13,7 @@ from .grasp_planner import GraspPlanner
 from .arm_ik import ArmIK
 from .arm_fk import ArmFK
 from .arm_executor import ArmExecutor
+from .obstacle_checker import Obstacles
 
 import math
 import os
@@ -67,6 +68,7 @@ class DirectHandPoseNav:
         config: Dict,
         fixed_result: Optional[DetectionResult] = None,
         robot=None,
+        obstacles: Optional[Obstacles] = None,
     ) -> None:
         self._config = dict(config)
         arm = config.get("arm", "right")
@@ -159,6 +161,7 @@ class DirectHandPoseNav:
             convergence_rot_rad=config.get("convergence_rot_rad", 0.05),
             max_joint_step_rad=max_joint_step_rad,
             timeout_s=config.get("timeout_s", 30.0),
+            static_obstacles=obstacles,
         )
         self._tracking_loop.start(blocking=False)
 
