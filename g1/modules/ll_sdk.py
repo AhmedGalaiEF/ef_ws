@@ -22,7 +22,11 @@ from hand_pose_navigation.arm_fk import (
     ArmFK, LEFT_ARM_JOINTS, RIGHT_ARM_JOINTS, JOINT_LIMITS,
     _LEFT_SHOULDER_IN_BASE, _RIGHT_SHOULDER_IN_BASE,
 )
-from dds_env import ensure_cyclonedds_environment
+from dds_env import (
+    default_dds_iface,
+    ensure_channel_factory_initialized,
+    ensure_cyclonedds_environment,
+)
 
 import math
 import os
@@ -44,7 +48,7 @@ ensure_cyclonedds_environment()
 
 try:
     from unitree_sdk2py.core.channel import (
-        ChannelFactoryInitialize, ChannelPublisher, ChannelSubscriber,
+        ChannelPublisher, ChannelSubscriber,
     )
     from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
     from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_, LowState_
@@ -429,15 +433,15 @@ class LLSdk:
 
     def __init__(
         self,
-        iface: str = "eth0",
+        iface: str | None = None,
         domain_id: int = 0,
         arm_ik_max_iter: int = 24,
         leg_ik_max_iter: int = 64,
     ) -> None:
-        self.iface = str(iface)
+        self.iface = str(iface) if iface is not None else default_dds_iface("eth0")
         self.domain_id = int(domain_id)
 
-        ChannelFactoryInitialize(self.domain_id, self.iface)
+        ensure_channel_factory_initialized(self.domain_id, self.iface)
 
         self._crc = CRC()
         self._pub = ChannelPublisher("rt/lowcmd", LowCmd_)

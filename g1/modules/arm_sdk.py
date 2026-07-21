@@ -59,7 +59,11 @@ except ModuleNotFoundError:
         ArmFK, LEFT_ARM_JOINTS, RIGHT_ARM_JOINTS, JOINT_LIMITS,
     )
 
-from dds_env import ensure_channel_factory_initialized, ensure_cyclonedds_environment
+from dds_env import (
+    default_dds_iface,
+    ensure_channel_factory_initialized,
+    ensure_cyclonedds_environment,
+)
 
 ensure_cyclonedds_environment()
 
@@ -391,7 +395,7 @@ class ArmSdk:
 
     def __init__(
         self,
-        iface: str = "eth0",
+        iface: str | None = None,
         domain_id: int = 0,
         arm_kp: float = DEFAULT_ARM_KP,
         arm_kd: float = DEFAULT_ARM_KD,
@@ -399,6 +403,7 @@ class ArmSdk:
         waist_kd: float = DEFAULT_WAIST_KD,
         arm_ik_max_iter: int = 24,
     ) -> None:
+        iface = str(iface) if iface is not None else default_dds_iface("eth0")
         self.arm_kp = float(arm_kp)
         self.arm_kd = float(arm_kd)
         self.waist_kp = float(waist_kp)

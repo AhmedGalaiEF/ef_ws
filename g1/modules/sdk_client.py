@@ -28,7 +28,11 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from dds_env import ensure_channel_factory_initialized, ensure_cyclonedds_environment
+from dds_env import (
+    default_dds_iface,
+    ensure_channel_factory_initialized,
+    ensure_cyclonedds_environment,
+)
 from sdk_audio import RobotAudio
 from sdk_boot import create_loco_client, rpc_get_int
 from sdk_hand import Dex3HandController
@@ -324,7 +328,7 @@ class Robot:
 
     def __init__(
         self,
-        iface: str = "eth0",
+        iface: str | None = None,
         domain_id: int = 0,
         safety_boot: bool = False,
         recover_dev_mode_on_init: bool = True,
@@ -342,7 +346,7 @@ class Robot:
         chat_model: str = DEFAULT_CHAT_MODEL,
         vision_model: str = DEFAULT_VISION_MODEL,
     ) -> None:
-        self.iface = iface
+        self.iface = str(iface) if iface is not None else default_dds_iface("eth0")
         self.domain_id = int(domain_id)
         self.sport_topic = sport_topic
         self.lidar_map_topic = lidar_map_topic
@@ -3747,7 +3751,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Smoke test for sdk_client Robot wrapper")
-    parser.add_argument("--iface", default="eth0")
+    parser.add_argument("--iface", default=default_dds_iface("eth0"))
     parser.add_argument(
         "--robot-ip",
         "--rgbd-host",

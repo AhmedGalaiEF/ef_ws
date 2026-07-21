@@ -118,6 +118,8 @@ def ensure_channel_factory_initialized(domain_id: int = 0, iface: str | None = N
     global _CHANNEL_FACTORY_CONFIG
 
     resolved_domain = int(domain_id)
+    if resolved_domain < 0:
+        raise ValueError("DDS domain_id must be non-negative.")
     resolved_iface = _normalize_iface(iface)
     ensure_cyclonedds_environment()
     with _CHANNEL_FACTORY_LOCK:

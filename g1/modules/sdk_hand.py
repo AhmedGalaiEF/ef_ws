@@ -9,7 +9,11 @@ import time
 import threading
 from typing import Any, Dict
 
-from dds_env import ensure_channel_factory_initialized, ensure_cyclonedds_environment
+from dds_env import (
+    default_dds_iface,
+    ensure_channel_factory_initialized,
+    ensure_cyclonedds_environment,
+)
 
 ensure_cyclonedds_environment()
 
@@ -211,12 +215,12 @@ def build_hand_msg(
 
 
 class Dex3HandController:
-    def __init__(self, hand: str = "right", iface: str = "eth0", domain_id: int = 0) -> None:
+    def __init__(self, hand: str = "right", iface: str | None = None, domain_id: int = 0) -> None:
         side = str(hand).strip().lower()
         if side not in TOPIC_HAND_BY_SIDE:
             raise ValueError(f"Invalid hand '{hand}'.")
         self.hand = side
-        self.iface = str(iface)
+        self.iface = str(iface) if iface is not None else default_dds_iface("eth0")
         self.domain_id = int(domain_id)
         ensure_channel_factory_initialized(self.domain_id, self.iface)
         self._pub = ChannelPublisher(TOPIC_HAND_BY_SIDE[self.hand], HandCmd_)

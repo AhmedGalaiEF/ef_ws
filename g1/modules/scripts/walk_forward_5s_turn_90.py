@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 import os
 import sys
 import time
@@ -12,33 +13,60 @@ PARENT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 if PARENT_DIR not in sys.path:
     sys.path.insert(0, PARENT_DIR)
 
+<<<<<<< HEAD
+=======
+from dds_env import default_dds_iface
+
+
+def nonnegative_float(value: str) -> float:
+    parsed = float(value)
+    if parsed < 0.0:
+        raise argparse.ArgumentTypeError("value must be non-negative")
+    return parsed
+
+
+def positive_float(value: str) -> float:
+    parsed = float(value)
+    if parsed <= 0.0:
+        raise argparse.ArgumentTypeError("value must be greater than zero")
+    return parsed
+
+
+def finite_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        raise argparse.ArgumentTypeError("value must be finite")
+    return parsed
+
+
+>>>>>>> 2053b1a7 (improvised the scripts for sdk_client.py)
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Walk forward for 5 seconds, then turn 90 degrees."
     )
-    parser.add_argument("--iface", default="eth0", help="Network interface for the robot SDK.")
+    parser.add_argument("--iface", default=default_dds_iface("eth0"), help="Network interface for the robot SDK.")
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id.")
     parser.add_argument(
         "--forward-speed",
-        type=float,
+        type=nonnegative_float,
         default=0.3,
         help="Forward walking speed in m/s.",
     )
     parser.add_argument(
         "--forward-seconds",
-        type=float,
+        type=nonnegative_float,
         default=5.0,
         help="How long to walk forward.",
     )
     parser.add_argument(
         "--turn-angle-deg",
-        type=float,
+        type=finite_float,
         default=90.0,
         help="Turn angle in degrees. Positive is counter-clockwise.",
     )
     parser.add_argument(
         "--turn-timeout",
-        type=float,
+        type=positive_float,
         default=10.0,
         help="Timeout for the 90 degree turn.",
     )
@@ -58,7 +86,10 @@ def main() -> int:
 
     from sdk_client import Robot
 
+    robot = None
     try:
+        from sdk_client import Robot
+
         robot = Robot(
             iface=args.iface,
             domain_id=args.domain_id,
@@ -91,14 +122,17 @@ def main() -> int:
         print(f"Turn completed: {turned}")
     except KeyboardInterrupt:
         print("\nInterrupted. Sending stop command.")
-        robot.stop()
         return 1
     except Exception as exc:
         print(f"Motion sequence failed: {exc}")
-        robot.stop()
         return 1
+    finally:
+        if robot is not None:
+            try:
+                robot.stop()
+            except Exception as exc:
+                print(f"Warning: failed to send final stop command: {exc}")
 
-    robot.stop()
     print("Sequence complete. Stop command sent.")
     return 0
 
