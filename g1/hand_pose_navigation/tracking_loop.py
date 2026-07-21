@@ -20,8 +20,9 @@ from __future__ import annotations
 import math
 import threading
 import time
+from collections import deque
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Deque, Dict, List, Optional
 
 import numpy as np
 
@@ -61,6 +62,7 @@ _BODY_JOINT_INDEX_BY_LABEL = {
 class LoopStatus:
     running: bool = False
     converged: bool = False
+    stalled: bool = False
     iteration: int = 0
     last_error_pos_m: float = float("inf")
     last_error_rot_rad: float = float("inf")
@@ -85,6 +87,7 @@ class LoopStatus:
         return {
             "running": self.running,
             "converged": self.converged,
+            "stalled": self.stalled,
             "iteration": self.iteration,
             "last_error_pos_m": finite_or_none(self.last_error_pos_m),
             "last_error_rot_rad": finite_or_none(self.last_error_rot_rad),
@@ -121,6 +124,14 @@ class TrackingLoop:
         timeout_s:           maximum time before giving up (0 = run forever)
         on_converge:         optional callback when hand reaches target
     """
+
+    # If the hand hasn't gotten meaningfully closer to the target over this
+    # many consecutive EE-pose increments, the grab is considered stalled
+    # (e.g. the object moved out from under the fixed target mid-grab, or the
+    # arm is stuck against a workspace/obstacle limit) and the loop aborts
+    # rather than continuing to chase a target that isn't converging.
+    _STALL_WINDOW = 10
+    _STALL_PROGRESS_TOL_M = 0.003
 
     def __init__(
         self,
@@ -202,7 +213,28 @@ class TrackingLoop:
         dt = 1.0 / self.rate_hz
         start_t = time.time()
         q_arm_commanded: Optional[np.ndarray] = None
+        err_history: Deque[float] = deque(maxlen=self._STALL_WINDOW)
 
+        try:
+            self.executor.start_continuous()
+        except Exception as exc:
+            self._status.record(f"[Step 9] Could not start continuous executor: {exc}")
+            self._status.running = False
+            return
+
+        try:
+            self._run_loop(dt, start_t, q_arm_commanded, err_history)
+        finally:
+            self.executor.stop_continuous()
+            self._status.running = False
+
+    def _run_loop(
+        self,
+        dt: float,
+        start_t: float,
+        q_arm_commanded: Optional[np.ndarray],
+        err_history: Deque[float],
+    ) -> None:
         while not self._stop_event.is_set():
             t0 = time.time()
             self._status.iteration += 1
@@ -304,6 +336,20 @@ class TrackingLoop:
                     self.on_converge()
                 break
 
+            # ── Stall check: hand isn't getting closer to the target ──
+            err_history.append(err_pos)
+            if (
+                len(err_history) == err_history.maxlen
+                and err_history[-1] >= err_history[0] - self._STALL_PROGRESS_TOL_M
+            ):
+                self._status.stalled = True
+                self._status.record(
+                    "[Step 10] Stalled: target not getting closer over last "
+                    f"{err_history.maxlen} EE-pose increments "
+                    f"({err_history[0]:.4f}m -> {err_history[-1]:.4f}m) — aborting."
+                )
+                break
+
             # ── Step 7: IK ───────────────────────────────────────────
             q_arm_desired, ik_info = self.ik.solve(
                 T_base_desired,
@@ -360,37 +406,34 @@ class TrackingLoop:
                     table_xy_margin_m=self.static_obstacles.table_xy_margin_m,
                 )
 
-            # ── Step 9: send command ─────────────────────────────────
-            move_duration = min(
-                dt * 1.5,
-                0.3,
-            )  # short smooth step each iteration
-            exec_result = self.executor.execute(
+            # ── Step 9: submit to the continuous execution thread ────
+            # Validation only, here — the continuous thread (started once,
+            # outside this loop) owns actual publishing and keeps rt/arm_sdk
+            # fed at a steady rate regardless of how long this iteration's
+            # perception/IK took, so a slow iteration never leaves the wire
+            # silent.
+            validation = self.executor.validate(
                 q_arm_next,
-                duration_s=move_duration,
-                q_arm_start=q_arm_start_cmd,
                 T_base_desired=T_base_desired,
-                stop_event=self._stop_event,
+                q_arm_start=q_arm_start_cmd,
                 obstacles=obstacles,
             )
-            if not exec_result.get("success") and exec_result.get("reason") == "obstacle_gate":
+            if not validation.get("safe") and validation.get("reason") == "obstacle_gate":
                 self._status.safety_rejections += 1
                 self._status.record(
-                    f"[Step 8b] Obstacle in swept path: {exec_result.get('violations')}"
+                    f"[Step 8b] Obstacle in swept path: {validation.get('violations')}"
                 )
                 self._sleep(dt, t0)
                 continue
-            if not exec_result.get("success"):
+            if not validation.get("safe"):
                 self._status.safety_rejections += 1
                 self._status.record(
-                    f"[Step 9] Command failed: reason={exec_result.get('reason')}"
+                    f"[Step 9] Command rejected: reason={validation.get('reason')}"
                 )
                 self._sleep(dt, t0)
                 continue
-            q_arm_commanded = np.asarray(
-                exec_result.get("final_q", q_arm_next),
-                dtype=np.float64,
-            )
+            self.executor.submit_target(q_arm_next)
+            q_arm_commanded = q_arm_next.copy()
 
             self._status.record(
                 f"[Step 10] it={self._status.iteration:4d}  "
@@ -399,8 +442,6 @@ class TrackingLoop:
             )
 
             self._sleep(dt, t0)
-
-        self._status.running = False
 
     # ------------------------------------------------------------------
     def _read_q_full(self) -> Optional[np.ndarray]:

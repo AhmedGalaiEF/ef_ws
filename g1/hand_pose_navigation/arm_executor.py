@@ -14,6 +14,8 @@ Usage:
 """
 from __future__ import annotations
 
+import queue
+import threading
 import time
 from typing import Dict, List, Optional, Tuple
 
@@ -100,6 +102,120 @@ class ArmExecutor:
         self._fk = ArmFK(arm=arm, backend="urdf")
         self._checker = ReachabilityChecker(arm=arm, max_reach_m=max_reach_m)
         self._last_command_q: Optional[np.ndarray] = None
+        self._continuous_thread: Optional[threading.Thread] = None
+        self._continuous_stop: Optional[threading.Event] = None
+        self._target_queue: Optional["queue.Queue[np.ndarray]"] = None
+
+    # ------------------------------------------------------------------
+    def validate(
+        self,
+        q_arm_desired: np.ndarray,
+        *,
+        T_base_desired: Optional[np.ndarray] = None,
+        q_arm_start: Optional[np.ndarray] = None,
+        obstacles: Optional[Obstacles] = None,
+    ) -> Dict:
+        """Run the safety/obstacle gate without sending anything.
+
+        Shared by execute() (one-shot burst moves) and the continuous
+        streaming path (submit_target()), so both reject the same way.
+        """
+        if not self.safety_gate:
+            return {"safe": True}
+        result = self._checker.check(q_arm_desired, T_base_desired)
+        if not result.safe:
+            return {"safe": False, "reason": "safety_gate", "violations": result.reasons}
+        if obstacles is not None and q_arm_start is not None:
+            sweep = check_swept_path(self._fk, q_arm_start, q_arm_desired, obstacles)
+            if not sweep.safe:
+                return {"safe": False, "reason": "obstacle_gate", "violations": sweep.reasons}
+        return {"safe": True}
+
+    # ------------------------------------------------------------------
+    def start_continuous(self, rate_hz: Optional[float] = None) -> None:
+        """Start a background thread that republishes the latest submitted
+        target at a fixed rate, ramping smoothly toward it every tick.
+
+        Bursty execute() calls only publish while actively interpolating a
+        single move, then go silent until the next call — if the caller's
+        next command is delayed (perception/IK/detection taking a moment),
+        rt/arm_sdk goes quiet and the low-level controller can reclaim the
+        arm, producing a sudden drop followed by a snap back once publishing
+        resumes. This loop never stops publishing once started: with no new
+        target queued it just keeps re-sending (and holding) the last one,
+        so compute-side latency no longer creates a gap on the wire.
+        """
+        if self._continuous_thread is not None:
+            return
+        seed = self._last_command_q
+        if seed is None:
+            seed = self._read_current_arm_q()
+        if seed is None:
+            raise RuntimeError("cannot start continuous execution: joint state unavailable")
+        self._last_command_q = seed.copy()
+        self._target_queue = queue.Queue(maxsize=1)
+        self._continuous_stop = threading.Event()
+        rate = float(rate_hz) if rate_hz else self.rate_hz
+        thread = threading.Thread(
+            target=self._continuous_loop,
+            args=(self._target_queue, self._continuous_stop, max(1.0, rate)),
+            daemon=True,
+        )
+        self._continuous_thread = thread
+        thread.start()
+
+    def stop_continuous(self) -> None:
+        """Stop the continuous publish thread, if running."""
+        thread = self._continuous_thread
+        stop_event = self._continuous_stop
+        self._continuous_thread = None
+        self._continuous_stop = None
+        self._target_queue = None
+        if stop_event is not None:
+            stop_event.set()
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=2.0)
+
+    def submit_target(self, q_arm_desired: np.ndarray) -> None:
+        """Queue a new target for the continuous execution thread.
+
+        Non-blocking; replaces any not-yet-applied pending target so the
+        thread always ramps toward the newest command rather than working
+        through a backlog of stale intermediate ones.
+        """
+        target_queue = self._target_queue
+        if target_queue is None:
+            raise RuntimeError("start_continuous() was not called")
+        q = np.asarray(q_arm_desired, dtype=np.float64).copy()
+        try:
+            target_queue.get_nowait()
+        except queue.Empty:
+            pass
+        try:
+            target_queue.put_nowait(q)
+        except queue.Full:
+            pass
+
+    def _continuous_loop(
+        self,
+        target_queue: "queue.Queue[np.ndarray]",
+        stop_event: threading.Event,
+        rate_hz: float,
+    ) -> None:
+        dt = 1.0 / rate_hz
+        q_target = self._last_command_q.copy()
+        while not stop_event.is_set():
+            t0 = time.time()
+            try:
+                while True:
+                    q_target = target_queue.get_nowait()
+            except queue.Empty:
+                pass
+            q_cmd, _ = self._cap_command_step(q_target, dt)
+            self._send_command(q_cmd)
+            remaining = dt - (time.time() - t0)
+            if remaining > 0:
+                time.sleep(remaining)
 
     # ------------------------------------------------------------------
     def execute(
@@ -142,26 +258,20 @@ class ArmExecutor:
         q_arm_desired = np.asarray(q_arm_desired, dtype=np.float64).copy()
 
         # Safety check
-        if self.safety_gate:
-            result = self._checker.check(q_arm_desired, T_base_desired)
-            if not result.safe:
-                return {
-                    "success": False,
-                    "reason": "safety_gate",
-                    "violations": result.reasons,
-                    "duration_s": 0.0,
-                    "steps": 0,
-                }
-            if obstacles is not None:
-                sweep = check_swept_path(self._fk, q_arm_start, q_arm_desired, obstacles)
-                if not sweep.safe:
-                    return {
-                        "success": False,
-                        "reason": "obstacle_gate",
-                        "violations": sweep.reasons,
-                        "duration_s": 0.0,
-                        "steps": 0,
-                    }
+        validation = self.validate(
+            q_arm_desired,
+            T_base_desired=T_base_desired,
+            q_arm_start=q_arm_start,
+            obstacles=obstacles,
+        )
+        if not validation.get("safe"):
+            return {
+                "success": False,
+                "reason": validation.get("reason"),
+                "violations": validation.get("violations"),
+                "duration_s": 0.0,
+                "steps": 0,
+            }
 
         if self._last_command_q is None:
             self._last_command_q = q_arm_start.copy()

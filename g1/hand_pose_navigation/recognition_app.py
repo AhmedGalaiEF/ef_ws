@@ -987,6 +987,16 @@ def _view_panel() -> dbc.Card:
     ], className="mb-3")
 
 
+def _logs_card() -> dbc.Card:
+    return dbc.Card([
+        dbc.CardHeader("Grab log", style={"fontSize": "13px"}),
+        dbc.CardBody(html.Pre(id="grab-log", style={
+            "maxHeight": "460px", "overflow": "auto", "fontSize": "11px",
+            "background": "#111", "padding": "8px", "marginBottom": 0,
+        })),
+    ], className="mb-3")
+
+
 def _limit_visible_detections(
     detections: Dict[str, Detection],
     boxes: List[Dict],
@@ -1047,6 +1057,7 @@ app.layout = dbc.Container([
 
     dbc.Row([
         dbc.Col(_view_panel(), width=6),
+        dbc.Col(_logs_card(), width=6),
     ]),
 
     dbc.Row([
@@ -1100,12 +1111,6 @@ app.layout = dbc.Container([
                 dbc.Button("Damp", id="damp-btn", color="danger"),
             ]),
             html.Div(id="safety-status", className="mt-2", style={"fontSize": "12px"}),
-            html.Hr(),
-            html.H6("Grab log"),
-            html.Pre(id="grab-log", style={
-                "maxHeight": "220px", "overflow": "auto", "fontSize": "11px",
-                "background": "#111", "padding": "8px",
-            }),
         ], width=6),
     ]),
 
@@ -2302,6 +2307,7 @@ def _run_direct_grab_inline(
         with ACTIVE_NAV_LOCK:
             ACTIVE_DIRECT_NAV = nav
         ok = False
+        stalled = False
         last_status_log_t = 0.0
         try:
             deadline = time.time() + float(config["timeout_s"]) + 2.0
@@ -2329,6 +2335,14 @@ def _run_direct_grab_inline(
                 if status.get("converged"):
                     ok = True
                     break
+                if status.get("stalled"):
+                    stalled = True
+                    _log(
+                        "[recognition_app] Direct grab stalled: target has not "
+                        "gotten closer over the last several EE-pose increments "
+                        "(object likely moved) — will reset to extend-arm pose."
+                    )
+                    break
                 if not status.get("running", True):
                     _log(f"[recognition_app] direct nav stopped: {status}")
                     break
@@ -2338,6 +2352,28 @@ def _run_direct_grab_inline(
             with ACTIVE_NAV_LOCK:
                 if ACTIVE_DIRECT_NAV is nav:
                     ACTIVE_DIRECT_NAV = None
+
+        if stalled:
+            if ARM_CANCEL_EVENT.is_set():
+                _log("[recognition_app] Stall reset skipped: grab was cancelled.")
+                return
+            try:
+                reset_result = _run_extend_arm_ee_ik(
+                    _CONTROL_ROBOT,
+                    arm,
+                    max_joint_step_rad,
+                    max_joint_speed_rad_s,
+                    cam,
+                )
+                if reset_result.get("final_q") is not None:
+                    q_final = np.asarray(reset_result["final_q"], dtype=np.float64)
+                    T_final = ArmFK(arm=arm, backend="urdf").compute_arm(q_final)
+                    with STATE.lock:
+                        STATE.extended_hand_R_base[arm] = T_final[:3, :3].copy()
+                _log(f"[recognition_app] stall-reset extend arm result: {reset_result}")
+            except Exception as exc:
+                _log(f"[recognition_app] stall-reset extend arm failed: {exc}")
+            return
 
         if not ok:
             _log("[recognition_app] Direct grab did not converge; not closing hand.")
