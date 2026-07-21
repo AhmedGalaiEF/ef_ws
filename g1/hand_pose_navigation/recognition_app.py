@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import difflib
 import json
 import math
 import os
@@ -64,6 +65,7 @@ from hand_pose_navigation.vla_planner import DEFAULT_VLA_POLICY
 import dash
 from dash import dcc, html, Input, Output, State, callback_context, no_update, ALL
 import dash_bootstrap_components as dbc
+from flask import request, jsonify
 
 try:
     from sdk_client import Robot
@@ -2535,6 +2537,133 @@ def _run_grab() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Voice-control API — plain Flask routes on app.server, alongside the Dash UI.
+# Each route just does what the matching button/callback already does
+# (STATE.lock-guarded field set, or a daemon thread launch); no new behavior.
+# ---------------------------------------------------------------------------
+
+def _api_authorized() -> bool:
+    token = str(getattr(_ARGS, "api_token", "") or "")
+    if not token:
+        return True
+    auth = str(request.headers.get("Authorization", ""))
+    return auth == f"Bearer {token}"
+
+
+def _find_detection_by_label(name: str) -> Optional[Detection]:
+    wanted = str(name).strip().lower()
+    if not wanted:
+        return None
+    with STATE.lock:
+        candidates = list(STATE.detections.values())
+    best: Optional[Detection] = None
+    best_score = 0.0
+    for det in candidates:
+        label = str(det.label).strip().lower()
+        if wanted == label or wanted in label or label in wanted:
+            return det
+        score = difflib.SequenceMatcher(None, wanted, label).ratio()
+        if score > best_score:
+            best, best_score = det, score
+    return best if best_score >= 0.6 else None
+
+
+@app.server.route("/api/objects", methods=["GET"])
+def api_objects():
+    if not _api_authorized():
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    with STATE.lock:
+        fresh = (time.time() - STATE.last_detection_ts) <= STALE_AFTER_S if STATE.last_detection_ts else False
+        objects = [
+            {"id": det.id, "label": det.label, "score": round(float(det.score), 3)}
+            for det in STATE.detections.values()
+        ]
+    return jsonify({"ok": True, "stale": not fresh, "objects": objects})
+
+
+@app.server.route("/api/status", methods=["GET"])
+def api_status():
+    if not _api_authorized():
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    with STATE.lock:
+        return jsonify({
+            "ok": True,
+            "status_msg": STATE.status_msg,
+            "grab_log": list(STATE.grab_log[-50:]),
+            "grab_running": STATE.grab_running,
+            "arm_motion_running": STATE.arm_motion_running,
+            "selected_id": STATE.selected_id,
+            "arm_override": STATE.arm_override,
+            "vision_classes": list(STATE.vision_classes),
+        })
+
+
+@app.server.route("/api/select_arm/<side>", methods=["POST"])
+def api_select_arm(side: str):
+    if not _api_authorized():
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    side = str(side).strip().lower()
+    if side not in {"left", "right"}:
+        return jsonify({"ok": False, "error": "invalid_side"}), 400
+    with STATE.lock:
+        STATE.arm_override = side
+    return jsonify({"ok": True, "arm_override": side})
+
+
+@app.server.route("/api/extend_arm", methods=["POST"])
+def api_extend_arm():
+    if not _api_authorized():
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    threading.Thread(target=_run_extend_arm, daemon=True).start()
+    return jsonify({"ok": True, "started": True})
+
+
+@app.server.route("/api/release_arms", methods=["POST"])
+def api_release_arms():
+    if not _api_authorized():
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    threading.Thread(target=_run_release_arms, daemon=True).start()
+    return jsonify({"ok": True, "started": True})
+
+
+@app.server.route("/api/unrelease_arms", methods=["POST"])
+def api_unrelease_arms():
+    if not _api_authorized():
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    threading.Thread(target=_run_unrelease_arms, daemon=True).start()
+    return jsonify({"ok": True, "started": True})
+
+
+@app.server.route("/api/set_prompt", methods=["POST"])
+def api_set_prompt():
+    if not _api_authorized():
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    body = request.get_json(silent=True) or {}
+    text = str(body.get("text", "") or "")
+    classes = _VISION.set_prompt(text)
+    with STATE.lock:
+        STATE.vision_classes = classes
+    if not _VISION.available:
+        return jsonify({"ok": False, "error": _VISION.error, "classes": classes}), 503
+    return jsonify({"ok": True, "classes": classes})
+
+
+@app.server.route("/api/grab", methods=["POST"])
+def api_grab():
+    if not _api_authorized():
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    body = request.get_json(silent=True) or {}
+    name = str(body.get("object", "") or "")
+    det = _find_detection_by_label(name)
+    if det is None:
+        return jsonify({"ok": False, "error": "not_found"}), 404
+    with STATE.lock:
+        STATE.selected_id = det.id
+    threading.Thread(target=_run_grab, daemon=True).start()
+    return jsonify({"ok": True, "matched_label": det.label, "id": det.id})
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -2557,6 +2686,8 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--host", default="0.0.0.0")
     p.add_argument("--port", type=int, default=8060)
     p.add_argument("--debug", action="store_true")
+    p.add_argument("--api-token", default="",
+                    help="Optional bearer token required by the /api/* voice-control routes.")
     return p.parse_args()
 
 

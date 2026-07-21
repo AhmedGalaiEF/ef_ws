@@ -1,1 +1,1 @@
-py chatbot.py robot_modules_knowledge.sample.json --enable-motion --external-asr-server --external-asr-host 127.0.0.1 --external-asr-port 8095 --external-asr-token mysecret --external-asr-only
+py chatbot_with_tactile_dex3.py robot_modules_knowledge.sample.json --enable-motion --external-asr-server --external-asr-host 127.0.0.1 --external-asr-port 8095 --external-asr-token mysecret --external-asr-only
