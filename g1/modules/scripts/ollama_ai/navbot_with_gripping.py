@@ -55,6 +55,7 @@ SPOKEN_STATUS_ECHOES = (
     "relocating",
     "i did not understand that navigation command",
     "the gripping system is not available right now",
+    "i cannot read my hand sensors right now",
 )
 STOP_WORDS = {
     "a", "an", "and", "at", "called", "go", "i", "me", "my", "named", "navigate",
@@ -134,6 +135,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--gripping-port", type=int, default=8060)
     parser.add_argument("--gripping-token", default="",
                         help="Bearer token required by the recognition_app.py /api/* routes.")
+    parser.add_argument("--no-tactile-status", action="store_true",
+                        help="Disable Dex3 tactile status answers.")
+    parser.add_argument("--tactile-threshold", type=float, default=100000.0,
+                        help="Raw tactile pressure threshold for deciding that a hand is holding something.")
+    parser.add_argument("--tactile-timeout-s", type=float, default=2.0,
+                        help="Seconds to wait for initial Dex3 tactile state at startup.")
+    parser.add_argument("--tactile-max-age-s", type=float, default=2.0,
+                        help="Maximum age of tactile data used for holding status answers.")
     parser.add_argument("--min-confidence", type=float, default=0.0)
     parser.add_argument("--post-speak-ignore-s", type=float, default=1.5)
     parser.add_argument("--auto-relocate", dest="auto_relocate", action="store_true", default=True)
@@ -691,6 +700,88 @@ class GrippingClient:
             self.logger.warning(f"Could not stop gripping plugin: {exc}")
 
 
+class TactileHoldingMonitor:
+    def __init__(self, args: argparse.Namespace, logger: Any) -> None:
+        self.args = args
+        self.logger = logger
+        self.enabled = not bool(args.no_tactile_status)
+        self.ready = False
+        self.error = ""
+        self.subscribers: list[Any] = []
+        if not self.enabled:
+            return
+        try:
+            from test_dex3_tactile import (
+                HAND_STATE_TOPIC_BY_SIDE,
+                LatestTactileState,
+                collect_latest_snapshots,
+                ensure_channel_factory_initialized,
+                wait_for_initial_snapshots,
+            )
+
+            self._collect_latest_snapshots = collect_latest_snapshots
+            ensure_channel_factory_initialized(int(args.domain_id), str(args.iface))
+            self.subscribers = [
+                LatestTactileState(hand, HAND_STATE_TOPIC_BY_SIDE[hand], 20)
+                for hand in ("left", "right")
+            ]
+            wait_for_initial_snapshots(self.subscribers, float(args.tactile_timeout_s))
+            self.ready = True
+            logger.info(
+                "Dex3 tactile status ready: "
+                + ", ".join(getattr(sub, "topic", "?") for sub in self.subscribers)
+            )
+        except Exception as exc:
+            self.enabled = False
+            self.error = str(exc)
+            logger.warning(f"Dex3 tactile status unavailable: {exc}")
+
+    def answer(self) -> tuple[str, dict[str, Any]]:
+        if not self.enabled or not self.ready:
+            answer = "I cannot read my hand sensors right now."
+            return answer, {"ok": False, "answer": answer, "error": self.error or "tactile status disabled"}
+        snapshots = self._collect_latest_snapshots(self.subscribers)
+        threshold = float(self.args.tactile_threshold)
+        max_age_s = float(self.args.tactile_max_age_s)
+        holding: list[str] = []
+        details: dict[str, Any] = {}
+        fresh_hands = 0
+        for hand in ("left", "right"):
+            snapshot = snapshots.get(hand)
+            if snapshot is None:
+                details[hand] = {"ok": False, "reason": "missing"}
+                continue
+            age_s = max(0.0, time.time() - float(snapshot.timestamp))
+            max_value = snapshot.max_value
+            fresh = age_s <= max_age_s
+            if fresh:
+                fresh_hands += 1
+            is_holding = fresh and max_value is not None and float(max_value) >= threshold
+            if is_holding:
+                holding.append(hand)
+            details[hand] = {
+                "ok": fresh,
+                "age_s": round(age_s, 3),
+                "max": max_value,
+                "threshold": threshold,
+                "holding": is_holding,
+                "valid_count": snapshot.valid_count,
+                "active_count": snapshot.active_count,
+            }
+        if fresh_hands == 0:
+            answer = "I cannot read my hand sensors right now."
+            return answer, {"ok": False, "answer": answer, "holding": holding, "hands": details}
+        if holding == ["left", "right"]:
+            answer = "Yes, I am holding something in both hands."
+        elif holding == ["left"]:
+            answer = "Yes, I am holding something in my left hand."
+        elif holding == ["right"]:
+            answer = "Yes, I am holding something in my right hand."
+        else:
+            answer = "No."
+        return answer, {"ok": True, "answer": answer, "holding": holding, "hands": details}
+
+
 class NavBotNode(Node):
     def __init__(self, args: argparse.Namespace) -> None:
         super().__init__("g1_navbot_with_gripping")
@@ -698,6 +789,7 @@ class NavBotNode(Node):
         self.nav = NavState(args)
         self.motion = MotionClient(args, self.get_logger())
         self.gripping = GrippingClient(args, self.get_logger())
+        self.tactile = TactileHoldingMonitor(args, self.get_logger())
         self.speaker = Speaker(args, self.get_logger())
         self.response_pub = self.create_publisher(String, args.response_topic, 10)
         self.audit_path = Path(args.audit_log).expanduser()
@@ -855,6 +947,10 @@ class NavBotNode(Node):
             self.motion.move_for(vx=vx, vy=vy, vyaw=vyaw)
             return {"ok": True, "code": 0, "intent": "locomotion", "vx": vx, "vy": vy, "vyaw": vyaw, "answer": ""}
 
+        if self._is_holding_status_question(low):
+            answer, tactile_result = self.tactile.answer()
+            return {**tactile_result, "intent": "holding_status", "answer": answer}
+
         if self._wants_objects_query(low):
             if not self.gripping.enabled:
                 return {"ok": False, "code": 1, "intent": "list_objects", "answer": "The gripping system is not available right now."}
@@ -986,6 +1082,33 @@ class NavBotNode(Node):
         return None
 
     @staticmethod
+    def _is_holding_status_question(low: str) -> bool:
+        normalized = " ".join(str(low).strip().strip(string.punctuation + "，。！？、；：").split())
+        if not normalized:
+            return False
+        direct_phrases = (
+            "are you holding something",
+            "are you holding anything",
+            "are you holding an object",
+            "do you hold something",
+            "do you hold anything",
+            "do you have something in your hand",
+            "do you have something in your hands",
+            "is there something in your hand",
+            "is there something in your hands",
+            "what are you holding",
+            "which hand is holding something",
+            "which hand are you holding something in",
+        )
+        if any(phrase in normalized for phrase in direct_phrases):
+            return True
+        has_holding_word = any(word in normalized for word in ("holding", "hold", "gripping", "grip"))
+        has_object_word = any(word in normalized for word in ("something", "anything", "object", "thing"))
+        has_robot_word = any(word in normalized for word in ("you", "your"))
+        has_hand_word = "hand" in normalized or "hands" in normalized
+        return has_holding_word and (has_object_word or has_hand_word) and has_robot_word
+
+    @staticmethod
     def _wants_objects_query(low: str) -> bool:
         phrases = ("what objects do you see", "what do you see", "what can you see", "what things do you see")
         return any(phrase in low for phrase in phrases)
@@ -1043,10 +1166,11 @@ class NavBotNode(Node):
         if not allow_name_fragment and len(words) <= 3 and not any(
             keyword in normalized
             for keyword in (
-                "add", "arm", "close", "extend", "find", "go", "grab", "list", "look",
-                "map", "mapping", "move", "navigate", "pick", "point", "relocate",
-                "release", "resume", "rotate", "save", "search", "select", "slam",
-                "start", "status", "step", "stop", "switch", "turn", "walk",
+                "add", "arm", "close", "extend", "find", "go", "grab", "grip", "hand",
+                "hold", "list", "look", "map", "mapping", "move", "navigate", "pick",
+                "point", "relocate", "release", "resume", "rotate", "save", "search",
+                "select", "slam", "start", "status", "step", "stop", "switch", "turn",
+                "walk",
             )
         ):
             return "short_non_command_fragment"
