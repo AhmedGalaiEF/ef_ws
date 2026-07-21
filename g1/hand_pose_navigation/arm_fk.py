@@ -125,13 +125,12 @@ def _T_from_axis_q(axis, q: float) -> np.ndarray:
 
 # _URDF_CHAIN above ends at the wrist_yaw JOINT's own frame — it does not
 # include the fixed wrist_yaw_link -> hand_palm_link joint, so without this
-# offset the "hand" pose this module returns is actually the wrist, short of
-# the real palm by ~4cm. Sourced verbatim from the right_hand_palm_joint /
-# left_hand_palm_joint <origin> in g1_29dof_with_hand_rev_1_0_pkg.urdf
-# (fixed joint, identity rotation, only a small lateral sign flip by side).
+# offset the "hand" pose this module returns is actually the wrist. The URDF
+# palm offset was 4.15cm; this tuned value brings the frame 2cm closer to the
+# wrist while preserving the small lateral sign flip by side.
 _HAND_PALM_OFFSET: Dict[str, Tuple[List[float], List[float]]] = {
-    "right": ([0.0415, -0.003, 0.0], [0.0, 0.0, 0.0]),
-    "left": ([0.0415, 0.003, 0.0], [0.0, 0.0, 0.0]),
+    "right": ([0.0215, -0.003, 0.0], [0.0, 0.0, 0.0]),
+    "left": ([0.0215, 0.003, 0.0], [0.0, 0.0, 0.0]),
 }
 
 

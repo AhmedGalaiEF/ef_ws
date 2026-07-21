@@ -2,13 +2,11 @@
 """
 Recognition layer — sensors-to-UI web app for the G1 + Dex3 grasp pipeline.
 
-Shows the RGB-D feed, a segmentation overlay, a labeled-detections overlay
-(open-vocabulary vision model, NL-prompted), and an ArUco tag overlay
-(object tags + the optional Dex3 hand tag) side by side. Pick a detected
-object from the list, hit Grab, and direct_nav.DirectHandPoseNav drives the
-arm to it (no ROS 2) and closes the hand. Release Arms and Damp are also
-exposed as one-click safety controls (sdk_client.Robot.release_arms() /
-.damp()).
+Shows the RGB-D feed, a segmentation overlay, and a labeled-detections overlay
+(open-vocabulary vision model, NL-prompted). Pick a detected object from the
+list, hit Grab, and direct_nav.DirectHandPoseNav drives the arm to it (no ROS
+2) and closes the hand. Release Arms and Damp are also exposed as one-click
+safety controls (sdk_client.Robot.release_arms() / .damp()).
 
 The ROS 2/TF backend (hand_pose_nav_node.HandPoseNavNode via grab_ros2.py)
 was removed from this app: it was never exercised past the initial scaffold
@@ -27,7 +25,6 @@ import base64
 import json
 import math
 import os
-import subprocess
 import sys
 import tempfile
 import threading
@@ -46,12 +43,11 @@ for _p in (_G1_DIR, os.path.join(_G1_DIR, "modules")):
         sys.path.insert(0, _p)
 
 from hand_pose_navigation.target_detector import (
-    TargetDetector, CameraIntrinsics, DetectionResult,
+    CameraIntrinsics, DetectionResult,
 )
-from hand_pose_navigation import aruco_assets
 from hand_pose_navigation.segmentation import (
     mask_from_box_depth, pose_from_mask,
-    draw_detection_boxes, draw_segmentation_overlay, draw_aruco_overlay,
+    draw_detection_boxes, draw_segmentation_overlay,
 )
 from hand_pose_navigation.vision_detector import VisionDetector
 from hand_pose_navigation.direct_nav import DirectHandPoseNav, _make_transform
@@ -85,12 +81,10 @@ except ImportError:
 class Detection:
     id: str
     label: str
-    source: str  # "aruco" | "vision"
+    source: str  # "vision"
     score: float
     T_camera_object: np.ndarray
     box: Optional[Tuple[int, int, int, int]] = None
-    marker_id: Optional[int] = None
-    role: str = "object"  # "object" | "hand" (aruco only)
 
 
 # Unitree G1 depth-camera drawing:
@@ -106,10 +100,11 @@ DEFAULT_CAMERA_EXTRINSIC = {
     "pitch": 0.0,
     "yaw": -math.pi / 2.0,
 }
-DEFAULT_MAX_JOINT_STEP_RAD = 0.05
+DEFAULT_MAX_JOINT_STEP_RAD = 0.08
 ABSOLUTE_MAX_JOINT_STEP_RAD = 0.10
-DEFAULT_MAX_JOINT_SPEED_RAD_S = 0.15
+DEFAULT_MAX_JOINT_SPEED_RAD_S = 0.30
 ABSOLUTE_MAX_JOINT_SPEED_RAD_S = 0.60
+WAIST_YAW_JOINT_INDEX = 12
 BODY_JOINT_INDEX_BY_LABEL = {
     "left_arm.shoulder_pitch": 15,
     "left_arm.shoulder_roll": 16,
@@ -136,8 +131,6 @@ def _copy_detection(det: Detection) -> Detection:
         score=float(det.score),
         T_camera_object=det.T_camera_object.copy(),
         box=None if det.box is None else tuple(det.box),
-        marker_id=det.marker_id,
-        role=det.role,
     )
 
 
@@ -160,17 +153,12 @@ class SharedState:
         self.detections: Dict[str, Detection] = {}
         self.boxes_for_draw: List[Dict] = []
         self.masks_for_draw: List[Tuple[str, str, np.ndarray]] = []
-        self.tags_for_draw: Dict[int, DetectionResult] = {}
-        self.hand_tag_T_camera: Optional[np.ndarray] = None
-        self.hand_tag_ts: float = 0.0
         self.max_visible_detections = 1
         self.max_joint_step_rad = DEFAULT_MAX_JOINT_STEP_RAD
         self.max_joint_speed_rad_s = DEFAULT_MAX_JOINT_SPEED_RAD_S
         self.selected_id: Optional[str] = None
         self.camera_extrinsic = dict(DEFAULT_CAMERA_EXTRINSIC)
         self.camera_tf_status = "camera TF: Unitree drawing fallback"
-        self.use_ros_camera_tf = False
-        self.use_aruco = True
         self.arm_override = "right"
         self.auto_step_base = False
         self.planning_mode = "direct"  # "direct" | "vla" (vla is scaffolding-only, see vla_planner.py)
@@ -232,7 +220,7 @@ KNOWN_INTRINSICS = {
 # last thing it happened to see. If the perception loop hasn't produced a
 # fresh frame+detection pass within this window, the UI treats the list as
 # stale rather than silently keeping possibly-gone objects selectable.
-STALE_AFTER_S = 2.0
+STALE_AFTER_S = 4.0
 DEFAULT_GRASP_STANDOFF_M = 0.08
 DEFAULT_VISION_GRASP_LIFT_M = 0.08
 DEFAULT_VISION_TABLE_CLEARANCE_M = 0.14
@@ -242,6 +230,13 @@ DEFAULT_DIRECT_MAX_REACH_M = 0.52
 DEFAULT_SLOW_GRAB_RATE_HZ = 3.0
 DEFAULT_SLOW_GRAB_TIMEOUT_S = 180.0
 DEFAULT_EXTEND_STAGE_DURATION_S = 1.2
+DEFAULT_EXTEND_FINAL_Y_DECREASE_M = 0.09
+DEFAULT_CENTER_WAIST_MAX_YAW_RAD = 0.25
+DEFAULT_CENTER_WAIST_DEADBAND_RAD = 0.025
+DEFAULT_CENTER_WAIST_SPEED_RAD_S = 0.35
+DEFAULT_CENTER_WAIST_SETTLE_S = 0.4
+DEFAULT_POST_GRASP_LIFT_M = 0.08
+DEFAULT_POST_GRASP_LIFT_DURATION_S = 2.5
 DEFAULT_DETECTION_PROMPT = "coffee cup"
 
 
@@ -362,7 +357,7 @@ class _ZmqRgbdRobot:
 # Background perception loop
 # ---------------------------------------------------------------------------
 
-def _update_intrinsics_for_frame(rgb: np.ndarray, detector: TargetDetector) -> None:
+def _update_intrinsics_for_frame(rgb: np.ndarray) -> None:
     global K
     h, w = rgb.shape[:2]
     if w == K.width and h == K.height:
@@ -380,10 +375,9 @@ def _update_intrinsics_for_frame(rgb: np.ndarray, detector: TargetDetector) -> N
             width=w,
             height=h,
         )
-    detector.set_intrinsics(K)
 
 
-def _camera_loop(robot, detector: TargetDetector, rate_hz: float) -> None:
+def _camera_loop(robot, rate_hz: float) -> None:
     period = 1.0 / max(1.0, rate_hz)
     while True:
         t0 = time.time()
@@ -391,7 +385,7 @@ def _camera_loop(robot, detector: TargetDetector, rate_hz: float) -> None:
             frame = robot.get_rgbd(timeout=2.0)
             rgb = frame["rgb_bgr"]
             depth = frame["depth_m"]
-            _update_intrinsics_for_frame(rgb, detector)
+            _update_intrinsics_for_frame(rgb)
         except Exception as exc:
             with STATE.lock:
                 STATE.status_msg = f"camera error: {exc}"
@@ -408,23 +402,20 @@ def _camera_loop(robot, detector: TargetDetector, rate_hz: float) -> None:
         time.sleep(max(0.0, period - dt))
 
 
-# Perception (aruco + vision model) runs at its own, slower rate_hz while the
-# UI polls every 500ms — a single perception pass that misses a detection
-# (motion blur, brief occlusion, one bad vision-model call) used to blank the
-# whole overlay/list until the next pass caught up, reading as "detection
-# keeps failing". Held over below for a short window so one missed pass
-# doesn't flicker the UI; DETECTION_HOLD_S stays well under STALE_AFTER_S so
-# an object that's genuinely gone still clears within STALE_AFTER_S.
-DETECTION_HOLD_S = 0.6
+# Perception runs at its own, slower rate_hz while the
+# UI polls every 500ms — short bursts of motion blur, one slow vision-model
+# call, or one missed camera read used to blank the overlay/list and make the
+# selected object feel lost. Hold detections briefly, while still clearing
+# them before the stale window when the object is genuinely gone.
+DETECTION_HOLD_S = 1.5
 
 
-def _perception_loop(detector: TargetDetector, vision: VisionDetector, rate_hz: float) -> None:
+def _perception_loop(vision: VisionDetector, rate_hz: float) -> None:
     period = 1.0 / max(0.5, rate_hz)
     last_processed_seq = -1
     held_detections: Dict[str, Tuple[Detection, float]] = {}
     held_boxes: Dict[str, Tuple[Dict, float]] = {}
     held_masks: Dict[str, Tuple[Tuple[str, str, np.ndarray], float]] = {}
-    held_tags: Dict[int, Tuple[DetectionResult, float]] = {}
 
     def _merge_and_prune(held: Dict, now: float) -> Dict:
         for k in list(held.keys()):
@@ -443,27 +434,10 @@ def _perception_loop(detector: TargetDetector, vision: VisionDetector, rate_hz: 
             continue
         last_processed_seq = seq
 
-        _update_intrinsics_for_frame(rgb, detector)
-
-        with STATE.lock:
-            use_aruco = STATE.use_aruco
-        tags = detector.detect_all_aruco(rgb, depth) if use_aruco else {}
+        _update_intrinsics_for_frame(rgb)
         vis_dets = vision.detect(rgb) if vision.available else []
 
         detections: Dict[str, Detection] = {}
-        for marker_id, result in tags.items():
-            role = "hand" if marker_id == aruco_assets.HAND_MARKER_ID else "object"
-            det_id = f"aruco:{marker_id}"
-            detections[det_id] = Detection(
-                id=det_id,
-                label=f"{role} tag #{marker_id}",
-                source="aruco",
-                score=result.confidence,
-                T_camera_object=result.T_camera_object,
-                marker_id=marker_id,
-                role=role,
-            )
-
         boxes_for_draw: List[Dict] = []
         masks_for_draw: List[Tuple[str, str, np.ndarray]] = []
         with STATE.lock:
@@ -491,15 +465,12 @@ def _perception_loop(detector: TargetDetector, vision: VisionDetector, rate_hz: 
             held_boxes[b["id"]] = (b, now)
         for mask_entry in masks_for_draw:
             held_masks[mask_entry[0]] = (mask_entry, now)
-        for marker_id, result in tags.items():
-            held_tags[marker_id] = (result, now)
 
         detections = _merge_and_prune(held_detections, now)
         boxes_for_draw = list(_merge_and_prune(held_boxes, now).values())
         for b in boxes_for_draw:
             b["selected"] = b["id"] == selected_id
         masks_for_draw = list(_merge_and_prune(held_masks, now).values())
-        tags = _merge_and_prune(held_tags, now)
 
         with STATE.lock:
             STATE.detection_rgb_bgr = rgb
@@ -507,14 +478,6 @@ def _perception_loop(detector: TargetDetector, vision: VisionDetector, rate_hz: 
             STATE.detections = detections
             STATE.boxes_for_draw = boxes_for_draw
             STATE.masks_for_draw = masks_for_draw
-            STATE.tags_for_draw = tags
-            hand_tag = tags.get(aruco_assets.HAND_MARKER_ID)
-            if hand_tag is not None:
-                STATE.hand_tag_T_camera = hand_tag.T_camera_object.copy()
-                STATE.hand_tag_ts = time.time()
-            elif STATE.hand_tag_ts and time.time() - STATE.hand_tag_ts > STALE_AFTER_S:
-                STATE.hand_tag_T_camera = None
-                STATE.hand_tag_ts = 0.0
             STATE.last_detection_ts = time.time()
             n_vision = "on" if vision.available else f"off ({vision.error})"
             STATE.status_msg = (
@@ -571,66 +534,6 @@ def _hand_fk_loop(iface: str, domain_id: int) -> None:
             with STATE.lock:
                 STATE.hand_fk_status = f"FK hand error: {exc}"
         time.sleep(0.1)
-
-
-def _ros_camera_tf_loop(
-    base_frame: str,
-    camera_frame: str,
-    timeout_s: float,
-    period_s: float = 1.0,
-) -> None:
-    probe = os.path.join(_DIR, "ros2_camera_tf_probe.py")
-    while True:
-        with STATE.lock:
-            enabled = STATE.use_ros_camera_tf
-        if not enabled:
-            time.sleep(0.2)
-            continue
-
-        cmd = [
-            sys.executable,
-            probe,
-            "--base-frame",
-            base_frame,
-            "--camera-frame",
-            camera_frame,
-            "--timeout-s",
-            str(timeout_s),
-        ]
-        try:
-            proc = subprocess.run(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                timeout=max(1.0, timeout_s + 1.0),
-            )
-            if proc.returncode != 0:
-                detail = (proc.stderr or proc.stdout or "").strip().splitlines()
-                msg = detail[-1] if detail else f"exit {proc.returncode}"
-                with STATE.lock:
-                    STATE.camera_tf_status = f"ROS TF unavailable: {msg[:160]}"
-                time.sleep(period_s)
-                continue
-            data = json.loads(proc.stdout)
-            cam = {
-                "x": float(data["x"]),
-                "y": float(data["y"]),
-                "z": float(data["z"]),
-                "roll": float(data["roll"]),
-                "pitch": float(data["pitch"]),
-                "yaw": float(data["yaw"]),
-            }
-            age = float(data.get("age_s", 0.0))
-            with STATE.lock:
-                STATE.camera_extrinsic = cam
-                STATE.camera_tf_status = (
-                    f"camera TF: ROS 2 {base_frame}<-{camera_frame}, age={age:.2f}s"
-                )
-        except Exception as exc:
-            with STATE.lock:
-                STATE.camera_tf_status = f"ROS TF error: {exc}"
-        time.sleep(period_s)
 
 
 def _init_unitree_dds_once(iface: str, domain_id: int) -> str:
@@ -884,7 +787,6 @@ def _draw_detection_gizmos(
     cam: Dict[str, float],
     arm_override: str,
     hand_fk_T_base: Dict[str, np.ndarray],
-    hand_tag_T_camera: Optional[np.ndarray],
     extended_hand_R_base: Dict[str, np.ndarray],
 ) -> np.ndarray:
     out = image.copy()
@@ -957,14 +859,6 @@ def _draw_detection_gizmos(
                 2,
                 cv2.LINE_AA,
             )
-    if not drew_hand and hand_tag_T_camera is not None:
-        _draw_pose_axis(
-            out,
-            hand_tag_T_camera,
-            f"{arm} hand tag",
-            (255, 255, 80),
-            axis_len_m=0.06,
-        )
     return out
 
 
@@ -1013,23 +907,11 @@ app.title = "G1 Recognition Layer"
 
 
 def _instructions_card() -> dbc.Card:
-    hand_marker = aruco_assets.default_hand_marker()
-    obj_markers = aruco_assets.default_object_markers()[:4]  # keep the page light
-    marker_thumbs = [
-        html.Div([
-            html.Img(src=m.data_uri(), style={"width": "90px", "border": "1px solid #555"}),
-            html.Div(f"id {m.marker_id} · {m.size_mm:.0f}mm · {m.role}",
-                      style={"fontSize": "11px", "textAlign": "center"}),
-        ], style={"display": "inline-block", "margin": "6px"})
-        for m in [hand_marker] + obj_markers
-    ]
     return dbc.Card(dbc.CardBody([
-        html.H5("ArUco setup"),
-        html.Div(marker_thumbs),
-        dcc.Markdown(aruco_assets.PLACEMENT_INSTRUCTIONS, style={"fontSize": "13px"}),
+        html.H5("Vision setup"),
         html.Small(
-            "Full sheet (all object tags) is generated on the fly — "
-            "increase OBJECT_MARKER_IDS in aruco_assets.py if you need more.",
+            "Use the prompt below to choose the target class. The app estimates "
+            "object pose from the vision box, segmentation mask, and depth frame.",
             className="text-muted",
         ),
     ]), className="mb-3")
@@ -1037,19 +919,7 @@ def _instructions_card() -> dbc.Card:
 
 def _options_card() -> dbc.Card:
     return dbc.Card(dbc.CardBody([
-        html.H5("Perception options"),
-        dbc.Checkbox(
-            id="use-aruco",
-            label="Use ArUco tags",
-            value=STATE.use_aruco,
-            className="mb-2",
-        ),
-        dbc.Checkbox(
-            id="use-ros-camera-tf",
-            label="Use ROS 2 camera TF",
-            value=STATE.use_ros_camera_tf,
-            className="mb-2",
-        ),
+        html.H5("Motion options"),
         dbc.Label("Maximum visible detections", className="mt-2"),
         dbc.Input(
             id="max-visible-detections",
@@ -1080,8 +950,7 @@ def _options_card() -> dbc.Card:
             className="mb-2",
         ),
         html.Small(
-            "When ROS 2 TF is enabled, the app reads base_link<-camera_color_optical_frame "
-            "from a separate probe process. Otherwise it uses the built-in fixed transform.",
+            "Camera projection uses the built-in fixed base_link<-camera_color_optical_frame transform.",
             className="text-muted",
         ),
         html.Div(id="camera-tf-status", className="mt-2", style={"fontSize": "12px"}),
@@ -1107,7 +976,6 @@ def _view_panel() -> dbc.Card:
                         {"label": "Depth", "value": "depth"},
                         {"label": "Vision detections", "value": "detections"},
                         {"label": "Segmentation", "value": "segmentation"},
-                        {"label": "ArUco tags", "value": "aruco"},
                     ],
                     value="detections",
                     clearable=False,
@@ -1123,15 +991,14 @@ def _limit_visible_detections(
     detections: Dict[str, Detection],
     boxes: List[Dict],
     masks: List[Tuple[str, str, np.ndarray]],
-    tags: Dict[int, DetectionResult],
     max_count: int,
-) -> Tuple[Dict[str, Detection], List[Dict], List[Tuple[str, str, np.ndarray]], Dict[int, DetectionResult]]:
+) -> Tuple[Dict[str, Detection], List[Dict], List[Tuple[str, str, np.ndarray]]]:
     try:
         limit = max(1, int(max_count))
     except Exception:
         limit = 5
     if len(detections) <= limit:
-        return detections, boxes, masks, tags
+        return detections, boxes, masks
 
     ranked = sorted(
         detections.items(),
@@ -1151,17 +1018,7 @@ def _limit_visible_detections(
         mask_item for mask_item in masks
         if mask_item[0] in allowed_ids
     ]
-    allowed_marker_ids = {
-        det.marker_id
-        for det in limited_detections.values()
-        if det.source == "aruco" and det.marker_id is not None
-    }
-    limited_tags = {
-        marker_id: result
-        for marker_id, result in tags.items()
-        if marker_id in allowed_marker_ids
-    }
-    return limited_detections, limited_boxes, limited_masks, limited_tags
+    return limited_detections, limited_boxes, limited_masks
 
 
 app.layout = dbc.Container([
@@ -1282,7 +1139,6 @@ def _refresh(_n, view_name):
         detections = dict(STATE.detections)
         boxes = list(STATE.boxes_for_draw)
         masks = list(STATE.masks_for_draw)
-        tags = dict(STATE.tags_for_draw)
         selected_id = STATE.selected_id
         status_msg = STATE.status_msg
         grab_log = list(STATE.grab_log[-100:])
@@ -1297,10 +1153,6 @@ def _refresh(_n, view_name):
         extended_hand_R_base = {
             k: v.copy() for k, v in STATE.extended_hand_R_base.items()
         }
-        hand_tag_T_camera = (
-            None if STATE.hand_tag_T_camera is None else STATE.hand_tag_T_camera.copy()
-        )
-        hand_tag_ts = STATE.hand_tag_ts
         camera_tf_status = STATE.camera_tf_status
         max_visible_detections = STATE.max_visible_detections
         obstacle_status = STATE.obstacle_status
@@ -1322,24 +1174,20 @@ def _refresh(_n, view_name):
         detections = {}
         boxes = []
         masks = []
-        tags = {}
         if frame_is_stale:
             status_msg = f"STALE — no fresh frame in >{STALE_AFTER_S:.0f}s. {status_msg}"
         else:
             status_msg = f"DETECTING — latest detection is >{STALE_AFTER_S:.0f}s old. {status_msg}"
     else:
         total_detections = len(detections)
-        detections, boxes, masks, tags = _limit_visible_detections(
-            detections, boxes, masks, tags, max_visible_detections,
+        detections, boxes, masks = _limit_visible_detections(
+            detections, boxes, masks, max_visible_detections,
         )
         if len(detections) < total_detections:
             status_msg = (
                 f"{status_msg} | showing {len(detections)}/{total_detections} "
                 f"detections"
             )
-    if hand_tag_ts > 0.0 and (time.time() - hand_tag_ts) <= STALE_AFTER_S:
-        camera_tf_status = f"{camera_tf_status} | hand tag visible"
-
     view_name = view_name or "detections"
     if view_name == "rgb":
         view_src = _encode_jpeg_src(rgb)
@@ -1348,9 +1196,6 @@ def _refresh(_n, view_name):
     elif view_name == "segmentation":
         base = detection_rgb if detection_rgb is not None else rgb
         view_src = _encode_jpeg_src(draw_segmentation_overlay(base, masks)) if masks else _placeholder_src("no masks")
-    elif view_name == "aruco":
-        base = detection_rgb if detection_rgb is not None else rgb
-        view_src = _encode_jpeg_src(draw_aruco_overlay(base, tags, K))
     else:
         base = detection_rgb if detection_rgb is not None else rgb
         selected = detections.get(selected_id or "")
@@ -1361,17 +1206,15 @@ def _refresh(_n, view_name):
             cam,
             arm_override,
             hand_fk_T_base,
-            hand_tag_T_camera,
             extended_hand_R_base,
         ))
 
     items = []
     for det_id, det in sorted(detections.items()):
         active = det_id == selected_id
-        badge_color = "info" if det.source == "aruco" else "primary"
         items.append(dbc.ListGroupItem(
             [
-                dbc.Badge(det.source, color=badge_color, className="me-2"),
+                dbc.Badge(det.source, color="primary", className="me-2"),
                 f"{det.label}  (score={det.score:.2f})",
             ],
             id={"type": "det-item", "index": det_id},
@@ -1387,7 +1230,7 @@ def _refresh(_n, view_name):
         )
     else:
         det_list = html.Div(
-            "No detections. Set an NL prompt and/or stick an ArUco tag on an object.",
+            "No detections. Set an NL prompt and keep the object in the RGB-D view.",
             className="text-muted",
         )
 
@@ -1483,26 +1326,6 @@ def _sync_auto_step(value):
 
 
 @app.callback(
-    Output("use-aruco", "value"),
-    Input("use-aruco", "value"),
-)
-def _sync_use_aruco(value):
-    enabled = bool(value)
-    with STATE.lock:
-        STATE.use_aruco = enabled
-        if not enabled:
-            STATE.detections = {
-                det_id: det
-                for det_id, det in STATE.detections.items()
-                if det.source != "aruco"
-            }
-            STATE.tags_for_draw = {}
-            if STATE.selected_id and STATE.selected_id.startswith("aruco:"):
-                STATE.selected_id = None
-    return enabled
-
-
-@app.callback(
     Output("max-visible-detections", "value"),
     Input("max-visible-detections", "value"),
 )
@@ -1544,21 +1367,6 @@ def _sync_max_joint_speed_rad_s(value):
     with STATE.lock:
         STATE.max_joint_speed_rad_s = speed
     return speed
-
-
-@app.callback(
-    Output("use-ros-camera-tf", "value"),
-    Input("use-ros-camera-tf", "value"),
-)
-def _sync_use_ros_camera_tf(value):
-    enabled = bool(value)
-    with STATE.lock:
-        STATE.use_ros_camera_tf = enabled
-        if enabled:
-            STATE.camera_tf_status = "camera TF: waiting for ROS 2 TF"
-        else:
-            STATE.camera_tf_status = "camera TF: Unitree drawing fallback"
-    return enabled
 
 
 @app.callback(
@@ -1721,32 +1529,38 @@ def _run_hand_close() -> None:
     _run_hand_action("close")
 
 
+def _send_hand_action(action: str, side: str, hold_s: Optional[float] = None) -> bool:
+    if _CONTROL_ROBOT is None:
+        raise RuntimeError(_CONTROL_STATUS)
+    feedback_available = True
+    try:
+        snapshot = _CONTROL_ROBOT.get_hand_state_snapshot(side)
+    except Exception:
+        snapshot = None
+    if snapshot is None:
+        feedback_available = False
+        _log(
+            f"[recognition_app] {side} Dex3 state feedback unavailable "
+            f"(no rt/dex3/{side}/state messages); sending hand_{action} anyway."
+        )
+    if action == "open":
+        _CONTROL_ROBOT.hand_open(hand=side)
+    elif hold_s is None:
+        _CONTROL_ROBOT.hand_close(hand=side)
+    else:
+        _CONTROL_ROBOT.hand_close(hand=side, hold_s=hold_s)
+    return feedback_available
+
+
 def _run_hand_action(action: str) -> None:
     with STATE.lock:
         arm_override = STATE.arm_override
     side = _hand_side_from_override(arm_override)
     try:
-        if _CONTROL_ROBOT is None:
-            raise RuntimeError(_CONTROL_STATUS)
-        # The Dex3 hand boards occasionally fail to enumerate on boot; if that
-        # happens there is no rt/dex3/<side>/state publisher and any command
-        # to that hand is silently dropped. Check for live state feedback
-        # first so we can surface a clear error instead of a no-op.
-        try:
-            snapshot = _CONTROL_ROBOT.get_hand_state_snapshot(side)
-        except Exception:
-            snapshot = None
-        if snapshot is None:
-            raise RuntimeError(
-                f"{side} Dex3 hand not detected (no rt/dex3/{side}/state "
-                "messages) — check hand cabling/power and reboot if needed."
-            )
-        if action == "open":
-            _CONTROL_ROBOT.hand_open(hand=side)
-        else:
-            _CONTROL_ROBOT.hand_close(hand=side)
+        feedback_available = _send_hand_action(action, side)
         with STATE.lock:
-            STATE.status_msg = f"hand_{action}({side}) sent."
+            suffix = "" if feedback_available else " (feedback unavailable)"
+            STATE.status_msg = f"hand_{action}({side}) sent{suffix}."
     except Exception as exc:
         with STATE.lock:
             STATE.status_msg = f"hand_{action}({side}) failed: {exc}"
@@ -1896,6 +1710,105 @@ def _read_current_arm_q(robot, arm: str) -> np.ndarray:
     return q_full[joint_indices]
 
 
+def _read_joint_position(robot, joint_index: int) -> float:
+    js = robot.get_joint_states()
+    joints = js.get("joints", {}) if js else {}
+    for name, data in joints.items():
+        idx = _joint_entry_index(name, data)
+        if idx == int(joint_index) and data.get("position") is not None:
+            return float(data.get("position"))
+    raise RuntimeError(f"cannot read joint index {joint_index} from lowstate")
+
+
+def _center_object_with_waist_yaw(
+    det: Detection,
+    selected_id: Optional[str],
+    max_joint_speed_rad_s: float,
+) -> Detection:
+    if _CONTROL_ROBOT is None:
+        raise RuntimeError(_CONTROL_STATUS)
+    p_cam = det.T_camera_object[:3, 3]
+    z = float(p_cam[2])
+    if z <= 0.05:
+        _log("[recognition_app] Waist centering skipped: invalid object depth.")
+        return det
+    yaw_delta = -math.atan2(float(p_cam[0]), z)
+    yaw_delta = max(
+        -DEFAULT_CENTER_WAIST_MAX_YAW_RAD,
+        min(DEFAULT_CENTER_WAIST_MAX_YAW_RAD, yaw_delta),
+    )
+    if abs(yaw_delta) < DEFAULT_CENTER_WAIST_DEADBAND_RAD:
+        _log(
+            "[recognition_app] Waist centering skipped: "
+            f"object already near camera center (yaw_delta={yaw_delta:+.3f}rad)."
+        )
+        return det
+    if not ARM_CONTROL_LOCK.acquire(blocking=False):
+        _log("[recognition_app] Waiting for current arm motion before waist centering.")
+        ARM_CONTROL_LOCK.acquire()
+    try:
+        if ARM_CANCEL_EVENT.is_set():
+            _log("[recognition_app] Waist centering cancelled before control handoff.")
+            return det
+        ARM_CANCEL_EVENT.clear()
+        with STATE.lock:
+            STATE.arm_motion_running = True
+            STATE.arm_motion_label = "waist center"
+        _ensure_arm_authority(_CONTROL_ROBOT, duration_s=0.3)
+        current_yaw = _read_joint_position(_CONTROL_ROBOT, WAIST_YAW_JOINT_INDEX)
+        target_yaw = current_yaw + yaw_delta
+        speed = min(
+            DEFAULT_CENTER_WAIST_SPEED_RAD_S,
+            max(0.05, float(max_joint_speed_rad_s)),
+        )
+        _log(
+            "[recognition_app] Centering object with waist yaw: "
+            f"current={current_yaw:+.3f}rad target={target_yaw:+.3f}rad "
+            f"delta={yaw_delta:+.3f}rad."
+        )
+        result = _CONTROL_ROBOT.move_upper_body_joint(
+            joint_index=WAIST_YAW_JOINT_INDEX,
+            target=target_yaw,
+            max_speed_rad_s=speed,
+            timeout=2.0,
+        )
+        _log(f"[recognition_app] waist yaw center result: {result}")
+    except Exception as exc:
+        _log(f"[recognition_app] Waist centering failed; continuing with original target: {exc}")
+        return det
+    finally:
+        with STATE.lock:
+            STATE.arm_motion_running = False
+            STATE.arm_motion_label = ""
+        ARM_CONTROL_LOCK.release()
+
+    min_detection_ts = time.time()
+    deadline = min_detection_ts + max(DEFAULT_CENTER_WAIST_SETTLE_S, STALE_AFTER_S)
+    refreshed: Optional[Detection] = None
+    while time.time() < deadline:
+        time.sleep(0.1)
+        with STATE.lock:
+            candidate = STATE.detections.get(selected_id) if selected_id else None
+            age_s = time.time() - STATE.last_detection_ts if STATE.last_detection_ts else float("inf")
+            detection_ts = STATE.last_detection_ts
+        if (
+            candidate is not None
+            and detection_ts >= min_detection_ts
+            and age_s <= STALE_AFTER_S
+        ):
+            refreshed = _copy_detection(candidate)
+            break
+    if refreshed is None:
+        _log("[recognition_app] No fresh detection after waist centering; using original target.")
+        return det
+    p_new = refreshed.T_camera_object[:3, 3]
+    _log(
+        "[recognition_app] Refreshed target after waist centering: "
+        f"camera xyz=({p_new[0]:+.3f}, {p_new[1]:+.3f}, {p_new[2]:+.3f}) m."
+    )
+    return refreshed
+
+
 def _extend_arm_forward_joint_waypoints(q_start: np.ndarray, arm: str) -> List[Tuple[str, np.ndarray]]:
     side = str(arm).strip().lower()
     if side not in ("left", "right"):
@@ -1977,6 +1890,9 @@ def _run_extend_arm_ee_ik(
                 "final_q": q_cur.copy() if results else None,
             }
         T_desired = fk.compute_arm(q_stage_nominal)
+        if stage_name == "final_forward_up_and_in":
+            T_desired = T_desired.copy()
+            T_desired[1, 3] += DEFAULT_EXTEND_FINAL_Y_DECREASE_M
         q_solution, info = ik.solve(T_desired, q_init=q_cur)
         if q_solution is None:
             return {
@@ -2123,6 +2039,126 @@ def _estimate_obstacles(cam: Dict[str, float]) -> Obstacles:
     return Obstacles(table=table)
 
 
+def _hand_fk_visible_now(arm: str, cam: Dict[str, float]) -> bool:
+    with STATE.lock:
+        T_base_hand = (
+            None
+            if arm not in STATE.hand_fk_T_base
+            else STATE.hand_fk_T_base[arm].copy()
+        )
+        hand_fk_ts = STATE.hand_fk_ts
+    if T_base_hand is None or (time.time() - hand_fk_ts) > STALE_AFTER_S:
+        return False
+    T_base_camera = _make_transform(
+        xyz=(cam["x"], cam["y"], cam["z"]),
+        rpy=(cam["roll"], cam["pitch"], cam["yaw"]),
+    )
+    p_h = np.ones(4, dtype=np.float64)
+    p_h[:3] = _palm_visual_point(T_base_hand)
+    p_camera = (np.linalg.inv(T_base_camera) @ p_h)[:3]
+    x, y, z = (float(v) for v in p_camera)
+    if z <= 0.05:
+        return False
+    u = K.fx * x / z + K.cx
+    v = K.fy * y / z + K.cy
+    return -10.0 <= u <= K.width + 10.0 and -10.0 <= v <= K.height + 10.0
+
+
+def _prepare_hand_visibility_for_grab(
+    arm: str,
+    cam: Dict[str, float],
+    max_joint_step_rad: float,
+    max_joint_speed_rad_s: float,
+) -> bool:
+    if _hand_fk_visible_now(arm, cam):
+        _log("[recognition_app] FK hand pose projects inside camera; opening hand before grab.")
+        _send_hand_action("open", arm)
+        _log(f"[recognition_app] Opened {arm} hand before grab.")
+        return True
+    if _CONTROL_ROBOT is None:
+        raise RuntimeError(_CONTROL_STATUS)
+    _log("[recognition_app] FK hand pose is not visible in camera; extending arm before grab.")
+    if not ARM_CONTROL_LOCK.acquire(blocking=False):
+        _log("[recognition_app] Waiting for current arm motion before pre-grab extend.")
+        ARM_CONTROL_LOCK.acquire()
+    try:
+        if ARM_CANCEL_EVENT.is_set():
+            _log("[recognition_app] Pre-grab extend cancelled before control handoff.")
+            return False
+        ARM_CANCEL_EVENT.clear()
+        with STATE.lock:
+            STATE.arm_motion_running = True
+            STATE.arm_motion_label = "pre-grab extend"
+        result = _run_extend_arm_ee_ik(
+            _CONTROL_ROBOT,
+            arm,
+            max_joint_step_rad,
+            max_joint_speed_rad_s,
+            cam,
+        )
+        if not result.get("success"):
+            _log(f"[recognition_app] Pre-grab extend failed: {result}")
+            return False
+        if result.get("final_q") is not None:
+            q_final = np.asarray(result["final_q"], dtype=np.float64)
+            T_final = ArmFK(arm=arm, backend="urdf").compute_arm(q_final)
+            with STATE.lock:
+                STATE.extended_hand_R_base[arm] = T_final[:3, :3].copy()
+            _log(f"[recognition_app] saved {arm} EE orientation from pre-grab extend.")
+        _send_hand_action("open", arm)
+        _log(f"[recognition_app] Opened {arm} hand after pre-grab extend.")
+        return True
+    finally:
+        with STATE.lock:
+            STATE.arm_motion_running = False
+            STATE.arm_motion_label = ""
+        ARM_CONTROL_LOCK.release()
+
+
+def _lift_end_effector_z_slowly(
+    robot,
+    arm: str,
+    max_joint_step_rad: float,
+    max_joint_speed_rad_s: float,
+    lift_m: float = DEFAULT_POST_GRASP_LIFT_M,
+) -> Dict[str, Any]:
+    if lift_m <= 0.0:
+        return {"success": True, "reason": "lift_disabled"}
+    q_cur = _read_current_arm_q(robot, arm)
+    fk = ArmFK(arm=arm, backend="urdf")
+    T_start = fk.compute_arm(q_cur)
+    T_lift = T_start.copy()
+    T_lift[2, 3] += float(lift_m)
+    ik = ArmIK(
+        arm=arm,
+        solver="dls",
+        tol_pos_m=0.010,
+        tol_rot_rad=0.20,
+    )
+    q_solution, info = ik.solve(T_lift, q_init=q_cur)
+    if q_solution is None:
+        return {"success": False, "reason": "ik_failed", "ik_info": info}
+    executor = ArmExecutor(
+        robot,
+        arm=arm,
+        kp=30.0,
+        kd=1.5,
+        max_reach_m=DEFAULT_DIRECT_MAX_REACH_M,
+        max_joint_step_rad=max_joint_step_rad,
+        max_joint_speed_rad_s=max_joint_speed_rad_s,
+    )
+    result = executor.execute(
+        q_solution,
+        duration_s=DEFAULT_POST_GRASP_LIFT_DURATION_S,
+        q_arm_start=q_cur,
+        T_base_desired=T_lift,
+        stop_event=ARM_CANCEL_EVENT,
+    )
+    result["ik_info"] = info
+    result["lift_m"] = float(lift_m)
+    return result
+
+
 def _run_direct_grab_inline(
     det: Detection,
     arm: str,
@@ -2220,7 +2256,7 @@ def _run_direct_grab_inline(
             "camera_roll": float(cam.get("roll", 0.0)),
             "camera_pitch": float(cam.get("pitch", 0.0)),
             "camera_yaw": float(cam.get("yaw", 0.0)),
-            "ik_tol_pos_m": 0.035 if det.source == "vision" else 0.003,
+            "ik_tol_pos_m": 0.10 if det.source == "vision" else 0.003,
             "ik_tol_rot_rad": 3.14 if det.source == "vision" else 0.01,
             "convergence_pos_m": 0.035 if det.source == "vision" else 0.015,
             "convergence_rot_rad": 3.14 if det.source == "vision" else 0.05,
@@ -2308,11 +2344,36 @@ def _run_direct_grab_inline(
             return
         _log("[recognition_app] Direct grab converged.")
         try:
+            closed_hand = False
             if hasattr(_CONTROL_ROBOT, "hand_close"):
-                _CONTROL_ROBOT.hand_close(hand=arm, hold_s=0.6)
+                _send_hand_action("close", arm, hold_s=0.6)
+                closed_hand = True
                 _log(f"[recognition_app] Closed {arm} hand.")
+            if not closed_hand:
+                _log("[recognition_app] Hand close unavailable; skipping post-grasp lift.")
+                return
         except Exception as exc:
             _log(f"[recognition_app] Hand close failed: {exc}")
+            return
+        if ARM_CANCEL_EVENT.is_set():
+            _log("[recognition_app] Post-grasp lift skipped because grab was cancelled.")
+            return
+        try:
+            with STATE.lock:
+                STATE.arm_motion_label = "post-grasp lift"
+            _log(
+                "[recognition_app] Raising end effector in base Z by "
+                f"{DEFAULT_POST_GRASP_LIFT_M:.3f} m."
+            )
+            lift_result = _lift_end_effector_z_slowly(
+                _CONTROL_ROBOT,
+                arm,
+                max_joint_step_rad,
+                max_joint_speed_rad_s,
+            )
+            _log(f"[recognition_app] post-grasp lift result: {lift_result}")
+        except Exception as exc:
+            _log(f"[recognition_app] post-grasp lift failed: {exc}")
     finally:
         with STATE.lock:
             STATE.arm_motion_running = False
@@ -2346,6 +2407,13 @@ def _run_grab_impl() -> None:
             STATE.grab_running = False
         return
 
+    det = _center_object_with_waist_yaw(
+        det,
+        selected_id,
+        max_joint_speed_rad_s,
+    )
+    with STATE.lock:
+        cam = dict(STATE.camera_extrinsic)
     arm, _T_base_camera, T_base_object = _resolve_arm_and_base_pose(
         det, cam, arm_override,
     )
@@ -2398,6 +2466,15 @@ def _run_grab_impl() -> None:
         return
 
     try:
+        prepared = _prepare_hand_visibility_for_grab(
+            arm,
+            cam,
+            max_joint_step_rad,
+            max_joint_speed_rad_s,
+        )
+        if not prepared:
+            _log("[recognition_app] Grab aborted during hand visibility preflight.")
+            return
         _run_direct_grab_inline(
             det,
             arm,
@@ -2440,9 +2517,6 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--rate-hz", type=float, default=3.0, help="perception loop rate")
     p.add_argument("--camera-rate-hz", type=float, default=15.0, help="raw RGB-D capture loop rate")
     p.add_argument("--vision-model", default="yolov8s-world.pt")
-    p.add_argument("--ros-base-frame", default="base_link")
-    p.add_argument("--ros-camera-frame", default="camera_color_optical_frame")
-    p.add_argument("--ros-tf-timeout-s", type=float, default=0.5)
     p.add_argument("--mock", action="store_true", help="use a synthetic camera feed")
     p.add_argument("--host", default="0.0.0.0")
     p.add_argument("--port", type=int, default=8060)
@@ -2491,25 +2565,17 @@ with STATE.lock:
     if _CONTROL_ROBOT is None:
         STATE.status_msg = _CONTROL_STATUS
 
-_DETECTOR = TargetDetector(
-    method="aruco",  # unused directly; detect_all_aruco() is what's called
-    marker_sizes={
-        aruco_assets.HAND_MARKER_ID: aruco_assets.HAND_MARKER_SIZE_M,
-        **{mid: aruco_assets.OBJECT_MARKER_SIZE_M for mid in aruco_assets.OBJECT_MARKER_IDS},
-    },
-    intrinsics=K,
-)
 _VISION = VisionDetector(model_name=_ARGS.vision_model)
 with STATE.lock:
     STATE.vision_classes = _VISION.set_prompt(DEFAULT_DETECTION_PROMPT)
 
 threading.Thread(
-    target=_camera_loop, args=(_ROBOT, _DETECTOR, _ARGS.camera_rate_hz),
+    target=_camera_loop, args=(_ROBOT, _ARGS.camera_rate_hz),
     daemon=True,
 ).start()
 
 threading.Thread(
-    target=_perception_loop, args=(_DETECTOR, _VISION, _ARGS.rate_hz),
+    target=_perception_loop, args=(_VISION, _ARGS.rate_hz),
     daemon=True,
 ).start()
 
@@ -2518,13 +2584,6 @@ if not _ARGS.mock and _DDS_STATUS.startswith("Unitree DDS initialized"):
         target=_hand_fk_loop, args=(_ARGS.iface, _ARGS.domain_id),
         daemon=True,
     ).start()
-
-threading.Thread(
-    target=_ros_camera_tf_loop,
-    args=(_ARGS.ros_base_frame, _ARGS.ros_camera_frame, _ARGS.ros_tf_timeout_s),
-    daemon=True,
-).start()
-
 
 if __name__ == "__main__":
     app.run(host=_ARGS.host, port=_ARGS.port, debug=_ARGS.debug)

@@ -95,7 +95,7 @@ class TargetDetector:
     Args:
         method:      "aruco" | "color" | "center"
         intrinsics:  CameraIntrinsics (leave None for 640×480 RealSense defaults)
-        aruco_dict:  cv2.aruco dict constant (default DICT_4X4_50)
+        aruco_dict:  cv2.aruco dict constant (default DICT_4X4_50 when used)
         aruco_id:    which marker ID to track (default 0)
         hsv_lower:   lower HSV bound for color-blob detection
         hsv_upper:   upper HSV bound for color-blob detection
@@ -106,7 +106,7 @@ class TargetDetector:
         self,
         method: str = "aruco",
         intrinsics: Optional[CameraIntrinsics] = None,
-        aruco_dict: int = cv2.aruco.DICT_4X4_50,
+        aruco_dict: Optional[int] = None,
         aruco_id: int = 0,
         marker_size_m: float = 0.05,
         marker_sizes: Optional[Dict[int, float]] = None,
@@ -125,10 +125,10 @@ class TargetDetector:
         self.min_area_px = min_area_px
         self._fixed_result = fixed_result
 
-        # ArUco detector (OpenCV 4.7+)
-        self._aruco_dict = cv2.aruco.getPredefinedDictionary(aruco_dict)
-        self._aruco_params = cv2.aruco.DetectorParameters()
-        self._aruco_detector = cv2.aruco.ArucoDetector(self._aruco_dict, self._aruco_params)
+        self.aruco_dict = aruco_dict
+        self._aruco_dict = None
+        self._aruco_params = None
+        self._aruco_detector = None
 
         # Camera matrix and dist coeffs for solvePnP
         self._cam_mat = np.array([
@@ -137,6 +137,19 @@ class TargetDetector:
             [0, 0, 1],
         ], dtype=np.float64)
         self._dist = np.zeros((4,), dtype=np.float64)
+
+    def _ensure_aruco_detector(self) -> None:
+        if self._aruco_detector is not None:
+            return
+        aruco = getattr(cv2, "aruco", None)
+        if aruco is None:
+            raise RuntimeError("OpenCV ArUco support is unavailable.")
+        aruco_dict = self.aruco_dict
+        if aruco_dict is None:
+            aruco_dict = aruco.DICT_4X4_50
+        self._aruco_dict = aruco.getPredefinedDictionary(aruco_dict)
+        self._aruco_params = aruco.DetectorParameters()
+        self._aruco_detector = aruco.ArucoDetector(self._aruco_dict, self._aruco_params)
 
     def set_intrinsics(self, intrinsics: CameraIntrinsics) -> None:
         """Update camera intrinsics used for depth backprojection and solvePnP."""
@@ -201,6 +214,7 @@ class TargetDetector:
         ``marker_sizes.get(id, marker_size_m)`` as the physical tag size, so
         differently-sized hand vs. object tags are decoded correctly.
         """
+        self._ensure_aruco_detector()
         gray = cv2.cvtColor(rgb_bgr, cv2.COLOR_BGR2GRAY)
         corners, ids, _ = self._aruco_detector.detectMarkers(gray)
         results: Dict[int, DetectionResult] = {}
@@ -246,6 +260,7 @@ class TargetDetector:
     def _detect_aruco(
         self, rgb_bgr: np.ndarray, depth_m: np.ndarray
     ) -> Optional[DetectionResult]:
+        self._ensure_aruco_detector()
         gray = cv2.cvtColor(rgb_bgr, cv2.COLOR_BGR2GRAY)
         corners, ids, _ = self._aruco_detector.detectMarkers(gray)
 
