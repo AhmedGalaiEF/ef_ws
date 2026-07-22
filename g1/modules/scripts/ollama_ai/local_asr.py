@@ -38,7 +38,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--download-root", default=None,
                         help="Optional faster-whisper model download/cache directory.")
     parser.add_argument("--list-devices", action="store_true")
-    parser.add_argument("--sample-rate", type=int, default=16000)
+    parser.add_argument("--sample-rate", type=int, default=16000,
+                        help="Input sample rate. Use 0 to use the device default; invalid rates fall back automatically.")
     parser.add_argument("--chunk-seconds", type=float, default=4.0)
     parser.add_argument("--min-rms", type=float, default=0.008,
                         help="Skip chunks quieter than this RMS level.")
@@ -136,7 +137,7 @@ def resolve_input_device(device_arg: str | None) -> int | str | None:
     return int(device_text) if device_text.isdigit() else device_text
 
 
-def validate_input_device(device: int | str | None) -> None:
+def validate_input_device(device: int | str | None, sample_rate: int) -> int:
     sd = require_module("sounddevice")
     try:
         info = sd.query_devices(device, "input")
@@ -153,6 +154,37 @@ def validate_input_device(device: int | str | None) -> None:
             f"has {max_inputs} input channels.\n"
             "Choose a microphone device, not a headphones/output device."
         )
+    default_rate = int(round(float(info.get("default_samplerate", 0) or 0)))
+    requested_rate = int(sample_rate)
+    if requested_rate <= 0:
+        if default_rate <= 0:
+            raise SystemExit(f"Device {device!r} did not report a usable default sample rate.")
+        print(
+            f"Using device default sample rate {default_rate} Hz for {info.get('name', device)!r}.",
+            flush=True,
+        )
+        return default_rate
+    try:
+        sd.check_input_settings(device=device, channels=1, samplerate=requested_rate, dtype="float32")
+        return requested_rate
+    except Exception as exc:
+        if default_rate <= 0 or default_rate == requested_rate:
+            raise SystemExit(
+                f"Device {device!r} cannot open at {requested_rate} Hz: {exc}\n"
+                "Try --sample-rate 0 or another microphone device."
+            ) from exc
+        try:
+            sd.check_input_settings(device=device, channels=1, samplerate=default_rate, dtype="float32")
+        except Exception as default_exc:
+            raise SystemExit(
+                f"Device {device!r} cannot open at requested {requested_rate} Hz or default {default_rate} Hz.\n"
+                f"Requested error: {exc}\nDefault error: {default_exc}"
+            ) from default_exc
+        print(
+            f"Device {device!r} rejected {requested_rate} Hz; using default {default_rate} Hz.",
+            flush=True,
+        )
+        return default_rate
 
 
 def record_chunk(args: argparse.Namespace) -> tuple[Any, float]:
@@ -161,14 +193,20 @@ def record_chunk(args: argparse.Namespace) -> tuple[Any, float]:
     frames = int(float(args.sample_rate) * float(args.chunk_seconds))
     device: int | str | None
     device = resolve_input_device(args.device)
-    audio = sd.rec(
-        frames,
-        samplerate=int(args.sample_rate),
-        channels=1,
-        dtype="float32",
-        device=device,
-    )
-    sd.wait()
+    try:
+        audio = sd.rec(
+            frames,
+            samplerate=int(args.sample_rate),
+            channels=1,
+            dtype="float32",
+            device=device,
+        )
+        sd.wait()
+    except Exception as exc:
+        raise SystemExit(
+            f"Could not record from input device {device!r} at {int(args.sample_rate)} Hz: {exc}\n"
+            "Run --list-devices and choose a microphone input device, or try --sample-rate 0."
+        ) from exc
     audio = np.asarray(audio).reshape(-1)
     rms = float(np.sqrt(np.mean(audio * audio))) if audio.size else 0.0
     return audio, rms
@@ -360,7 +398,7 @@ def main() -> int:
     if args.list_devices:
         list_devices()
         return 0
-    validate_input_device(resolve_input_device(args.device))
+    args.sample_rate = validate_input_device(resolve_input_device(args.device), int(args.sample_rate))
 
     try:
         backend = make_backend(args)
