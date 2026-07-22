@@ -25,7 +25,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--url", default="http://127.0.0.1:8095/asr")
     parser.add_argument("--token", default="")
     parser.add_argument("--backend", choices=("auto", "faster-whisper", "whisper", "vosk"), default="auto")
-    parser.add_argument("--model", default="tiny.en",
+    parser.add_argument("--model", default=os.environ.get("LOCAL_ASR_MODEL", "small.en"),
                         help="faster-whisper/openai-whisper model name, or Vosk model directory.")
     parser.add_argument("--device", default=os.environ.get("LOCAL_ASR_DEVICE", "20" if os.name == "nt" else None),
                         help="sounddevice input device id/name. Use --list-devices to inspect.")
@@ -53,6 +53,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--normalize-rms", type=float, default=0.06,
                         help="Normalize non-quiet chunks to this RMS before writing WAV; use 0 to disable.")
     parser.add_argument("--language", default="en")
+    parser.add_argument("--beam-size", type=int, default=5,
+                        help="Beam size for faster-whisper decoding; higher is slower but usually more accurate.")
     parser.add_argument("--once", action="store_true", help="Transcribe one chunk and exit.")
     parser.add_argument("--dry-run", action="store_true", help="Print transcripts but do not POST.")
     parser.add_argument("--toggle-key", default="space",
@@ -274,9 +276,19 @@ def write_wav(audio: Any, sample_rate: int) -> Path:
 
 
 class FasterWhisperBackend:
-    def __init__(self, model_name: str, language: str, *, compute_device: str, compute_type: str, download_root: str | None) -> None:
+    def __init__(
+        self,
+        model_name: str,
+        language: str,
+        *,
+        compute_device: str,
+        compute_type: str,
+        download_root: str | None,
+        beam_size: int,
+    ) -> None:
         fw = require_module("faster_whisper")
         self.language = language
+        self.beam_size = max(1, int(beam_size))
         kwargs: dict[str, Any] = {
             "device": str(compute_device),
             "compute_type": str(compute_type),
@@ -290,7 +302,12 @@ class FasterWhisperBackend:
         self.model = fw.WhisperModel(model_name, **kwargs)
 
     def transcribe(self, wav_path: Path) -> str:
-        segments, _info = self.model.transcribe(str(wav_path), language=self.language, vad_filter=True)
+        segments, _info = self.model.transcribe(
+            str(wav_path),
+            language=self.language,
+            vad_filter=True,
+            beam_size=self.beam_size,
+        )
         return " ".join(seg.text.strip() for seg in segments).strip()
 
 
@@ -336,6 +353,7 @@ def make_backend(args: argparse.Namespace) -> Any:
             compute_device=str(args.compute_device),
             compute_type=str(args.compute_type),
             download_root=args.download_root,
+            beam_size=int(args.beam_size),
         )
     if backend == "whisper":
         return OpenAIWhisperBackend(str(args.model), str(args.language))

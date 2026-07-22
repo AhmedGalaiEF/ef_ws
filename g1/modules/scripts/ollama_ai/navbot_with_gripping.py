@@ -20,7 +20,9 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 
-if "--slam-worker" not in sys.argv and "--gesture-worker" not in sys.argv:
+WORKER_FLAGS = {"--slam-worker", "--gesture-worker", "--control-worker"}
+
+if not any(flag in sys.argv for flag in WORKER_FLAGS):
     import rclpy
     from rclpy.node import Node
     from std_msgs.msg import String
@@ -100,6 +102,22 @@ KNOWLEDGE_SYSTEM_PROMPT = (
     "answer, say you do not know yet. Keep it spoken and concise."
 )
 DEFAULT_KNOWLEDGE_FILE = SCRIPT_DIR / "robot_modules_knowledge.sample.json"
+STABLE_HOLD_ARM_JOINTS = {
+    15: 0.000,
+    16: 1.000,
+    17: 0.105,
+    18: -0.100,
+    19: -0.368,
+    20: 0.164,
+    21: 0.000,
+    22: 0.323,
+    23: -0.307,
+    24: -0.080,
+    25: -0.688,
+    26: 0.328,
+    27: 0.140,
+    28: 0.000,
+}
 GESTURE_ACTIONS = {
     "wave": "face_wave",
     "face_wave": "face_wave",
@@ -188,8 +206,16 @@ def parse_args() -> argparse.Namespace:
                         help="Robot hostname/IP that browser clients should use for the external ASR endpoint.")
     parser.add_argument("--external-asr-token", default="")
     parser.add_argument("--external-asr-only", "--no-ros-audio", dest="external_asr_only", action="store_true")
+    parser.add_argument("--control-worker", default="", help=argparse.SUPPRESS)
+    parser.add_argument("--control-arm", default="right", choices=("left", "right"), help=argparse.SUPPRESS)
+    parser.add_argument("--control-vx", type=float, default=0.0, help=argparse.SUPPRESS)
+    parser.add_argument("--control-vy", type=float, default=0.0, help=argparse.SUPPRESS)
+    parser.add_argument("--control-vyaw", type=float, default=0.0, help=argparse.SUPPRESS)
     parser.add_argument("--enable-motion", action="store_true",
                         help="Actually execute step/turn locomotion commands instead of only logging them.")
+    parser.add_argument("--loco-duration-s", type=float, default=LOCO_DURATION_S)
+    parser.add_argument("--loco-linear-speed", type=float, default=LOCO_LINEAR_SPEED_MPS)
+    parser.add_argument("--loco-yaw-speed", type=float, default=LOCO_YAW_SPEED_RPS)
     parser.add_argument("--no-gestures", dest="enable_gestures", action="store_false", default=True,
                         help="Disable high-level SDK arm gestures such as wave, clap, handshake, and high five.")
     parser.add_argument("--no-pose-gestures", dest="enable_pose_gestures", action="store_false", default=True,
@@ -211,10 +237,17 @@ def parse_args() -> argparse.Namespace:
                         help="Run the recognition Dash app inside this process, or as a legacy child process.")
     parser.add_argument("--gripping-mock", action="store_true",
                         help="Pass --mock to the recognition dashboard/grasp plugin (no camera/robot needed).")
+    parser.add_argument("--gripping-zmq-rgbd", dest="gripping_sdk_rgbd", action="store_false", default=True,
+                        help="Use the recognition app's standalone ZMQ RGB-D receiver instead of sdk_client.Robot.get_rgbd().")
     parser.add_argument("--gripping-host", default="192.168.2.41")
     parser.add_argument("--gripping-port", type=int, default=8060)
     parser.add_argument("--gripping-token", default="",
                         help="Bearer token required by the recognition_app.py /api/* routes.")
+    parser.add_argument("--rgbd-host", default="192.168.2.41")
+    parser.add_argument("--rgbd-port", type=int, default=5555)
+    parser.add_argument("--rgbd-topic", default="")
+    parser.add_argument("--vision-model", default="yolov8s-world.pt")
+    parser.add_argument("--vision-conf", type=float, default=0.15)
     parser.add_argument("--no-tactile-status", action="store_true",
                         help="Disable Dex3 tactile status answers.")
     parser.add_argument("--tactile-threshold", type=float, default=100000.0,
@@ -817,37 +850,41 @@ class MotionClient:
         self.args = args
         self.logger = logger
         self.enabled = bool(args.enable_motion)
-        self.robot: Any = None
         self.lock = threading.Lock()
 
-    def _get_robot(self) -> Any:
-        if self.robot is None:
-            from sdk_client import Robot
-            self.robot = Robot(
-                iface=str(self.args.iface),
-                domain_id=int(self.args.domain_id),
-                safety_boot=False,
-                recover_dev_mode_on_init=False,
-                auto_start_sensors=False,
-            )
-        return self.robot
-
     def move_for(self, vx: float, vy: float, vyaw: float) -> bool:
+        duration_s = max(0.05, float(self.args.loco_duration_s))
         if not self.enabled:
             self.logger.info(
                 f"[motion disabled] would move vx={vx:.2f} vy={vy:.2f} vyaw={vyaw:.2f} "
-                f"for {LOCO_DURATION_S:.1f}s"
+                f"for {duration_s:.1f}s"
             )
             return False
+        command = [
+            sys.executable,
+            str(SCRIPT_DIR / "navbot_with_gripping.py"),
+            "--control-worker", "move_for",
+            "--control-vx", str(float(vx)),
+            "--control-vy", str(float(vy)),
+            "--control-vyaw", str(float(vyaw)),
+            "--loco-duration-s", str(duration_s),
+            "--iface", str(self.args.iface),
+            "--domain-id", str(int(self.args.domain_id)),
+        ]
+        self.logger.info(f"[motion worker] starting: {' '.join(command)}")
         with self.lock:
             try:
-                robot = self._get_robot()
-                code = int(robot.move_for(LOCO_DURATION_S, vx=float(vx), vy=float(vy), vyaw=float(vyaw)))
-                self.logger.info(
-                    f"Locomotion move_for returned {code}: duration={LOCO_DURATION_S:.1f}s "
-                    f"vx={vx:.2f} vy={vy:.2f} vyaw={vyaw:.2f}"
+                proc = subprocess.run(
+                    command,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    timeout=duration_s + 8.0,
+                    check=False,
                 )
-                return code == 0
+                output = str(proc.stdout or "").strip()
+                self.logger.info(f"[motion worker] exited code={proc.returncode} output={output}")
+                return proc.returncode == 0
             except Exception as exc:
                 self.logger.warning(f"Locomotion command failed: {exc}")
             return False
@@ -1062,6 +1099,8 @@ class GrippingClient:
             command.extend(["--api-token", self.token])
         if bool(self.args.gripping_mock):
             command.append("--mock")
+        if bool(getattr(self.args, "gripping_sdk_rgbd", True)) and not bool(self.args.gripping_mock):
+            command.append("--sdk-rgbd")
         public_asr_host = str(self.args.external_asr_public_host or "")
         if not public_asr_host or public_asr_host in {"0.0.0.0", "::"}:
             public_asr_host = str(self.args.gripping_host)
@@ -1161,17 +1200,29 @@ class GrippingClient:
         if not self.enabled:
             return {"ok": False, "error": "gripping_disabled"}
         data = json.dumps(body).encode("utf-8") if body is not None else None
-        req = urllib.request.Request(f"{self.base_url}{path}", data=data, headers=self._headers(), method=method)
+        url = f"{self.base_url}{path}"
+        self.logger.info(f"[gripping api] {method} {url} body={body if body is not None else {}}")
+        req = urllib.request.Request(url, data=data, headers=self._headers(), method=method)
         try:
             with urllib.request.urlopen(req, timeout=5.0) as response:
-                return json.loads(response.read().decode("utf-8"))
+                raw = response.read().decode("utf-8")
+                result = json.loads(raw)
+                self.logger.info(f"[gripping api] {method} {path} -> http={response.status} result={result}")
+                return result
         except urllib.error.HTTPError as exc:
             try:
-                return json.loads(exc.read().decode("utf-8"))
+                raw = exc.read().decode("utf-8")
+                result = json.loads(raw)
+                self.logger.warning(f"[gripping api] {method} {path} -> http={exc.code} result={result}")
+                return result
             except Exception:
-                return {"ok": False, "error": f"http_{exc.code}"}
+                result = {"ok": False, "error": f"http_{exc.code}"}
+                self.logger.warning(f"[gripping api] {method} {path} -> {result}")
+                return result
         except Exception as exc:
-            return {"ok": False, "error": str(exc)}
+            result = {"ok": False, "error": str(exc)}
+            self.logger.warning(f"[gripping api] {method} {path} failed: {exc!r}")
+            return result
 
     def status(self) -> dict[str, Any]:
         return self._request("GET", "/api/status")
@@ -1229,6 +1280,273 @@ class GrippingClient:
             proc.kill()
         except Exception as exc:
             self.logger.warning(f"Could not stop gripping plugin: {exc}")
+
+
+class DirectRobotControlClient:
+    """Navbot-owned robot controls; no recognition_app.py or dashboard process."""
+
+    def __init__(self, args: argparse.Namespace, logger: Any) -> None:
+        self.args = args
+        self.logger = logger
+        self.enabled = bool(args.enable_gripping)
+        self.selected_arm = "right"
+        self.lock = threading.Lock()
+        if self.enabled:
+            self.logger.info("Direct robot control enabled; recognition_app.py will not be launched.")
+
+    def _unsupported(self, action: str) -> dict[str, Any]:
+        return {
+            "ok": False,
+            "error": "not_available_without_recognition_app",
+            "action": action,
+            "message": "This perception/grab action needs a perception pipeline; direct navbot control only handles robot control actions.",
+        }
+
+    def _run_worker(self, action: str, *, side: str | None = None) -> dict[str, Any]:
+        if not self.enabled:
+            return {"ok": False, "error": "gripping_disabled", "action": action}
+        command = [
+            sys.executable,
+            str(SCRIPT_DIR / "navbot_with_gripping.py"),
+            "--control-worker", str(action),
+            "--control-arm", str(side or self.selected_arm),
+            "--iface", str(self.args.iface),
+            "--domain-id", str(int(self.args.domain_id)),
+        ]
+        self.logger.info(f"[direct control] starting: {' '.join(command)}")
+        with self.lock:
+            try:
+                proc = subprocess.run(
+                    command,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    timeout=20.0,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired as exc:
+                output = str(exc.stdout or "").strip()
+                self.logger.warning(f"[direct control] {action} timed out output={output}")
+                return {"ok": False, "code": 124, "error": "timeout", "action": action, "output": output}
+            except Exception as exc:
+                self.logger.warning(f"[direct control] {action} failed to start: {exc!r}")
+                return {"ok": False, "code": 1, "error": str(exc), "action": action}
+
+        output = str(proc.stdout or "").strip()
+        self.logger.info(f"[direct control] {action} exited code={proc.returncode} output={output}")
+        result: dict[str, Any] | None = None
+        for line in reversed(output.splitlines()):
+            try:
+                parsed = json.loads(line)
+            except Exception:
+                continue
+            if isinstance(parsed, dict):
+                result = parsed
+                break
+        if result is None:
+            result = {"ok": False, "code": proc.returncode or 1, "error": output or "no JSON result", "action": action}
+        elif proc.returncode and result.get("ok", False):
+            result["ok"] = False
+            result["code"] = proc.returncode
+        return result
+
+    def status(self) -> dict[str, Any]:
+        return {"ok": self.enabled, "mode": "direct_robot_control", "selected_arm": self.selected_arm}
+
+    def get_objects(self) -> dict[str, Any]:
+        return self._unsupported("objects")
+
+    def select_arm(self, side: str) -> dict[str, Any]:
+        clean = str(side).strip().lower()
+        if clean not in {"left", "right"}:
+            return {"ok": False, "error": "invalid_arm", "arm": side}
+        self.selected_arm = clean
+        self.logger.info(f"[direct control] selected_arm={clean}")
+        return {"ok": True, "arm_override": clean}
+
+    def extend_arm(self) -> dict[str, Any]:
+        return self._run_worker("extend_arm")
+
+    def release_arms(self) -> dict[str, Any]:
+        return self._run_worker("release_arms")
+
+    def unrelease_arms(self) -> dict[str, Any]:
+        return self._run_worker("unrelease_arms")
+
+    def set_prompt(self, text: str) -> dict[str, Any]:
+        return self._unsupported("set_prompt")
+
+    def grab(self, object_name: str) -> dict[str, Any]:
+        return self._unsupported("grab")
+
+    def hand_action(self, action: str, side: str) -> dict[str, Any]:
+        return self._run_worker(f"hand_{action}", side=side)
+
+    def stable_hold(self) -> dict[str, Any]:
+        return self._run_worker("stable_hold")
+
+    def damp(self) -> dict[str, Any]:
+        return self._run_worker("damp")
+
+    def stop_grabbing(self) -> dict[str, Any]:
+        return self._unsupported("stop_grabbing")
+
+    def stop(self) -> None:
+        return
+
+
+class ZmqRgbdJpegSource:
+    """Best-effort RGB JPEG reader for the navbot dashboard."""
+
+    def __init__(self, args: argparse.Namespace, logger: Any) -> None:
+        self.host = str(args.rgbd_host)
+        self.port = int(args.rgbd_port)
+        self.topic = str(args.rgbd_topic or "")
+        self.logger = logger
+        self._last_error = ""
+
+    @property
+    def source(self) -> str:
+        return f"tcp://{self.host}:{self.port}"
+
+    def latest_jpeg(self, timeout_s: float = 0.7) -> tuple[bytes | None, str]:
+        try:
+            import zmq  # type: ignore
+        except Exception as exc:
+            return None, f"pyzmq unavailable: {exc}"
+
+        context = zmq.Context()
+        socket = context.socket(zmq.SUB)
+        socket.setsockopt(zmq.SUBSCRIBE, self.topic.encode("utf-8"))
+        socket.setsockopt(zmq.RCVTIMEO, 100)
+        socket.setsockopt(zmq.RCVHWM, 2)
+        socket.connect(self.source)
+        deadline = time.time() + max(0.1, float(timeout_s))
+        latest: bytes | None = None
+        try:
+            while time.time() < deadline:
+                try:
+                    parts = socket.recv_multipart()
+                except zmq.Again:
+                    continue
+                if len(parts) >= 4:
+                    parts = parts[-3:]
+                if len(parts) < 1:
+                    continue
+                latest = bytes(parts[0])
+                while True:
+                    try:
+                        parts = socket.recv_multipart(flags=zmq.NOBLOCK)
+                        if len(parts) >= 4:
+                            parts = parts[-3:]
+                        if parts:
+                            latest = bytes(parts[0])
+                    except zmq.Again:
+                        break
+                if latest:
+                    return latest, "ok"
+            return None, f"No RGB-D frame received from {self.source}"
+        except Exception as exc:
+            self._last_error = str(exc)
+            return None, str(exc)
+        finally:
+            try:
+                socket.close(0)
+                context.term()
+            except Exception:
+                pass
+
+
+class DashboardVision:
+    def __init__(self, args: argparse.Namespace, frame_source: ZmqRgbdJpegSource, logger: Any) -> None:
+        self.args = args
+        self.frame_source = frame_source
+        self.logger = logger
+        self.lock = threading.Lock()
+        self.detector: Any = None
+        self.classes: list[str] = []
+        self.last_objects: list[dict[str, Any]] = []
+        self.last_status = "vision model not loaded"
+
+    def _get_detector(self) -> Any:
+        if self.detector is None:
+            from hand_pose_navigation.vision_detector import VisionDetector
+
+            self.detector = VisionDetector(
+                model_name=str(self.args.vision_model),
+                conf=float(self.args.vision_conf),
+            )
+            self.classes = list(getattr(self.detector, "classes", []))
+            self.last_status = "on" if getattr(self.detector, "available", False) else str(getattr(self.detector, "error", "unavailable"))
+            self.logger.info(f"dashboard vision status: {self.last_status}")
+        return self.detector
+
+    def set_prompt(self, text: str) -> dict[str, Any]:
+        with self.lock:
+            detector = self._get_detector()
+            self.classes = list(detector.set_prompt(text))
+            return {"ok": True, "vision_classes": self.classes, "status": self.last_status}
+
+    def detect(self) -> dict[str, Any]:
+        with self.lock:
+            detector = self._get_detector()
+            frame, error = self.frame_source.latest_jpeg(timeout_s=0.8)
+            if not frame:
+                self.last_status = error
+                return {"ok": False, "error": error, "objects": self.last_objects, "vision_classes": self.classes}
+            try:
+                import cv2  # type: ignore
+                import numpy as np  # type: ignore
+
+                rgb_bgr = cv2.imdecode(np.frombuffer(frame, dtype=np.uint8), cv2.IMREAD_COLOR)
+                if rgb_bgr is None:
+                    raise RuntimeError("could not decode RGB JPEG")
+                detections = detector.detect(rgb_bgr)
+                objects = []
+                for idx, det in enumerate(detections):
+                    x1, y1, x2, y2 = [int(v) for v in det.box_xyxy]
+                    objects.append({
+                        "id": f"vision-{idx}",
+                        "label": str(det.label),
+                        "score": round(float(det.score), 3),
+                        "box": [x1, y1, x2, y2],
+                    })
+                self.last_objects = objects
+                self.last_status = "on" if getattr(detector, "available", False) else str(getattr(detector, "error", "unavailable"))
+                return {"ok": True, "objects": objects, "vision_classes": self.classes, "status": self.last_status}
+            except Exception as exc:
+                self.last_status = str(exc)
+                return {"ok": False, "error": str(exc), "objects": self.last_objects, "vision_classes": self.classes}
+
+    def annotated_jpeg(self) -> tuple[bytes | None, str]:
+        with self.lock:
+            detector = self._get_detector()
+            frame, error = self.frame_source.latest_jpeg(timeout_s=0.8)
+            if not frame:
+                return None, error
+            try:
+                import cv2  # type: ignore
+                import numpy as np  # type: ignore
+
+                rgb_bgr = cv2.imdecode(np.frombuffer(frame, dtype=np.uint8), cv2.IMREAD_COLOR)
+                if rgb_bgr is None:
+                    raise RuntimeError("could not decode RGB JPEG")
+                detections = detector.detect(rgb_bgr)
+                objects = []
+                for idx, det in enumerate(detections):
+                    x1, y1, x2, y2 = [int(v) for v in det.box_xyxy]
+                    label = f"{det.label} {float(det.score):.2f}"
+                    cv2.rectangle(rgb_bgr, (x1, y1), (x2, y2), (0, 220, 120), 2)
+                    cv2.putText(rgb_bgr, label, (x1, max(18, y1 - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 220, 120), 2, cv2.LINE_AA)
+                    objects.append({"id": f"vision-{idx}", "label": str(det.label), "score": round(float(det.score), 3), "box": [x1, y1, x2, y2]})
+                self.last_objects = objects
+                ok, encoded = cv2.imencode(".jpg", rgb_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+                if not ok:
+                    raise RuntimeError("could not encode annotated JPEG")
+                return bytes(encoded), "ok"
+            except Exception as exc:
+                self.last_status = str(exc)
+                return None, str(exc)
 
 
 class TactileHoldingMonitor:
@@ -1321,7 +1639,9 @@ class NavBotNode(Node):
         self.motion = MotionClient(args, self.get_logger())
         self.pose_gestures = PoseGestureClient(args, self.get_logger())
         self.gestures = GestureClient(args, self.get_logger())
-        self.gripping = GrippingClient(args, self.get_logger())
+        self.gripping = DirectRobotControlClient(args, self.get_logger())
+        self.rgbd_source = ZmqRgbdJpegSource(args, self.get_logger())
+        self.dashboard_vision = DashboardVision(args, self.rgbd_source, self.get_logger())
         self.tactile = TactileHoldingMonitor(args, self.get_logger())
         knowledge_paths = [Path(item).expanduser() for item in args.knowledge_file]
         missing = [str(path) for path in knowledge_paths if not path.exists()]
@@ -1343,13 +1663,17 @@ class NavBotNode(Node):
         self.last_reply_ts = 0.0
         self.external_asr_httpd: http.server.ThreadingHTTPServer | None = None
         self.external_asr_thread: threading.Thread | None = None
+        self.dashboard_httpd: http.server.ThreadingHTTPServer | None = None
+        self.dashboard_thread: threading.Thread | None = None
         if not bool(args.external_asr_only):
             self.create_subscription(String, args.audio_topic, self.on_audio, 10)
             if str(args.filtered_audio_topic) and str(args.filtered_audio_topic) != str(args.audio_topic):
                 self.create_subscription(String, args.filtered_audio_topic, self.on_audio, 10)
         self.create_subscription(String, args.command_topic, self.on_command, 10)
-        if bool(args.external_asr_server):
+        if bool(args.external_asr_server) or bool(args.external_asr_only):
             self._start_external_asr_server()
+        if bool(args.enable_gripping):
+            self._start_dashboard_server()
         self.get_logger().info(
             f"navbot_with_gripping ready audio={'external-only' if args.external_asr_only else args.audio_topic} "
             f"map={args.map_path} points={args.points_file} "
@@ -1481,7 +1805,7 @@ class NavBotNode(Node):
         point_name = self._extract_go_to_name(low)
         if point_name:
             return {"intent": "go_to_point", "announce": f"Going to {point_name}.", "point": point_name, "needs_knowledge": False}
-        loco = self._extract_locomotion(low)
+        loco = self._extract_locomotion(low, self.args)
         if loco is not None:
             vx, vy, vyaw, announce = loco
             return {"intent": "locomotion", "announce": announce, "vx": vx, "vy": vy, "vyaw": vyaw, "needs_knowledge": False}
@@ -1605,7 +1929,7 @@ class NavBotNode(Node):
         # Locomotion/gripping checks run after every SLAM/point-nav intent above so that
         # e.g. "walk to office one" is always claimed by go_to_point first (both share the
         # word "walk") and only bare direction phrases ("walk forward") reach this point.
-        loco = self._extract_locomotion(low)
+        loco = self._extract_locomotion(low, self.args)
         if loco is not None:
             vx, vy, vyaw, announce = loco
             self._say_action_announce(announce)
@@ -1659,7 +1983,14 @@ class NavBotNode(Node):
                 return {"ok": False, "code": 1, "intent": "extend_arm", "answer": "The gripping system is not available right now."}
             self._say_action_announce("Extending my arm.")
             result = self.gripping.extend_arm()
-            return {"ok": bool(result.get("ok")), "code": 0, "intent": "extend_arm", "answer": ""}
+            ok = bool(result.get("ok"))
+            return {
+                "ok": ok,
+                "code": 0 if ok else 1,
+                "intent": "extend_arm",
+                "answer": "" if ok else f"I could not extend my arm: {result.get('error', result.get('status', 'control failed'))}.",
+                "raw": result,
+            }
 
         arm_side = self._extract_select_arm_side(low)
         if arm_side is not None:
@@ -1944,21 +2275,23 @@ class NavBotNode(Node):
         return None
 
     @staticmethod
-    def _extract_locomotion(low: str) -> tuple[float, float, float, str] | None:
+    def _extract_locomotion(low: str, args: argparse.Namespace) -> tuple[float, float, float, str] | None:
         if not any(word in low for word in ("step", "walk", "move", "turn", "rotate")):
             return None
+        linear = float(getattr(args, "loco_linear_speed", LOCO_LINEAR_SPEED_MPS))
+        yaw = float(getattr(args, "loco_yaw_speed", LOCO_YAW_SPEED_RPS))
         if "forward" in low or "forwards" in low or "front" in low:
-            return (LOCO_LINEAR_SPEED_MPS, 0.0, 0.0, "Stepping forward.")
+            return (linear, 0.0, 0.0, "Stepping forward.")
         if "backward" in low or "backwards" in low or "back" in low or "reverse" in low:
-            return (-LOCO_LINEAR_SPEED_MPS, 0.0, 0.0, "Stepping backward.")
+            return (-linear, 0.0, 0.0, "Stepping backward.")
         if "right" in low:
             if "turn" in low or "rotate" in low:
-                return (0.0, 0.0, -LOCO_YAW_SPEED_RPS, "Turning right.")
-            return (0.0, -LOCO_LINEAR_SPEED_MPS, 0.0, "Stepping right.")
+                return (0.0, 0.0, -yaw, "Turning right.")
+            return (0.0, -linear, 0.0, "Stepping right.")
         if "left" in low:
             if "turn" in low or "rotate" in low:
-                return (0.0, 0.0, LOCO_YAW_SPEED_RPS, "Turning left.")
-            return (0.0, LOCO_LINEAR_SPEED_MPS, 0.0, "Stepping left.")
+                return (0.0, 0.0, yaw, "Turning left.")
+            return (0.0, linear, 0.0, "Stepping left.")
         return None
 
     @staticmethod
@@ -2121,6 +2454,280 @@ class NavBotNode(Node):
         with self.audit_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(record, sort_keys=True, default=str) + "\n")
 
+    def _dashboard_html(self, title: str, note: str) -> str:
+        return f"""
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{title}</title>
+  <style>
+    :root {{ color-scheme: light dark; }}
+    body {{ font-family: system-ui, sans-serif; margin: 0; background: #101114; color: #f4f4f5; }}
+    header {{ padding: 14px 18px; border-bottom: 1px solid #30333a; display: flex; justify-content: space-between; gap: 12px; align-items: center; }}
+    main {{ display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; padding: 16px; }}
+    h1 {{ font-size: 20px; margin: 0; }}
+    .status {{ color: #b6bcc8; font-size: 13px; }}
+    .video {{ background: #050608; border: 1px solid #30333a; min-height: 360px; display: grid; place-items: center; }}
+    .video img {{ display: block; width: 100%; height: auto; max-height: calc(100vh - 120px); object-fit: contain; }}
+    aside {{ display: flex; flex-direction: column; gap: 12px; }}
+    section {{ border: 1px solid #30333a; padding: 12px; background: #17191e; }}
+    h2 {{ font-size: 15px; margin: 0 0 10px; }}
+    button {{ font-size: 15px; padding: 9px 12px; margin: 3px; background: #2b65d9; color: white; border: 0; cursor: pointer; }}
+    button.danger {{ background: #b3261e; }}
+    button.secondary {{ background: #3b414d; }}
+    input {{ box-sizing: border-box; width: 100%; font-size: 15px; padding: 10px; margin-bottom: 8px; background: #0f1115; color: #f4f4f5; border: 1px solid #3b414d; }}
+    pre {{ background: #08090b; color: #d7dbe3; padding: 10px; min-height: 180px; max-height: 280px; overflow: auto; white-space: pre-wrap; font-size: 12px; }}
+    @media (max-width: 860px) {{ main {{ grid-template-columns: 1fr; }} }}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>{title}</h1>
+    <div class="status" id="status">{note}</div>
+  </header>
+  <main>
+    <div class="video"><img id="frame" alt="RGB-D camera frame"></div>
+    <aside>
+      <section>
+        <h2>Robot Control</h2>
+        <button class="danger" onclick="post('/api/damp')">Damp</button>
+        <button onclick="post('/api/extend_arm')">Extend Arm</button>
+        <button class="secondary" onclick="post('/api/release_arms')">Release Arms</button>
+        <button class="secondary" onclick="post('/api/unrelease_arms')">Unrelease Arms</button>
+        <button class="secondary" onclick="post('/api/stable_hold')">Stable Hold</button>
+      </section>
+      <section>
+        <h2>Object Detection</h2>
+        <input id="visionPrompt" placeholder="coffee cup, bottle, phone">
+        <button onclick="setPrompt()">Set Prompt</button>
+        <button onclick="detect()">Detect</button>
+        <button onclick="refreshAnnotated()">Annotated View</button>
+        <div id="objects" class="status">No detections yet.</div>
+      </section>
+      <section>
+        <h2>Grab Pipeline</h2>
+        <input id="grabObject" placeholder="object label">
+        <button onclick="grab()">Grab</button>
+      </section>
+      <section>
+        <h2>Voice/Text Command</h2>
+        <input id="cmd" placeholder="Type a navigation or gripping command">
+        <button onclick="command()">Send</button>
+      </section>
+      <section>
+        <h2>Log</h2>
+        <pre id="log"></pre>
+      </section>
+    </aside>
+  </main>
+  <script>
+    const log = (msg) => {{
+      const el = document.getElementById('log');
+      el.textContent = new Date().toLocaleTimeString() + ' ' + msg + '\\n' + el.textContent;
+    }};
+    async function post(path, body) {{
+      log('send ' + path);
+      try {{
+        const res = await fetch(path, {{
+          method: 'POST',
+          headers: {{'Content-Type': 'application/json'}},
+          body: JSON.stringify(body || {{}})
+        }});
+        log('response ' + res.status + ' ' + await res.text());
+        refreshStatus();
+      }} catch (err) {{
+        log('error ' + err);
+      }}
+    }}
+    function command() {{
+      const input = document.getElementById('cmd');
+      post('/command', {{text: input.value}});
+    }}
+    function setPrompt() {{
+      post('/api/set_prompt', {{text: document.getElementById('visionPrompt').value}});
+    }}
+    async function detect() {{
+      log('send /api/objects');
+      try {{
+        const res = await fetch('/api/objects');
+        const data = await res.json();
+        document.getElementById('objects').textContent = JSON.stringify(data.objects || []);
+        log('response ' + res.status + ' ' + JSON.stringify(data));
+      }} catch (err) {{
+        log('error ' + err);
+      }}
+    }}
+    function refreshAnnotated() {{
+      document.getElementById('frame').src = '/api/annotated.jpg?t=' + Date.now();
+    }}
+    function grab() {{
+      post('/api/grab', {{object: document.getElementById('grabObject').value}});
+    }}
+    async function refreshStatus() {{
+      try {{
+        const res = await fetch('/api/status');
+        document.getElementById('status').textContent = JSON.stringify(await res.json());
+      }} catch (err) {{
+        document.getElementById('status').textContent = String(err);
+      }}
+    }}
+    function refreshFrame() {{
+      document.getElementById('frame').src = '/api/frame.jpg?t=' + Date.now();
+    }}
+    document.getElementById('frame').addEventListener('error', () => log('camera frame unavailable'));
+    setInterval(refreshFrame, 600);
+    setInterval(refreshStatus, 2000);
+    refreshFrame();
+    refreshStatus();
+  </script>
+</body>
+</html>
+"""
+
+    def _control_routes(self) -> dict[str, Any]:
+        return {
+            "/api/damp": self.gripping.damp,
+            "/api/extend_arm": self.gripping.extend_arm,
+            "/api/release_arms": self.gripping.release_arms,
+            "/api/unrelease_arms": self.gripping.unrelease_arms,
+            "/api/stable_hold": self.gripping.stable_hold,
+        }
+
+    def _control_status_payload(self) -> dict[str, Any]:
+        return {
+            "ok": True,
+            "service": "navbot_with_gripping",
+            "control": self.gripping.status(),
+            "dds": self.dds_status,
+            "rgbd_source": self.rgbd_source.source,
+            "last_text": self.last_text,
+            "last_reply": self.last_reply,
+        }
+
+    def _start_dashboard_server(self) -> None:
+        node = self
+        token = str(self.args.external_asr_token or "")
+
+        class DashboardHandler(http.server.BaseHTTPRequestHandler):
+            server_version = "G1NavBotDashboard/1.0"
+
+            def log_message(self, fmt: str, *args: Any) -> None:
+                node.get_logger().info("dashboard_http " + (fmt % args))
+
+            def _send_json(self, status: int, payload: dict[str, Any]) -> None:
+                body = json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Access-Control-Allow-Headers", "authorization, content-type")
+                self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+                self.end_headers()
+                self.wfile.write(body)
+
+            def _send_bytes(self, status: int, content_type: str, body: bytes) -> None:
+                self.send_response(status)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(body)
+
+            def _send_html(self, status: int, html_text: str) -> None:
+                self._send_bytes(status, "text/html; charset=utf-8", html_text.encode("utf-8"))
+
+            def _authorized(self, payload: dict[str, Any] | None = None) -> bool:
+                if not token:
+                    return True
+                auth = str(self.headers.get("Authorization", ""))
+                return auth == f"Bearer {token}" or bool(isinstance(payload, dict) and str(payload.get("token", "")) == token)
+
+            def do_OPTIONS(self) -> None:
+                self._send_json(200, {"ok": True})
+
+            def do_GET(self) -> None:
+                path = self.path.split("?", 1)[0]
+                if path == "/":
+                    self._send_html(200, node._dashboard_html("G1 Recognition Layer", "navbot dashboard on port 8060"))
+                    return
+                if path in {"/health", "/api/status"}:
+                    self._send_json(200, node._control_status_payload())
+                    return
+                if path == "/api/frame.jpg":
+                    frame, error = node.rgbd_source.latest_jpeg(timeout_s=0.5)
+                    if frame:
+                        self._send_bytes(200, "image/jpeg", frame)
+                    else:
+                        self._send_json(503, {"ok": False, "error": error, "source": node.rgbd_source.source})
+                    return
+                if path == "/api/annotated.jpg":
+                    frame, error = node.dashboard_vision.annotated_jpeg()
+                    if frame:
+                        self._send_bytes(200, "image/jpeg", frame)
+                    else:
+                        self._send_json(503, {"ok": False, "error": error, "source": node.rgbd_source.source})
+                    return
+                if path == "/api/objects":
+                    self._send_json(200, node.dashboard_vision.detect())
+                    return
+                self._send_json(404, {"ok": False, "error": "not_found"})
+
+            def do_POST(self) -> None:
+                path = self.path.split("?", 1)[0]
+                routes = node._control_routes()
+                if path not in routes and path not in {"/command", "/api/set_prompt", "/api/grab"}:
+                    self._send_json(404, {"ok": False, "error": "not_found"})
+                    return
+                length = int(self.headers.get("Content-Length", "0") or "0")
+                raw = self.rfile.read(min(length, 64_000)).decode("utf-8", errors="replace")
+                payload: dict[str, Any] | None = None
+                text = raw
+                try:
+                    parsed = json.loads(raw) if raw.strip() else {}
+                    if isinstance(parsed, dict):
+                        payload = parsed
+                        text = str(parsed.get("text", parsed.get("prompt", parsed.get("raw", ""))))
+                except Exception:
+                    payload = None
+                if not self._authorized(payload):
+                    self._send_json(401, {"ok": False, "error": "unauthorized"})
+                    return
+                if path in routes:
+                    node.get_logger().info(f"dashboard_http direct control route {path}")
+                    result = routes[path]()
+                    self._send_json(200 if result.get("ok") else 500, result)
+                    return
+                if path == "/api/set_prompt":
+                    result = node.dashboard_vision.set_prompt(text)
+                    self._send_json(200 if result.get("ok") else 500, result)
+                    return
+                if path == "/api/grab":
+                    obj = str(payload.get("object", "") if isinstance(payload, dict) else "").strip()
+                    result = {
+                        "ok": False,
+                        "error": "grab_pipeline_not_ported_to_navbot_yet",
+                        "object": obj,
+                        "message": "Object detection is available in navbot; the full reach/grab pipeline still needs to be ported from hand_pose_navigation modules.",
+                    }
+                    self._send_json(501, result)
+                    return
+                accepted = node.submit_external_asr(text)
+                self._send_json(200, {"ok": True, "accepted": accepted, "text": compact_text(text)})
+
+        host = str(self.args.gripping_host)
+        port = int(self.args.gripping_port)
+        try:
+            self.dashboard_httpd = http.server.ThreadingHTTPServer((host, port), DashboardHandler)
+        except Exception as exc:
+            self.get_logger().warning(f"dashboard server failed to bind http://{host}:{port}: {exc}")
+            return
+        self.dashboard_thread = threading.Thread(target=self.dashboard_httpd.serve_forever, daemon=True)
+        self.dashboard_thread.start()
+        self.get_logger().info(f"navbot dashboard listening on http://{host}:{port}/")
+
     def _start_external_asr_server(self) -> None:
         node = self
         token = str(self.args.external_asr_token or "")
@@ -2142,6 +2749,15 @@ class NavBotNode(Node):
                 self.end_headers()
                 self.wfile.write(body)
 
+            def _send_html(self, status: int, html_text: str) -> None:
+                body = html_text.encode("utf-8")
+                self.send_response(status)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(body)
+
             def _authorized(self, payload: dict[str, Any] | None = None) -> bool:
                 if not token:
                     return True
@@ -2157,14 +2773,87 @@ class NavBotNode(Node):
                 self._send_json(200, {"ok": True})
 
             def do_GET(self) -> None:
-                if self.path.split("?", 1)[0] == "/health":
+                path = self.path.split("?", 1)[0]
+                if path == "/health":
                     self._send_json(200, {"ok": True, "service": "navbot_with_gripping"})
+                    return
+                if path == "/api/status":
+                    self._send_json(200, {
+                        "ok": True,
+                        "service": "navbot_with_gripping",
+                        "control": node.gripping.status(),
+                        "dds": node.dds_status,
+                    })
+                    return
+                if path == "/":
+                    self._send_html(200, """
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>G1 NavBot Control</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 24px; max-width: 760px; }
+    button { font-size: 16px; padding: 10px 14px; margin: 4px; }
+    input { font-size: 16px; padding: 10px; width: min(520px, 100%); }
+    pre { background: #111; color: #eee; padding: 12px; min-height: 160px; overflow: auto; }
+  </style>
+</head>
+<body>
+  <h1>G1 NavBot Control</h1>
+  <p>Direct navbot controls on port 8097. This page does not use recognition_app.py.</p>
+  <div>
+    <button onclick="post('/api/damp')">Damp</button>
+    <button onclick="post('/api/extend_arm')">Extend Arm</button>
+    <button onclick="post('/api/release_arms')">Release Arms</button>
+    <button onclick="post('/api/unrelease_arms')">Unrelease Arms</button>
+    <button onclick="post('/api/stable_hold')">Stable Hold</button>
+  </div>
+  <p>
+    <input id="cmd" placeholder="Type a navigation or gripping command">
+    <button onclick="command()">Send</button>
+  </p>
+  <pre id="log"></pre>
+  <script>
+    const log = (msg) => {
+      const el = document.getElementById('log');
+      el.textContent = new Date().toLocaleTimeString() + ' ' + msg + '\\n' + el.textContent;
+    };
+    async function post(path, body) {
+      log('send ' + path);
+      try {
+        const res = await fetch(path, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(body || {})
+        });
+        log('response ' + res.status + ' ' + await res.text());
+      } catch (err) {
+        log('error ' + err);
+      }
+    }
+    function command() {
+      const input = document.getElementById('cmd');
+      post('/command', {text: input.value});
+    }
+  </script>
+</body>
+</html>
+""")
                     return
                 self._send_json(404, {"ok": False, "error": "not_found"})
 
             def do_POST(self) -> None:
                 path = self.path.split("?", 1)[0]
-                if path not in {"/asr", "/command"}:
+                control_routes = {
+                    "/api/damp": node.gripping.damp,
+                    "/api/extend_arm": node.gripping.extend_arm,
+                    "/api/release_arms": node.gripping.release_arms,
+                    "/api/unrelease_arms": node.gripping.unrelease_arms,
+                    "/api/stable_hold": node.gripping.stable_hold,
+                }
+                if path not in {"/asr", "/command"} and path not in control_routes:
                     self._send_json(404, {"ok": False, "error": "not_found"})
                     return
                 length = int(self.headers.get("Content-Length", "0") or "0")
@@ -2180,6 +2869,11 @@ class NavBotNode(Node):
                     payload = None
                 if not self._authorized(payload):
                     self._send_json(401, {"ok": False, "error": "unauthorized"})
+                    return
+                if path in control_routes:
+                    node.get_logger().info(f"external_asr_http direct control route {path}")
+                    result = control_routes[path]()
+                    self._send_json(200 if result.get("ok") else 500, result)
                     return
                 accepted = node.submit_external_asr(text)
                 self._send_json(200, {"ok": True, "accepted": accepted, "text": compact_text(text)})
@@ -2208,6 +2902,12 @@ class NavBotNode(Node):
             self.external_asr_httpd = None
         if self.external_asr_thread is not None and self.external_asr_thread.is_alive():
             self.external_asr_thread.join(timeout=0.5)
+        if self.dashboard_httpd is not None:
+            self.dashboard_httpd.shutdown()
+            self.dashboard_httpd.server_close()
+            self.dashboard_httpd = None
+        if self.dashboard_thread is not None and self.dashboard_thread.is_alive():
+            self.dashboard_thread.join(timeout=0.5)
         self.pose_gestures.close()
         self.gripping.stop()
         return super().destroy_node()
@@ -2322,12 +3022,107 @@ def run_gesture_worker(args: argparse.Namespace) -> int:
     return 0 if result.get("ok") else 1
 
 
+def run_control_worker(args: argparse.Namespace) -> int:
+    action = str(args.control_worker).strip().lower()
+    arm = str(args.control_arm).strip().lower()
+    result: dict[str, Any]
+    try:
+        ensure_channel_factory_initialized(int(args.domain_id), str(args.iface))
+        from sdk_client import Robot
+
+        if action == "damp":
+            robot = Robot(
+                iface=str(args.iface),
+                domain_id=int(args.domain_id),
+                safety_boot=False,
+                recover_dev_mode_on_init=False,
+                auto_start_sensors=False,
+            )
+            robot.damp()
+            result = {"ok": True, "code": 0, "action": action}
+        elif action == "move_for":
+            robot = Robot(
+                iface=str(args.iface),
+                domain_id=int(args.domain_id),
+                safety_boot=False,
+                recover_dev_mode_on_init=False,
+                auto_start_sensors=False,
+            )
+            duration_s = max(0.05, float(args.loco_duration_s))
+            code = int(robot.move_for(duration_s, vx=float(args.control_vx), vy=float(args.control_vy), vyaw=float(args.control_vyaw)))
+            result = {
+                "ok": code == 0,
+                "code": code,
+                "action": action,
+                "duration_s": duration_s,
+                "vx": float(args.control_vx),
+                "vy": float(args.control_vy),
+                "vyaw": float(args.control_vyaw),
+            }
+        elif action == "hand_open":
+            robot = Robot(
+                iface=str(args.iface),
+                domain_id=int(args.domain_id),
+                safety_boot=False,
+                recover_dev_mode_on_init=False,
+                auto_start_sensors=False,
+            )
+            robot.hand_open(hand=arm)
+            result = {"ok": True, "code": 0, "action": action, "hand": arm}
+        elif action == "hand_close":
+            robot = Robot(
+                iface=str(args.iface),
+                domain_id=int(args.domain_id),
+                safety_boot=False,
+                recover_dev_mode_on_init=False,
+                auto_start_sensors=False,
+            )
+            robot.hand_close(hand=arm)
+            result = {"ok": True, "code": 0, "action": action, "hand": arm}
+        elif action in {"extend_arm", "release_arms", "unrelease_arms", "stable_hold"}:
+            robot = Robot(
+                iface=str(args.iface),
+                domain_id=int(args.domain_id),
+                safety_boot=False,
+                recover_dev_mode_on_init=False,
+                auto_start_sensors=True,
+            )
+            if action == "extend_arm":
+                robot.unrelease_arms(duration_s=0.5, timeout=3.0)
+                data = robot.extend_arm_forward(arm=arm, duration_s=4.0, timeout=3.0)
+                result = {"ok": True, "code": 0, "action": action, "arm": arm, "result": data}
+            elif action == "release_arms":
+                data = robot.release_arms(duration_s=0.8, timeout=3.0)
+                result = {"ok": True, "code": 0, "action": action, "result": data}
+            elif action == "unrelease_arms":
+                data = robot.unrelease_arms(duration_s=0.8, timeout=3.0)
+                result = {"ok": True, "code": 0, "action": action, "result": data}
+            else:
+                robot.unrelease_arms(duration_s=1.2, timeout=3.0)
+                data = robot.hold_arm_pose(
+                    STABLE_HOLD_ARM_JOINTS,
+                    speed_rad_s=0.08,
+                    max_step_rad=0.04,
+                    timeout=3.0,
+                )
+                result = {"ok": True, "code": 0, "action": action, "result": data}
+        else:
+            result = {"ok": False, "code": 2, "error": f"unsupported control action: {action}", "action": action}
+    except Exception as exc:
+        result = {"ok": False, "code": 1, "error": repr(exc), "action": action, "arm": arm}
+
+    print(json.dumps(result, sort_keys=True, default=str), flush=True)
+    return 0 if result.get("ok") else 1
+
+
 def main() -> int:
     args = parse_args()
     if args.slam_worker:
         return run_slam_worker(args)
     if args.gesture_worker:
         return run_gesture_worker(args)
+    if args.control_worker:
+        return run_control_worker(args)
     node: NavBotNode | None = None
     try:
         rclpy.init()
