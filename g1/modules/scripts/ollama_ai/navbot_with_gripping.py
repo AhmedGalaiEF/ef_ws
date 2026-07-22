@@ -20,7 +20,7 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 
-if "--slam-worker" not in sys.argv:
+if "--slam-worker" not in sys.argv and "--gesture-worker" not in sys.argv:
     import rclpy
     from rclpy.node import Node
     from std_msgs.msg import String
@@ -98,6 +98,27 @@ KNOWLEDGE_SYSTEM_PROMPT = (
     "that knowledge, answer only from context. If context does not contain the "
     "answer, say you do not know yet. Keep it spoken and concise."
 )
+DEFAULT_KNOWLEDGE_FILE = SCRIPT_DIR / "robot_modules_knowledge.sample.json"
+GESTURE_ACTIONS = {
+    "wave": "face_wave",
+    "face_wave": "face_wave",
+    "hello_wave": "face_wave",
+    "high_wave": "high_wave",
+    "clap": "clap",
+    "shake_hand": "shake_hand",
+    "handshake": "shake_hand",
+    "high_five": "high_five",
+    "hug": "hug",
+    "heart": "heart",
+    "right_heart": "right_heart",
+    "hands_up": "hands_up",
+    "x_ray": "x_ray",
+    "right_hand_up": "right_hand_up",
+    "reject": "reject",
+    "left_kiss": "left_kiss",
+    "right_kiss": "right_kiss",
+    "two_hand_kiss": "two_hand_kiss",
+}
 
 
 @dataclass
@@ -131,7 +152,12 @@ def parse_args() -> argparse.Namespace:
         description="Voice-command SLAM navigation bot for Unitree G1 named points, "
         "plus short locomotion steps/turns and voice control of the recognition_app.py grasp plugin."
     )
-    parser.add_argument("knowledge_file", nargs="*", help="Optional structured JSON knowledge file(s).")
+    parser.add_argument(
+        "knowledge_file",
+        nargs="*",
+        default=[str(DEFAULT_KNOWLEDGE_FILE)],
+        help="Optional structured JSON knowledge file(s). Defaults to robot_modules_knowledge.sample.json.",
+    )
     parser.add_argument("--iface", default=os.environ.get("G1_IFACE", "eth0"))
     parser.add_argument("--domain-id", type=int, default=int(os.environ.get("G1_DOMAIN_ID", "0")))
     parser.add_argument("--map-path", default="/home/unitree/test.pcd")
@@ -150,6 +176,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--external-asr-only", "--no-ros-audio", dest="external_asr_only", action="store_true")
     parser.add_argument("--enable-motion", action="store_true",
                         help="Actually execute step/turn locomotion commands instead of only logging them.")
+    parser.add_argument("--no-gestures", dest="enable_gestures", action="store_false", default=True,
+                        help="Disable high-level SDK arm gestures such as wave, clap, handshake, and high five.")
     parser.add_argument("--no-gripping", dest="enable_gripping", action="store_false", default=True,
                         help="Do not launch the recognition dashboard/grasp plugin.")
     parser.add_argument("--gripping-launch-mode", choices=("in-process", "subprocess"), default="subprocess",
@@ -192,6 +220,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--no-startup-speech", action="store_true")
     parser.add_argument("--audit-log", default="/tmp/navbot_with_gripping.jsonl")
     parser.add_argument("--slam-worker", default="", help=argparse.SUPPRESS)
+    parser.add_argument("--gesture-worker", default="", help=argparse.SUPPRESS)
     parser.add_argument("--point-json", default="", help=argparse.SUPPRESS)
     return parser.parse_args()
 
@@ -797,6 +826,61 @@ class MotionClient:
                 return False
 
 
+class GestureClient:
+    """Runs high-level SDK arm gestures independently of the recognition dashboard."""
+
+    def __init__(self, args: argparse.Namespace, logger: Any) -> None:
+        self.args = args
+        self.logger = logger
+        self.enabled = bool(args.enable_gestures)
+        self.lock = threading.Lock()
+
+    def play(self, action: str) -> dict[str, Any]:
+        action_key = GESTURE_ACTIONS.get(str(action).strip().lower())
+        if not action_key:
+            return {"ok": False, "error": "unsupported_gesture", "action": action}
+        if not self.enabled:
+            self.logger.info(f"[gestures disabled] would run high-level action: {action_key}")
+            return {"ok": False, "error": "gestures_disabled", "action": action_key}
+        if not self.lock.acquire(blocking=False):
+            return {"ok": False, "error": "gesture_busy", "action": action_key}
+        try:
+            command = [
+                sys.executable,
+                str(Path(__file__).resolve()),
+                "--gesture-worker",
+                action_key,
+                "--iface",
+                str(self.args.iface),
+                "--domain-id",
+                str(int(self.args.domain_id)),
+            ]
+            proc = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=20.0)
+            output = proc.stdout or ""
+            result: dict[str, Any] | None = None
+            for line in reversed(output.splitlines()):
+                try:
+                    parsed = json.loads(line)
+                except Exception:
+                    continue
+                if isinstance(parsed, dict):
+                    result = parsed
+                    break
+            if result is None:
+                result = {"ok": False, "code": proc.returncode or 1, "error": output.strip() or "gesture worker produced no JSON result"}
+            elif proc.returncode and result.get("ok", False):
+                result["ok"] = False
+                result["code"] = proc.returncode
+            result["action"] = action_key
+            self.logger.info(f"High-level gesture worker result: {json.dumps(result, sort_keys=True, default=str)}")
+            return result
+        except Exception as exc:
+            self.logger.warning(f"High-level gesture {action_key} failed: {exc}")
+            return {"ok": False, "error": str(exc), "action": action_key}
+        finally:
+            self.lock.release()
+
+
 class GrippingClient:
     """Runs the recognition Dash grasp UI and talks to its /api/* control routes."""
 
@@ -1016,7 +1100,6 @@ class TactileHoldingMonitor:
                 HAND_STATE_TOPIC_BY_SIDE,
                 LatestTactileState,
                 collect_latest_snapshots,
-                ensure_channel_factory_initialized,
                 wait_for_initial_snapshots,
             )
 
@@ -1087,8 +1170,10 @@ class NavBotNode(Node):
     def __init__(self, args: argparse.Namespace) -> None:
         super().__init__("g1_navbot_with_gripping")
         self.args = args
+        self.dds_status = self._init_dds_once(args)
         self.nav = NavState(args)
         self.motion = MotionClient(args, self.get_logger())
+        self.gestures = GestureClient(args, self.get_logger())
         self.gripping = GrippingClient(args, self.get_logger())
         self.tactile = TactileHoldingMonitor(args, self.get_logger())
         knowledge_paths = [Path(item).expanduser() for item in args.knowledge_file]
@@ -1104,6 +1189,7 @@ class NavBotNode(Node):
         self.audit_path.parent.mkdir(parents=True, exist_ok=True)
         self.busy_lock = threading.Lock()
         self.pending_add_point = False
+        self._planned_announce_active = False
         self.last_index: int | None = None
         self.last_text = ""
         self.last_reply = ""
@@ -1120,11 +1206,21 @@ class NavBotNode(Node):
         self.get_logger().info(
             f"navbot_with_gripping ready audio={'external-only' if args.external_asr_only else args.audio_topic} "
             f"map={args.map_path} points={args.points_file} "
-            f"motion={'on' if args.enable_motion else 'off'} gripping={'on' if args.enable_gripping else 'off'} "
-            f"knowledge_entries={len(self.retriever.entries) if self.retriever is not None else 0}"
+            f"motion={'on' if args.enable_motion else 'off'} gestures={'on' if args.enable_gestures else 'off'} gripping={'on' if args.enable_gripping else 'off'} "
+            f"knowledge_entries={len(self.retriever.entries) if self.retriever is not None else 0} "
+            f"dds={self.dds_status}"
         )
         if not args.no_startup_speech and compact_text(args.startup_speech):
             self._say(args.startup_speech)
+
+    def _init_dds_once(self, args: argparse.Namespace) -> str:
+        try:
+            ensure_channel_factory_initialized(int(args.domain_id), str(args.iface))
+            return f"ready iface={args.iface} domain_id={int(args.domain_id)}"
+        except Exception as exc:
+            message = f"init failed: {exc}"
+            self.get_logger().warning(f"Unitree DDS {message}")
+            return message
 
     def on_audio(self, msg: String) -> None:
         payload = decode_payload(str(msg.data))
@@ -1169,21 +1265,122 @@ class NavBotNode(Node):
         started = time.time()
         with self.busy_lock:
             try:
-                result = self._dispatch(text)
+                route = self._plan_intent(text)
+                announce = compact_text(str(route.get("announce", "")))
+                self.get_logger().info(
+                    f"{source} planned: text={text!r} intent={route.get('intent')!r} "
+                    f"route={json.dumps(route, sort_keys=True, default=str)}"
+                )
+                if announce:
+                    self._say(announce)
+                self._planned_announce_active = True
+                try:
+                    result = self._dispatch(text)
+                finally:
+                    self._planned_announce_active = False
                 answer = str(result.pop("answer", "Done."))
                 if not result.get("ok", True):
                     self.get_logger().warning(
                         f"nav command failed intent={result.get('intent')} code={result.get('code')} raw={result.get('raw')!r}"
                     )
-                if answer:
+                if answer and answer != announce:
                     self._say(answer)
-                result.update({"source": source, "text": text, "answer": answer, "elapsed_s": round(time.time() - started, 3)})
+                result.update({
+                    "source": source,
+                    "text": text,
+                    "answer": answer or announce,
+                    "planned_intent": route.get("intent"),
+                    "announce": announce,
+                    "elapsed_s": round(time.time() - started, 3),
+                })
                 self._publish(result)
             except Exception as exc:
+                self._planned_announce_active = False
                 self.get_logger().error(f"nav command failed: {exc}")
                 answer = "Navigation command failed."
                 self._say(answer)
                 self._publish({"ok": False, "intent": "error", "source": source, "text": text, "answer": answer, "error": str(exc)})
+
+    def _plan_intent(self, text: str) -> dict[str, Any]:
+        low = normalize_text(text)
+        if self.pending_add_point:
+            return {"intent": "name_point", "announce": "Saving this point.", "needs_knowledge": False}
+        inline_name = self._extract_add_point_name(low)
+        if inline_name is not None:
+            return {"intent": "add_current_point", "announce": "Saving this point.", "point": inline_name, "needs_knowledge": False}
+        if self._wants_add_current_point(low):
+            return {"intent": "ask_point_name", "announce": "What should I call this point?", "needs_knowledge": False}
+        if self._wants_start_mapping(low):
+            return {"intent": "start_mapping", "announce": "Starting mapping.", "needs_knowledge": False}
+        if self._wants_stop_mapping(low):
+            return {"intent": "stop_mapping", "announce": "Stopping mapping.", "needs_knowledge": False}
+        if self._wants_relocate(low):
+            return {"intent": "relocate", "announce": "Relocating.", "needs_knowledge": False}
+        if self._wants_resume(low):
+            return {"intent": "resume_navigation", "announce": "Resuming navigation.", "needs_knowledge": False}
+        if self._wants_pause_or_stop(low):
+            return {"intent": "pause_navigation", "announce": "Stopping navigation.", "needs_knowledge": False}
+        if self._wants_close_slam(low):
+            return {"intent": "close_slam", "announce": "Stopping SLAM.", "needs_knowledge": False}
+        point_name = self._extract_go_to_name(low)
+        if point_name:
+            return {"intent": "go_to_point", "announce": f"Going to {point_name}.", "point": point_name, "needs_knowledge": False}
+        loco = self._extract_locomotion(low)
+        if loco is not None:
+            vx, vy, vyaw, announce = loco
+            return {"intent": "locomotion", "announce": announce, "vx": vx, "vy": vy, "vyaw": vyaw, "needs_knowledge": False}
+        if self._is_holding_status_question(low):
+            return {"intent": "holding_status", "announce": "Checking my hand sensors.", "needs_knowledge": False}
+        if self._wants_objects_query(low):
+            return {"intent": "list_objects", "announce": "Checking what I can see.", "needs_knowledge": False}
+        if self._wants_stop_grabbing(low):
+            return {"intent": "stop_grabbing", "announce": "Stopping grab.", "needs_knowledge": False}
+        if self._wants_release_arms(low):
+            return {"intent": "release_arms", "announce": "Releasing my arms.", "needs_knowledge": False}
+        if self._wants_stable_hold(low):
+            return {"intent": "stable_hold", "announce": "Moving to a stable hold.", "needs_knowledge": False}
+        if self._wants_extend_arm(low):
+            return {"intent": "extend_arm", "announce": "Extending my arm.", "needs_knowledge": False}
+        arm_side = self._extract_select_arm_side(low)
+        if arm_side is not None:
+            return {"intent": "select_arm", "announce": f"Switching to the {arm_side} arm.", "arm": arm_side, "needs_knowledge": False}
+        hand_action = self._extract_hand_action(low)
+        if hand_action is not None:
+            action, side = hand_action
+            verb = "Opening" if action == "open" else "Closing"
+            noun = "hands" if side == "both" else f"{side} hand"
+            return {"intent": "hand_action", "announce": f"{verb} my {noun}.", "action": action, "side": side, "needs_knowledge": False}
+        look_for = self._extract_look_for(low)
+        if look_for is not None:
+            return {"intent": "set_prompt", "announce": f"Looking for {look_for}.", "object": look_for, "needs_knowledge": False}
+        grab_object = self._extract_grab_object(low)
+        if grab_object is not None:
+            return {"intent": "grab", "announce": f"Grabbing the {grab_object}.", "object": grab_object, "needs_knowledge": False}
+        if "list" in low and "point" in low:
+            return {"intent": "list_points", "announce": "Listing saved points.", "needs_knowledge": False}
+        if self._wants_clear_points(low):
+            return {"intent": "clear_points", "announce": "Clearing saved points.", "needs_knowledge": False}
+        if "status" in low:
+            return {"intent": "status", "announce": "Checking navigation status.", "needs_knowledge": False}
+        if self._is_thanks_text(low):
+            return {"intent": "thanks", "announce": self._thanks_answer(low), "needs_knowledge": False}
+        if self._is_chat_text(low):
+            return {"intent": "chat", "announce": "", "needs_knowledge": False}
+        if self._is_knowledge_question(low):
+            return {"intent": "rag_question", "announce": "Let me check my local knowledge.", "needs_knowledge": True}
+        gesture = self._extract_gesture(low)
+        if gesture is not None:
+            action, announce = gesture
+            return {"intent": "gesture", "announce": announce, "motion": action, "needs_knowledge": False}
+        return {
+            "intent": "unknown",
+            "announce": "I did not understand that navigation command.",
+            "needs_knowledge": False,
+        }
+
+    def _say_action_announce(self, text: str) -> None:
+        if not self._planned_announce_active:
+            self._say(text)
 
     def _dispatch(self, text: str) -> dict[str, Any]:
         low = normalize_text(text)
@@ -1252,7 +1449,7 @@ class NavBotNode(Node):
         loco = self._extract_locomotion(low)
         if loco is not None:
             vx, vy, vyaw, announce = loco
-            self._say(announce)
+            self._say_action_announce(announce)
             self.motion.move_for(vx=vx, vy=vy, vyaw=vyaw)
             return {"ok": True, "code": 0, "intent": "locomotion", "vx": vx, "vy": vy, "vyaw": vyaw, "answer": ""}
 
@@ -1273,28 +1470,28 @@ class NavBotNode(Node):
         if self._wants_stop_grabbing(low):
             if not self.gripping.enabled:
                 return {"ok": False, "code": 1, "intent": "stop_grabbing", "answer": "The gripping system is not available right now."}
-            self._say("Stopping grab.")
+            self._say_action_announce("Stopping grab.")
             result = self.gripping.stop_grabbing()
             return {"ok": bool(result.get("ok")), "code": 0, "intent": "stop_grabbing", "answer": ""}
 
         if self._wants_release_arms(low):
             if not self.gripping.enabled:
                 return {"ok": False, "code": 1, "intent": "release_arms", "answer": "The gripping system is not available right now."}
-            self._say("Releasing my arms.")
+            self._say_action_announce("Releasing my arms.")
             result = self.gripping.release_arms()
             return {"ok": bool(result.get("ok")), "code": 0, "intent": "release_arms", "answer": ""}
 
         if self._wants_stable_hold(low):
             if not self.gripping.enabled:
                 return {"ok": False, "code": 1, "intent": "stable_hold", "answer": "The gripping system is not available right now."}
-            self._say("Moving to a stable hold.")
+            self._say_action_announce("Moving to a stable hold.")
             result = self.gripping.stable_hold()
             return {"ok": bool(result.get("ok")), "code": 0, "intent": "stable_hold", "answer": ""}
 
         if self._wants_extend_arm(low):
             if not self.gripping.enabled:
                 return {"ok": False, "code": 1, "intent": "extend_arm", "answer": "The gripping system is not available right now."}
-            self._say("Extending my arm.")
+            self._say_action_announce("Extending my arm.")
             result = self.gripping.extend_arm()
             return {"ok": bool(result.get("ok")), "code": 0, "intent": "extend_arm", "answer": ""}
 
@@ -1302,7 +1499,7 @@ class NavBotNode(Node):
         if arm_side is not None:
             if not self.gripping.enabled:
                 return {"ok": False, "code": 1, "intent": "select_arm", "answer": "The gripping system is not available right now."}
-            self._say(f"Switching to the {arm_side} arm.")
+            self._say_action_announce(f"Switching to the {arm_side} arm.")
             result = self.gripping.select_arm(arm_side)
             return {"ok": bool(result.get("ok")), "code": 0, "intent": "select_arm", "arm": arm_side, "answer": ""}
 
@@ -1313,7 +1510,7 @@ class NavBotNode(Node):
             action, side = hand_action
             verb = "Opening" if action == "open" else "Closing"
             noun = "hands" if side == "both" else f"{side} hand"
-            self._say(f"{verb} my {noun}.")
+            self._say_action_announce(f"{verb} my {noun}.")
             if side == "both":
                 result_left = self.gripping.hand_action(action, "left")
                 result_right = self.gripping.hand_action(action, "right")
@@ -1327,7 +1524,7 @@ class NavBotNode(Node):
         if look_for is not None:
             if not self.gripping.enabled:
                 return {"ok": False, "code": 1, "intent": "set_prompt", "answer": "The gripping system is not available right now."}
-            self._say(f"Looking for {look_for}.")
+            self._say_action_announce(f"Looking for {look_for}.")
             result = self.gripping.set_prompt(look_for)
             return {"ok": bool(result.get("ok")), "code": 0, "intent": "set_prompt", "answer": ""}
 
@@ -1335,7 +1532,7 @@ class NavBotNode(Node):
         if grab_object is not None:
             if not self.gripping.enabled:
                 return {"ok": False, "code": 1, "intent": "grab", "answer": "The gripping system is not available right now."}
-            self._say(f"Grabbing the {grab_object}.")
+            self._say_action_announce(f"Grabbing the {grab_object}.")
             result = self.gripping.grab(grab_object)
             if result.get("ok"):
                 return {"ok": True, "code": 0, "intent": "grab", "object": grab_object, "answer": ""}
@@ -1355,12 +1552,38 @@ class NavBotNode(Node):
         if "status" in low:
             return {"ok": True, "code": 0, "intent": "status", "status": self.nav.status(), "answer": "Navigation status is available."}
 
+        if self._is_chat_text(low):
+            return {"ok": True, "code": 0, "intent": "chat", "answer": self._chat_answer(text)}
+
+        if self._is_thanks_text(low):
+            return {"ok": True, "code": 0, "intent": "thanks", "answer": self._thanks_answer(low)}
+
         if self._is_knowledge_question(low):
             answer, used_knowledge = self._rag_answer(text)
             if used_knowledge:
                 return {"ok": True, "code": 0, "intent": "rag_question", "used_knowledge": True, "answer": answer}
 
-        return {"ok": False, "code": 1, "intent": "unknown", "answer": ""}
+        gesture = self._extract_gesture(low)
+        if gesture is not None:
+            action, announce = gesture
+            result = self.gestures.play(action)
+            if result.get("ok"):
+                return {"ok": True, "code": int(result.get("code", 0)), "intent": "gesture", "motion": action, "answer": ""}
+            return {
+                "ok": False,
+                "code": int(result.get("code", 1) or 1),
+                "intent": "gesture",
+                "motion": action,
+                "answer": f"I could not run that gesture: {result.get('error', 'gesture failed')}.",
+                "raw": result,
+            }
+
+        return {
+            "ok": False,
+            "code": 1,
+            "intent": "unknown",
+            "answer": "I did not understand that navigation command.",
+        }
 
     def _rag_answer(self, text: str) -> tuple[str, bool]:
         context = ""
@@ -1424,6 +1647,67 @@ class NavBotNode(Node):
             return True
         first = low.split(" ", 1)[0] if low else ""
         return first in {"what", "why", "how", "when", "where", "who", "which"} and bool(tokenize(low))
+
+    @staticmethod
+    def _extract_gesture(low: str) -> tuple[str, str] | None:
+        if "clap" in low or "applaud" in low or "lap your hands" in low or "sap your hands" in low:
+            return "clap", "I will clap."
+        if "high five" in low or "high-five" in low:
+            return "high_five", "High five."
+        if "shake hand" in low or "shake hands" in low or "handshake" in low:
+            return "shake_hand", "Nice to meet you."
+        if "hug" in low:
+            return "hug", "Giving a hug gesture."
+        if "right heart" in low:
+            return "right_heart", "Making a right-heart gesture."
+        if "heart" in low and any(word in low for word in ("make", "do", "show", "gesture", "pose")):
+            return "heart", "Making a heart gesture."
+        if "hands up" in low or "raise your hands" in low or "put your hands up" in low:
+            return "hands_up", "Putting my hands up."
+        if "x ray" in low or "x-ray" in low:
+            return "x_ray", "Doing the x-ray gesture."
+        if "right hand up" in low or "raise your right hand" in low:
+            return "right_hand_up", "Raising my right hand."
+        if "reject" in low or "refuse" in low:
+            return "reject", "Rejecting."
+        if "two hand kiss" in low or "two-hand kiss" in low:
+            return "two_hand_kiss", "Blowing a kiss."
+        if "right kiss" in low:
+            return "right_kiss", "Blowing a right-hand kiss."
+        if "left kiss" in low or "blow a kiss" in low:
+            return "left_kiss", "Blowing a kiss."
+        if "high wave" in low or "big wave" in low or "wave high" in low:
+            return "high_wave", "Waving."
+        if "wave" in low or "greet" in low or "say hello with your hand" in low:
+            return "face_wave", "Hello."
+        return None
+
+    @staticmethod
+    def _is_chat_text(low: str) -> bool:
+        if low in {"hello", "hi", "hey", "good morning", "good afternoon", "good evening"}:
+            return True
+        return low in {"how are you", "how are you doing", "what can you do", "who are you"}
+
+    @staticmethod
+    def _is_thanks_text(low: str) -> bool:
+        return any(word in low for word in ("thank", "thanks", "danke"))
+
+    @staticmethod
+    def _thanks_answer(low: str) -> str:
+        if any(phrase in low for phrase in ("say thank you", "say thanks", "thank them", "thank everyone")):
+            return "Thank you."
+        return "You're welcome."
+
+    @staticmethod
+    def _chat_answer(text: str) -> str:
+        low = normalize_text(text)
+        if low in {"hello", "hi", "hey", "good morning", "good afternoon", "good evening"}:
+            return "Hello. I am ready for navigation and gripping commands."
+        if low == "who are you":
+            return "I am the navigation and gripping voice controller for this G1 robot."
+        if low == "what can you do":
+            return "I can navigate to saved points, manage mapping, look for objects, and control gripping actions."
+        return "I am ready."
 
     @staticmethod
     def _wants_clear_points(low: str) -> bool:
@@ -1829,10 +2113,39 @@ def run_slam_worker(args: argparse.Namespace) -> int:
     return 0 if result.get("ok") else 1
 
 
+def run_gesture_worker(args: argparse.Namespace) -> int:
+    action_key = GESTURE_ACTIONS.get(str(args.gesture_worker).strip().lower(), str(args.gesture_worker).strip().lower())
+    result: dict[str, Any]
+    try:
+        if action_key not in set(GESTURE_ACTIONS.values()):
+            result = {"ok": False, "code": 2, "error": f"unsupported gesture: {action_key}", "action": action_key}
+        else:
+            ensure_channel_factory_initialized(int(args.domain_id), str(args.iface))
+            from sdk_client import Robot
+
+            robot = Robot(
+                iface=str(args.iface),
+                domain_id=int(args.domain_id),
+                safety_boot=False,
+                recover_dev_mode_on_init=False,
+                auto_start_sensors=False,
+            )
+            method = getattr(robot, action_key)
+            code = int(method())
+            result = {"ok": code == 0, "code": code, "action": action_key}
+    except Exception as exc:
+        result = {"ok": False, "code": 1, "error": str(exc), "action": action_key}
+
+    print(json.dumps(result, sort_keys=True, default=str), flush=True)
+    return 0 if result.get("ok") else 1
+
+
 def main() -> int:
     args = parse_args()
     if args.slam_worker:
         return run_slam_worker(args)
+    if args.gesture_worker:
+        return run_gesture_worker(args)
     node: NavBotNode | None = None
     try:
         rclpy.init()

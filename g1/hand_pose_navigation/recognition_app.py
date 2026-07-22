@@ -176,6 +176,7 @@ class SharedState:
         self.frame_seq: int = 0
         self.hand_fk_base: Dict[str, np.ndarray] = {}
         self.hand_fk_T_base: Dict[str, np.ndarray] = {}
+        self.lowstate_q_full: Optional[np.ndarray] = None
         self.hand_fk_ts: float = 0.0
         self.hand_fk_status: str = "FK hand: starting"
         self.extended_hand_R_base: Dict[str, np.ndarray] = {}
@@ -560,6 +561,7 @@ def _hand_fk_loop(iface: str, domain_id: int) -> None:
                 for side, T_base_hand in hand_T.items()
             }
             with STATE.lock:
+                STATE.lowstate_q_full = q_full.copy()
                 STATE.hand_fk_base = hands
                 STATE.hand_fk_T_base = hand_T
                 STATE.hand_fk_ts = float(ts or time.time())
@@ -586,7 +588,7 @@ def _make_control_robot(iface: str, domain_id: int):
         robot = Robot(
             iface=iface,
             domain_id=domain_id,
-            auto_start_sensors=True,
+            auto_start_sensors=False,
         )
         return robot, "control robot ready"
     except Exception as exc:
@@ -1449,6 +1451,10 @@ def _refresh(_n, view_name):
     elif selected_id is not None:
         selected_label = "Selected object is no longer visible."
 
+    control_status = globals().get("_CONTROL_STATUS", "control status unknown")
+    if control_status and control_status not in status_msg:
+        status_msg = f"{status_msg} | control: {control_status}"
+
     return (
         view_src, det_list, status_msg, camera_tf_status,
         "\n".join(grab_log), grab_disabled, selected_label, obstacle_status,
@@ -1601,6 +1607,24 @@ def _buttons(
     if not ctx.triggered:
         return no_update
     trigger = ctx.triggered[0]["prop_id"].split(".")[0]
+    control_buttons = {
+        "grab-btn",
+        "prepare-btn",
+        "walk-btn",
+        "stop-moving-btn",
+        "extend-arm-btn",
+        "stop-grabbing-btn",
+        "release-arms-btn",
+        "unrelease-arms-btn",
+        "hand-open-btn",
+        "hand-close-btn",
+        "damp-btn",
+    }
+    if trigger in control_buttons and globals().get("_CONTROL_ROBOT") is None:
+        status = str(globals().get("_CONTROL_STATUS", "control robot unavailable"))
+        with STATE.lock:
+            STATE.status_msg = status
+        return f"Control unavailable: {status}"
 
     if trigger == "grab-btn":
         _log("[recognition_app] Grab button clicked.")
@@ -1917,30 +1941,24 @@ def _run_stop_grabbing() -> None:
 
 
 def _read_current_arm_q(robot, arm: str) -> np.ndarray:
-    js = robot.get_joint_states()
-    joints = js.get("joints", {}) if js else {}
     joint_indices = LEFT_ARM_JOINTS if arm == "left" else RIGHT_ARM_JOINTS
-    seen_indices = set()
-    q_full = np.zeros(30, dtype=np.float64)
-    for name, data in joints.items():
-        idx = _joint_entry_index(name, data)
-        if 0 <= idx < q_full.size and data.get("position") is not None:
-            q_full[idx] = float(data.get("position"))
-            seen_indices.add(idx)
-    missing = [idx for idx in joint_indices if idx not in seen_indices]
-    if missing:
-        raise RuntimeError(f"cannot read current {arm} arm joints from lowstate; missing indices {missing}")
+    with STATE.lock:
+        q_full = None if STATE.lowstate_q_full is None else STATE.lowstate_q_full.copy()
+        ts = float(STATE.hand_fk_ts)
+    if q_full is None or (time.time() - ts) > STALE_AFTER_S:
+        raise RuntimeError(f"cannot read current {arm} arm joints from shared lowstate; lowstate is stale or unavailable")
     return q_full[joint_indices]
 
 
 def _read_joint_position(robot, joint_index: int) -> float:
-    js = robot.get_joint_states()
-    joints = js.get("joints", {}) if js else {}
-    for name, data in joints.items():
-        idx = _joint_entry_index(name, data)
-        if idx == int(joint_index) and data.get("position") is not None:
-            return float(data.get("position"))
-    raise RuntimeError(f"cannot read joint index {joint_index} from lowstate")
+    with STATE.lock:
+        q_full = None if STATE.lowstate_q_full is None else STATE.lowstate_q_full.copy()
+        ts = float(STATE.hand_fk_ts)
+    if q_full is None or (time.time() - ts) > STALE_AFTER_S:
+        raise RuntimeError(f"cannot read joint index {joint_index} from shared lowstate; lowstate is stale or unavailable")
+    if int(joint_index) < 0 or int(joint_index) >= q_full.size:
+        raise RuntimeError(f"joint index {joint_index} is outside shared lowstate size {q_full.size}")
+    return float(q_full[int(joint_index)])
 
 
 def _center_object_with_waist_yaw(
@@ -2763,6 +2781,13 @@ def _api_authorized() -> bool:
     return auth == f"Bearer {token}"
 
 
+def _api_control_unavailable():
+    status = str(globals().get("_CONTROL_STATUS", "control robot unavailable"))
+    with STATE.lock:
+        STATE.status_msg = status
+    return jsonify({"ok": False, "error": "control_unavailable", "status": status}), 503
+
+
 def _find_detection_by_label(name: str) -> Optional[Detection]:
     wanted = str(name).strip().lower()
     if not wanted:
@@ -2862,6 +2887,8 @@ def api_stop_moving():
 def api_extend_arm():
     if not _api_authorized():
         return jsonify({"ok": False, "error": "unauthorized"}), 401
+    if _CONTROL_ROBOT is None:
+        return _api_control_unavailable()
     threading.Thread(target=_run_extend_arm, daemon=True).start()
     return jsonify({"ok": True, "started": True})
 
@@ -2916,6 +2943,8 @@ def api_stable_hold():
 def api_damp():
     if not _api_authorized():
         return jsonify({"ok": False, "error": "unauthorized"}), 401
+    if _CONTROL_ROBOT is None:
+        return _api_control_unavailable()
     threading.Thread(target=_run_damp, daemon=True).start()
     return jsonify({"ok": True, "started": True})
 

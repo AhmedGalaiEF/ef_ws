@@ -275,6 +275,9 @@ def start_toggle_listener(toggle_key: str) -> queue.Queue[str]:
         import msvcrt
         while True:
             ch = msvcrt.getwch()
+            if ch in {"\x03", "\x1a"}:
+                events.put("interrupt")
+                return
             if ch == wanted or (wanted == "\r" and ch in {"\r", "\n"}):
                 events.put("toggle")
 
@@ -290,6 +293,9 @@ def start_toggle_listener(toggle_key: str) -> queue.Queue[str]:
                 if not readable:
                     continue
                 ch = sys.stdin.read(1)
+                if ch in {"\x03", "\x04"}:
+                    events.put("interrupt")
+                    return
                 if ch == wanted or (wanted == "\r" and ch in {"\r", "\n"}):
                     events.put("toggle")
         finally:
@@ -352,7 +358,11 @@ def main() -> int:
     try:
         while True:
             while not toggles.empty():
-                toggles.get_nowait()
+                event = toggles.get_nowait()
+                if event == "interrupt":
+                    raise KeyboardInterrupt
+                if event != "toggle":
+                    continue
                 recording = not recording
                 if recording:
                     chunks = []
@@ -366,7 +376,7 @@ def main() -> int:
                     chunks = []
                     print("paused", flush=True)
             if not recording:
-                time.sleep(0.05)
+                time.sleep(0.02)
                 continue
             audio, _rms = record_seconds(args, max(0.05, float(args.slice_seconds)))
             chunks.append(audio)
