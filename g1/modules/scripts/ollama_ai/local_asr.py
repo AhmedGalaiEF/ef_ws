@@ -27,11 +27,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--backend", choices=("auto", "faster-whisper", "whisper", "vosk"), default="auto")
     parser.add_argument("--model", default="tiny.en",
                         help="faster-whisper/openai-whisper model name, or Vosk model directory.")
-    parser.add_argument("--device", default=None,
+    parser.add_argument("--device", default=os.environ.get("LOCAL_ASR_DEVICE", "20" if os.name == "nt" else None),
                         help="sounddevice input device id/name. Use --list-devices to inspect.")
     parser.add_argument("--level-meter", action="store_true",
                         help="Print per-slice RMS while recording to debug microphone/device selection.")
-    parser.add_argument("--record-dtype", choices=("float32", "int16"), default="float32",
+    parser.add_argument("--record-dtype", choices=("float32", "int16"),
+                        default=os.environ.get("LOCAL_ASR_RECORD_DTYPE", "int16" if os.name == "nt" else "float32"),
                         help="PortAudio capture dtype. Try int16 on Windows devices that return silent float32 samples.")
     parser.add_argument("--save-debug-wav", default="",
                         help="Optional path to save the next transcribed/quiet chunk exactly as Python recorded it.")
@@ -42,12 +43,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--download-root", default=None,
                         help="Optional faster-whisper model download/cache directory.")
     parser.add_argument("--list-devices", action="store_true")
-    parser.add_argument("--sample-rate", type=int, default=16000,
+    parser.add_argument("--sample-rate", type=int, default=int(os.environ.get("LOCAL_ASR_SAMPLE_RATE", "0" if os.name == "nt" else "16000")),
                         help="Input sample rate. Use 0 to use the device default; invalid rates fall back automatically.")
     parser.add_argument("--chunk-seconds", type=float, default=4.0)
     parser.add_argument("--min-rms", type=float, default=0.00005,
                         help="Skip chunks quieter than this RMS level.")
-    parser.add_argument("--gain", type=float, default=1.0,
+    parser.add_argument("--gain", type=float, default=float(os.environ.get("LOCAL_ASR_GAIN", "20.0" if os.name == "nt" else "1.0")),
                         help="Multiply recorded audio before transcription. Useful for very quiet Windows inputs.")
     parser.add_argument("--normalize-rms", type=float, default=0.06,
                         help="Normalize non-quiet chunks to this RMS before writing WAV; use 0 to disable.")
@@ -457,6 +458,11 @@ def main() -> int:
         list_devices()
         return 0
     args.sample_rate = validate_input_device(resolve_input_device(args.device), int(args.sample_rate), str(args.record_dtype))
+    print(
+        f"Audio input: device={args.device!r} sample_rate={int(args.sample_rate)} "
+        f"dtype={args.record_dtype} gain={float(args.gain):g}",
+        flush=True,
+    )
 
     try:
         backend = make_backend(args)
