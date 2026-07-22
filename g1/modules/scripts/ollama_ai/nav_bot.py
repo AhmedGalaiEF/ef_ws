@@ -450,6 +450,13 @@ class NavState:
             self._save_points()
             return {"code": 0, "ok": True, "raw": {"name": clean, **pose.as_dict(), "point_count": len(self.points)}}
 
+    def clear_points(self) -> dict[str, Any]:
+        with self.lock:
+            count = len(self.points)
+            self.points = {}
+            self._save_points()
+            return {"code": 0, "ok": True, "raw": {"cleared": count}}
+
     def find_point(self, requested_name: str) -> tuple[str | None, PoseTarget | None, float]:
         wanted = clean_point_name(requested_name)
         if not wanted:
@@ -680,10 +687,22 @@ class NavBotNode(Node):
             answer = "I do not have any saved points." if not names else "Saved points are " + ", ".join(names) + "."
             return {"ok": True, "code": 0, "intent": "list_points", "points": names, "answer": answer}
 
+        if self._wants_clear_points(low):
+            result = self.nav.clear_points()
+            count = result.get("raw", {}).get("cleared", 0) if isinstance(result.get("raw"), dict) else 0
+            answer = f"Cleared {count} saved points." if result["ok"] else "I could not clear the saved points."
+            return {"intent": "clear_points", **result, "answer": answer}
+
         if "status" in low:
             return {"ok": True, "code": 0, "intent": "status", "status": self.nav.status(), "answer": "Navigation status is available."}
 
         return {"ok": False, "code": 1, "intent": "unknown", "answer": ""}
+
+    @staticmethod
+    def _wants_clear_points(low: str) -> bool:
+        if "point" not in low:
+            return False
+        return any(phrase in low for phrase in ("clear", "erase", "reset", "delete all", "forget all", "remove all"))
 
     @staticmethod
     def _wants_start_mapping(low: str) -> bool:

@@ -479,6 +479,13 @@ class NavState:
             self._save_points()
             return {"code": 0, "ok": True, "raw": {"name": clean, **pose.as_dict(), "point_count": len(self.points)}}
 
+    def clear_points(self) -> dict[str, Any]:
+        with self.lock:
+            count = len(self.points)
+            self.points = {}
+            self._save_points()
+            return {"code": 0, "ok": True, "raw": {"cleared": count}}
+
     def find_point(self, requested_name: str) -> tuple[str | None, PoseTarget | None, float]:
         wanted = clean_point_name(requested_name)
         if not wanted:
@@ -686,6 +693,15 @@ class GrippingClient:
 
     def grab(self, object_name: str) -> dict[str, Any]:
         return self._request("POST", "/api/grab", {"object": object_name})
+
+    def hand_action(self, action: str, side: str) -> dict[str, Any]:
+        return self._request("POST", f"/api/hand/{side}/{action}")
+
+    def stable_hold(self) -> dict[str, Any]:
+        return self._request("POST", "/api/stable_hold")
+
+    def stop_grabbing(self) -> dict[str, Any]:
+        return self._request("POST", "/api/stop_grabbing")
 
     def stop(self) -> None:
         proc = self.proc
@@ -961,12 +977,26 @@ class NavBotNode(Node):
             answer = "I do not see any objects right now." if not labels else "I can see " + ", ".join(labels) + "."
             return {"ok": True, "code": 0, "intent": "list_objects", "objects": labels, "answer": answer}
 
+        if self._wants_stop_grabbing(low):
+            if not self.gripping.enabled:
+                return {"ok": False, "code": 1, "intent": "stop_grabbing", "answer": "The gripping system is not available right now."}
+            self._say("Stopping grab.")
+            result = self.gripping.stop_grabbing()
+            return {"ok": bool(result.get("ok")), "code": 0, "intent": "stop_grabbing", "answer": ""}
+
         if self._wants_release_arms(low):
             if not self.gripping.enabled:
                 return {"ok": False, "code": 1, "intent": "release_arms", "answer": "The gripping system is not available right now."}
             self._say("Releasing my arms.")
             result = self.gripping.release_arms()
             return {"ok": bool(result.get("ok")), "code": 0, "intent": "release_arms", "answer": ""}
+
+        if self._wants_stable_hold(low):
+            if not self.gripping.enabled:
+                return {"ok": False, "code": 1, "intent": "stable_hold", "answer": "The gripping system is not available right now."}
+            self._say("Moving to a stable hold.")
+            result = self.gripping.stable_hold()
+            return {"ok": bool(result.get("ok")), "code": 0, "intent": "stable_hold", "answer": ""}
 
         if self._wants_extend_arm(low):
             if not self.gripping.enabled:
@@ -982,6 +1012,23 @@ class NavBotNode(Node):
             self._say(f"Switching to the {arm_side} arm.")
             result = self.gripping.select_arm(arm_side)
             return {"ok": bool(result.get("ok")), "code": 0, "intent": "select_arm", "arm": arm_side, "answer": ""}
+
+        hand_action = self._extract_hand_action(low)
+        if hand_action is not None:
+            if not self.gripping.enabled:
+                return {"ok": False, "code": 1, "intent": "hand_action", "answer": "The gripping system is not available right now."}
+            action, side = hand_action
+            verb = "Opening" if action == "open" else "Closing"
+            noun = "hands" if side == "both" else f"{side} hand"
+            self._say(f"{verb} my {noun}.")
+            if side == "both":
+                result_left = self.gripping.hand_action(action, "left")
+                result_right = self.gripping.hand_action(action, "right")
+                ok = bool(result_left.get("ok")) and bool(result_right.get("ok"))
+            else:
+                result = self.gripping.hand_action(action, side)
+                ok = bool(result.get("ok"))
+            return {"ok": ok, "code": 0, "intent": "hand_action", "action": action, "side": side, "answer": ""}
 
         look_for = self._extract_look_for(low)
         if look_for is not None:
@@ -1006,10 +1053,22 @@ class NavBotNode(Node):
             answer = "I do not have any saved points." if not names else "Saved points are " + ", ".join(names) + "."
             return {"ok": True, "code": 0, "intent": "list_points", "points": names, "answer": answer}
 
+        if self._wants_clear_points(low):
+            result = self.nav.clear_points()
+            count = result.get("raw", {}).get("cleared", 0) if isinstance(result.get("raw"), dict) else 0
+            answer = f"Cleared {count} saved points." if result["ok"] else "I could not clear the saved points."
+            return {"intent": "clear_points", **result, "answer": answer}
+
         if "status" in low:
             return {"ok": True, "code": 0, "intent": "status", "status": self.nav.status(), "answer": "Navigation status is available."}
 
         return {"ok": False, "code": 1, "intent": "unknown", "answer": ""}
+
+    @staticmethod
+    def _wants_clear_points(low: str) -> bool:
+        if "point" not in low:
+            return False
+        return any(phrase in low for phrase in ("clear", "erase", "reset", "delete all", "forget all", "remove all"))
 
     @staticmethod
     def _wants_start_mapping(low: str) -> bool:
@@ -1114,6 +1173,11 @@ class NavBotNode(Node):
         return any(phrase in low for phrase in phrases)
 
     @staticmethod
+    def _wants_stop_grabbing(low: str) -> bool:
+        phrases = ("stop grabbing", "cancel grabbing", "cancel the grab", "abort grab", "abort the grab")
+        return any(phrase in low for phrase in phrases)
+
+    @staticmethod
     def _wants_release_arms(low: str) -> bool:
         phrases = ("release arm", "release arms", "release your arm", "release your arms")
         return any(phrase in low for phrase in phrases)
@@ -1122,6 +1186,35 @@ class NavBotNode(Node):
     def _wants_extend_arm(low: str) -> bool:
         phrases = ("extend arm", "extend your arm", "extend the arm")
         return any(phrase in low for phrase in phrases)
+
+    @staticmethod
+    def _wants_stable_hold(low: str) -> bool:
+        phrases = ("stable hold", "hold stable", "stable pose", "safe hold")
+        return any(phrase in low for phrase in phrases)
+
+    @staticmethod
+    def _extract_hand_action(low: str) -> tuple[str, str] | None:
+        if "hand" not in low:
+            return None
+        if "open" in low:
+            action = "open"
+        elif "close" in low:
+            action = "close"
+        else:
+            return None
+        has_left = "left" in low
+        has_right = "right" in low
+        if has_left and has_right:
+            side = "both"
+        elif has_left:
+            side = "left"
+        elif has_right:
+            side = "right"
+        elif "hands" in low or "both" in low:
+            side = "both"
+        else:
+            return None
+        return action, side
 
     @staticmethod
     def _extract_select_arm_side(low: str) -> str | None:

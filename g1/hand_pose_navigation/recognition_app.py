@@ -241,6 +241,25 @@ DEFAULT_POST_GRASP_LIFT_M = 0.08
 DEFAULT_POST_GRASP_LIFT_DURATION_S = 2.5
 DEFAULT_DETECTION_PROMPT = "coffee cup"
 
+# Built-in "stable_hold" joint pose, copied from WBC/ik_pose_cli_v3.py's
+# STABLE_HOLD_ARM_JOINTS (the pose the IK pose tool ships with by default).
+STABLE_HOLD_ARM_JOINTS: Dict[int, float] = {
+    LEFT_ARM_JOINTS[0]: 0.000,
+    LEFT_ARM_JOINTS[1]: 1.000,
+    LEFT_ARM_JOINTS[2]: 0.105,
+    LEFT_ARM_JOINTS[3]: -0.100,
+    LEFT_ARM_JOINTS[4]: -0.368,
+    LEFT_ARM_JOINTS[5]: 0.164,
+    LEFT_ARM_JOINTS[6]: 0.000,
+    RIGHT_ARM_JOINTS[0]: 0.323,
+    RIGHT_ARM_JOINTS[1]: -0.307,
+    RIGHT_ARM_JOINTS[2]: -0.080,
+    RIGHT_ARM_JOINTS[3]: -0.688,
+    RIGHT_ARM_JOINTS[4]: 0.328,
+    RIGHT_ARM_JOINTS[5]: 0.140,
+    RIGHT_ARM_JOINTS[6]: 0.000,
+}
+
 
 class _MockRobot:
     """Frame source + no-op safety calls, used with --mock."""
@@ -1463,13 +1482,24 @@ def _buttons(
 # Background actions
 # ---------------------------------------------------------------------------
 
-def _run_release_arms() -> None:
+def _acquire_arm_control(waiting_msg: str, timeout_s: float = 3.0) -> None:
+    """Cancel any in-progress arm motion (e.g. a running grab) and take the lock.
+
+    Setting ARM_CANCEL_EVENT makes grab/extend loops stop at their next check
+    (within ~0.2s) and release ARM_CONTROL_LOCK in their own finally block, so
+    the blocking acquire() below is guaranteed to return rather than hang —
+    this is what lets a command like "stable hold" take over promptly right
+    after (or during) a grab instead of being silently dropped as "busy".
+    """
     ARM_CANCEL_EVENT.set()
-    acquired = ARM_CONTROL_LOCK.acquire(timeout=3.0)
-    if not acquired:
+    if not ARM_CONTROL_LOCK.acquire(timeout=timeout_s):
         with STATE.lock:
-            STATE.status_msg = "release_arms() waiting: arm controller is busy"
+            STATE.status_msg = waiting_msg
         ARM_CONTROL_LOCK.acquire()
+
+
+def _run_release_arms() -> None:
+    _acquire_arm_control("release_arms() waiting: arm controller is busy")
     try:
         with STATE.lock:
             STATE.arm_motion_running = True
@@ -1493,10 +1523,7 @@ def _run_release_arms() -> None:
 
 
 def _run_unrelease_arms() -> None:
-    if not ARM_CONTROL_LOCK.acquire(blocking=False):
-        with STATE.lock:
-            STATE.status_msg = "unrelease_arms() skipped: arm controller is busy"
-        return
+    _acquire_arm_control("unrelease_arms() waiting: arm controller is busy")
     try:
         ARM_CANCEL_EVENT.clear()
         with STATE.lock:
@@ -1563,6 +1590,10 @@ def _run_hand_action(action: str) -> None:
     with STATE.lock:
         arm_override = STATE.arm_override
     side = _hand_side_from_override(arm_override)
+    _run_hand_action_for_side(action, side)
+
+
+def _run_hand_action_for_side(action: str, side: str) -> None:
     try:
         feedback_available = _send_hand_action(action, side)
         with STATE.lock:
@@ -1571,6 +1602,30 @@ def _run_hand_action(action: str) -> None:
     except Exception as exc:
         with STATE.lock:
             STATE.status_msg = f"hand_{action}({side}) failed: {exc}"
+
+
+def _run_stable_hold() -> None:
+    _acquire_arm_control("stable hold waiting: arm controller is busy")
+    try:
+        ARM_CANCEL_EVENT.clear()
+        with STATE.lock:
+            STATE.arm_motion_running = True
+            STATE.arm_motion_label = "stable hold"
+        if _CONTROL_ROBOT is None:
+            raise RuntimeError(_CONTROL_STATUS)
+        _ensure_arm_authority(_CONTROL_ROBOT, duration_s=0.4)
+        result = _CONTROL_ROBOT.hold_arm_pose(STABLE_HOLD_ARM_JOINTS)
+        with STATE.lock:
+            STATE.status_msg = f"stable hold reached: {result}"
+    except Exception as exc:
+        with STATE.lock:
+            STATE.status_msg = f"stable hold failed: {exc}"
+    finally:
+        with STATE.lock:
+            STATE.arm_motion_running = False
+            STATE.arm_motion_label = ""
+        ARM_CANCEL_EVENT.clear()
+        ARM_CONTROL_LOCK.release()
 
 
 def _run_damp() -> None:
@@ -1952,10 +2007,7 @@ def _run_extend_arm_ee_ik(
 
 
 def _run_extend_arm() -> None:
-    if not ARM_CONTROL_LOCK.acquire(blocking=False):
-        with STATE.lock:
-            STATE.status_msg = "extend arm skipped: arm controller is busy"
-        return
+    _acquire_arm_control("extend arm waiting: arm controller is busy")
     try:
         ARM_CANCEL_EVENT.clear()
         with STATE.lock:
@@ -2618,6 +2670,14 @@ def api_extend_arm():
     return jsonify({"ok": True, "started": True})
 
 
+@app.server.route("/api/stop_grabbing", methods=["POST"])
+def api_stop_grabbing():
+    if not _api_authorized():
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    threading.Thread(target=_run_stop_grabbing, daemon=True).start()
+    return jsonify({"ok": True, "started": True})
+
+
 @app.server.route("/api/release_arms", methods=["POST"])
 def api_release_arms():
     if not _api_authorized():
@@ -2631,6 +2691,28 @@ def api_unrelease_arms():
     if not _api_authorized():
         return jsonify({"ok": False, "error": "unauthorized"}), 401
     threading.Thread(target=_run_unrelease_arms, daemon=True).start()
+    return jsonify({"ok": True, "started": True})
+
+
+@app.server.route("/api/hand/<side>/<action>", methods=["POST"])
+def api_hand_action(side: str, action: str):
+    if not _api_authorized():
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    side = str(side).strip().lower()
+    action = str(action).strip().lower()
+    if side not in {"left", "right"}:
+        return jsonify({"ok": False, "error": "invalid_side"}), 400
+    if action not in {"open", "close"}:
+        return jsonify({"ok": False, "error": "invalid_action"}), 400
+    threading.Thread(target=_run_hand_action_for_side, args=(action, side), daemon=True).start()
+    return jsonify({"ok": True, "started": True, "side": side, "action": action})
+
+
+@app.server.route("/api/stable_hold", methods=["POST"])
+def api_stable_hold():
+    if not _api_authorized():
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    threading.Thread(target=_run_stable_hold, daemon=True).start()
     return jsonify({"ok": True, "started": True})
 
 

@@ -1203,6 +1203,53 @@ class Robot:
             "joint_count": len(positions),
         }
 
+    def hold_arm_pose(
+        self,
+        arm_targets: dict[int, float],
+        *,
+        speed_rad_s: float = 0.2,
+        max_step_rad: float = 0.2,
+        command_rate_hz: float = 50.0,
+        kp: float = 30.0,
+        kd: float = 1.5,
+        waist_kp: float = WAIST_HOLD_KP,
+        waist_kd: float = WAIST_HOLD_KD,
+        tolerance_rad: float = 0.002,
+        timeout: float = 3.0,
+    ) -> dict[str, Any]:
+        """Ramp the given arm joints to arm_targets and hold there.
+
+        Joints not present in arm_targets (e.g. the waist) stay at their
+        current reading. Assumes arm_sdk authority is already engaged
+        (see unrelease_arms()/_ensure_arm_authority). Mirrors the ramp in
+        WBC/to_stable_hold.py so speed/step limits behave the same way.
+        """
+        start = self._read_upper_body_hold_pose(timeout=timeout)
+        target = dict(start)
+        target.update(arm_targets)
+        rate_hz = max(1.0, float(command_rate_hz))
+        dt = 1.0 / rate_hz
+        per_tick_delta = min(max(0.001, float(max_step_rad)), max(0.001, float(speed_rad_s)) / rate_hz)
+        arm_sdk = self._get_arm_sdk()
+        waist_gains = {joint_index: float(waist_kp) for joint_index in WAIST_JOINTS}
+        waist_damping = {joint_index: float(waist_kd) for joint_index in WAIST_JOINTS}
+        current = dict(start)
+        steps = 0
+        while max(abs(float(target[j]) - float(current[j])) for j in target) > float(tolerance_rad):
+            stepped = dict(current)
+            for joint_index, target_q in target.items():
+                cur_q = float(current[joint_index])
+                delta = float(target_q) - cur_q
+                if abs(delta) <= per_tick_delta:
+                    stepped[joint_index] = float(target_q)
+                else:
+                    stepped[joint_index] = cur_q + math.copysign(per_tick_delta, delta)
+            current = stepped
+            arm_sdk.publish_targets(current, kp=kp, kd=kd, kp_by_joint=waist_gains, kd_by_joint=waist_damping)
+            time.sleep(dt)
+            steps += 1
+        return {"steps": steps, "joint_count": len(target)}
+
     def shake_hand_action(self, *, release_after_s: float | None = HL_ARM_ACTION_DEFAULT_RELEASE_DELAY_S) -> int:
         return self.execute_arm_action("shake hand", release_after_s=release_after_s)
 
