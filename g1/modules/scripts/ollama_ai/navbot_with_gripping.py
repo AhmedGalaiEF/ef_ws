@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import http.server
+import importlib.util
 import json
 import math
 import os
@@ -87,6 +88,16 @@ LOCO_LINEAR_SPEED_MPS = 1.2
 LOCO_YAW_SPEED_RPS = 0.6
 GRIPPING_SCRIPT = G1_DIR / "hand_pose_navigation" / "recognition_app.py"
 GRIPPING_READY_TIMEOUT_S = 20.0
+WORD_RE = re.compile(r"[A-Za-z0-9_]+", re.UNICODE)
+DEFAULT_SYSTEM_PROMPT = (
+    "You are the voice of a Unitree G1 humanoid robot. Answer naturally and "
+    "concisely. Do not mention hidden reasoning, tools, or model internals."
+)
+KNOWLEDGE_SYSTEM_PROMPT = (
+    "Use the structured knowledge context when relevant. For questions about "
+    "that knowledge, answer only from context. If context does not contain the "
+    "answer, say you do not know yet. Keep it spoken and concise."
+)
 
 
 @dataclass
@@ -106,11 +117,21 @@ class PoseTarget:
         return {"x": self.x, "y": self.y, "z": self.z, "yaw": self.yaw}
 
 
+@dataclass(frozen=True)
+class KnowledgeEntry:
+    title: str
+    text: str
+    source: str
+    path: str
+    tokens: tuple[str, ...]
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Voice-command SLAM navigation bot for Unitree G1 named points, "
         "plus short locomotion steps/turns and voice control of the recognition_app.py grasp plugin."
     )
+    parser.add_argument("knowledge_file", nargs="*", help="Optional structured JSON knowledge file(s).")
     parser.add_argument("--iface", default=os.environ.get("G1_IFACE", "eth0"))
     parser.add_argument("--domain-id", type=int, default=int(os.environ.get("G1_DOMAIN_ID", "0")))
     parser.add_argument("--map-path", default="/home/unitree/test.pcd")
@@ -123,15 +144,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--external-asr-server", action="store_true")
     parser.add_argument("--external-asr-host", default="0.0.0.0")
     parser.add_argument("--external-asr-port", type=int, default=8097)
+    parser.add_argument("--external-asr-public-host", default="192.168.2.41",
+                        help="Robot hostname/IP that browser clients should use for the external ASR endpoint.")
     parser.add_argument("--external-asr-token", default="")
     parser.add_argument("--external-asr-only", "--no-ros-audio", dest="external_asr_only", action="store_true")
     parser.add_argument("--enable-motion", action="store_true",
                         help="Actually execute step/turn locomotion commands instead of only logging them.")
     parser.add_argument("--no-gripping", dest="enable_gripping", action="store_false", default=True,
-                        help="Do not launch the recognition_app.py grasp-plugin subprocess.")
+                        help="Do not launch the recognition dashboard/grasp plugin.")
+    parser.add_argument("--gripping-launch-mode", choices=("in-process", "subprocess"), default="subprocess",
+                        help="Run the recognition Dash app inside this process, or as a legacy child process.")
     parser.add_argument("--gripping-mock", action="store_true",
-                        help="Pass --mock to the recognition_app.py subprocess (no camera/robot needed).")
-    parser.add_argument("--gripping-host", default="127.0.0.1")
+                        help="Pass --mock to the recognition dashboard/grasp plugin (no camera/robot needed).")
+    parser.add_argument("--gripping-host", default="192.168.2.41")
     parser.add_argument("--gripping-port", type=int, default=8060)
     parser.add_argument("--gripping-token", default="",
                         help="Bearer token required by the recognition_app.py /api/* routes.")
@@ -150,6 +175,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--wait-for-arrival", dest="wait_for_arrival", action="store_true", default=False)
     parser.add_argument("--no-wait-for-arrival", dest="wait_for_arrival", action="store_false")
     parser.add_argument("--arrival-timeout-s", type=float, default=NAV_TARGET_TIMEOUT_S)
+    parser.add_argument("--ollama-url", default="http://127.0.0.1:11434")
+    parser.add_argument("--model", default="qwen3.5:9b")
+    parser.add_argument("--temperature", type=float, default=0.2)
+    parser.add_argument("--timeout", type=float, default=45.0)
+    parser.add_argument("--num-predict", type=int, default=160)
+    parser.add_argument("--num-ctx", type=int, default=4096)
+    parser.add_argument("--keep-alive", default="15m")
+    parser.add_argument("--knowledge-top-k", type=int, default=4)
+    parser.add_argument("--knowledge-min-score", type=float, default=0.06)
+    parser.add_argument("--knowledge-max-chars", type=int, default=2600)
     parser.add_argument("--volume", type=int, default=None)
     parser.add_argument("--tts-language", default=None)
     parser.add_argument("--no-speech", action="store_true")
@@ -167,6 +202,165 @@ def compact_text(text: str) -> str:
 
 def normalize_text(text: str) -> str:
     return compact_text(text).lower().strip(string.punctuation + "，。！？、；：")
+
+
+def tokenize(text: str) -> tuple[str, ...]:
+    return tuple(
+        token
+        for token in (match.group(0).lower() for match in WORD_RE.finditer(text))
+        if len(token) > 1 and token not in STOP_WORDS
+    )
+
+
+def flatten_leaves(value: Any, path: str = "$") -> list[tuple[str, str]]:
+    if isinstance(value, dict):
+        out: list[tuple[str, str]] = []
+        for key, child in value.items():
+            out.extend(flatten_leaves(child, f"{path}.{key}"))
+        return out
+    if isinstance(value, list):
+        out = []
+        for index, child in enumerate(value):
+            out.extend(flatten_leaves(child, f"{path}[{index}]"))
+        return out
+    if value is None:
+        return [(path, "null")]
+    if isinstance(value, bool):
+        return [(path, "true" if value else "false")]
+    if isinstance(value, (int, float, str)):
+        return [(path, str(value))]
+    return [(path, json.dumps(value, ensure_ascii=False, sort_keys=True))]
+
+
+def title_for(value: Any, fallback: str) -> str:
+    if isinstance(value, dict):
+        for key in ("title", "name", "question", "id", "label", "type", "category"):
+            found = value.get(key)
+            if isinstance(found, (str, int, float)) and str(found).strip():
+                return str(found).strip()
+    return fallback
+
+
+def entry_from_value(value: Any, *, source: str, path: str, fallback_title: str) -> KnowledgeEntry | None:
+    leaves = flatten_leaves(value, path)
+    lines = [f"{leaf_path}: {leaf_value}" for leaf_path, leaf_value in leaves if str(leaf_value).strip()]
+    title = title_for(value, fallback_title)
+    text = f"{title}\n" + "\n".join(lines)
+    tokens = tokenize(text)
+    if not lines or not tokens:
+        return None
+    return KnowledgeEntry(title=title, text=text, source=source, path=path, tokens=tokens)
+
+
+def entries_from_json(data: Any, *, source: str) -> list[KnowledgeEntry]:
+    entries: list[KnowledgeEntry] = []
+    if isinstance(data, list):
+        for index, item in enumerate(data):
+            entry = entry_from_value(item, source=source, path=f"$[{index}]", fallback_title=f"record {index + 1}")
+            if entry:
+                entries.append(entry)
+    elif isinstance(data, dict):
+        for key, value in data.items():
+            if isinstance(value, list):
+                for index, item in enumerate(value):
+                    entry = entry_from_value(item, source=source, path=f"$.{key}[{index}]", fallback_title=f"{key} {index + 1}")
+                    if entry:
+                        entries.append(entry)
+            elif isinstance(value, dict):
+                entry = entry_from_value(value, source=source, path=f"$.{key}", fallback_title=str(key))
+                if entry:
+                    entries.append(entry)
+    if not entries:
+        root = entry_from_value(data, source=source, path="$", fallback_title=Path(source).stem)
+        if root:
+            entries.append(root)
+    return entries
+
+
+class KnowledgeRetriever:
+    def __init__(self, paths: list[Path]) -> None:
+        entries: list[KnowledgeEntry] = []
+        for path in paths:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            entries.extend(entries_from_json(data, source=str(path)))
+        self.entries = entries
+        doc_count = max(1, len(entries))
+        df: dict[str, int] = {}
+        for entry in entries:
+            for token in set(entry.tokens):
+                df[token] = df.get(token, 0) + 1
+        self.idf = {token: math.log((doc_count + 1) / (freq + 0.5)) + 1.0 for token, freq in df.items()}
+
+    def search(self, query: str, *, top_k: int, min_score: float) -> list[tuple[KnowledgeEntry, float]]:
+        query_tokens = tokenize(query)
+        if not query_tokens:
+            return []
+        query_set = set(query_tokens)
+        scored: list[tuple[KnowledgeEntry, float]] = []
+        for entry in self.entries:
+            counts: dict[str, int] = {}
+            for token in entry.tokens:
+                counts[token] = counts.get(token, 0) + 1
+            score = 0.0
+            for token in query_set:
+                if token in counts:
+                    score += self.idf.get(token, 1.0) * (1.0 + math.log(counts[token]))
+            if query.strip().lower() in entry.text.lower():
+                score += 2.0
+            norm = math.sqrt(max(1, len(query_set)) * max(1, len(set(entry.tokens))))
+            score /= norm
+            if score >= min_score:
+                scored.append((entry, score))
+        scored.sort(key=lambda item: item[1], reverse=True)
+        return scored[: max(1, top_k)]
+
+    def format_context(self, query: str, *, top_k: int, min_score: float, max_chars: int) -> str:
+        parts: list[str] = []
+        total = 0
+        for index, (entry, score) in enumerate(self.search(query, top_k=top_k, min_score=min_score), start=1):
+            chunk = f"[{index}] source={entry.source} path={entry.path} score={score:.2f}\n{entry.text}"
+            remaining = max(300, max_chars) - total
+            if remaining <= 0:
+                break
+            if len(chunk) > remaining:
+                chunk = chunk[:remaining].rsplit(" ", 1)[0].strip()
+            parts.append(chunk)
+            total += len(chunk) + 2
+        return "\n\n".join(parts)
+
+
+class OllamaClient:
+    def __init__(self, args: argparse.Namespace) -> None:
+        self.args = args
+        self.base_url = str(args.ollama_url).rstrip("/")
+
+    def chat(self, messages: list[dict[str, str]], *, temperature: float | None = None, num_predict: int | None = None) -> str:
+        body: dict[str, Any] = {
+            "model": str(self.args.model),
+            "messages": messages,
+            "stream": False,
+            "think": False,
+            "keep_alive": str(self.args.keep_alive),
+            "options": {
+                "temperature": float(self.args.temperature if temperature is None else temperature),
+                "num_predict": int(self.args.num_predict if num_predict is None else num_predict),
+                "num_ctx": int(self.args.num_ctx),
+            },
+        }
+        data = json.dumps(body).encode("utf-8")
+        request = urllib.request.Request(
+            f"{self.base_url}/api/chat",
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=float(self.args.timeout)) as response:
+                result = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"Ollama HTTP {exc.code}: {detail}") from exc
+        return compact_text(str(result.get("message", {}).get("content", "")))
 
 
 def decode_payload(raw: str) -> dict[str, Any]:
@@ -604,22 +798,33 @@ class MotionClient:
 
 
 class GrippingClient:
-    """Manages the recognition_app.py grasp-plugin subprocess and its /api/* control routes."""
+    """Runs the recognition Dash grasp UI and talks to its /api/* control routes."""
 
     def __init__(self, args: argparse.Namespace, logger: Any) -> None:
         self.args = args
         self.logger = logger
         self.enabled = bool(args.enable_gripping)
-        self.base_url = f"http://{args.gripping_host}:{int(args.gripping_port)}"
+        client_host = "127.0.0.1" if str(args.gripping_host) == "0.0.0.0" else str(args.gripping_host)
+        self.base_url = f"http://{client_host}:{int(args.gripping_port)}"
         self.token = str(args.gripping_token or "")
         self.proc: subprocess.Popen[str] | None = None
+        self.output_thread: threading.Thread | None = None
+        self.app_thread: threading.Thread | None = None
+        self.app_module: Any = None
+        self.inprocess_server: Any = None
         self.ready = False
         if self.enabled:
             self._start()
 
     def _start(self) -> None:
+        if str(self.args.gripping_launch_mode) == "subprocess":
+            self._start_subprocess()
+        else:
+            self._start_in_process()
+        threading.Thread(target=self._wait_ready, daemon=True).start()
+
+    def _recognition_argv(self) -> list[str]:
         command = [
-            sys.executable,
             str(GRIPPING_SCRIPT),
             "--iface", str(self.args.iface),
             "--domain-id", str(int(self.args.domain_id)),
@@ -630,13 +835,84 @@ class GrippingClient:
             command.extend(["--api-token", self.token])
         if bool(self.args.gripping_mock):
             command.append("--mock")
+        public_asr_host = str(self.args.external_asr_public_host or "")
+        if not public_asr_host or public_asr_host in {"0.0.0.0", "::"}:
+            public_asr_host = str(self.args.gripping_host)
+        if public_asr_host in {"0.0.0.0", "::"}:
+            public_asr_host = "127.0.0.1"
+        command.extend([
+            "--voice-asr-url",
+            f"http://{public_asr_host}:{int(self.args.external_asr_port)}/asr",
+        ])
+        if str(self.args.external_asr_token or ""):
+            command.extend(["--voice-asr-token", str(self.args.external_asr_token)])
+        return command
+
+    def _start_in_process(self) -> None:
+        self.app_thread = threading.Thread(target=self._run_in_process_app, daemon=True)
+        self.app_thread.start()
+        self.logger.info(
+            f"Gripping dashboard starting in-process on {self.base_url} "
+            f"script={GRIPPING_SCRIPT}"
+        )
+
+    def _run_in_process_app(self) -> None:
+        previous_argv = list(sys.argv)
+        module_name = "_navbot_embedded_recognition_app"
+        try:
+            spec = importlib.util.spec_from_file_location(module_name, str(GRIPPING_SCRIPT))
+            if spec is None or spec.loader is None:
+                raise RuntimeError(f"Could not load {GRIPPING_SCRIPT}")
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[module_name] = module
+            sys.argv = self._recognition_argv()
+            try:
+                spec.loader.exec_module(module)
+            finally:
+                sys.argv = previous_argv
+            self.app_module = module
+            from werkzeug.serving import make_server
+
+            server = make_server(
+                host=str(self.args.gripping_host),
+                port=int(self.args.gripping_port),
+                app=module.app.server,
+                threaded=True,
+            )
+            self.inprocess_server = server
+            server.serve_forever()
+        except Exception as exc:
+            self.logger.warning(f"In-process gripping dashboard failed: {exc}")
+
+    def _start_subprocess(self) -> None:
+        command = [sys.executable, *self._recognition_argv()]
         try:
             self.proc = subprocess.Popen(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         except Exception as exc:
             self.logger.warning(f"Could not start gripping plugin: {exc}")
             return
         self.logger.info(f"Gripping plugin starting: {' '.join(command)}")
-        threading.Thread(target=self._wait_ready, daemon=True).start()
+        self.output_thread = threading.Thread(target=self._drain_output, daemon=True)
+        self.output_thread.start()
+
+    def _drain_output(self) -> None:
+        proc = self.proc
+        if proc is None or proc.stdout is None:
+            return
+        noisy_dash_paths = (
+            "/_dash-update-component",
+            "/_dash-layout",
+            "/_dash-dependencies",
+        )
+        try:
+            for line in proc.stdout:
+                line = line.rstrip()
+                if line:
+                    if any(noisy in line for noisy in noisy_dash_paths):
+                        continue
+                    self.logger.info(f"[gripping] {line}")
+        except Exception as exc:
+            self.logger.warning(f"Could not read gripping plugin output: {exc}")
 
     def _wait_ready(self) -> None:
         deadline = time.time() + GRIPPING_READY_TIMEOUT_S
@@ -704,6 +980,15 @@ class GrippingClient:
         return self._request("POST", "/api/stop_grabbing")
 
     def stop(self) -> None:
+        if self.inprocess_server is not None:
+            try:
+                self.inprocess_server.shutdown()
+            except Exception as exc:
+                self.logger.warning(f"Could not stop in-process gripping dashboard: {exc}")
+            finally:
+                self.inprocess_server = None
+        if self.app_thread is not None and self.app_thread.is_alive():
+            self.app_thread.join(timeout=1.0)
         proc = self.proc
         if proc is None:
             return
@@ -806,6 +1091,13 @@ class NavBotNode(Node):
         self.motion = MotionClient(args, self.get_logger())
         self.gripping = GrippingClient(args, self.get_logger())
         self.tactile = TactileHoldingMonitor(args, self.get_logger())
+        knowledge_paths = [Path(item).expanduser() for item in args.knowledge_file]
+        missing = [str(path) for path in knowledge_paths if not path.exists()]
+        if missing:
+            self.get_logger().warning("Knowledge file(s) not found: " + ", ".join(missing))
+        existing_knowledge_paths = [path for path in knowledge_paths if path.exists()]
+        self.retriever = KnowledgeRetriever(existing_knowledge_paths) if existing_knowledge_paths else None
+        self.ollama = OllamaClient(args) if self.retriever is not None else None
         self.speaker = Speaker(args, self.get_logger())
         self.response_pub = self.create_publisher(String, args.response_topic, 10)
         self.audit_path = Path(args.audit_log).expanduser()
@@ -828,7 +1120,8 @@ class NavBotNode(Node):
         self.get_logger().info(
             f"navbot_with_gripping ready audio={'external-only' if args.external_asr_only else args.audio_topic} "
             f"map={args.map_path} points={args.points_file} "
-            f"motion={'on' if args.enable_motion else 'off'} gripping={'on' if args.enable_gripping else 'off'}"
+            f"motion={'on' if args.enable_motion else 'off'} gripping={'on' if args.enable_gripping else 'off'} "
+            f"knowledge_entries={len(self.retriever.entries) if self.retriever is not None else 0}"
         )
         if not args.no_startup_speech and compact_text(args.startup_speech):
             self._say(args.startup_speech)
@@ -1062,7 +1355,75 @@ class NavBotNode(Node):
         if "status" in low:
             return {"ok": True, "code": 0, "intent": "status", "status": self.nav.status(), "answer": "Navigation status is available."}
 
+        if self._is_knowledge_question(low):
+            answer, used_knowledge = self._rag_answer(text)
+            if used_knowledge:
+                return {"ok": True, "code": 0, "intent": "rag_question", "used_knowledge": True, "answer": answer}
+
         return {"ok": False, "code": 1, "intent": "unknown", "answer": ""}
+
+    def _rag_answer(self, text: str) -> tuple[str, bool]:
+        context = ""
+        if self.retriever is not None:
+            context = self.retriever.format_context(
+                text,
+                top_k=int(self.args.knowledge_top_k),
+                min_score=float(self.args.knowledge_min_score),
+                max_chars=int(self.args.knowledge_max_chars),
+            )
+        if not context:
+            return "I do not know yet.", False
+        messages = [
+            {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
+            {"role": "system", "content": f"{KNOWLEDGE_SYSTEM_PROMPT}\n\nStructured knowledge context:\n{context}"},
+            {"role": "user", "content": text},
+        ]
+        try:
+            if self.ollama is None:
+                raise RuntimeError("Ollama client is not configured.")
+            answer = self.ollama.chat(messages, temperature=float(self.args.temperature), num_predict=int(self.args.num_predict))
+            return answer, True
+        except Exception as exc:
+            self.get_logger().warning(f"Ollama RAG answer failed; using local knowledge fallback: {exc}")
+            fallback = self._local_knowledge_answer(text)
+            return (fallback or "I do not know yet."), bool(fallback)
+
+    def _local_knowledge_answer(self, text: str) -> str:
+        if self.retriever is None:
+            return ""
+        matches = self.retriever.search(
+            text,
+            top_k=min(2, int(self.args.knowledge_top_k)),
+            min_score=float(self.args.knowledge_min_score),
+        )
+        if not matches:
+            return ""
+        parts: list[str] = []
+        for entry, _score in matches:
+            cleaned_lines = []
+            for line in entry.text.splitlines():
+                line = compact_text(line)
+                if not line or line.startswith("$.") or line.startswith("$["):
+                    continue
+                cleaned_lines.append(line)
+                if len(" ".join(cleaned_lines)) >= 260:
+                    break
+            summary = " ".join(cleaned_lines) or compact_text(entry.text)
+            if len(summary) > 280:
+                summary = summary[:280].rsplit(" ", 1)[0].strip()
+            parts.append(summary)
+        answer = "From my local knowledge: " + " ".join(parts)
+        if len(answer) > 650:
+            answer = answer[:650].rsplit(" ", 1)[0].strip()
+        return answer
+
+    def _is_knowledge_question(self, low: str) -> bool:
+        if self.retriever is None:
+            return False
+        if any(phrase in low for phrase in ("from your knowledge", "local knowledge", "knowledge file", "tell me about", "what is", "what are")):
+            return True
+        first = low.split(" ", 1)[0] if low else ""
+        return first in {"what", "why", "how", "when", "where", "who", "which"} and bool(tokenize(low))
 
     @staticmethod
     def _wants_clear_points(low: str) -> bool:
@@ -1260,10 +1621,10 @@ class NavBotNode(Node):
             keyword in normalized
             for keyword in (
                 "add", "arm", "close", "extend", "find", "go", "grab", "grip", "hand",
-                "hold", "list", "look", "map", "mapping", "move", "navigate", "pick",
+                "about", "hold", "how", "list", "look", "map", "mapping", "move", "navigate", "pick",
                 "point", "relocate", "release", "resume", "rotate", "save", "search",
                 "select", "slam", "start", "status", "step", "stop", "switch", "turn",
-                "walk",
+                "tell", "walk", "what", "when", "where", "which", "who", "why",
             )
         ):
             return "short_non_command_fragment"

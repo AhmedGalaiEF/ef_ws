@@ -91,6 +91,10 @@ log/
 *.jsonl
 *.csv
 
+# Local model weights
+g1/modules/scripts/ollama_ai/weights/
+g1/modules/scripts/ollama_ai/*.pt
+
 # Altegro edge runtime (moved to ~/altegro_edge/)
 g1/dev/edge_runtime/
 g1/dev/modules/scripts/altegro_client.py

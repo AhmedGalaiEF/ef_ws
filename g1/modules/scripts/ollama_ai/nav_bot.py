@@ -12,6 +12,8 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -77,6 +79,16 @@ NUMBER_WORDS = {
 NAV_REACHED_DISTANCE_M = 0.35
 NAV_TARGET_TIMEOUT_S = 120.0
 NAV_POLL_INTERVAL_S = 0.5
+WORD_RE = re.compile(r"[A-Za-z0-9_]+", re.UNICODE)
+DEFAULT_SYSTEM_PROMPT = (
+    "You are the voice of a Unitree G1 humanoid robot. Answer naturally and "
+    "concisely. Do not mention hidden reasoning, tools, or model internals."
+)
+KNOWLEDGE_SYSTEM_PROMPT = (
+    "Use the structured knowledge context when relevant. For questions about "
+    "that knowledge, answer only from context. If context does not contain the "
+    "answer, say you do not know yet. Keep it spoken and concise."
+)
 
 
 @dataclass
@@ -96,10 +108,20 @@ class PoseTarget:
         return {"x": self.x, "y": self.y, "z": self.z, "yaw": self.yaw}
 
 
+@dataclass(frozen=True)
+class KnowledgeEntry:
+    title: str
+    text: str
+    source: str
+    path: str
+    tokens: tuple[str, ...]
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Voice-command SLAM navigation bot for Unitree G1 named points."
     )
+    parser.add_argument("knowledge_file", nargs="*", help="Optional structured JSON knowledge file(s).")
     parser.add_argument("--iface", default=os.environ.get("G1_IFACE", "eth0"))
     parser.add_argument("--domain-id", type=int, default=int(os.environ.get("G1_DOMAIN_ID", "0")))
     parser.add_argument("--map-path", default="/home/unitree/test.pcd")
@@ -121,6 +143,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--wait-for-arrival", dest="wait_for_arrival", action="store_true", default=False)
     parser.add_argument("--no-wait-for-arrival", dest="wait_for_arrival", action="store_false")
     parser.add_argument("--arrival-timeout-s", type=float, default=NAV_TARGET_TIMEOUT_S)
+    parser.add_argument("--ollama-url", default="http://127.0.0.1:11434")
+    parser.add_argument("--model", default="qwen3.5:9b")
+    parser.add_argument("--temperature", type=float, default=0.2)
+    parser.add_argument("--timeout", type=float, default=45.0)
+    parser.add_argument("--num-predict", type=int, default=160)
+    parser.add_argument("--num-ctx", type=int, default=4096)
+    parser.add_argument("--keep-alive", default="15m")
+    parser.add_argument("--knowledge-top-k", type=int, default=4)
+    parser.add_argument("--knowledge-min-score", type=float, default=0.06)
+    parser.add_argument("--knowledge-max-chars", type=int, default=2600)
     parser.add_argument("--volume", type=int, default=None)
     parser.add_argument("--tts-language", default=None)
     parser.add_argument("--no-speech", action="store_true")
@@ -138,6 +170,165 @@ def compact_text(text: str) -> str:
 
 def normalize_text(text: str) -> str:
     return compact_text(text).lower().strip(string.punctuation + "，。！？、；：")
+
+
+def tokenize(text: str) -> tuple[str, ...]:
+    return tuple(
+        token
+        for token in (match.group(0).lower() for match in WORD_RE.finditer(text))
+        if len(token) > 1 and token not in STOP_WORDS
+    )
+
+
+def flatten_leaves(value: Any, path: str = "$") -> list[tuple[str, str]]:
+    if isinstance(value, dict):
+        out: list[tuple[str, str]] = []
+        for key, child in value.items():
+            out.extend(flatten_leaves(child, f"{path}.{key}"))
+        return out
+    if isinstance(value, list):
+        out = []
+        for index, child in enumerate(value):
+            out.extend(flatten_leaves(child, f"{path}[{index}]"))
+        return out
+    if value is None:
+        return [(path, "null")]
+    if isinstance(value, bool):
+        return [(path, "true" if value else "false")]
+    if isinstance(value, (int, float, str)):
+        return [(path, str(value))]
+    return [(path, json.dumps(value, ensure_ascii=False, sort_keys=True))]
+
+
+def title_for(value: Any, fallback: str) -> str:
+    if isinstance(value, dict):
+        for key in ("title", "name", "question", "id", "label", "type", "category"):
+            found = value.get(key)
+            if isinstance(found, (str, int, float)) and str(found).strip():
+                return str(found).strip()
+    return fallback
+
+
+def entry_from_value(value: Any, *, source: str, path: str, fallback_title: str) -> KnowledgeEntry | None:
+    leaves = flatten_leaves(value, path)
+    lines = [f"{leaf_path}: {leaf_value}" for leaf_path, leaf_value in leaves if str(leaf_value).strip()]
+    title = title_for(value, fallback_title)
+    text = f"{title}\n" + "\n".join(lines)
+    tokens = tokenize(text)
+    if not lines or not tokens:
+        return None
+    return KnowledgeEntry(title=title, text=text, source=source, path=path, tokens=tokens)
+
+
+def entries_from_json(data: Any, *, source: str) -> list[KnowledgeEntry]:
+    entries: list[KnowledgeEntry] = []
+    if isinstance(data, list):
+        for index, item in enumerate(data):
+            entry = entry_from_value(item, source=source, path=f"$[{index}]", fallback_title=f"record {index + 1}")
+            if entry:
+                entries.append(entry)
+    elif isinstance(data, dict):
+        for key, value in data.items():
+            if isinstance(value, list):
+                for index, item in enumerate(value):
+                    entry = entry_from_value(item, source=source, path=f"$.{key}[{index}]", fallback_title=f"{key} {index + 1}")
+                    if entry:
+                        entries.append(entry)
+            elif isinstance(value, dict):
+                entry = entry_from_value(value, source=source, path=f"$.{key}", fallback_title=str(key))
+                if entry:
+                    entries.append(entry)
+    if not entries:
+        root = entry_from_value(data, source=source, path="$", fallback_title=Path(source).stem)
+        if root:
+            entries.append(root)
+    return entries
+
+
+class KnowledgeRetriever:
+    def __init__(self, paths: list[Path]) -> None:
+        entries: list[KnowledgeEntry] = []
+        for path in paths:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            entries.extend(entries_from_json(data, source=str(path)))
+        self.entries = entries
+        doc_count = max(1, len(entries))
+        df: dict[str, int] = {}
+        for entry in entries:
+            for token in set(entry.tokens):
+                df[token] = df.get(token, 0) + 1
+        self.idf = {token: math.log((doc_count + 1) / (freq + 0.5)) + 1.0 for token, freq in df.items()}
+
+    def search(self, query: str, *, top_k: int, min_score: float) -> list[tuple[KnowledgeEntry, float]]:
+        query_tokens = tokenize(query)
+        if not query_tokens:
+            return []
+        query_set = set(query_tokens)
+        scored: list[tuple[KnowledgeEntry, float]] = []
+        for entry in self.entries:
+            counts: dict[str, int] = {}
+            for token in entry.tokens:
+                counts[token] = counts.get(token, 0) + 1
+            score = 0.0
+            for token in query_set:
+                if token in counts:
+                    score += self.idf.get(token, 1.0) * (1.0 + math.log(counts[token]))
+            if query.strip().lower() in entry.text.lower():
+                score += 2.0
+            norm = math.sqrt(max(1, len(query_set)) * max(1, len(set(entry.tokens))))
+            score /= norm
+            if score >= min_score:
+                scored.append((entry, score))
+        scored.sort(key=lambda item: item[1], reverse=True)
+        return scored[: max(1, top_k)]
+
+    def format_context(self, query: str, *, top_k: int, min_score: float, max_chars: int) -> str:
+        parts: list[str] = []
+        total = 0
+        for index, (entry, score) in enumerate(self.search(query, top_k=top_k, min_score=min_score), start=1):
+            chunk = f"[{index}] source={entry.source} path={entry.path} score={score:.2f}\n{entry.text}"
+            remaining = max(300, max_chars) - total
+            if remaining <= 0:
+                break
+            if len(chunk) > remaining:
+                chunk = chunk[:remaining].rsplit(" ", 1)[0].strip()
+            parts.append(chunk)
+            total += len(chunk) + 2
+        return "\n\n".join(parts)
+
+
+class OllamaClient:
+    def __init__(self, args: argparse.Namespace) -> None:
+        self.args = args
+        self.base_url = str(args.ollama_url).rstrip("/")
+
+    def chat(self, messages: list[dict[str, str]], *, temperature: float | None = None, num_predict: int | None = None) -> str:
+        body: dict[str, Any] = {
+            "model": str(self.args.model),
+            "messages": messages,
+            "stream": False,
+            "think": False,
+            "keep_alive": str(self.args.keep_alive),
+            "options": {
+                "temperature": float(self.args.temperature if temperature is None else temperature),
+                "num_predict": int(self.args.num_predict if num_predict is None else num_predict),
+                "num_ctx": int(self.args.num_ctx),
+            },
+        }
+        data = json.dumps(body).encode("utf-8")
+        request = urllib.request.Request(
+            f"{self.base_url}/api/chat",
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=float(self.args.timeout)) as response:
+                result = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"Ollama HTTP {exc.code}: {detail}") from exc
+        return compact_text(str(result.get("message", {}).get("content", "")))
 
 
 def decode_payload(raw: str) -> dict[str, Any]:
@@ -536,6 +727,13 @@ class NavBotNode(Node):
         super().__init__("g1_nav_bot")
         self.args = args
         self.nav = NavState(args)
+        knowledge_paths = [Path(item).expanduser() for item in args.knowledge_file]
+        missing = [str(path) for path in knowledge_paths if not path.exists()]
+        if missing:
+            self.get_logger().warning("Knowledge file(s) not found: " + ", ".join(missing))
+        existing_knowledge_paths = [path for path in knowledge_paths if path.exists()]
+        self.retriever = KnowledgeRetriever(existing_knowledge_paths) if existing_knowledge_paths else None
+        self.ollama = OllamaClient(args) if self.retriever is not None else None
         self.speaker = Speaker(args, self.get_logger())
         self.response_pub = self.create_publisher(String, args.response_topic, 10)
         self.audit_path = Path(args.audit_log).expanduser()
@@ -557,7 +755,8 @@ class NavBotNode(Node):
             self._start_external_asr_server()
         self.get_logger().info(
             f"nav_bot ready audio={'external-only' if args.external_asr_only else args.audio_topic} "
-            f"map={args.map_path} points={args.points_file}"
+            f"map={args.map_path} points={args.points_file} "
+            f"knowledge_entries={len(self.retriever.entries) if self.retriever is not None else 0}"
         )
         if not args.no_startup_speech and compact_text(args.startup_speech):
             self._say(args.startup_speech)
@@ -696,7 +895,75 @@ class NavBotNode(Node):
         if "status" in low:
             return {"ok": True, "code": 0, "intent": "status", "status": self.nav.status(), "answer": "Navigation status is available."}
 
+        if self._is_knowledge_question(low):
+            answer, used_knowledge = self._rag_answer(text)
+            if used_knowledge:
+                return {"ok": True, "code": 0, "intent": "rag_question", "used_knowledge": True, "answer": answer}
+
         return {"ok": False, "code": 1, "intent": "unknown", "answer": ""}
+
+    def _rag_answer(self, text: str) -> tuple[str, bool]:
+        context = ""
+        if self.retriever is not None:
+            context = self.retriever.format_context(
+                text,
+                top_k=int(self.args.knowledge_top_k),
+                min_score=float(self.args.knowledge_min_score),
+                max_chars=int(self.args.knowledge_max_chars),
+            )
+        if not context:
+            return "I do not know yet.", False
+        messages = [
+            {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
+            {"role": "system", "content": f"{KNOWLEDGE_SYSTEM_PROMPT}\n\nStructured knowledge context:\n{context}"},
+            {"role": "user", "content": text},
+        ]
+        try:
+            if self.ollama is None:
+                raise RuntimeError("Ollama client is not configured.")
+            answer = self.ollama.chat(messages, temperature=float(self.args.temperature), num_predict=int(self.args.num_predict))
+            return answer, True
+        except Exception as exc:
+            self.get_logger().warning(f"Ollama RAG answer failed; using local knowledge fallback: {exc}")
+            fallback = self._local_knowledge_answer(text)
+            return (fallback or "I do not know yet."), bool(fallback)
+
+    def _local_knowledge_answer(self, text: str) -> str:
+        if self.retriever is None:
+            return ""
+        matches = self.retriever.search(
+            text,
+            top_k=min(2, int(self.args.knowledge_top_k)),
+            min_score=float(self.args.knowledge_min_score),
+        )
+        if not matches:
+            return ""
+        parts: list[str] = []
+        for entry, _score in matches:
+            cleaned_lines = []
+            for line in entry.text.splitlines():
+                line = compact_text(line)
+                if not line or line.startswith("$.") or line.startswith("$["):
+                    continue
+                cleaned_lines.append(line)
+                if len(" ".join(cleaned_lines)) >= 260:
+                    break
+            summary = " ".join(cleaned_lines) or compact_text(entry.text)
+            if len(summary) > 280:
+                summary = summary[:280].rsplit(" ", 1)[0].strip()
+            parts.append(summary)
+        answer = "From my local knowledge: " + " ".join(parts)
+        if len(answer) > 650:
+            answer = answer[:650].rsplit(" ", 1)[0].strip()
+        return answer
+
+    def _is_knowledge_question(self, low: str) -> bool:
+        if self.retriever is None:
+            return False
+        if any(phrase in low for phrase in ("from your knowledge", "local knowledge", "knowledge file", "tell me about", "what is", "what are")):
+            return True
+        first = low.split(" ", 1)[0] if low else ""
+        return first in {"what", "why", "how", "when", "where", "who", "which"} and bool(tokenize(low))
 
     @staticmethod
     def _wants_clear_points(low: str) -> bool:
@@ -778,7 +1045,7 @@ class NavBotNode(Node):
         words = normalized.split()
         if not allow_name_fragment and len(words) <= 3 and not any(
             keyword in normalized
-            for keyword in ("add", "close", "go", "list", "map", "mapping", "navigate", "point", "relocate", "resume", "save", "slam", "start", "status", "stop")
+            for keyword in ("add", "about", "close", "go", "how", "list", "map", "mapping", "navigate", "point", "relocate", "resume", "save", "slam", "start", "status", "stop", "tell", "what", "when", "where", "which", "who", "why")
         ):
             return "short_non_command_fragment"
         if not any(char.isalnum() for char in text):

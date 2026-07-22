@@ -240,6 +240,19 @@ DEFAULT_CENTER_WAIST_SETTLE_S = 0.4
 DEFAULT_POST_GRASP_LIFT_M = 0.08
 DEFAULT_POST_GRASP_LIFT_DURATION_S = 2.5
 DEFAULT_DETECTION_PROMPT = "coffee cup"
+DEFAULT_VOICE_ASR_URL = os.environ.get("G1_VOICE_ASR_URL", "http://192.168.2.41:8097/asr")
+DEFAULT_VOICE_ASR_TOKEN = os.environ.get("G1_VOICE_ASR_TOKEN", "")
+
+
+def _argv_value(name: str, default: str = "") -> str:
+    try:
+        index = sys.argv.index(name)
+    except ValueError:
+        return default
+    try:
+        return str(sys.argv[index + 1])
+    except IndexError:
+        return default
 
 # Built-in "stable_hold" joint pose, copied from WBC/ik_pose_cli_v3.py's
 # STABLE_HOLD_ARM_JOINTS (the pose the IK pose tool ships with by default).
@@ -925,6 +938,119 @@ def _reach_preview(
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.DARKLY])
 app.title = "G1 Recognition Layer"
+app.index_string = """
+<!DOCTYPE html>
+<html>
+    <head>
+        {%metas%}
+        <title>{%title%}</title>
+        {%favicon%}
+        {%css%}
+    </head>
+    <body>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+            <script>
+            (function () {
+                let voiceRecognition = null;
+
+                function voiceConfig() {
+                    const el = document.getElementById("voice-config");
+                    return {
+                        url: (el && el.dataset.asrUrl) || "",
+                        token: (el && el.dataset.asrToken) || ""
+                    };
+                }
+
+                function setVoiceStatus(text) {
+                    const el = document.getElementById("voice-status");
+                    if (el) el.textContent = text;
+                }
+
+                function addVoiceLog(line) {
+                    const el = document.getElementById("voice-log");
+                    if (!el) return;
+                    el.textContent = new Date().toLocaleTimeString() + " " + line + "\\n" + el.textContent;
+                }
+
+                async function sendVoiceText(text) {
+                    const value = (text || "").trim();
+                    if (!value) return;
+                    const cfg = voiceConfig();
+                    if (!cfg.url) {
+                        setVoiceStatus("ASR endpoint is not configured.");
+                        return;
+                    }
+                    addVoiceLog("send: " + value);
+                    const headers = {"Content-Type": "application/json"};
+                    if (cfg.token) headers.Authorization = "Bearer " + cfg.token;
+                    try {
+                        const res = await fetch(cfg.url, {
+                            method: "POST",
+                            headers: headers,
+                            body: JSON.stringify({text: value})
+                        });
+                        const body = await res.text();
+                        addVoiceLog("response: " + body);
+                        setVoiceStatus(res.ok ? "Command sent." : "Command failed.");
+                    } catch (err) {
+                        setVoiceStatus("Command failed: " + err.message);
+                        addVoiceLog("error: " + err.message);
+                    }
+                }
+
+                document.addEventListener("submit", function (event) {
+                    const form = event.target;
+                    if (!form || form.id !== "voice-manual-form") return;
+                    event.preventDefault();
+                    event.stopImmediatePropagation();
+                    const input = document.getElementById("voice-manual-text");
+                    const text = input && input.value ? input.value.trim() : "";
+                    if (text) sendVoiceText(text);
+                    if (input) input.value = "";
+                }, true);
+
+                document.addEventListener("click", function (event) {
+                    const startButton = event.target && event.target.closest ? event.target.closest("#voice-start-btn") : null;
+                    const stopButton = event.target && event.target.closest ? event.target.closest("#voice-stop-btn") : null;
+                    if (!startButton && !stopButton) return;
+                    event.preventDefault();
+                    event.stopImmediatePropagation();
+                    if (stopButton) {
+                        if (voiceRecognition) voiceRecognition.stop();
+                        return;
+                    }
+                    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                    if (!SpeechRecognition) {
+                        setVoiceStatus("SpeechRecognition is not supported in this browser.");
+                        return;
+                    }
+                    voiceRecognition = new SpeechRecognition();
+                    voiceRecognition.lang = "en-US";
+                    voiceRecognition.continuous = true;
+                    voiceRecognition.interimResults = false;
+                    voiceRecognition.onstart = () => setVoiceStatus("Listening.");
+                    voiceRecognition.onerror = (e) => {
+                        setVoiceStatus("Speech recognition error: " + e.error);
+                        addVoiceLog("error: " + e.error);
+                    };
+                    voiceRecognition.onend = () => setVoiceStatus("Stopped.");
+                    voiceRecognition.onresult = (e) => {
+                        for (let i = e.resultIndex; i < e.results.length; i++) {
+                            if (e.results[i].isFinal) sendVoiceText(e.results[i][0].transcript);
+                        }
+                    };
+                    voiceRecognition.start();
+                }, true);
+            })();
+            </script>
+        </footer>
+    </body>
+</html>
+"""
 
 
 def _instructions_card() -> dbc.Card:
@@ -1018,6 +1144,40 @@ def _logs_card() -> dbc.Card:
     ], className="mb-3")
 
 
+def _voice_card() -> dbc.Card:
+    return dbc.Card([
+        dbc.CardHeader("Voice commands", style={"fontSize": "13px"}),
+        dbc.CardBody([
+            html.Div(
+                id="voice-config",
+                **{
+                    "data-asr-url": _argv_value("--voice-asr-url", DEFAULT_VOICE_ASR_URL),
+                    "data-asr-token": _argv_value("--voice-asr-token", DEFAULT_VOICE_ASR_TOKEN),
+                },
+            ),
+            dbc.ButtonGroup([
+                dbc.Button("Start headset", id="voice-start-btn", color="success"),
+                dbc.Button("Stop", id="voice-stop-btn", color="secondary"),
+            ], className="mb-2"),
+            html.Form([
+                dbc.InputGroup([
+                    dbc.Input(
+                        id="voice-manual-text",
+                        placeholder="Type a navigation or gripping command",
+                        autoComplete="off",
+                    ),
+                    dbc.Button("Send", id="voice-send-btn", color="primary", type="submit"),
+                ]),
+            ], id="voice-manual-form"),
+            html.Div(id="voice-status", className="mt-2", style={"fontSize": "12px", "color": "#9c9"}),
+            html.Pre(id="voice-log", style={
+                "maxHeight": "150px", "overflow": "auto", "fontSize": "11px",
+                "background": "#111", "padding": "8px", "marginTop": "8px", "marginBottom": 0,
+            }),
+        ]),
+    ], className="mb-3")
+
+
 def _limit_visible_detections(
     detections: Dict[str, Detection],
     boxes: List[Dict],
@@ -1058,7 +1218,8 @@ app.layout = dbc.Container([
 
     dbc.Row([
         dbc.Col(_instructions_card(), width=6),
-        dbc.Col(_options_card(), width=6),
+        dbc.Col(_voice_card(), width=3),
+        dbc.Col(_options_card(), width=3),
     ]),
 
     dbc.Row([
@@ -2662,6 +2823,41 @@ def api_select_arm(side: str):
     return jsonify({"ok": True, "arm_override": side})
 
 
+@app.server.route("/api/select_object/<det_id>", methods=["POST"])
+def api_select_object(det_id: str):
+    if not _api_authorized():
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    with STATE.lock:
+        if det_id not in STATE.detections:
+            return jsonify({"ok": False, "error": "not_found"}), 404
+        STATE.selected_id = det_id
+    return jsonify({"ok": True, "selected_id": det_id})
+
+
+@app.server.route("/api/prepare", methods=["POST"])
+def api_prepare():
+    if not _api_authorized():
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    threading.Thread(target=_run_prepare, daemon=True).start()
+    return jsonify({"ok": True, "started": True})
+
+
+@app.server.route("/api/walk", methods=["POST"])
+def api_walk():
+    if not _api_authorized():
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    threading.Thread(target=_run_walk, daemon=True).start()
+    return jsonify({"ok": True, "started": True})
+
+
+@app.server.route("/api/stop_moving", methods=["POST"])
+def api_stop_moving():
+    if not _api_authorized():
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    threading.Thread(target=_run_stop_moving, daemon=True).start()
+    return jsonify({"ok": True, "started": True})
+
+
 @app.server.route("/api/extend_arm", methods=["POST"])
 def api_extend_arm():
     if not _api_authorized():
@@ -2716,6 +2912,14 @@ def api_stable_hold():
     return jsonify({"ok": True, "started": True})
 
 
+@app.server.route("/api/damp", methods=["POST"])
+def api_damp():
+    if not _api_authorized():
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    threading.Thread(target=_run_damp, daemon=True).start()
+    return jsonify({"ok": True, "started": True})
+
+
 @app.server.route("/api/set_prompt", methods=["POST"])
 def api_set_prompt():
     if not _api_authorized():
@@ -2736,13 +2940,23 @@ def api_grab():
         return jsonify({"ok": False, "error": "unauthorized"}), 401
     body = request.get_json(silent=True) or {}
     name = str(body.get("object", "") or "")
-    det = _find_detection_by_label(name)
-    if det is None:
-        return jsonify({"ok": False, "error": "not_found"}), 404
-    with STATE.lock:
-        STATE.selected_id = det.id
+    if name:
+        det = _find_detection_by_label(name)
+        if det is None:
+            return jsonify({"ok": False, "error": "not_found"}), 404
+        with STATE.lock:
+            STATE.selected_id = det.id
+        matched_label = det.label
+        selected_id = det.id
+    else:
+        with STATE.lock:
+            selected_id = STATE.selected_id
+            det = STATE.detections.get(selected_id or "")
+            matched_label = det.label if det is not None else ""
+        if not selected_id:
+            return jsonify({"ok": False, "error": "no_selection"}), 400
     threading.Thread(target=_run_grab, daemon=True).start()
-    return jsonify({"ok": True, "matched_label": det.label, "id": det.id})
+    return jsonify({"ok": True, "matched_label": matched_label, "id": selected_id})
 
 
 # ---------------------------------------------------------------------------
@@ -2770,6 +2984,10 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--debug", action="store_true")
     p.add_argument("--api-token", default="",
                     help="Optional bearer token required by the /api/* voice-control routes.")
+    p.add_argument("--voice-asr-url", default=DEFAULT_VOICE_ASR_URL,
+                    help="Browser-facing navbot ASR endpoint used by the integrated headset controls.")
+    p.add_argument("--voice-asr-token", default=DEFAULT_VOICE_ASR_TOKEN,
+                    help="Bearer token sent by the integrated headset controls when posting voice commands.")
     return p.parse_args()
 
 

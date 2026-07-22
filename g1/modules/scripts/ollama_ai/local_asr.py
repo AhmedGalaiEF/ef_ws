@@ -12,6 +12,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+import urllib.parse
 import wave
 from pathlib import Path
 from typing import Any
@@ -49,6 +50,47 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--slice-seconds", type=float, default=0.25,
                         help="Small recording slice used so the toggle key responds quickly.")
     return parser.parse_args()
+
+
+def normalize_post_url(url: str) -> str:
+    text = str(url or "").strip()
+    if not text:
+        raise SystemExit("--url must not be empty")
+    if "://" not in text:
+        text = "http://" + text
+    parsed = urllib.parse.urlparse(text)
+    if not parsed.hostname:
+        raise SystemExit(f"Invalid --url: {url!r}")
+    path = parsed.path.rstrip("/")
+    if not path:
+        path = "/asr"
+    if path not in {"/asr", "/command"}:
+        print(
+            f"Warning: --url path is {path!r}; navbot usually expects /asr.",
+            file=sys.stderr,
+            flush=True,
+        )
+    netloc = parsed.netloc
+    if parsed.port is None:
+        default_port = 8097 if path in {"/asr", "/command"} else 80
+        netloc = f"{parsed.hostname}:{default_port}"
+    normalized = urllib.parse.urlunparse((
+        parsed.scheme or "http",
+        netloc,
+        path,
+        "",
+        parsed.query,
+        "",
+    ))
+    return normalized
+
+
+def describe_post_url(url: str) -> str:
+    parsed = urllib.parse.urlparse(url)
+    return (
+        f"POST target: {url} "
+        f"(host={parsed.hostname or 'unknown'} port={parsed.port or 'default'} path={parsed.path or '/'})"
+    )
 
 
 def require_module(name: str) -> Any:
@@ -283,6 +325,8 @@ def transcribe_and_post(args: argparse.Namespace, backend: Any, audio: Any, rms:
 
 def main() -> int:
     args = parse_args()
+    args.url = normalize_post_url(str(args.url))
+    print(describe_post_url(str(args.url)), flush=True)
     if args.list_devices:
         list_devices()
         return 0
