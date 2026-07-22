@@ -31,6 +31,10 @@ def parse_args() -> argparse.Namespace:
                         help="sounddevice input device id/name. Use --list-devices to inspect.")
     parser.add_argument("--level-meter", action="store_true",
                         help="Print per-slice RMS while recording to debug microphone/device selection.")
+    parser.add_argument("--record-dtype", choices=("float32", "int16"), default="float32",
+                        help="PortAudio capture dtype. Try int16 on Windows devices that return silent float32 samples.")
+    parser.add_argument("--save-debug-wav", default="",
+                        help="Optional path to save the next transcribed/quiet chunk exactly as Python recorded it.")
     parser.add_argument("--compute-device", default="auto",
                         help="faster-whisper compute device: auto, cpu, cuda.")
     parser.add_argument("--compute-type", default="int8",
@@ -141,7 +145,7 @@ def resolve_input_device(device_arg: str | None) -> int | str | None:
     return int(device_text) if device_text.isdigit() else device_text
 
 
-def validate_input_device(device: int | str | None, sample_rate: int) -> int:
+def validate_input_device(device: int | str | None, sample_rate: int, record_dtype: str = "float32") -> int:
     sd = require_module("sounddevice")
     try:
         info = sd.query_devices(device, "input")
@@ -169,7 +173,7 @@ def validate_input_device(device: int | str | None, sample_rate: int) -> int:
         )
         return default_rate
     try:
-        sd.check_input_settings(device=device, channels=1, samplerate=requested_rate, dtype="float32")
+        sd.check_input_settings(device=device, channels=1, samplerate=requested_rate, dtype=record_dtype)
         return requested_rate
     except Exception as exc:
         if default_rate <= 0 or default_rate == requested_rate:
@@ -178,7 +182,7 @@ def validate_input_device(device: int | str | None, sample_rate: int) -> int:
                 "Try --sample-rate 0 or another microphone device."
             ) from exc
         try:
-            sd.check_input_settings(device=device, channels=1, samplerate=default_rate, dtype="float32")
+            sd.check_input_settings(device=device, channels=1, samplerate=default_rate, dtype=record_dtype)
         except Exception as default_exc:
             raise SystemExit(
                 f"Device {device!r} cannot open at requested {requested_rate} Hz or default {default_rate} Hz.\n"
@@ -216,7 +220,7 @@ def record_chunk(args: argparse.Namespace) -> tuple[Any, float, float]:
             frames,
             samplerate=int(args.sample_rate),
             channels=channels,
-            dtype="float32",
+            dtype=str(args.record_dtype),
             device=device,
         )
         sd.wait()
@@ -225,7 +229,12 @@ def record_chunk(args: argparse.Namespace) -> tuple[Any, float, float]:
             f"Could not record from input device {device!r} at {int(args.sample_rate)} Hz: {exc}\n"
             "Run --list-devices and choose a microphone input device, or try --sample-rate 0."
         ) from exc
-    audio = np.asarray(audio, dtype=np.float32)
+    audio = np.asarray(audio)
+    if audio.dtype.kind in {"i", "u"}:
+        max_value = float(np.iinfo(audio.dtype).max)
+        audio = audio.astype(np.float32) / max_value
+    else:
+        audio = audio.astype(np.float32)
     if audio.ndim == 2 and audio.shape[1] > 1:
         rms_by_channel = np.sqrt(np.mean(audio * audio, axis=0))
         channel = int(np.argmax(rms_by_channel))
@@ -400,6 +409,20 @@ def transcribe_and_post(args: argparse.Namespace, backend: Any, audio: Any, rms:
     np = require_module("numpy")
     if audio.size == 0:
         return
+    debug_path = str(args.save_debug_wav or "").strip()
+    if debug_path:
+        try:
+            saved = Path(debug_path).expanduser()
+            original_debug = write_wav(audio, int(args.sample_rate))
+            saved.write_bytes(original_debug.read_bytes())
+            try:
+                original_debug.unlink()
+            except OSError:
+                pass
+            print(f"saved debug wav: {saved}", flush=True)
+        except Exception as exc:
+            print(f"failed to save debug wav: {exc}", file=sys.stderr, flush=True)
+        args.save_debug_wav = ""
     if rms < float(args.min_rms):
         _rms, peak = audio_stats(audio)
         print(f"quiet rms={rms:.6f} peak={peak:.6f}", flush=True)
@@ -433,7 +456,7 @@ def main() -> int:
     if args.list_devices:
         list_devices()
         return 0
-    args.sample_rate = validate_input_device(resolve_input_device(args.device), int(args.sample_rate))
+    args.sample_rate = validate_input_device(resolve_input_device(args.device), int(args.sample_rate), str(args.record_dtype))
 
     try:
         backend = make_backend(args)
