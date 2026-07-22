@@ -41,8 +41,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sample-rate", type=int, default=16000,
                         help="Input sample rate. Use 0 to use the device default; invalid rates fall back automatically.")
     parser.add_argument("--chunk-seconds", type=float, default=4.0)
-    parser.add_argument("--min-rms", type=float, default=0.008,
+    parser.add_argument("--min-rms", type=float, default=0.00005,
                         help="Skip chunks quieter than this RMS level.")
+    parser.add_argument("--gain", type=float, default=1.0,
+                        help="Multiply recorded audio before transcription. Useful for very quiet Windows inputs.")
+    parser.add_argument("--normalize-rms", type=float, default=0.06,
+                        help="Normalize non-quiet chunks to this RMS before writing WAV; use 0 to disable.")
     parser.add_argument("--language", default="en")
     parser.add_argument("--once", action="store_true", help="Transcribe one chunk and exit.")
     parser.add_argument("--dry-run", action="store_true", help="Print transcripts but do not POST.")
@@ -187,17 +191,31 @@ def validate_input_device(device: int | str | None, sample_rate: int) -> int:
         return default_rate
 
 
-def record_chunk(args: argparse.Namespace) -> tuple[Any, float]:
+def audio_stats(audio: Any) -> tuple[float, float]:
+    np = require_module("numpy")
+    arr = np.asarray(audio).reshape(-1)
+    rms = float(np.sqrt(np.mean(arr * arr))) if arr.size else 0.0
+    peak = float(np.max(np.abs(arr))) if arr.size else 0.0
+    return rms, peak
+
+
+def record_chunk(args: argparse.Namespace) -> tuple[Any, float, float]:
     sd = require_module("sounddevice")
     np = require_module("numpy")
     frames = int(float(args.sample_rate) * float(args.chunk_seconds))
     device: int | str | None
     device = resolve_input_device(args.device)
     try:
+        channels = 2
+        try:
+            info = sd.query_devices(device, "input")
+            channels = max(1, min(2, int(info.get("max_input_channels", 1) or 1)))
+        except Exception:
+            channels = 1
         audio = sd.rec(
             frames,
             samplerate=int(args.sample_rate),
-            channels=1,
+            channels=channels,
             dtype="float32",
             device=device,
         )
@@ -207,12 +225,21 @@ def record_chunk(args: argparse.Namespace) -> tuple[Any, float]:
             f"Could not record from input device {device!r} at {int(args.sample_rate)} Hz: {exc}\n"
             "Run --list-devices and choose a microphone input device, or try --sample-rate 0."
         ) from exc
-    audio = np.asarray(audio).reshape(-1)
-    rms = float(np.sqrt(np.mean(audio * audio))) if audio.size else 0.0
-    return audio, rms
+    audio = np.asarray(audio, dtype=np.float32)
+    if audio.ndim == 2 and audio.shape[1] > 1:
+        rms_by_channel = np.sqrt(np.mean(audio * audio, axis=0))
+        channel = int(np.argmax(rms_by_channel))
+        audio = audio[:, channel]
+    else:
+        audio = audio.reshape(-1)
+    gain = float(args.gain)
+    if gain != 1.0:
+        audio = np.clip(audio * gain, -1.0, 1.0)
+    rms, peak = audio_stats(audio)
+    return audio, rms, peak
 
 
-def record_seconds(args: argparse.Namespace, seconds: float) -> tuple[Any, float]:
+def record_seconds(args: argparse.Namespace, seconds: float) -> tuple[Any, float, float]:
     old_chunk = args.chunk_seconds
     args.chunk_seconds = float(seconds)
     try:
@@ -374,8 +401,16 @@ def transcribe_and_post(args: argparse.Namespace, backend: Any, audio: Any, rms:
     if audio.size == 0:
         return
     if rms < float(args.min_rms):
-        print(f"quiet rms={rms:.4f}", flush=True)
+        _rms, peak = audio_stats(audio)
+        print(f"quiet rms={rms:.6f} peak={peak:.6f}", flush=True)
         return
+    normalize_rms = float(args.normalize_rms)
+    if normalize_rms > 0.0 and rms > 0.0:
+        scale = min(200.0, normalize_rms / rms)
+        if scale > 1.0:
+            audio = np.clip(audio * scale, -1.0, 1.0)
+            new_rms, new_peak = audio_stats(audio)
+            print(f"normalized audio gain={scale:.1f} rms={new_rms:.6f} peak={new_peak:.6f}", flush=True)
     wav_path = write_wav(audio, int(args.sample_rate))
     try:
         text = backend.transcribe(wav_path).strip()
@@ -441,9 +476,9 @@ def main() -> int:
             if not recording:
                 time.sleep(0.02)
                 continue
-            audio, slice_rms = record_seconds(args, max(0.05, float(args.slice_seconds)))
+            audio, slice_rms, slice_peak = record_seconds(args, max(0.05, float(args.slice_seconds)))
             if bool(args.level_meter):
-                print(f"rms={slice_rms:.4f}", flush=True)
+                print(f"rms={slice_rms:.6f} peak={slice_peak:.6f}", flush=True)
             chunks.append(audio)
             if args.once:
                 audio = np.concatenate(chunks)
