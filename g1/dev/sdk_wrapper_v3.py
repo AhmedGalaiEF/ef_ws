@@ -7,11 +7,14 @@ import re
 import socket
 import struct
 import subprocess
+import sys
 import tempfile
 import threading
 import time
 import wave
 from pathlib import Path
+
+import numpy as np
 
 from unitree_sdk2py.comm.motion_switcher.motion_switcher_client import MotionSwitcherClient
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelPublisher, ChannelSubscriber
@@ -90,6 +93,18 @@ SLAM_POINT_TOPICS = [
     "rt/unitree/slam_relocation/web_points",
 ]
 _factory = None
+
+_ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(_ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(_ROOT_DIR))
+
+try:
+    from hand_pose_navigation.arm_fk import ArmFK, JOINT_LIMITS
+    from hand_pose_navigation.arm_ik import ArmIK
+except Exception:
+    ArmFK = None
+    ArmIK = None
+    JOINT_LIMITS = {}
 
 
 def _ensure_factory(domain_id, iface):
@@ -182,6 +197,104 @@ def _vector3(value):
         return (float(value[0]), float(value[1]), float(value[2]))
     except Exception:
         return None
+
+
+def _rot_x(angle):
+    c, s = math.cos(angle), math.sin(angle)
+    return np.array([[1.0, 0.0, 0.0], [0.0, c, -s], [0.0, s, c]], dtype=np.float64)
+
+
+def _rot_y(angle):
+    c, s = math.cos(angle), math.sin(angle)
+    return np.array([[c, 0.0, s], [0.0, 1.0, 0.0], [-s, 0.0, c]], dtype=np.float64)
+
+
+def _rot_z(angle):
+    c, s = math.cos(angle), math.sin(angle)
+    return np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]], dtype=np.float64)
+
+
+_ROT_BY_AXIS = (_rot_x, _rot_y, _rot_z)
+
+
+def _clamp_arm_q(q, side):
+    if not JOINT_LIMITS or side not in JOINT_LIMITS:
+        return q
+    lo = np.array([lim[0] for lim in JOINT_LIMITS[side]], dtype=np.float64)
+    hi = np.array([lim[1] for lim in JOINT_LIMITS[side]], dtype=np.float64)
+    return np.clip(q, lo, hi)
+
+
+def _solve_position_shoulder_elbow(fk, side, target_T, q_init, selected_axis=None):
+    """Position-only DLS with wrist joints held fixed, matching ik_pose_cli_v3."""
+    q = _clamp_arm_q(q_init.copy(), side)
+    lam = 0.05
+    eps = 1e-5
+    max_iter = 64
+    tol = 0.005
+    active = (0, 1, 2, 3)
+    best_q = q.copy()
+    best_err_pos = float("inf")
+    best_axis_err = float("inf")
+
+    for iteration in range(max_iter):
+        T_cur = fk.compute_arm(q)
+        pos_err = target_T[:3, 3] - T_cur[:3, 3]
+        err_pos = float(np.linalg.norm(pos_err))
+        axis_err = abs(float(pos_err[selected_axis])) if selected_axis is not None else err_pos
+        if (err_pos, axis_err) < (best_err_pos, best_axis_err):
+            best_q = q.copy()
+            best_err_pos = err_pos
+            best_axis_err = axis_err
+        if err_pos < tol:
+            return q, {
+                "success": True,
+                "error_pos_m": err_pos,
+                "error_rot_rad": 0.0,
+                "iterations": iteration,
+                "mode": "pos_shoulder_elbow",
+            }
+
+        J = np.zeros((3, len(active)), dtype=np.float64)
+        p0 = T_cur[:3, 3]
+        for col, idx in enumerate(active):
+            q1 = q.copy()
+            q1[idx] += eps
+            T1 = fk.compute_arm(q1)
+            J[:, col] = (T1[:3, 3] - p0) / eps
+
+        JJT = J @ J.T
+        dq_active = J.T @ np.linalg.solve(JJT + lam**2 * np.eye(3), pos_err)
+        norm_dq = float(np.linalg.norm(dq_active))
+        if norm_dq > 0.3:
+            dq_active *= 0.3 / norm_dq
+
+        q_next = q.copy()
+        for col, idx in enumerate(active):
+            q_next[idx] += dq_active[col]
+        q = _clamp_arm_q(q_next, side)
+        q[4:] = q_init[4:]
+
+    T_cur = fk.compute_arm(best_q)
+    err = target_T[:3, 3] - T_cur[:3, 3]
+    err_pos = float(np.linalg.norm(err))
+    axis_err = abs(float(err[selected_axis])) if selected_axis is not None else err_pos
+    if selected_axis is not None and axis_err < 0.006 and err_pos < 0.040:
+        return best_q, {
+            "success": True,
+            "error_pos_m": err_pos,
+            "error_rot_rad": 0.0,
+            "iterations": max_iter,
+            "mode": "pos_axis_clamped",
+            "axis_error_m": axis_err,
+        }
+    return None, {
+        "success": False,
+        "error_pos_m": err_pos,
+        "error_rot_rad": 0.0,
+        "iterations": max_iter,
+        "mode": "pos_shoulder_elbow",
+    }
 
 
 def _decode_json_text(raw):
@@ -417,6 +530,8 @@ class G1:
         self._slam = None
         self._lowcmd = None
         self._arm_sdk = None
+        self._arm_fk = {}
+        self._arm_ik = {}
         self._headlight_stop = None
         self._headlight_thread = None
         self._path_points = []
@@ -518,6 +633,22 @@ class G1:
         if self._arm_sdk is None:
             self._arm_sdk = _ArmSdk()
         return self._arm_sdk
+
+    def _arm_fk_solver(self, side):
+        side = _normalize_side(side)
+        if ArmFK is None:
+            raise RuntimeError("hand_pose_navigation ArmFK is unavailable; cannot run DLS IK")
+        if side not in self._arm_fk:
+            self._arm_fk[side] = ArmFK(side, "urdf")
+        return self._arm_fk[side]
+
+    def _arm_ik_solver(self, side):
+        side = _normalize_side(side)
+        if ArmIK is None:
+            raise RuntimeError("hand_pose_navigation ArmIK is unavailable; cannot run DLS IK")
+        if side not in self._arm_ik:
+            self._arm_ik[side] = ArmIK(side, "dls", max_iter=24, tol_pos_m=0.005, tol_rot_rad=0.02)
+        return self._arm_ik[side]
 
     def _dex3_hand(self, side):
         side = _normalize_side(side)
@@ -1165,36 +1296,54 @@ class G1:
         if len(inc) != 6:
             raise ValueError("pose_increment must have 3 or 6 elements: [dx, dy, dz, droll, dpitch, dyaw]")
         dx, dy, dz, droll, dpitch, dyaw = [float(x) for x in inc]
-        sign = -1.0 if side == "right" else 1.0
         joints = RIGHT_ARM_JOINTS if side == "right" else LEFT_ARM_JOINTS
         current = self._upper_body_pose()
-        target = dict(current)
+        q_init = np.array([current[j] for j in joints], dtype=np.float64)
+        fk = self._arm_fk_solver(side)
+        target_T = fk.compute_arm(q_init).copy()
+
+        target_T[0, 3] += dx
+        target_T[1, 3] += dy if side == "left" else -dy
+        target_T[2, 3] += dz
+        if not position_only:
+            rotations = (
+                -droll if side == "left" else droll,
+                -dpitch,
+                -dyaw if side == "left" else dyaw,
+            )
+            for axis, value in enumerate(rotations):
+                if value:
+                    target_T[:3, :3] = _ROT_BY_AXIS[axis](value) @ target_T[:3, :3]
+
+        selected_axis = None
+        xyz_nonzero = [idx for idx, value in enumerate((dx, dy, dz)) if abs(value) > 1e-12]
+        if position_only and len(xyz_nonzero) == 1:
+            selected_axis = xyz_nonzero[0]
         if position_only:
-            # Approximate the "f" mode from ik_pose_cli_v3.py:
-            # solve xyz motion through shoulder/elbow while leaving wrist
-            # orientation unconstrained instead of trying to hold it fixed.
-            deltas = {
-                joints[0]: -0.95 * dx - 0.30 * dz,
-                joints[1]: sign * (0.95 * dy - 0.10 * dx),
-                joints[2]: sign * 0.20 * dy,
-                joints[3]: -1.45 * dx + 0.35 * dz,
-                joints[4]: 0.0,
-                joints[5]: 0.0,
-                joints[6]: 0.0,
-            }
+            q_sol, info = _solve_position_shoulder_elbow(
+                fk,
+                side,
+                target_T,
+                q_init,
+                selected_axis=selected_axis,
+            )
         else:
-            deltas = {
-                joints[0]: -0.9 * dx - 0.35 * dz,
-                joints[1]: sign * (0.9 * dy - 0.2 * dx),
-                joints[2]: -0.5 * dyaw,
-                joints[3]: -1.4 * dx + 0.25 * dz,
-                joints[4]: 0.7 * droll,
-                joints[5]: -0.8 * dz - 0.7 * dpitch,
-                joints[6]: 0.7 * dyaw,
+            q_sol, info = self._arm_ik_solver(side).solve(target_T, q_init=q_init)
+        if q_sol is None:
+            return {
+                "hand": side,
+                "success": False,
+                "pose_increment": inc,
+                "position_only": bool(position_only),
+                "ik": info,
+                "steps": 0,
             }
-        for joint_id in joints:
-            joint_delta = max(-float(max_dq), min(float(max_dq), float(deltas.get(joint_id, 0.0))))
-            target[joint_id] = current[joint_id] + joint_delta
+
+        delta = np.clip(np.asarray(q_sol, dtype=np.float64) - q_init, -float(max_dq), float(max_dq))
+        q_apply = _clamp_arm_q(q_init + delta, side)
+        target = dict(current)
+        for i, joint_id in enumerate(joints):
+            target[joint_id] = float(q_apply[i])
         step_limit = max(1e-4, float(max_speed) / max(1.0, float(rate_hz)))
         remaining = max(abs(target[j] - current[j]) for j in joints)
         steps = max(1, int(math.ceil(remaining / step_limit)))
@@ -1207,7 +1356,21 @@ class G1:
                 frame[joint_id] = current[joint_id] + (target[joint_id] - current[joint_id]) * ramp
             arm_sdk.write(frame, kp=30.0, kd=1.5, waist_kp={12: 200.0, 13: 200.0, 14: 480.0}, waist_kd={j: 12.0 for j in WAIST_JOINTS})
             time.sleep(1.0 / max(1.0, float(rate_hz)))
-        return {"hand": side, "pose_increment": inc, "position_only": bool(position_only), "joint_targets": {joint_id: target[joint_id] for joint_id in joints}, "steps": steps}
+        final_T = fk.compute_arm(q_apply)
+        return {
+            "hand": side,
+            "success": True,
+            "pose_increment": inc,
+            "position_only": bool(position_only),
+            "ik": info,
+            "joint_targets": {joint_id: target[joint_id] for joint_id in joints},
+            "ee_pose": {
+                "x": float(final_T[0, 3]),
+                "y": float(final_T[1, 3]),
+                "z": float(final_T[2, 3]),
+            },
+            "steps": steps,
+        }
 
     def extend_arm(self, hand="right", dx=0.08, dy=0.08, dz=0.04, steps=3, max_speed=0.25, max_dq=0.15, rate_hz=50.0):
         side = _normalize_side(hand)
