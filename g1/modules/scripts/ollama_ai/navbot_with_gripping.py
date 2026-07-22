@@ -33,6 +33,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 G1_DIR = SCRIPT_DIR.parents[2] if SCRIPT_DIR.name == "ollama_ai" else SCRIPT_DIR.parent
 MODULES_DIR = G1_DIR / "modules"
 SCRIPTS_DIR = MODULES_DIR / "scripts"
+WBC_DIR = G1_DIR / "WBC"
 for path in (MODULES_DIR, SCRIPTS_DIR):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
@@ -119,6 +120,19 @@ GESTURE_ACTIONS = {
     "right_kiss": "right_kiss",
     "two_hand_kiss": "two_hand_kiss",
 }
+THINK_SEQUENCE = ["think"]
+EXPLAIN_SEQUENCE = [
+    "Explain_base",
+    "Explain_left_0",
+    "Explain_left_1",
+    "Explain_base",
+    "Explain_right_0",
+    "Explain_right_1",
+    "Explain_base",
+    "Explain_both_0",
+    "Explain_both_1",
+]
+DEFAULT_POSE_FILE = WBC_DIR / "saved_ik_pose_cli_v3_poses.json"
 
 
 @dataclass
@@ -178,6 +192,19 @@ def parse_args() -> argparse.Namespace:
                         help="Actually execute step/turn locomotion commands instead of only logging them.")
     parser.add_argument("--no-gestures", dest="enable_gestures", action="store_false", default=True,
                         help="Disable high-level SDK arm gestures such as wave, clap, handshake, and high five.")
+    parser.add_argument("--no-pose-gestures", dest="enable_pose_gestures", action="store_false", default=True,
+                        help="Disable saved-pose gestures such as thinking, explain, and thanks.")
+    parser.add_argument("--pose-file", default=str(DEFAULT_POSE_FILE))
+    parser.add_argument("--motion-speed", type=float, default=0.32)
+    parser.add_argument("--motion-kp", type=float, default=30.0)
+    parser.add_argument("--motion-kd", type=float, default=1.5)
+    parser.add_argument("--thinking-speed", type=float, default=0.23)
+    parser.add_argument("--explain-speed", type=float, default=0.36)
+    parser.add_argument("--sequence-gap", type=float, default=0.25)
+    parser.add_argument("--pose-timeout-s", type=float, default=11.0)
+    parser.add_argument("--post-sequence-hold-s", type=float, default=4.0)
+    parser.add_argument("--thanks-hold-s", type=float, default=7.0)
+    parser.add_argument("--release-after-sequence", action="store_true")
     parser.add_argument("--no-gripping", dest="enable_gripping", action="store_false", default=True,
                         help="Do not launch the recognition dashboard/grasp plugin.")
     parser.add_argument("--gripping-launch-mode", choices=("in-process", "subprocess"), default="subprocess",
@@ -823,7 +850,123 @@ class MotionClient:
                 return code == 0
             except Exception as exc:
                 self.logger.warning(f"Locomotion command failed: {exc}")
+            return False
+
+
+class PoseGestureClient:
+    """Uses the saved IK pose worker from chatbot_with_tactile_dex3 for pose gestures."""
+
+    def __init__(self, args: argparse.Namespace, logger: Any) -> None:
+        self.args = args
+        self.logger = logger
+        self.enabled = bool(args.enable_pose_gestures)
+        self.proc: subprocess.Popen[str] | None = None
+        self.lock = threading.Lock()
+
+    def _start_worker(self) -> bool:
+        if not self.enabled:
+            return False
+        if self.proc is not None and self.proc.poll() is None:
+            return True
+        command = [
+            sys.executable,
+            str(SCRIPT_DIR / "chatbot_with_tactile_dex3.py"),
+            "--motion-worker",
+            "--enable-motion",
+            "--iface", str(self.args.iface),
+            "--domain-id", str(int(self.args.domain_id)),
+            "--pose-file", str(self.args.pose_file),
+            "--motion-speed", str(float(self.args.motion_speed)),
+            "--motion-kp", str(float(self.args.motion_kp)),
+            "--motion-kd", str(float(self.args.motion_kd)),
+            "--thinking-speed", str(float(self.args.thinking_speed)),
+            "--explain-speed", str(float(self.args.explain_speed)),
+            "--sequence-gap", str(float(self.args.sequence_gap)),
+            "--pose-timeout-s", str(float(self.args.pose_timeout_s)),
+            "--post-sequence-hold-s", str(float(self.args.post_sequence_hold_s)),
+            "--thanks-hold-s", str(float(self.args.thanks_hold_s)),
+            "--no-speech",
+            "--no-startup-speech",
+        ]
+        if bool(getattr(self.args, "release_after_sequence", False)):
+            command.append("--release-after-sequence")
+        env = os.environ.copy()
+        env.setdefault("CYCLONEDDS_HOME", "/home/unitree/cyclonedds_ws/install/cyclonedds")
+        env.setdefault("CYCLONEDDS_URI", "/home/unitree/cyclonedds_ws/cyclonedds.xml")
+        try:
+            self.proc = subprocess.Popen(
+                command,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                env=env,
+            )
+        except Exception as exc:
+            self.logger.warning(f"Could not start pose gesture worker: {exc}")
+            self.proc = None
+            return False
+        threading.Thread(target=self._log_worker_output, daemon=True).start()
+        self.logger.info(f"Started pose gesture worker pid={self.proc.pid}")
+        return True
+
+    def _log_worker_output(self) -> None:
+        proc = self.proc
+        if proc is None or proc.stdout is None:
+            return
+        for line in proc.stdout:
+            text = line.strip()
+            if text:
+                self.logger.info(f"[pose] {text}")
+
+    def _send(self, payload: dict[str, Any]) -> bool:
+        with self.lock:
+            if not self._start_worker():
                 return False
+            proc = self.proc
+            if proc is None or proc.stdin is None or proc.poll() is not None:
+                self.logger.warning("Pose gesture worker is not running.")
+                return False
+            try:
+                proc.stdin.write(json.dumps(payload, sort_keys=True) + "\n")
+                proc.stdin.flush()
+                return True
+            except BrokenPipeError:
+                self.logger.warning("Pose gesture worker pipe is closed.")
+                return False
+
+    def play_thinking(self) -> bool:
+        if not self.enabled:
+            self.logger.info("[pose gestures disabled] would play thinking pose")
+            return False
+        return self._send({"cmd": "play", "names": THINK_SEQUENCE, "speed": float(self.args.thinking_speed), "loop": False})
+
+    def play_explain(self) -> bool:
+        if not self.enabled:
+            self.logger.info("[pose gestures disabled] would play explain sequence")
+            return False
+        return self._send({"cmd": "play", "names": EXPLAIN_SEQUENCE, "speed": float(self.args.explain_speed), "loop": False})
+
+    def play_thanks(self) -> bool:
+        if not self.enabled:
+            self.logger.info("[pose gestures disabled] would play thanks pose")
+            return False
+        return self._send({"cmd": "thanks", "speed": float(self.args.explain_speed)})
+
+    def close(self) -> None:
+        proc = self.proc
+        if proc is None or proc.stdin is None:
+            return
+        try:
+            proc.stdin.write(json.dumps({"cmd": "close"}) + "\n")
+            proc.stdin.flush()
+            proc.wait(timeout=2.0)
+        except Exception:
+            try:
+                proc.terminate()
+            except Exception:
+                pass
 
 
 class GestureClient:
@@ -1060,6 +1203,9 @@ class GrippingClient:
     def stable_hold(self) -> dict[str, Any]:
         return self._request("POST", "/api/stable_hold")
 
+    def damp(self) -> dict[str, Any]:
+        return self._request("POST", "/api/damp")
+
     def stop_grabbing(self) -> dict[str, Any]:
         return self._request("POST", "/api/stop_grabbing")
 
@@ -1173,6 +1319,7 @@ class NavBotNode(Node):
         self.dds_status = self._init_dds_once(args)
         self.nav = NavState(args)
         self.motion = MotionClient(args, self.get_logger())
+        self.pose_gestures = PoseGestureClient(args, self.get_logger())
         self.gestures = GestureClient(args, self.get_logger())
         self.gripping = GrippingClient(args, self.get_logger())
         self.tactile = TactileHoldingMonitor(args, self.get_logger())
@@ -1206,7 +1353,8 @@ class NavBotNode(Node):
         self.get_logger().info(
             f"navbot_with_gripping ready audio={'external-only' if args.external_asr_only else args.audio_topic} "
             f"map={args.map_path} points={args.points_file} "
-            f"motion={'on' if args.enable_motion else 'off'} gestures={'on' if args.enable_gestures else 'off'} gripping={'on' if args.enable_gripping else 'off'} "
+            f"motion={'on' if args.enable_motion else 'off'} pose_gestures={'on' if args.enable_pose_gestures else 'off'} "
+            f"gestures={'on' if args.enable_gestures else 'off'} gripping={'on' if args.enable_gripping else 'off'} "
             f"knowledge_entries={len(self.retriever.entries) if self.retriever is not None else 0} "
             f"dds={self.dds_status}"
         )
@@ -1273,6 +1421,14 @@ class NavBotNode(Node):
                 )
                 if announce:
                     self._say(announce)
+                motion_name = str(route.get("motion", "")).strip().lower()
+                planned_intent = str(route.get("intent", "")).strip().lower()
+                if motion_name == "thinking" and planned_intent != "gesture":
+                    self.pose_gestures.play_thinking()
+                elif motion_name == "explain" and planned_intent != "gesture":
+                    self.pose_gestures.play_explain()
+                elif motion_name == "thanks" and planned_intent != "gesture":
+                    self.pose_gestures.play_thanks()
                 self._planned_announce_active = True
                 try:
                     result = self._dispatch(text)
@@ -1339,6 +1495,8 @@ class NavBotNode(Node):
             return {"intent": "release_arms", "announce": "Releasing my arms.", "needs_knowledge": False}
         if self._wants_stable_hold(low):
             return {"intent": "stable_hold", "announce": "Moving to a stable hold.", "needs_knowledge": False}
+        if self._wants_damp(low):
+            return {"intent": "damp", "announce": "Damping.", "needs_knowledge": False}
         if self._wants_extend_arm(low):
             return {"intent": "extend_arm", "announce": "Extending my arm.", "needs_knowledge": False}
         arm_side = self._extract_select_arm_side(low)
@@ -1367,11 +1525,12 @@ class NavBotNode(Node):
         if self._is_chat_text(low):
             return {"intent": "chat", "announce": "", "needs_knowledge": False}
         if self._is_knowledge_question(low):
-            return {"intent": "rag_question", "announce": "Let me check my local knowledge.", "needs_knowledge": True}
+            return {"intent": "rag_question", "announce": "Let me check my local knowledge.", "needs_knowledge": True, "motion": "thinking"}
         gesture = self._extract_gesture(low)
         if gesture is not None:
             action, announce = gesture
-            return {"intent": "gesture", "announce": announce, "motion": action, "needs_knowledge": False}
+            motion = "thinking" if action == "thinking" else "explain" if action == "explain" else action
+            return {"intent": "gesture", "announce": announce, "motion": motion, "needs_knowledge": False}
         return {
             "intent": "unknown",
             "announce": "I did not understand that navigation command.",
@@ -1488,6 +1647,13 @@ class NavBotNode(Node):
             result = self.gripping.stable_hold()
             return {"ok": bool(result.get("ok")), "code": 0, "intent": "stable_hold", "answer": ""}
 
+        if self._wants_damp(low):
+            if not self.gripping.enabled:
+                return {"ok": False, "code": 1, "intent": "damp", "answer": "The gripping system is not available right now."}
+            self._say_action_announce("Damping.")
+            result = self.gripping.damp()
+            return {"ok": bool(result.get("ok")), "code": 0 if result.get("ok") else 1, "intent": "damp", "answer": "" if result.get("ok") else f"I could not damp: {result.get('error', result.get('status', 'control failed'))}.", "raw": result}
+
         if self._wants_extend_arm(low):
             if not self.gripping.enabled:
                 return {"ok": False, "code": 1, "intent": "extend_arm", "answer": "The gripping system is not available right now."}
@@ -1566,6 +1732,12 @@ class NavBotNode(Node):
         gesture = self._extract_gesture(low)
         if gesture is not None:
             action, announce = gesture
+            if action == "thinking":
+                ok = self.pose_gestures.play_thinking()
+                return {"ok": ok, "code": 0 if ok else 1, "intent": "gesture", "motion": action, "answer": ""}
+            if action == "explain":
+                ok = self.pose_gestures.play_explain()
+                return {"ok": ok, "code": 0 if ok else 1, "intent": "gesture", "motion": action, "answer": ""}
             result = self.gestures.play(action)
             if result.get("ok"):
                 return {"ok": True, "code": int(result.get("code", 0)), "intent": "gesture", "motion": action, "answer": ""}
@@ -1650,6 +1822,10 @@ class NavBotNode(Node):
 
     @staticmethod
     def _extract_gesture(low: str) -> tuple[str, str] | None:
+        if "thinking gesture" in low or "think gesture" in low or low in {"think", "thinking"}:
+            return "thinking", "Let me think."
+        if "explain gesture" in low or low in {"explain", "explain motion"}:
+            return "explain", "Explaining."
         if "clap" in low or "applaud" in low or "lap your hands" in low or "sap your hands" in low:
             return "clap", "I will clap."
         if "high five" in low or "high-five" in low:
@@ -1831,6 +2007,11 @@ class NavBotNode(Node):
     def _wants_extend_arm(low: str) -> bool:
         phrases = ("extend arm", "extend your arm", "extend the arm")
         return any(phrase in low for phrase in phrases)
+
+    @staticmethod
+    def _wants_damp(low: str) -> bool:
+        phrases = ("damp", "damping", "damp the robot", "damp arm", "damp arms", "damp the arms")
+        return low in {"damp", "damping"} or any(phrase in low for phrase in phrases)
 
     @staticmethod
     def _wants_stable_hold(low: str) -> bool:
@@ -2027,6 +2208,7 @@ class NavBotNode(Node):
             self.external_asr_httpd = None
         if self.external_asr_thread is not None and self.external_asr_thread.is_alive():
             self.external_asr_thread.join(timeout=0.5)
+        self.pose_gestures.close()
         self.gripping.stop()
         return super().destroy_node()
 

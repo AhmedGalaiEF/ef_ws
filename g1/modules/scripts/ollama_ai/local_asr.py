@@ -29,6 +29,8 @@ def parse_args() -> argparse.Namespace:
                         help="faster-whisper/openai-whisper model name, or Vosk model directory.")
     parser.add_argument("--device", default=None,
                         help="sounddevice input device id/name. Use --list-devices to inspect.")
+    parser.add_argument("--level-meter", action="store_true",
+                        help="Print per-slice RMS while recording to debug microphone/device selection.")
     parser.add_argument("--compute-device", default="auto",
                         help="faster-whisper compute device: auto, cpu, cuda.")
     parser.add_argument("--compute-type", default="int8",
@@ -127,16 +129,38 @@ def list_devices() -> None:
     print(sd.query_devices())
 
 
+def resolve_input_device(device_arg: str | None) -> int | str | None:
+    if device_arg is None:
+        return None
+    device_text = str(device_arg).strip()
+    return int(device_text) if device_text.isdigit() else device_text
+
+
+def validate_input_device(device: int | str | None) -> None:
+    sd = require_module("sounddevice")
+    try:
+        info = sd.query_devices(device, "input")
+    except Exception as exc:
+        raise SystemExit(
+            f"Invalid input device {device!r}: {exc}\n"
+            "Run: py .\\local_asr.py --list-devices\n"
+            "Choose a device with inputs, e.g. one marked '(2 in, 0 out)', not headphones/output."
+        ) from exc
+    max_inputs = int(info.get("max_input_channels", 0) or 0)
+    if max_inputs < 1:
+        raise SystemExit(
+            f"Device {device!r} is not an input device: {info.get('name', device)!r} "
+            f"has {max_inputs} input channels.\n"
+            "Choose a microphone device, not a headphones/output device."
+        )
+
+
 def record_chunk(args: argparse.Namespace) -> tuple[Any, float]:
     sd = require_module("sounddevice")
     np = require_module("numpy")
     frames = int(float(args.sample_rate) * float(args.chunk_seconds))
     device: int | str | None
-    if args.device is None:
-        device = None
-    else:
-        device_text = str(args.device).strip()
-        device = int(device_text) if device_text.isdigit() else device_text
+    device = resolve_input_device(args.device)
     audio = sd.rec(
         frames,
         samplerate=int(args.sample_rate),
@@ -336,6 +360,7 @@ def main() -> int:
     if args.list_devices:
         list_devices()
         return 0
+    validate_input_device(resolve_input_device(args.device))
 
     try:
         backend = make_backend(args)
@@ -378,7 +403,9 @@ def main() -> int:
             if not recording:
                 time.sleep(0.02)
                 continue
-            audio, _rms = record_seconds(args, max(0.05, float(args.slice_seconds)))
+            audio, slice_rms = record_seconds(args, max(0.05, float(args.slice_seconds)))
+            if bool(args.level_meter):
+                print(f"rms={slice_rms:.4f}", flush=True)
             chunks.append(audio)
             if args.once:
                 audio = np.concatenate(chunks)
