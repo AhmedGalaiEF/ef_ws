@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import argparse
 import base64
-import difflib
 import json
 import math
 import os
@@ -65,7 +64,6 @@ from hand_pose_navigation.vla_planner import DEFAULT_VLA_POLICY
 import dash
 from dash import dcc, html, Input, Output, State, callback_context, no_update, ALL
 import dash_bootstrap_components as dbc
-from flask import request, jsonify
 
 try:
     from sdk_client import Robot
@@ -176,7 +174,6 @@ class SharedState:
         self.frame_seq: int = 0
         self.hand_fk_base: Dict[str, np.ndarray] = {}
         self.hand_fk_T_base: Dict[str, np.ndarray] = {}
-        self.lowstate_q_full: Optional[np.ndarray] = None
         self.hand_fk_ts: float = 0.0
         self.hand_fk_status: str = "FK hand: starting"
         self.extended_hand_R_base: Dict[str, np.ndarray] = {}
@@ -243,38 +240,6 @@ DEFAULT_CENTER_WAIST_SETTLE_S = 0.4
 DEFAULT_POST_GRASP_LIFT_M = 0.08
 DEFAULT_POST_GRASP_LIFT_DURATION_S = 2.5
 DEFAULT_DETECTION_PROMPT = "coffee cup"
-DEFAULT_VOICE_ASR_URL = os.environ.get("G1_VOICE_ASR_URL", "http://192.168.2.41:8097/asr")
-DEFAULT_VOICE_ASR_TOKEN = os.environ.get("G1_VOICE_ASR_TOKEN", "")
-
-
-def _argv_value(name: str, default: str = "") -> str:
-    try:
-        index = sys.argv.index(name)
-    except ValueError:
-        return default
-    try:
-        return str(sys.argv[index + 1])
-    except IndexError:
-        return default
-
-# Built-in "stable_hold" joint pose, copied from WBC/ik_pose_cli_v3.py's
-# STABLE_HOLD_ARM_JOINTS (the pose the IK pose tool ships with by default).
-STABLE_HOLD_ARM_JOINTS: Dict[int, float] = {
-    LEFT_ARM_JOINTS[0]: 0.000,
-    LEFT_ARM_JOINTS[1]: 1.000,
-    LEFT_ARM_JOINTS[2]: 0.105,
-    LEFT_ARM_JOINTS[3]: -0.100,
-    LEFT_ARM_JOINTS[4]: -0.368,
-    LEFT_ARM_JOINTS[5]: 0.164,
-    LEFT_ARM_JOINTS[6]: 0.000,
-    RIGHT_ARM_JOINTS[0]: 0.323,
-    RIGHT_ARM_JOINTS[1]: -0.307,
-    RIGHT_ARM_JOINTS[2]: -0.080,
-    RIGHT_ARM_JOINTS[3]: -0.688,
-    RIGHT_ARM_JOINTS[4]: 0.328,
-    RIGHT_ARM_JOINTS[5]: 0.140,
-    RIGHT_ARM_JOINTS[6]: 0.000,
-}
 
 
 class _MockRobot:
@@ -563,7 +528,6 @@ def _hand_fk_loop(iface: str, domain_id: int) -> None:
                 for side, T_base_hand in hand_T.items()
             }
             with STATE.lock:
-                STATE.lowstate_q_full = q_full.copy()
                 STATE.hand_fk_base = hands
                 STATE.hand_fk_T_base = hand_T
                 STATE.hand_fk_ts = float(ts or time.time())
@@ -590,7 +554,7 @@ def _make_control_robot(iface: str, domain_id: int):
         robot = Robot(
             iface=iface,
             domain_id=domain_id,
-            auto_start_sensors=False,
+            auto_start_sensors=True,
         )
         return robot, "control robot ready"
     except Exception as exc:
@@ -942,119 +906,6 @@ def _reach_preview(
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.DARKLY])
 app.title = "G1 Recognition Layer"
-app.index_string = """
-<!DOCTYPE html>
-<html>
-    <head>
-        {%metas%}
-        <title>{%title%}</title>
-        {%favicon%}
-        {%css%}
-    </head>
-    <body>
-        {%app_entry%}
-        <footer>
-            {%config%}
-            {%scripts%}
-            {%renderer%}
-            <script>
-            (function () {
-                let voiceRecognition = null;
-
-                function voiceConfig() {
-                    const el = document.getElementById("voice-config");
-                    return {
-                        url: (el && el.dataset.asrUrl) || "",
-                        token: (el && el.dataset.asrToken) || ""
-                    };
-                }
-
-                function setVoiceStatus(text) {
-                    const el = document.getElementById("voice-status");
-                    if (el) el.textContent = text;
-                }
-
-                function addVoiceLog(line) {
-                    const el = document.getElementById("voice-log");
-                    if (!el) return;
-                    el.textContent = new Date().toLocaleTimeString() + " " + line + "\\n" + el.textContent;
-                }
-
-                async function sendVoiceText(text) {
-                    const value = (text || "").trim();
-                    if (!value) return;
-                    const cfg = voiceConfig();
-                    if (!cfg.url) {
-                        setVoiceStatus("ASR endpoint is not configured.");
-                        return;
-                    }
-                    addVoiceLog("send: " + value);
-                    const headers = {"Content-Type": "application/json"};
-                    if (cfg.token) headers.Authorization = "Bearer " + cfg.token;
-                    try {
-                        const res = await fetch(cfg.url, {
-                            method: "POST",
-                            headers: headers,
-                            body: JSON.stringify({text: value})
-                        });
-                        const body = await res.text();
-                        addVoiceLog("response: " + body);
-                        setVoiceStatus(res.ok ? "Command sent." : "Command failed.");
-                    } catch (err) {
-                        setVoiceStatus("Command failed: " + err.message);
-                        addVoiceLog("error: " + err.message);
-                    }
-                }
-
-                document.addEventListener("submit", function (event) {
-                    const form = event.target;
-                    if (!form || form.id !== "voice-manual-form") return;
-                    event.preventDefault();
-                    event.stopImmediatePropagation();
-                    const input = document.getElementById("voice-manual-text");
-                    const text = input && input.value ? input.value.trim() : "";
-                    if (text) sendVoiceText(text);
-                    if (input) input.value = "";
-                }, true);
-
-                document.addEventListener("click", function (event) {
-                    const startButton = event.target && event.target.closest ? event.target.closest("#voice-start-btn") : null;
-                    const stopButton = event.target && event.target.closest ? event.target.closest("#voice-stop-btn") : null;
-                    if (!startButton && !stopButton) return;
-                    event.preventDefault();
-                    event.stopImmediatePropagation();
-                    if (stopButton) {
-                        if (voiceRecognition) voiceRecognition.stop();
-                        return;
-                    }
-                    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-                    if (!SpeechRecognition) {
-                        setVoiceStatus("SpeechRecognition is not supported in this browser.");
-                        return;
-                    }
-                    voiceRecognition = new SpeechRecognition();
-                    voiceRecognition.lang = "en-US";
-                    voiceRecognition.continuous = true;
-                    voiceRecognition.interimResults = false;
-                    voiceRecognition.onstart = () => setVoiceStatus("Listening.");
-                    voiceRecognition.onerror = (e) => {
-                        setVoiceStatus("Speech recognition error: " + e.error);
-                        addVoiceLog("error: " + e.error);
-                    };
-                    voiceRecognition.onend = () => setVoiceStatus("Stopped.");
-                    voiceRecognition.onresult = (e) => {
-                        for (let i = e.resultIndex; i < e.results.length; i++) {
-                            if (e.results[i].isFinal) sendVoiceText(e.results[i][0].transcript);
-                        }
-                    };
-                    voiceRecognition.start();
-                }, true);
-            })();
-            </script>
-        </footer>
-    </body>
-</html>
-"""
 
 
 def _instructions_card() -> dbc.Card:
@@ -1148,40 +999,6 @@ def _logs_card() -> dbc.Card:
     ], className="mb-3")
 
 
-def _voice_card() -> dbc.Card:
-    return dbc.Card([
-        dbc.CardHeader("Voice commands", style={"fontSize": "13px"}),
-        dbc.CardBody([
-            html.Div(
-                id="voice-config",
-                **{
-                    "data-asr-url": _argv_value("--voice-asr-url", DEFAULT_VOICE_ASR_URL),
-                    "data-asr-token": _argv_value("--voice-asr-token", DEFAULT_VOICE_ASR_TOKEN),
-                },
-            ),
-            dbc.ButtonGroup([
-                dbc.Button("Start headset", id="voice-start-btn", color="success"),
-                dbc.Button("Stop", id="voice-stop-btn", color="secondary"),
-            ], className="mb-2"),
-            html.Form([
-                dbc.InputGroup([
-                    dbc.Input(
-                        id="voice-manual-text",
-                        placeholder="Type a navigation or gripping command",
-                        autoComplete="off",
-                    ),
-                    dbc.Button("Send", id="voice-send-btn", color="primary", type="submit"),
-                ]),
-            ], id="voice-manual-form"),
-            html.Div(id="voice-status", className="mt-2", style={"fontSize": "12px", "color": "#9c9"}),
-            html.Pre(id="voice-log", style={
-                "maxHeight": "150px", "overflow": "auto", "fontSize": "11px",
-                "background": "#111", "padding": "8px", "marginTop": "8px", "marginBottom": 0,
-            }),
-        ]),
-    ], className="mb-3")
-
-
 def _limit_visible_detections(
     detections: Dict[str, Detection],
     boxes: List[Dict],
@@ -1222,8 +1039,7 @@ app.layout = dbc.Container([
 
     dbc.Row([
         dbc.Col(_instructions_card(), width=6),
-        dbc.Col(_voice_card(), width=3),
-        dbc.Col(_options_card(), width=3),
+        dbc.Col(_options_card(), width=6),
     ]),
 
     dbc.Row([
@@ -1453,10 +1269,6 @@ def _refresh(_n, view_name):
     elif selected_id is not None:
         selected_label = "Selected object is no longer visible."
 
-    control_status = globals().get("_CONTROL_STATUS", "control status unknown")
-    if control_status and control_status not in status_msg:
-        status_msg = f"{status_msg} | control: {control_status}"
-
     return (
         view_src, det_list, status_msg, camera_tf_status,
         "\n".join(grab_log), grab_disabled, selected_label, obstacle_status,
@@ -1609,24 +1421,6 @@ def _buttons(
     if not ctx.triggered:
         return no_update
     trigger = ctx.triggered[0]["prop_id"].split(".")[0]
-    control_buttons = {
-        "grab-btn",
-        "prepare-btn",
-        "walk-btn",
-        "stop-moving-btn",
-        "extend-arm-btn",
-        "stop-grabbing-btn",
-        "release-arms-btn",
-        "unrelease-arms-btn",
-        "hand-open-btn",
-        "hand-close-btn",
-        "damp-btn",
-    }
-    if trigger in control_buttons and globals().get("_CONTROL_ROBOT") is None:
-        status = str(globals().get("_CONTROL_STATUS", "control robot unavailable"))
-        with STATE.lock:
-            STATE.status_msg = status
-        return f"Control unavailable: {status}"
 
     if trigger == "grab-btn":
         _log("[recognition_app] Grab button clicked.")
@@ -1669,24 +1463,13 @@ def _buttons(
 # Background actions
 # ---------------------------------------------------------------------------
 
-def _acquire_arm_control(waiting_msg: str, timeout_s: float = 3.0) -> None:
-    """Cancel any in-progress arm motion (e.g. a running grab) and take the lock.
-
-    Setting ARM_CANCEL_EVENT makes grab/extend loops stop at their next check
-    (within ~0.2s) and release ARM_CONTROL_LOCK in their own finally block, so
-    the blocking acquire() below is guaranteed to return rather than hang —
-    this is what lets a command like "stable hold" take over promptly right
-    after (or during) a grab instead of being silently dropped as "busy".
-    """
-    ARM_CANCEL_EVENT.set()
-    if not ARM_CONTROL_LOCK.acquire(timeout=timeout_s):
-        with STATE.lock:
-            STATE.status_msg = waiting_msg
-        ARM_CONTROL_LOCK.acquire()
-
-
 def _run_release_arms() -> None:
-    _acquire_arm_control("release_arms() waiting: arm controller is busy")
+    ARM_CANCEL_EVENT.set()
+    acquired = ARM_CONTROL_LOCK.acquire(timeout=3.0)
+    if not acquired:
+        with STATE.lock:
+            STATE.status_msg = "release_arms() waiting: arm controller is busy"
+        ARM_CONTROL_LOCK.acquire()
     try:
         with STATE.lock:
             STATE.arm_motion_running = True
@@ -1710,7 +1493,10 @@ def _run_release_arms() -> None:
 
 
 def _run_unrelease_arms() -> None:
-    _acquire_arm_control("unrelease_arms() waiting: arm controller is busy")
+    if not ARM_CONTROL_LOCK.acquire(blocking=False):
+        with STATE.lock:
+            STATE.status_msg = "unrelease_arms() skipped: arm controller is busy"
+        return
     try:
         ARM_CANCEL_EVENT.clear()
         with STATE.lock:
@@ -1777,10 +1563,6 @@ def _run_hand_action(action: str) -> None:
     with STATE.lock:
         arm_override = STATE.arm_override
     side = _hand_side_from_override(arm_override)
-    _run_hand_action_for_side(action, side)
-
-
-def _run_hand_action_for_side(action: str, side: str) -> None:
     try:
         feedback_available = _send_hand_action(action, side)
         with STATE.lock:
@@ -1789,30 +1571,6 @@ def _run_hand_action_for_side(action: str, side: str) -> None:
     except Exception as exc:
         with STATE.lock:
             STATE.status_msg = f"hand_{action}({side}) failed: {exc}"
-
-
-def _run_stable_hold() -> None:
-    _acquire_arm_control("stable hold waiting: arm controller is busy")
-    try:
-        ARM_CANCEL_EVENT.clear()
-        with STATE.lock:
-            STATE.arm_motion_running = True
-            STATE.arm_motion_label = "stable hold"
-        if _CONTROL_ROBOT is None:
-            raise RuntimeError(_CONTROL_STATUS)
-        _ensure_arm_authority(_CONTROL_ROBOT, duration_s=0.4)
-        result = _CONTROL_ROBOT.hold_arm_pose(STABLE_HOLD_ARM_JOINTS)
-        with STATE.lock:
-            STATE.status_msg = f"stable hold reached: {result}"
-    except Exception as exc:
-        with STATE.lock:
-            STATE.status_msg = f"stable hold failed: {exc}"
-    finally:
-        with STATE.lock:
-            STATE.arm_motion_running = False
-            STATE.arm_motion_label = ""
-        ARM_CANCEL_EVENT.clear()
-        ARM_CONTROL_LOCK.release()
 
 
 def _run_damp() -> None:
@@ -1943,63 +1701,30 @@ def _run_stop_grabbing() -> None:
 
 
 def _read_current_arm_q(robot, arm: str) -> np.ndarray:
+    js = robot.get_joint_states()
+    joints = js.get("joints", {}) if js else {}
     joint_indices = LEFT_ARM_JOINTS if arm == "left" else RIGHT_ARM_JOINTS
-    with STATE.lock:
-        q_full = None if STATE.lowstate_q_full is None else STATE.lowstate_q_full.copy()
-        ts = float(STATE.hand_fk_ts)
-    if q_full is None or (time.time() - ts) > STALE_AFTER_S:
-        q_full = _read_robot_joint_state_q_full(robot, required_indices=joint_indices)
-    if q_full is None:
-        raise RuntimeError(
-            f"cannot read current {arm} arm joints; lowstate is stale or unavailable"
-        )
+    seen_indices = set()
+    q_full = np.zeros(30, dtype=np.float64)
+    for name, data in joints.items():
+        idx = _joint_entry_index(name, data)
+        if 0 <= idx < q_full.size and data.get("position") is not None:
+            q_full[idx] = float(data.get("position"))
+            seen_indices.add(idx)
+    missing = [idx for idx in joint_indices if idx not in seen_indices]
+    if missing:
+        raise RuntimeError(f"cannot read current {arm} arm joints from lowstate; missing indices {missing}")
     return q_full[joint_indices]
 
 
 def _read_joint_position(robot, joint_index: int) -> float:
-    with STATE.lock:
-        q_full = None if STATE.lowstate_q_full is None else STATE.lowstate_q_full.copy()
-        ts = float(STATE.hand_fk_ts)
-    if q_full is None or (time.time() - ts) > STALE_AFTER_S:
-        q_full = _read_robot_joint_state_q_full(robot, required_indices=[int(joint_index)])
-    if q_full is None:
-        raise RuntimeError(
-            f"cannot read joint index {joint_index}; lowstate is stale or unavailable"
-        )
-    if int(joint_index) < 0 or int(joint_index) >= q_full.size:
-        raise RuntimeError(f"joint index {joint_index} is outside shared lowstate size {q_full.size}")
-    return float(q_full[int(joint_index)])
-
-
-def _read_robot_joint_state_q_full(
-    robot,
-    required_indices: Optional[List[int]] = None,
-) -> Optional[np.ndarray]:
-    """Fallback for actions when the app's FK/lowstate cache has not updated."""
-    if robot is None or not hasattr(robot, "get_joint_states"):
-        return None
-    try:
-        js = robot.get_joint_states()
-    except Exception as exc:
-        _log(f"[recognition_app] direct get_joint_states() failed: {exc}")
-        return None
-    if not js:
-        return None
-    joints = js.get("joints", {})
-    q = np.zeros(30, dtype=np.float64)
-    seen_indices = set()
-    for label, data in joints.items():
-        idx = _joint_entry_index(label, data)
-        if 0 <= idx < q.size:
-            try:
-                q[idx] = float(data.get("position", 0.0))
-            except Exception:
-                q[idx] = 0.0
-            seen_indices.add(int(idx))
-    required = [int(idx) for idx in (required_indices or [])]
-    if not seen_indices or any(idx not in seen_indices for idx in required):
-        return None
-    return q
+    js = robot.get_joint_states()
+    joints = js.get("joints", {}) if js else {}
+    for name, data in joints.items():
+        idx = _joint_entry_index(name, data)
+        if idx == int(joint_index) and data.get("position") is not None:
+            return float(data.get("position"))
+    raise RuntimeError(f"cannot read joint index {joint_index} from lowstate")
 
 
 def _center_object_with_waist_yaw(
@@ -2281,7 +2006,10 @@ def _run_reset_to_extend_arm_reference(
 
 
 def _run_extend_arm() -> None:
-    _acquire_arm_control("extend arm waiting: arm controller is busy")
+    if not ARM_CONTROL_LOCK.acquire(blocking=False):
+        with STATE.lock:
+            STATE.status_msg = "extend arm skipped: arm controller is busy"
+        return
     try:
         ARM_CANCEL_EVENT.clear()
         with STATE.lock:
@@ -2852,227 +2580,6 @@ def _run_grab() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Voice-control API — plain Flask routes on app.server, alongside the Dash UI.
-# Each route just does what the matching button/callback already does
-# (STATE.lock-guarded field set, or a daemon thread launch); no new behavior.
-# ---------------------------------------------------------------------------
-
-def _api_authorized() -> bool:
-    token = str(getattr(_ARGS, "api_token", "") or "")
-    if not token:
-        return True
-    auth = str(request.headers.get("Authorization", ""))
-    return auth == f"Bearer {token}"
-
-
-def _api_control_unavailable():
-    status = str(globals().get("_CONTROL_STATUS", "control robot unavailable"))
-    with STATE.lock:
-        STATE.status_msg = status
-    return jsonify({"ok": False, "error": "control_unavailable", "status": status}), 503
-
-
-def _find_detection_by_label(name: str) -> Optional[Detection]:
-    wanted = str(name).strip().lower()
-    if not wanted:
-        return None
-    with STATE.lock:
-        candidates = list(STATE.detections.values())
-    best: Optional[Detection] = None
-    best_score = 0.0
-    for det in candidates:
-        label = str(det.label).strip().lower()
-        if wanted == label or wanted in label or label in wanted:
-            return det
-        score = difflib.SequenceMatcher(None, wanted, label).ratio()
-        if score > best_score:
-            best, best_score = det, score
-    return best if best_score >= 0.6 else None
-
-
-@app.server.route("/api/objects", methods=["GET"])
-def api_objects():
-    if not _api_authorized():
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    with STATE.lock:
-        fresh = (time.time() - STATE.last_detection_ts) <= STALE_AFTER_S if STATE.last_detection_ts else False
-        objects = [
-            {"id": det.id, "label": det.label, "score": round(float(det.score), 3)}
-            for det in STATE.detections.values()
-        ]
-    return jsonify({"ok": True, "stale": not fresh, "objects": objects})
-
-
-@app.server.route("/api/status", methods=["GET"])
-def api_status():
-    if not _api_authorized():
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    with STATE.lock:
-        return jsonify({
-            "ok": True,
-            "status_msg": STATE.status_msg,
-            "grab_log": list(STATE.grab_log[-50:]),
-            "grab_running": STATE.grab_running,
-            "arm_motion_running": STATE.arm_motion_running,
-            "selected_id": STATE.selected_id,
-            "arm_override": STATE.arm_override,
-            "vision_classes": list(STATE.vision_classes),
-        })
-
-
-@app.server.route("/api/select_arm/<side>", methods=["POST"])
-def api_select_arm(side: str):
-    if not _api_authorized():
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    side = str(side).strip().lower()
-    if side not in {"left", "right"}:
-        return jsonify({"ok": False, "error": "invalid_side"}), 400
-    with STATE.lock:
-        STATE.arm_override = side
-    return jsonify({"ok": True, "arm_override": side})
-
-
-@app.server.route("/api/select_object/<det_id>", methods=["POST"])
-def api_select_object(det_id: str):
-    if not _api_authorized():
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    with STATE.lock:
-        if det_id not in STATE.detections:
-            return jsonify({"ok": False, "error": "not_found"}), 404
-        STATE.selected_id = det_id
-    return jsonify({"ok": True, "selected_id": det_id})
-
-
-@app.server.route("/api/prepare", methods=["POST"])
-def api_prepare():
-    if not _api_authorized():
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    threading.Thread(target=_run_prepare, daemon=True).start()
-    return jsonify({"ok": True, "started": True})
-
-
-@app.server.route("/api/walk", methods=["POST"])
-def api_walk():
-    if not _api_authorized():
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    threading.Thread(target=_run_walk, daemon=True).start()
-    return jsonify({"ok": True, "started": True})
-
-
-@app.server.route("/api/stop_moving", methods=["POST"])
-def api_stop_moving():
-    if not _api_authorized():
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    threading.Thread(target=_run_stop_moving, daemon=True).start()
-    return jsonify({"ok": True, "started": True})
-
-
-@app.server.route("/api/extend_arm", methods=["POST"])
-def api_extend_arm():
-    if not _api_authorized():
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    if _CONTROL_ROBOT is None:
-        return _api_control_unavailable()
-    threading.Thread(target=_run_extend_arm, daemon=True).start()
-    return jsonify({"ok": True, "started": True})
-
-
-@app.server.route("/api/stop_grabbing", methods=["POST"])
-def api_stop_grabbing():
-    if not _api_authorized():
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    threading.Thread(target=_run_stop_grabbing, daemon=True).start()
-    return jsonify({"ok": True, "started": True})
-
-
-@app.server.route("/api/release_arms", methods=["POST"])
-def api_release_arms():
-    if not _api_authorized():
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    threading.Thread(target=_run_release_arms, daemon=True).start()
-    return jsonify({"ok": True, "started": True})
-
-
-@app.server.route("/api/unrelease_arms", methods=["POST"])
-def api_unrelease_arms():
-    if not _api_authorized():
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    threading.Thread(target=_run_unrelease_arms, daemon=True).start()
-    return jsonify({"ok": True, "started": True})
-
-
-@app.server.route("/api/hand/<side>/<action>", methods=["POST"])
-def api_hand_action(side: str, action: str):
-    if not _api_authorized():
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    side = str(side).strip().lower()
-    action = str(action).strip().lower()
-    if side not in {"left", "right"}:
-        return jsonify({"ok": False, "error": "invalid_side"}), 400
-    if action not in {"open", "close"}:
-        return jsonify({"ok": False, "error": "invalid_action"}), 400
-    threading.Thread(target=_run_hand_action_for_side, args=(action, side), daemon=True).start()
-    return jsonify({"ok": True, "started": True, "side": side, "action": action})
-
-
-@app.server.route("/api/stable_hold", methods=["POST"])
-def api_stable_hold():
-    if not _api_authorized():
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    threading.Thread(target=_run_stable_hold, daemon=True).start()
-    return jsonify({"ok": True, "started": True})
-
-
-@app.server.route("/api/damp", methods=["POST"])
-def api_damp():
-    if not _api_authorized():
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    if _CONTROL_ROBOT is None:
-        return _api_control_unavailable()
-    threading.Thread(target=_run_damp, daemon=True).start()
-    return jsonify({"ok": True, "started": True})
-
-
-@app.server.route("/api/set_prompt", methods=["POST"])
-def api_set_prompt():
-    if not _api_authorized():
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    body = request.get_json(silent=True) or {}
-    text = str(body.get("text", "") or "")
-    classes = _VISION.set_prompt(text)
-    with STATE.lock:
-        STATE.vision_classes = classes
-    if not _VISION.available:
-        return jsonify({"ok": False, "error": _VISION.error, "classes": classes}), 503
-    return jsonify({"ok": True, "classes": classes})
-
-
-@app.server.route("/api/grab", methods=["POST"])
-def api_grab():
-    if not _api_authorized():
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    body = request.get_json(silent=True) or {}
-    name = str(body.get("object", "") or "")
-    if name:
-        det = _find_detection_by_label(name)
-        if det is None:
-            return jsonify({"ok": False, "error": "not_found"}), 404
-        with STATE.lock:
-            STATE.selected_id = det.id
-        matched_label = det.label
-        selected_id = det.id
-    else:
-        with STATE.lock:
-            selected_id = STATE.selected_id
-            det = STATE.detections.get(selected_id or "")
-            matched_label = det.label if det is not None else ""
-        if not selected_id:
-            return jsonify({"ok": False, "error": "no_selection"}), 400
-    threading.Thread(target=_run_grab, daemon=True).start()
-    return jsonify({"ok": True, "matched_label": matched_label, "id": selected_id})
-
-
-# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -3095,12 +2602,6 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--host", default="0.0.0.0")
     p.add_argument("--port", type=int, default=8060)
     p.add_argument("--debug", action="store_true")
-    p.add_argument("--api-token", default="",
-                    help="Optional bearer token required by the /api/* voice-control routes.")
-    p.add_argument("--voice-asr-url", default=DEFAULT_VOICE_ASR_URL,
-                    help="Browser-facing navbot ASR endpoint used by the integrated headset controls.")
-    p.add_argument("--voice-asr-token", default=DEFAULT_VOICE_ASR_TOKEN,
-                    help="Bearer token sent by the integrated headset controls when posting voice commands.")
     return p.parse_args()
 
 
