@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Print the robot battery percentage from BMS DDS topics."""
+"""Print robot battery and temperature status from Unitree DDS topics."""
 from __future__ import annotations
 
 import argparse
@@ -23,6 +23,8 @@ DEFAULT_BMS_TOPICS = (
     "rt/bmsstate",
     "rt/agvbmsstate",
 )
+
+LOWSTATE_TOPIC = "rt/lowstate"
 
 
 def _read_attr(obj: Any, name: str) -> Any | None:
@@ -52,6 +54,15 @@ def _int_list(value: Any) -> list[int]:
         return []
 
 
+def _read_robot_temperature(msg: Any) -> dict[str, Any]:
+    imu = _read_attr(msg, "imu_state")
+    return {
+        "imu_temperature_c": _as_float(_read_attr(imu, "temperature")),
+        "temperature_ntc1_c": _as_float(_read_attr(msg, "temperature_ntc1")),
+        "temperature_ntc2_c": _as_float(_read_attr(msg, "temperature_ntc2")),
+    }
+
+
 def battery_status_from_lowstate(msg: Any) -> dict[str, Any]:
     bms = _read_attr(msg, "bms_state")
     bit_flag = _as_int(_read_attr(msg, "bit_flag"))
@@ -63,6 +74,7 @@ def battery_status_from_lowstate(msg: Any) -> dict[str, Any]:
         "power_a": _as_float(_read_attr(msg, "power_a")),
         "bit_flag": bit_flag,
         "battery_timeout": battery_timeout,
+        "robot_temperature": _read_robot_temperature(msg),
         "bms": None,
     }
 
@@ -76,7 +88,10 @@ def battery_status_from_lowstate(msg: Any) -> dict[str, Any]:
             "version_low": _as_int(_read_attr(bms, "version_low")),
             "bq_ntc": _int_list(_read_attr(bms, "bq_ntc")),
             "mcu_ntc": _int_list(_read_attr(bms, "mcu_ntc")),
+            "temperature": _int_list(_read_attr(bms, "temperature")),
             "cell_vol": _int_list(_read_attr(bms, "cell_vol")),
+            "bmsvoltage": _int_list(_read_attr(bms, "bmsvoltage")),
+            "bmsstate": _int_list(_read_attr(bms, "bmsstate")),
         }
 
     return status
@@ -90,6 +105,7 @@ def battery_status_from_bms_msg(msg: Any, *, topic: str) -> dict[str, Any]:
         "power_a": None,
         "bit_flag": None,
         "battery_timeout": None,
+        "robot_temperature": None,
         "bms": {
             "status": _as_int(_read_attr(msg, "status")),
             "soc": _as_int(_read_attr(msg, "soc")),
@@ -106,6 +122,13 @@ def battery_status_from_bms_msg(msg: Any, *, topic: str) -> dict[str, Any]:
             "bmsstate": _int_list(_read_attr(msg, "bmsstate")),
         },
     }
+
+
+def add_lowstate_temperature(status: dict[str, Any], msg: Any | None) -> dict[str, Any]:
+    if msg is None:
+        return status
+    status["robot_temperature"] = _read_robot_temperature(msg)
+    return status
 
 
 class LatestBmsSubscriber:
@@ -145,6 +168,39 @@ class LatestBmsSubscriber:
         return self.get_latest()
 
 
+class LatestLowStateSubscriber:
+    def __init__(self, topic: str = LOWSTATE_TOPIC) -> None:
+        from unitree_sdk2py.core.channel import ChannelSubscriber
+        from unitree_sdk2py.idl.unitree_go.msg.dds_ import LowState_ as GoLowState
+        from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_ as HgLowState
+
+        self._lock = threading.Lock()
+        self._latest: tuple[Any, float] | None = None
+        self._subscribers: list[Any] = []
+
+        for msg_type in (HgLowState, GoLowState):
+            sub = ChannelSubscriber(topic, msg_type)
+            sub.Init(self._callback, 10)
+            self._subscribers.append(sub)
+
+    def _callback(self, msg: Any) -> None:
+        with self._lock:
+            self._latest = (msg, time.time())
+
+    def get_latest(self) -> tuple[Any, float] | None:
+        with self._lock:
+            return self._latest
+
+    def wait(self, timeout: float) -> tuple[Any, float] | None:
+        deadline = time.time() + max(0.0, float(timeout))
+        while time.time() < deadline:
+            latest = self.get_latest()
+            if latest is not None:
+                return latest
+            time.sleep(0.05)
+        return self.get_latest()
+
+
 def print_status(status: dict[str, Any], *, as_json: bool = False) -> None:
     if as_json:
         print(json.dumps(status, indent=2, sort_keys=True))
@@ -168,6 +224,18 @@ def print_status(status: dict[str, Any], *, as_json: bool = False) -> None:
         print(f"Battery current: {current:.2f} A")
     if status.get("battery_timeout") is not None:
         print(f"Battery timeout flag: {status.get('battery_timeout')}")
+
+    robot_temperature = status.get("robot_temperature")
+    if isinstance(robot_temperature, dict):
+        imu_temp = robot_temperature.get("imu_temperature_c")
+        ntc1 = robot_temperature.get("temperature_ntc1_c")
+        ntc2 = robot_temperature.get("temperature_ntc2_c")
+        if imu_temp is not None:
+            print(f"Robot IMU temperature: {imu_temp:.1f} C")
+        if ntc1 is not None or ntc2 is not None:
+            ntc1_text = "n/a" if ntc1 is None else f"{ntc1:.1f} C"
+            ntc2_text = "n/a" if ntc2 is None else f"{ntc2:.1f} C"
+            print(f"Robot body NTC temperatures: {ntc1_text} / {ntc2_text}")
 
     if not isinstance(bms, dict):
         print("BMS state: unavailable on this lowstate message")
@@ -194,7 +262,7 @@ def print_status(status: dict[str, Any], *, as_json: bool = False) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Test G1 battery percentage from BMS DDS topics.")
+    parser = argparse.ArgumentParser(description="Print G1 battery and robot temperature from DDS topics.")
     parser.add_argument("--iface", default=os.environ.get("G1_IFACE", "eth0"), help="DDS network interface.")
     parser.add_argument("--domain-id", type=int, default=int(os.environ.get("ROS_DOMAIN_ID", "0")))
     parser.add_argument("--timeout", type=float, default=3.0, help="Seconds to wait for a battery message.")
@@ -222,6 +290,7 @@ def _run_bms(args: argparse.Namespace) -> bool:
     ensure_channel_factory_initialized(int(args.domain_id), str(args.iface))
     topics = [str(topic) for topic in args.topic] or list(DEFAULT_BMS_TOPICS)
     bms_sub = LatestBmsSubscriber(topics)
+    lowstate_sub = LatestLowStateSubscriber()
     latest = bms_sub.wait(float(args.timeout))
     if latest is None:
         print(
@@ -236,7 +305,10 @@ def _run_bms(args: argparse.Namespace) -> bool:
         if latest is None:
             return False
         msg, topic, _ts = latest
-        print_status(battery_status_from_bms_msg(msg, topic=topic), as_json=bool(args.json))
+        lowstate = lowstate_sub.wait(0.2)
+        lowstate_msg = None if lowstate is None else lowstate[0]
+        status = add_lowstate_temperature(battery_status_from_bms_msg(msg, topic=topic), lowstate_msg)
+        print_status(status, as_json=bool(args.json))
         if not args.watch:
             return True
         print()
