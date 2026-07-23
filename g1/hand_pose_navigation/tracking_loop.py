@@ -130,8 +130,8 @@ class TrackingLoop:
     # (e.g. the object moved out from under the fixed target mid-grab, or the
     # arm is stuck against a workspace/obstacle limit) and the loop aborts
     # rather than continuing to chase a target that isn't converging.
-    _STALL_WINDOW = 10
-    _STALL_PROGRESS_TOL_M = 0.003
+    _STALL_WINDOW = 30
+    _STALL_PROGRESS_TOL_M = 0.001
 
     def __init__(
         self,
@@ -203,6 +203,7 @@ class TrackingLoop:
         self._stop_event.set()
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=2.0)
+        self.executor.stop_continuous()
 
     @property
     def status(self) -> LoopStatus:
@@ -225,7 +226,8 @@ class TrackingLoop:
         try:
             self._run_loop(dt, start_t, q_arm_commanded, err_history)
         finally:
-            self.executor.stop_continuous()
+            if not (self._status.converged or self._status.stalled):
+                self.executor.stop_continuous()
             self._status.running = False
 
     def _run_loop(

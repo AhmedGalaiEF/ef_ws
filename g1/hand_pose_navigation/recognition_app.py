@@ -74,6 +74,14 @@ except ImportError:
     Robot = None
     _ROBOT_AVAILABLE = False
 
+try:
+    from sdk_hand import hand_closed_targets, hand_open_targets
+    _HAND_TARGETS_AVAILABLE = True
+except ImportError:
+    hand_closed_targets = None
+    hand_open_targets = None
+    _HAND_TARGETS_AVAILABLE = False
+
 
 # ---------------------------------------------------------------------------
 # Shared state
@@ -234,6 +242,11 @@ DEFAULT_REACH_MARGIN_M = 0.04
 DEFAULT_DIRECT_MAX_REACH_M = 0.52
 DEFAULT_SLOW_GRAB_RATE_HZ = 3.0
 DEFAULT_SLOW_GRAB_TIMEOUT_S = 180.0
+DEFAULT_VISION_GRAB_CONVERGENCE_POS_M = 0.065
+DEFAULT_VISION_CLOSE_ON_STALL_POS_M = 0.085
+DEFAULT_HAND_COMMAND_HOLD_S = 1.0
+DEFAULT_HAND_RECOVERY_HOLD_S = 1.6
+DEFAULT_HAND_TARGET_TOL_RAD = 0.12
 DEFAULT_EXTEND_STAGE_DURATION_S = 1.2
 DEFAULT_EXTEND_FINAL_Y_DECREASE_M = 0.09
 DEFAULT_CENTER_WAIST_MAX_YAW_RAD = 0.25
@@ -809,14 +822,11 @@ def _direct_nav_target_frame(
 
 
 # ArmFK's "hand" frame is hand_palm_link, i.e. the fixed wrist_yaw -> palm
-# mount flange (see arm_fk.py's _HAND_PALM_OFFSET). That's the right target
-# frame for control/IK, but visually it's still ~7.8cm short of where the
-# fingers actually start (right_hand_index_0_joint / right_hand_middle_0_joint
-# origin xyz="0.0777 ..." in g1_29dof_with_hand_rev_1_0_pkg.urdf, in
-# hand_palm_link's own frame). Nudge the on-screen gizmo out to that surface
-# so it reads as "the palm" rather than the mount plate — display only, does
-# not touch anything used for actual arm motion.
-_PALM_VISUAL_OFFSET_M = 0.075
+# mount flange (see arm_fk.py's _HAND_PALM_OFFSET). For the camera overlay,
+# nudge the gizmo a little farther along the palm so it lands near the visible
+# palm center instead of the wrist mount. Display only; control/IK still use
+# the FK hand frame.
+_PALM_VISUAL_OFFSET_M = 0.045
 
 
 def _draw_detection_gizmos(
@@ -879,9 +889,11 @@ def _draw_detection_gizmos(
                     plan_color,
                     thickness=2,
                 )
+            T_base_plan_visual = T_base_plan.copy()
+            T_base_plan_visual[:3, 3] = _palm_visual_point(T_base_plan)
             _draw_pose_axis(
                 out,
-                T_camera_base @ T_base_plan,
+                T_camera_base @ T_base_plan_visual,
                 "planned hand",
                 plan_color,
                 axis_len_m=0.055,
@@ -1750,26 +1762,144 @@ def _run_hand_close() -> None:
     _run_hand_action("close")
 
 
-def _send_hand_action(action: str, side: str, hold_s: Optional[float] = None) -> bool:
+def _hand_action_target(action: str, side: str) -> Optional[List[float]]:
+    if not _HAND_TARGETS_AVAILABLE:
+        return None
+    try:
+        if action == "open" and hand_open_targets is not None:
+            return [float(v) for v in hand_open_targets(side)]
+        if action == "close" and hand_closed_targets is not None:
+            return [float(v) for v in hand_closed_targets(side)]
+    except Exception as exc:
+        _log(f"[recognition_app] cannot build hand_{action} target for {side}: {exc}")
+    return None
+
+
+def _hand_snapshot(side: str) -> Optional[Dict[str, Any]]:
     if _CONTROL_ROBOT is None:
-        raise RuntimeError(_CONTROL_STATUS)
-    feedback_available = True
+        return None
     try:
         snapshot = _CONTROL_ROBOT.get_hand_state_snapshot(side)
     except Exception:
         snapshot = None
+    if snapshot is not None:
+        return snapshot
+    try:
+        controller = _CONTROL_ROBOT._get_hand(side)
+        if hasattr(controller, "get_state_snapshot"):
+            state = controller.get_state_snapshot(max_age=1.0)
+            if state is not None:
+                positions = state.get("positions")
+                if isinstance(positions, list):
+                    from sdk_hand import HAND_JOINT_NAMES
+                    state["positions"] = {
+                        HAND_JOINT_NAMES[idx]: positions[idx]
+                        for idx in range(min(len(positions), len(HAND_JOINT_NAMES)))
+                    }
+                return state
+    except Exception:
+        return None
+    return None
+
+
+def _hand_target_error(side: str, target: List[float]) -> Optional[float]:
+    snapshot = _hand_snapshot(side)
+    if snapshot is None:
+        return None
+    positions = snapshot.get("positions", {})
+    if not isinstance(positions, dict):
+        return None
+    try:
+        from sdk_hand import HAND_JOINT_NAMES
+        actual = [float(positions[name]) for name in HAND_JOINT_NAMES]
+    except Exception:
+        return None
+    return max(abs(goal - current) for goal, current in zip(target, actual))
+
+
+def _reset_hand_controller(side: str) -> None:
+    if _CONTROL_ROBOT is None:
+        return
+    hands = getattr(_CONTROL_ROBOT, "_hands", None)
+    if not isinstance(hands, dict):
+        return
+    controller = hands.pop(side, None)
+    if controller is not None and hasattr(controller, "stop_release_fingers"):
+        try:
+            controller.stop_release_fingers()
+        except Exception:
+            pass
+    _log(f"[recognition_app] reset {side} Dex3 controller instance.")
+
+
+def _send_hand_action(action: str, side: str, hold_s: Optional[float] = None) -> bool:
+    if _CONTROL_ROBOT is None:
+        raise RuntimeError(_CONTROL_STATUS)
+    target = _hand_action_target(action, side)
+    snapshot = _hand_snapshot(side)
     if snapshot is None:
         feedback_available = False
         _log(
             f"[recognition_app] {side} Dex3 state feedback unavailable "
             f"(no rt/dex3/{side}/state messages); sending hand_{action} anyway."
         )
-    if action == "open":
-        _CONTROL_ROBOT.hand_open(hand=side)
-    elif hold_s is None:
-        _CONTROL_ROBOT.hand_close(hand=side)
     else:
-        _CONTROL_ROBOT.hand_close(hand=side, hold_s=hold_s)
+        feedback_available = True
+
+    command_hold_s = DEFAULT_HAND_COMMAND_HOLD_S if hold_s is None else float(hold_s)
+    if action == "open":
+        _CONTROL_ROBOT.hand_open(hand=side, hold_s=command_hold_s, ramp_s=0.25)
+    elif hold_s is None:
+        _CONTROL_ROBOT.hand_close(hand=side, hold_s=command_hold_s, ramp_s=0.25)
+    else:
+        _CONTROL_ROBOT.hand_close(hand=side, hold_s=command_hold_s, ramp_s=0.20)
+
+    should_recover = target is not None and (action == "open" or hold_s is None)
+    if should_recover:
+        err = _hand_target_error(side, target)
+        if err is not None and err > DEFAULT_HAND_TARGET_TOL_RAD:
+            _log(
+                f"[recognition_app] hand_{action}({side}) missed target "
+                f"(max_err={err:.3f}rad); retrying explicit pose."
+            )
+            if hasattr(_CONTROL_ROBOT, "hand_pose"):
+                _CONTROL_ROBOT.hand_pose(
+                    target,
+                    hand=side,
+                    hold_s=DEFAULT_HAND_RECOVERY_HOLD_S,
+                    rate_hz=50.0,
+                    kp=1.8,
+                    kd=0.12,
+                    tau=0.08,
+                    ramp_s=0.25,
+                )
+            else:
+                if action == "open":
+                    _CONTROL_ROBOT.hand_open(hand=side, hold_s=DEFAULT_HAND_RECOVERY_HOLD_S, ramp_s=0.25)
+                else:
+                    _CONTROL_ROBOT.hand_close(hand=side, hold_s=DEFAULT_HAND_RECOVERY_HOLD_S, ramp_s=0.25)
+            retry_err = _hand_target_error(side, target)
+            if retry_err is not None and retry_err > DEFAULT_HAND_TARGET_TOL_RAD:
+                _log(
+                    f"[recognition_app] hand_{action}({side}) still off target "
+                    f"(max_err={retry_err:.3f}rad); recreating hand controller and retrying."
+                )
+                _reset_hand_controller(side)
+                if hasattr(_CONTROL_ROBOT, "hand_pose"):
+                    _CONTROL_ROBOT.hand_pose(
+                        target,
+                        hand=side,
+                        hold_s=DEFAULT_HAND_RECOVERY_HOLD_S,
+                        rate_hz=50.0,
+                        kp=1.8,
+                        kd=0.12,
+                        tau=0.08,
+                        ramp_s=0.25,
+                    )
+                elif action == "open":
+                    _CONTROL_ROBOT.hand_open(hand=side, hold_s=DEFAULT_HAND_RECOVERY_HOLD_S, ramp_s=0.25)
+                else:
+                    _CONTROL_ROBOT.hand_close(hand=side, hold_s=DEFAULT_HAND_RECOVERY_HOLD_S, ramp_s=0.25)
     return feedback_available
 
 
@@ -2332,6 +2462,20 @@ def _log(line: str) -> None:
         STATE.grab_log = STATE.grab_log[-300:]
 
 
+def _shutdown_direct_nav(nav, context: str) -> None:
+    global ACTIVE_DIRECT_NAV
+    if nav is None:
+        return
+    try:
+        nav.shutdown()
+    except Exception as exc:
+        _log(f"[recognition_app] {context} nav shutdown failed: {exc}")
+    finally:
+        with ACTIVE_NAV_LOCK:
+            if ACTIVE_DIRECT_NAV is nav:
+                ACTIVE_DIRECT_NAV = None
+
+
 def _estimate_obstacles(cam: Dict[str, float]) -> Obstacles:
     """Fit a table plane from the current depth frame for obstacle-aware
     trajectory checking (Step 8b — see obstacle_checker.py). Table is None
@@ -2487,6 +2631,61 @@ def _lift_end_effector_z_slowly(
     return result
 
 
+def _lift_end_effector_z_with_continuous_executor(
+    robot,
+    arm: str,
+    executor: ArmExecutor,
+    lift_m: float = DEFAULT_POST_GRASP_LIFT_M,
+) -> Dict[str, Any]:
+    if lift_m <= 0.0:
+        return {"success": True, "reason": "lift_disabled"}
+    q_cur = _read_current_arm_q(robot, arm)
+    fk = ArmFK(arm=arm, backend="urdf")
+    T_start = fk.compute_arm(q_cur)
+    T_lift = T_start.copy()
+    T_lift[2, 3] += float(lift_m)
+    ik = ArmIK(
+        arm=arm,
+        solver="dls",
+        tol_pos_m=0.010,
+        tol_rot_rad=0.20,
+    )
+    q_solution, info = ik.solve(T_lift, q_init=q_cur)
+    if q_solution is None:
+        return {"success": False, "reason": "ik_failed", "ik_info": info}
+    validation = executor.validate(
+        q_solution,
+        T_base_desired=T_lift,
+        q_arm_start=q_cur,
+    )
+    if not validation.get("safe"):
+        return {
+            "success": False,
+            "reason": validation.get("reason"),
+            "violations": validation.get("violations"),
+            "ik_info": info,
+        }
+    executor.submit_target(q_solution)
+    t0 = time.time()
+    while time.time() - t0 < DEFAULT_POST_GRASP_LIFT_DURATION_S:
+        if ARM_CANCEL_EVENT.is_set():
+            return {
+                "success": False,
+                "reason": "stopped",
+                "duration_s": time.time() - t0,
+                "ik_info": info,
+                "lift_m": float(lift_m),
+            }
+        time.sleep(0.05)
+    return {
+        "success": True,
+        "controller": "continuous_executor",
+        "duration_s": time.time() - t0,
+        "ik_info": info,
+        "lift_m": float(lift_m),
+    }
+
+
 def _run_direct_grab_inline(
     det: Detection,
     arm: str,
@@ -2586,7 +2785,7 @@ def _run_direct_grab_inline(
             "camera_yaw": float(cam.get("yaw", 0.0)),
             "ik_tol_pos_m": 0.10 if det.source == "vision" else 0.003,
             "ik_tol_rot_rad": 3.14 if det.source == "vision" else 0.01,
-            "convergence_pos_m": 0.035 if det.source == "vision" else 0.015,
+            "convergence_pos_m": DEFAULT_VISION_GRAB_CONVERGENCE_POS_M if det.source == "vision" else 0.015,
             "convergence_rot_rad": 3.14 if det.source == "vision" else 0.05,
             "max_joint_step_rad": max_joint_step_rad,
             "max_joint_speed_rad_s": max_joint_speed_rad_s,
@@ -2631,7 +2830,9 @@ def _run_direct_grab_inline(
             ACTIVE_DIRECT_NAV = nav
         ok = False
         stalled = False
+        last_nav_status: Dict[str, Any] = {}
         last_status_log_t = 0.0
+        nav_holding = False
         try:
             deadline = time.time() + float(config["timeout_s"]) + 2.0
             while time.time() < deadline:
@@ -2639,6 +2840,7 @@ def _run_direct_grab_inline(
                     _log("[recognition_app] Direct grab cancelled by safety command.")
                     break
                 status = nav.status_snapshot()
+                last_nav_status = dict(status)
                 now = time.time()
                 if now - last_status_log_t >= 1.0:
                     last_status_log_t = now
@@ -2663,7 +2865,7 @@ def _run_direct_grab_inline(
                     _log(
                         "[recognition_app] Direct grab stalled: target has not "
                         "gotten closer over the last several EE-pose increments "
-                        "(object likely moved) — will reset to saved extend-arm reference."
+                        "(object likely moved) — checking whether EE is close enough to grasp."
                     )
                     break
                 if not status.get("running", True):
@@ -2671,15 +2873,43 @@ def _run_direct_grab_inline(
                     break
                 time.sleep(0.2)
         finally:
-            nav.shutdown()
-            with ACTIVE_NAV_LOCK:
-                if ACTIVE_DIRECT_NAV is nav:
-                    ACTIVE_DIRECT_NAV = None
+            nav_holding = bool(ok or stalled)
+            if not nav_holding:
+                _shutdown_direct_nav(nav, "direct grab")
 
         if stalled:
+            pos_err = None
+            try:
+                raw_pos_err = last_nav_status.get("last_error_pos_m")
+                pos_err = None if raw_pos_err is None else float(raw_pos_err)
+            except Exception:
+                pos_err = None
+            close_on_stall_m = (
+                DEFAULT_VISION_CLOSE_ON_STALL_POS_M
+                if det.source == "vision"
+                else max(0.030, float(config["convergence_pos_m"]))
+            )
+            if pos_err is not None and pos_err <= close_on_stall_m:
+                _log(
+                    "[recognition_app] Direct grab stalled near target "
+                    f"(pos_err={pos_err:.4f}m <= {close_on_stall_m:.4f}m); "
+                    "closing hand instead of resetting."
+                )
+                ok = True
+            else:
+                _log(
+                    "[recognition_app] Direct grab stalled away from target "
+                    f"(pos_err={pos_err}); resetting to saved extend-arm reference."
+                )
+        if stalled and not ok:
             if ARM_CANCEL_EVENT.is_set():
                 _log("[recognition_app] Stall reset skipped: grab was cancelled.")
+                if nav_holding:
+                    _shutdown_direct_nav(nav, "direct grab")
                 return
+            if nav_holding:
+                _shutdown_direct_nav(nav, "direct grab before stall reset")
+                nav_holding = False
             try:
                 reset_result = _run_reset_to_extend_arm_reference(
                     _CONTROL_ROBOT,
@@ -2694,22 +2924,31 @@ def _run_direct_grab_inline(
 
         if not ok:
             _log("[recognition_app] Direct grab did not converge; not closing hand.")
+            if nav_holding:
+                _shutdown_direct_nav(nav, "direct grab")
             return
         _log("[recognition_app] Direct grab converged.")
         try:
             closed_hand = False
             if hasattr(_CONTROL_ROBOT, "hand_close"):
+                _log("[recognition_app] Holding EE pose while closing hand.")
                 _send_hand_action("close", arm, hold_s=0.6)
                 closed_hand = True
                 _log(f"[recognition_app] Closed {arm} hand.")
             if not closed_hand:
                 _log("[recognition_app] Hand close unavailable; skipping post-grasp lift.")
+                if nav_holding:
+                    _shutdown_direct_nav(nav, "direct grab")
                 return
         except Exception as exc:
             _log(f"[recognition_app] Hand close failed: {exc}")
+            if nav_holding:
+                _shutdown_direct_nav(nav, "direct grab")
             return
         if ARM_CANCEL_EVENT.is_set():
             _log("[recognition_app] Post-grasp lift skipped because grab was cancelled.")
+            if nav_holding:
+                _shutdown_direct_nav(nav, "direct grab")
             return
         try:
             with STATE.lock:
@@ -2718,15 +2957,27 @@ def _run_direct_grab_inline(
                 "[recognition_app] Raising end effector in base Z by "
                 f"{DEFAULT_POST_GRASP_LIFT_M:.3f} m."
             )
-            lift_result = _lift_end_effector_z_slowly(
-                _CONTROL_ROBOT,
-                arm,
-                max_joint_step_rad,
-                max_joint_speed_rad_s,
-            )
+            hold_executor = getattr(nav, "_executor_obj", None) if nav_holding else None
+            if hold_executor is not None:
+                _log("[recognition_app] Lifting with the continuous hold executor.")
+                lift_result = _lift_end_effector_z_with_continuous_executor(
+                    _CONTROL_ROBOT,
+                    arm,
+                    hold_executor,
+                )
+            else:
+                lift_result = _lift_end_effector_z_slowly(
+                    _CONTROL_ROBOT,
+                    arm,
+                    max_joint_step_rad,
+                    max_joint_speed_rad_s,
+                )
             _log(f"[recognition_app] post-grasp lift result: {lift_result}")
         except Exception as exc:
             _log(f"[recognition_app] post-grasp lift failed: {exc}")
+        finally:
+            if nav_holding:
+                _shutdown_direct_nav(nav, "direct grab after post-grasp lift")
     finally:
         with STATE.lock:
             STATE.arm_motion_running = False
