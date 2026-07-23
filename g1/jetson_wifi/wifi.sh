@@ -4,9 +4,10 @@
 # get into this directory
 sudo vim /etc/wpa_supplicant/wpa_supplicant-wlan0.conf
 
-# add up the username and password in the file
+# add up the username and password in the file (replace YOUR_SSID and YOUR_WIFI_PASSWORD with your actual wifi credentials)
 
 wpa_passphrase "YOUR_SSID" "YOUR_WIFI_PASSWORD" | sudo tee /etc/wpa_supplicant/wpa_supplicant-wlan0.conf >/dev/null
+
 
 
 # run the following command to connect to the wifi network
