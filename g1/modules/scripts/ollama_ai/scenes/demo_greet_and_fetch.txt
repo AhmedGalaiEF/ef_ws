@@ -1,0 +1,22 @@
+Announce: I am coming.
+Go to 'point A'.
+Greet people with a wave and introduce yourself in less than 15 words.
+Introduce EF Robotics in less than 25 words.
+Ask: do you have any questions?
+Listen to the question and save it.
+Do a thinking gesture and announce: let me think.
+Answer the question in less than 40 words, using the RAG knowledge base.
+Wait for the host to ask what objects you see in front of you.
+Name two objects you see: look for a bottle and a cup.
+Wait for the host to tell you which object to grab, and save their answer.
+Announce: I will try.
+Grab the object the host selected.
+Wait for the host to ask: can you bring it to me?
+Announce: I will try.
+Go to 'point B'.
+Announce: here you go.
+Open the right hand.
+Step back (move backward briefly).
+Release the arms.
+Announce: I am running out of battery, I must go now.
+Go to 'point C'.
