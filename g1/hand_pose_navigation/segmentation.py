@@ -15,6 +15,7 @@ ArUco tag (target_detector.py) wherever millimeter accuracy matters.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 import cv2
@@ -123,6 +124,96 @@ def pose_from_mask(
         method="mask_pca",
         pixel_uv=(u_center, v_center),
         depth_m=d_center,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Grasp surface estimation
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class GraspSurfaceEstimate:
+    """Coarse footprint of a masked object, from the same PCA point cloud
+    used by pose_from_mask(). Used to size the grasp standoff and hand
+    aperture to the object instead of using one fixed value for everything
+    from a pen to a pot.
+
+    width_m / length_m: in-view extents along the two PCA axes that lie
+        roughly across the camera's view (e0 = longest, e1 = shortest).
+        length_m is the object's dominant footprint dimension; width_m is
+        the narrower dimension a pinch grasp would close across.
+    near_surface_offset_m: how far the closest-to-camera point of the
+        object sits in front of the point-cloud centroid, along the
+        camera-facing normal (e2). A standoff computed from the centroid
+        alone (as if the object were a point) would let the wrist drive
+        into this near surface; add this offset (plus clearance) to avoid
+        that for large/bulky objects.
+    """
+
+    width_m: float
+    length_m: float
+    normal_extent_m: float
+    near_surface_offset_m: float
+    confidence: float
+    point_count: int
+
+
+def estimate_grasp_surface(
+    mask: np.ndarray,
+    depth_m: np.ndarray,
+    K: CameraIntrinsics,
+    min_points: int = 30,
+) -> Optional[GraspSurfaceEstimate]:
+    """Estimate a masked object's graspable footprint from its depth point
+    cloud. Reuses the same back-projection + PCA approach as
+    pose_from_mask(); this is a coarse size estimate, not a precise
+    measurement — good enough to scale a standoff distance or a grip target,
+    not for anything requiring millimeter accuracy.
+    """
+    ys, xs = np.nonzero(mask)
+    if xs.size < min_points:
+        return None
+
+    depths = depth_m[ys, xs]
+    valid = depths > 0.05
+    xs, ys, depths = xs[valid], ys[valid], depths[valid]
+    if xs.size < min_points:
+        return None
+
+    X = (xs.astype(np.float64) - K.cx) * depths / K.fx
+    Y = (ys.astype(np.float64) - K.cy) * depths / K.fy
+    Z = depths.astype(np.float64)
+    pts = np.stack([X, Y, Z], axis=1)
+
+    centroid = pts.mean(axis=0)
+    centered = pts - centroid
+
+    _, _, vt = np.linalg.svd(centered, full_matrices=False)
+    e0, e1, e2 = vt[0], vt[1], vt[2]
+    # Same convention as pose_from_mask(): orient e2 to point back toward
+    # the camera, so points nearer the camera than the centroid project
+    # positively onto it.
+    if np.dot(e2, centroid) > 0:
+        e2 = -e2
+
+    proj0 = centered @ e0
+    proj1 = centered @ e1
+    proj2 = centered @ e2
+
+    length_m = float(proj0.max() - proj0.min())
+    width_m = float(proj1.max() - proj1.min())
+    normal_extent_m = float(proj2.max() - proj2.min())
+    near_surface_offset_m = max(0.0, float(proj2.max()))
+
+    n = int(xs.size)
+    confidence = float(min(1.0, n / 400.0))
+    return GraspSurfaceEstimate(
+        width_m=max(0.005, width_m),
+        length_m=max(0.005, length_m),
+        normal_extent_m=max(0.0, normal_extent_m),
+        near_surface_offset_m=near_surface_offset_m,
+        confidence=confidence,
+        point_count=n,
     )
 
 

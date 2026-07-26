@@ -14,15 +14,28 @@ and its camera extrinsic was disconnected from the one calibrated/drawn here
 (see camera_tf_publisher.py's own hardcoded default). Use
 run_hand_pose_nav.py --use-ros-tf directly if you need that pipeline.
 
+v3 additions over recognition_app_old.py:
+  - Grasp surface estimation (segmentation.estimate_grasp_surface): each
+    vision detection's mask/depth point cloud is used to estimate the
+    object's in-view footprint and how far its near surface sits in front
+    of the point-cloud centroid, and the grasp standoff is sized from that
+    instead of one fixed distance for every object.
+  - Dex3 tactile sensor feedback (sdk_client.Robot.get_tactile_pressures(),
+    same raw-value semantics as modules/scripts/test_dex3_tactile.py):
+    hand closing is driven by measured fingertip pressure instead of a
+    single fixed close command, and current pressures are shown in the UI.
+  - Object mass input in the web UI: the target grip pressure and the
+    post-grasp lift stiffness/speed/duration all scale with the entered
+    mass, so light and heavy objects are gripped and lifted differently.
+
 Run:
-    python3 recognition_app.py [--iface eth0] [--domain-id 0] [--mock]
+    python3 recognition_app_v3.py [--iface eth0] [--domain-id 0] [--mock]
 Then open http://<host>:8060 in a browser on the same network.
 """
 from __future__ import annotations
 
 import argparse
 import base64
-import difflib
 import json
 import math
 import os
@@ -49,6 +62,7 @@ from hand_pose_navigation.target_detector import (
 from hand_pose_navigation.segmentation import (
     mask_from_box_depth, pose_from_mask,
     draw_detection_boxes, draw_segmentation_overlay,
+    estimate_grasp_surface, GraspSurfaceEstimate,
 )
 from hand_pose_navigation.vision_detector import VisionDetector
 from hand_pose_navigation.direct_nav import DirectHandPoseNav, _make_transform
@@ -65,7 +79,6 @@ from hand_pose_navigation.vla_planner import DEFAULT_VLA_POLICY
 import dash
 from dash import dcc, html, Input, Output, State, callback_context, no_update, ALL
 import dash_bootstrap_components as dbc
-from flask import request, jsonify
 
 try:
     from sdk_client import Robot
@@ -95,6 +108,7 @@ class Detection:
     score: float
     T_camera_object: np.ndarray
     box: Optional[Tuple[int, int, int, int]] = None
+    grasp_surface: Optional[GraspSurfaceEstimate] = None
 
 
 # Unitree G1 depth-camera drawing:
@@ -114,6 +128,8 @@ DEFAULT_MAX_JOINT_STEP_RAD = 0.08
 ABSOLUTE_MAX_JOINT_STEP_RAD = 0.10
 DEFAULT_MAX_JOINT_SPEED_RAD_S = 0.30
 ABSOLUTE_MAX_JOINT_SPEED_RAD_S = 0.60
+DEFAULT_OBJECT_MASS_KG = 0.30
+MAX_OBJECT_MASS_KG = 5.0
 WAIST_YAW_JOINT_INDEX = 12
 BODY_JOINT_INDEX_BY_LABEL = {
     "left_arm.shoulder_pitch": 15,
@@ -141,6 +157,7 @@ def _copy_detection(det: Detection) -> Detection:
         score=float(det.score),
         T_camera_object=det.T_camera_object.copy(),
         box=None if det.box is None else tuple(det.box),
+        grasp_surface=det.grasp_surface,  # frozen dataclass of floats; safe to share
     )
 
 
@@ -184,12 +201,14 @@ class SharedState:
         self.frame_seq: int = 0
         self.hand_fk_base: Dict[str, np.ndarray] = {}
         self.hand_fk_T_base: Dict[str, np.ndarray] = {}
-        self.lowstate_q_full: Optional[np.ndarray] = None
         self.hand_fk_ts: float = 0.0
         self.hand_fk_status: str = "FK hand: starting"
         self.extended_hand_R_base: Dict[str, np.ndarray] = {}
         self.extended_hand_reference_q: Dict[str, np.ndarray] = {}
         self.extended_hand_reference_T_base: Dict[str, np.ndarray] = {}
+        self.object_mass_kg: float = DEFAULT_OBJECT_MASS_KG
+        self.tactile_status: str = "tactile: starting…"
+        self.last_grip_result: Dict[str, Any] = {}
 
 
 STATE = SharedState()
@@ -256,38 +275,36 @@ DEFAULT_CENTER_WAIST_SETTLE_S = 0.4
 DEFAULT_POST_GRASP_LIFT_M = 0.08
 DEFAULT_POST_GRASP_LIFT_DURATION_S = 2.5
 DEFAULT_DETECTION_PROMPT = "coffee cup"
-DEFAULT_VOICE_ASR_URL = os.environ.get("G1_VOICE_ASR_URL", "http://192.168.2.41:8097/asr")
-DEFAULT_VOICE_ASR_TOKEN = os.environ.get("G1_VOICE_ASR_TOKEN", "")
+DEFAULT_SURFACE_CLEARANCE_M = 0.03
+MAX_SURFACE_STANDOFF_M = 0.16
 
+# Dex3 tactile (rt/dex3/{side}/state press_sensor_state) raw-value semantics
+# mirrored from modules/scripts/test_dex3_tactile.py: 30000 is the
+# "no reading" sentinel, and the Unitree docs call >=100000 a confirmed
+# contact reading. Read via sdk_client.Robot.get_tactile_pressures(), which
+# subscribes to the same topic this app already uses for hand joint state,
+# rather than opening a second independent DDS subscription to it.
+TACTILE_INVALID_VALUE = 30000.0
+TACTILE_VALID_THRESHOLD = 100000.0
+DEFAULT_TACTILE_BASE_TARGET_RAW = 120000.0
+DEFAULT_TACTILE_PER_KG_RAW = 60000.0
+DEFAULT_TACTILE_MAX_TARGET_RAW = 450000.0
+DEFAULT_TACTILE_CLOSE_STEPS = 10
+DEFAULT_TACTILE_STEP_HOLD_S = 0.12
+DEFAULT_TACTILE_STEP_SETTLE_S = 0.06
 
-def _argv_value(name: str, default: str = "") -> str:
-    try:
-        index = sys.argv.index(name)
-    except ValueError:
-        return default
-    try:
-        return str(sys.argv[index + 1])
-    except IndexError:
-        return default
-
-# Built-in "stable_hold" joint pose, copied from WBC/ik_pose_cli_v3.py's
-# STABLE_HOLD_ARM_JOINTS (the pose the IK pose tool ships with by default).
-STABLE_HOLD_ARM_JOINTS: Dict[int, float] = {
-    LEFT_ARM_JOINTS[0]: 0.000,
-    LEFT_ARM_JOINTS[1]: 1.000,
-    LEFT_ARM_JOINTS[2]: 0.105,
-    LEFT_ARM_JOINTS[3]: -0.100,
-    LEFT_ARM_JOINTS[4]: -0.368,
-    LEFT_ARM_JOINTS[5]: 0.164,
-    LEFT_ARM_JOINTS[6]: 0.000,
-    RIGHT_ARM_JOINTS[0]: 0.323,
-    RIGHT_ARM_JOINTS[1]: -0.307,
-    RIGHT_ARM_JOINTS[2]: -0.080,
-    RIGHT_ARM_JOINTS[3]: -0.688,
-    RIGHT_ARM_JOINTS[4]: 0.328,
-    RIGHT_ARM_JOINTS[5]: 0.140,
-    RIGHT_ARM_JOINTS[6]: 0.000,
-}
+# Post-grasp lift arm stiffness/speed/duration scale with the entered object
+# mass: heavier objects get a stiffer hold (higher kp/kd), a slower joint
+# speed (less likely to shake the object loose), and more time to get there.
+DEFAULT_LIFT_KP = 30.0
+DEFAULT_LIFT_KD = 1.5
+MAX_LIFT_KP = 48.0
+MAX_LIFT_KD = 3.0
+LIFT_KP_PER_KG = 5.0
+LIFT_KD_PER_KG = 0.25
+LIFT_DURATION_PER_KG = 0.35
+MAX_LIFT_DURATION_S = 6.0
+LIFT_SPEED_SLOWDOWN_PER_KG = 0.12
 
 
 class _MockRobot:
@@ -502,9 +519,11 @@ def _perception_loop(vision: VisionDetector, rate_hz: float) -> None:
             })
             if pose is None:
                 continue
+            grasp_surface = estimate_grasp_surface(mask, depth, K)
             detections[det_id] = Detection(
                 id=det_id, label=vd.label, source="vision", score=vd.score,
                 T_camera_object=pose.T_camera_object, box=vd.box_xyxy,
+                grasp_surface=grasp_surface,
             )
             masks_for_draw.append((det_id, vd.label, mask))
 
@@ -576,7 +595,6 @@ def _hand_fk_loop(iface: str, domain_id: int) -> None:
                 for side, T_base_hand in hand_T.items()
             }
             with STATE.lock:
-                STATE.lowstate_q_full = q_full.copy()
                 STATE.hand_fk_base = hands
                 STATE.hand_fk_T_base = hand_T
                 STATE.hand_fk_ts = float(ts or time.time())
@@ -603,7 +621,7 @@ def _make_control_robot(iface: str, domain_id: int):
         robot = Robot(
             iface=iface,
             domain_id=domain_id,
-            auto_start_sensors=False,
+            auto_start_sensors=True,
         )
         return robot, "control robot ready"
     except Exception as exc:
@@ -777,6 +795,23 @@ def _direct_grasp_object_pose(
     return T_base_object
 
 
+def _grasp_standoff_for_surface(grasp_surface: Optional[GraspSurfaceEstimate]) -> float:
+    """Size the wrist standoff from the object's estimated near surface
+    instead of using one fixed distance for every object. A standoff based
+    on the point-cloud centroid alone would drive the wrist into a bulky
+    object's near surface before it "arrives"; low-confidence or missing
+    estimates fall back to the original fixed default.
+    """
+    if grasp_surface is None or grasp_surface.confidence < 0.15:
+        return DEFAULT_GRASP_STANDOFF_M
+    surface_standoff = grasp_surface.near_surface_offset_m + DEFAULT_SURFACE_CLEARANCE_M
+    return float(min(MAX_SURFACE_STANDOFF_M, max(DEFAULT_GRASP_STANDOFF_M, surface_standoff)))
+
+
+def _grasp_standoff_for_det(det: Detection) -> float:
+    return _grasp_standoff_for_surface(det.grasp_surface)
+
+
 def _direct_grasp_hand_pose(
     det: Detection,
     T_base_object: np.ndarray,
@@ -786,7 +821,7 @@ def _direct_grasp_hand_pose(
 ) -> np.ndarray:
     T_base_hand = GraspPlanner(
         arm=arm,
-        standoff_m=DEFAULT_GRASP_STANDOFF_M,
+        standoff_m=_grasp_standoff_for_det(det),
     ).compute(_direct_grasp_object_pose(det, T_base_object, obstacles))
     if fixed_R_base is not None:
         T_base_hand = T_base_hand.copy()
@@ -794,18 +829,19 @@ def _direct_grasp_hand_pose(
     return T_base_hand
 
 
-def _grasp_offset_transform(arm: str) -> np.ndarray:
+def _grasp_offset_transform(arm: str, standoff_m: float = DEFAULT_GRASP_STANDOFF_M) -> np.ndarray:
     return GraspPlanner(
         arm=arm,
-        standoff_m=DEFAULT_GRASP_STANDOFF_M,
+        standoff_m=standoff_m,
     ).compute(np.eye(4, dtype=np.float64))
 
 
 def _direct_nav_target_frame_from_hand_pose(
     T_base_hand_desired: np.ndarray,
     arm: str,
+    standoff_m: float = DEFAULT_GRASP_STANDOFF_M,
 ) -> np.ndarray:
-    return T_base_hand_desired @ np.linalg.inv(_grasp_offset_transform(arm))
+    return T_base_hand_desired @ np.linalg.inv(_grasp_offset_transform(arm, standoff_m))
 
 
 def _direct_nav_target_frame(
@@ -818,6 +854,7 @@ def _direct_nav_target_frame(
     return _direct_nav_target_frame_from_hand_pose(
         _direct_grasp_hand_pose(det, T_base_object, arm, obstacles, fixed_R_base),
         arm,
+        _grasp_standoff_for_det(det),
     )
 
 
@@ -954,119 +991,6 @@ def _reach_preview(
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.DARKLY])
 app.title = "G1 Recognition Layer"
-app.index_string = """
-<!DOCTYPE html>
-<html>
-    <head>
-        {%metas%}
-        <title>{%title%}</title>
-        {%favicon%}
-        {%css%}
-    </head>
-    <body>
-        {%app_entry%}
-        <footer>
-            {%config%}
-            {%scripts%}
-            {%renderer%}
-            <script>
-            (function () {
-                let voiceRecognition = null;
-
-                function voiceConfig() {
-                    const el = document.getElementById("voice-config");
-                    return {
-                        url: (el && el.dataset.asrUrl) || "",
-                        token: (el && el.dataset.asrToken) || ""
-                    };
-                }
-
-                function setVoiceStatus(text) {
-                    const el = document.getElementById("voice-status");
-                    if (el) el.textContent = text;
-                }
-
-                function addVoiceLog(line) {
-                    const el = document.getElementById("voice-log");
-                    if (!el) return;
-                    el.textContent = new Date().toLocaleTimeString() + " " + line + "\\n" + el.textContent;
-                }
-
-                async function sendVoiceText(text) {
-                    const value = (text || "").trim();
-                    if (!value) return;
-                    const cfg = voiceConfig();
-                    if (!cfg.url) {
-                        setVoiceStatus("ASR endpoint is not configured.");
-                        return;
-                    }
-                    addVoiceLog("send: " + value);
-                    const headers = {"Content-Type": "application/json"};
-                    if (cfg.token) headers.Authorization = "Bearer " + cfg.token;
-                    try {
-                        const res = await fetch(cfg.url, {
-                            method: "POST",
-                            headers: headers,
-                            body: JSON.stringify({text: value})
-                        });
-                        const body = await res.text();
-                        addVoiceLog("response: " + body);
-                        setVoiceStatus(res.ok ? "Command sent." : "Command failed.");
-                    } catch (err) {
-                        setVoiceStatus("Command failed: " + err.message);
-                        addVoiceLog("error: " + err.message);
-                    }
-                }
-
-                document.addEventListener("submit", function (event) {
-                    const form = event.target;
-                    if (!form || form.id !== "voice-manual-form") return;
-                    event.preventDefault();
-                    event.stopImmediatePropagation();
-                    const input = document.getElementById("voice-manual-text");
-                    const text = input && input.value ? input.value.trim() : "";
-                    if (text) sendVoiceText(text);
-                    if (input) input.value = "";
-                }, true);
-
-                document.addEventListener("click", function (event) {
-                    const startButton = event.target && event.target.closest ? event.target.closest("#voice-start-btn") : null;
-                    const stopButton = event.target && event.target.closest ? event.target.closest("#voice-stop-btn") : null;
-                    if (!startButton && !stopButton) return;
-                    event.preventDefault();
-                    event.stopImmediatePropagation();
-                    if (stopButton) {
-                        if (voiceRecognition) voiceRecognition.stop();
-                        return;
-                    }
-                    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-                    if (!SpeechRecognition) {
-                        setVoiceStatus("SpeechRecognition is not supported in this browser.");
-                        return;
-                    }
-                    voiceRecognition = new SpeechRecognition();
-                    voiceRecognition.lang = "en-US";
-                    voiceRecognition.continuous = true;
-                    voiceRecognition.interimResults = false;
-                    voiceRecognition.onstart = () => setVoiceStatus("Listening.");
-                    voiceRecognition.onerror = (e) => {
-                        setVoiceStatus("Speech recognition error: " + e.error);
-                        addVoiceLog("error: " + e.error);
-                    };
-                    voiceRecognition.onend = () => setVoiceStatus("Stopped.");
-                    voiceRecognition.onresult = (e) => {
-                        for (let i = e.resultIndex; i < e.results.length; i++) {
-                            if (e.results[i].isFinal) sendVoiceText(e.results[i][0].transcript);
-                        }
-                    };
-                    voiceRecognition.start();
-                }, true);
-            })();
-            </script>
-        </footer>
-    </body>
-</html>
-"""
 
 
 def _instructions_card() -> dbc.Card:
@@ -1160,40 +1084,6 @@ def _logs_card() -> dbc.Card:
     ], className="mb-3")
 
 
-def _voice_card() -> dbc.Card:
-    return dbc.Card([
-        dbc.CardHeader("Voice commands", style={"fontSize": "13px"}),
-        dbc.CardBody([
-            html.Div(
-                id="voice-config",
-                **{
-                    "data-asr-url": _argv_value("--voice-asr-url", DEFAULT_VOICE_ASR_URL),
-                    "data-asr-token": _argv_value("--voice-asr-token", DEFAULT_VOICE_ASR_TOKEN),
-                },
-            ),
-            dbc.ButtonGroup([
-                dbc.Button("Start headset", id="voice-start-btn", color="success"),
-                dbc.Button("Stop", id="voice-stop-btn", color="secondary"),
-            ], className="mb-2"),
-            html.Form([
-                dbc.InputGroup([
-                    dbc.Input(
-                        id="voice-manual-text",
-                        placeholder="Type a navigation or gripping command",
-                        autoComplete="off",
-                    ),
-                    dbc.Button("Send", id="voice-send-btn", color="primary", type="submit"),
-                ]),
-            ], id="voice-manual-form"),
-            html.Div(id="voice-status", className="mt-2", style={"fontSize": "12px", "color": "#9c9"}),
-            html.Pre(id="voice-log", style={
-                "maxHeight": "150px", "overflow": "auto", "fontSize": "11px",
-                "background": "#111", "padding": "8px", "marginTop": "8px", "marginBottom": 0,
-            }),
-        ]),
-    ], className="mb-3")
-
-
 def _limit_visible_detections(
     detections: Dict[str, Detection],
     boxes: List[Dict],
@@ -1234,8 +1124,7 @@ app.layout = dbc.Container([
 
     dbc.Row([
         dbc.Col(_instructions_card(), width=6),
-        dbc.Col(_voice_card(), width=3),
-        dbc.Col(_options_card(), width=3),
+        dbc.Col(_options_card(), width=6),
     ]),
 
     dbc.Row([
@@ -1291,10 +1180,21 @@ app.layout = dbc.Container([
                 value=False,
                 className="mb-2",
             ),
+            dbc.Label("Object mass (kg) — sets grip force target and lift stiffness", className="mt-1"),
+            dbc.Input(
+                id="object-mass-kg",
+                type="number",
+                min=0,
+                max=MAX_OBJECT_MASS_KG,
+                step=0.05,
+                value=DEFAULT_OBJECT_MASS_KG,
+                className="mb-2",
+            ),
             dbc.Button("Grab selected object", id="grab-btn", color="success",
                         className="mb-2", disabled=True),
             html.Div(id="grab-selected-label", className="mb-2", style={"fontSize": "13px"}),
             html.Div(id="obstacle-status", className="mb-2", style={"fontSize": "12px", "color": "#aad"}),
+            html.Div(id="tactile-status", className="mb-2", style={"fontSize": "12px", "color": "#ada"}),
             html.Hr(),
             dbc.ButtonGroup([
                 dbc.Button("Prepare", id="prepare-btn", color="secondary"),
@@ -1330,6 +1230,7 @@ app.layout = dbc.Container([
     Output("grab-btn", "disabled"),
     Output("grab-selected-label", "children"),
     Output("obstacle-status", "children"),
+    Output("tactile-status", "children"),
     Input("refresh-interval", "n_intervals"),
     Input("view-select", "value"),
 )
@@ -1360,9 +1261,14 @@ def _refresh(_n, view_name):
         max_visible_detections = STATE.max_visible_detections
         obstacle_status = STATE.obstacle_status
 
+    tactile_status = _tactile_status_text()
+
     if rgb is None:
         ph = _placeholder_src("waiting for camera…")
-        return ph, "No detections yet.", status_msg, camera_tf_status, "\n".join(grab_log), True, "", obstacle_status
+        return (
+            ph, "No detections yet.", status_msg, camera_tf_status,
+            "\n".join(grab_log), True, "", obstacle_status, tactile_status,
+        )
 
     # A frozen/erroring camera feed must not keep offering stale objects as
     # if the robot could still see them — the list only reflects detections
@@ -1452,6 +1358,13 @@ def _refresh(_n, view_name):
             f"Selected: {det.label} ({det.source}) | arm={arm} | "
             f"wrist reach={reach_dist:.3f}/{max_reach:.3f} m"
         )
+        if det.grasp_surface is not None:
+            gs = det.grasp_surface
+            standoff_m = _grasp_standoff_for_surface(gs)
+            selected_label += (
+                f" | est. size {gs.width_m * 100:.1f}x{gs.length_m * 100:.1f} cm "
+                f"(conf={gs.confidence:.2f}) | standoff={standoff_m * 100:.1f} cm"
+            )
         if excess_m > 0.0:
             if auto_step_base:
                 selected_label += f" | base step planned ~{suggested_step_m:.3f} m"
@@ -1465,13 +1378,10 @@ def _refresh(_n, view_name):
     elif selected_id is not None:
         selected_label = "Selected object is no longer visible."
 
-    control_status = globals().get("_CONTROL_STATUS", "control status unknown")
-    if control_status and control_status not in status_msg:
-        status_msg = f"{status_msg} | control: {control_status}"
-
     return (
         view_src, det_list, status_msg, camera_tf_status,
         "\n".join(grab_log), grab_disabled, selected_label, obstacle_status,
+        tactile_status,
     )
 
 
@@ -1530,6 +1440,21 @@ def _sync_auto_step(value):
     with STATE.lock:
         STATE.auto_step_base = enabled
     return enabled
+
+
+@app.callback(
+    Output("object-mass-kg", "value"),
+    Input("object-mass-kg", "value"),
+)
+def _sync_object_mass(value):
+    try:
+        mass_kg = float(value)
+    except Exception:
+        mass_kg = DEFAULT_OBJECT_MASS_KG
+    mass_kg = max(0.0, min(MAX_OBJECT_MASS_KG, mass_kg))
+    with STATE.lock:
+        STATE.object_mass_kg = mass_kg
+    return mass_kg
 
 
 @app.callback(
@@ -1621,24 +1546,6 @@ def _buttons(
     if not ctx.triggered:
         return no_update
     trigger = ctx.triggered[0]["prop_id"].split(".")[0]
-    control_buttons = {
-        "grab-btn",
-        "prepare-btn",
-        "walk-btn",
-        "stop-moving-btn",
-        "extend-arm-btn",
-        "stop-grabbing-btn",
-        "release-arms-btn",
-        "unrelease-arms-btn",
-        "hand-open-btn",
-        "hand-close-btn",
-        "damp-btn",
-    }
-    if trigger in control_buttons and globals().get("_CONTROL_ROBOT") is None:
-        status = str(globals().get("_CONTROL_STATUS", "control robot unavailable"))
-        with STATE.lock:
-            STATE.status_msg = status
-        return f"Control unavailable: {status}"
 
     if trigger == "grab-btn":
         _log("[recognition_app] Grab button clicked.")
@@ -1681,24 +1588,13 @@ def _buttons(
 # Background actions
 # ---------------------------------------------------------------------------
 
-def _acquire_arm_control(waiting_msg: str, timeout_s: float = 3.0) -> None:
-    """Cancel any in-progress arm motion (e.g. a running grab) and take the lock.
-
-    Setting ARM_CANCEL_EVENT makes grab/extend loops stop at their next check
-    (within ~0.2s) and release ARM_CONTROL_LOCK in their own finally block, so
-    the blocking acquire() below is guaranteed to return rather than hang —
-    this is what lets a command like "stable hold" take over promptly right
-    after (or during) a grab instead of being silently dropped as "busy".
-    """
-    ARM_CANCEL_EVENT.set()
-    if not ARM_CONTROL_LOCK.acquire(timeout=timeout_s):
-        with STATE.lock:
-            STATE.status_msg = waiting_msg
-        ARM_CONTROL_LOCK.acquire()
-
-
 def _run_release_arms() -> None:
-    _acquire_arm_control("release_arms() waiting: arm controller is busy")
+    ARM_CANCEL_EVENT.set()
+    acquired = ARM_CONTROL_LOCK.acquire(timeout=3.0)
+    if not acquired:
+        with STATE.lock:
+            STATE.status_msg = "release_arms() waiting: arm controller is busy"
+        ARM_CONTROL_LOCK.acquire()
     try:
         with STATE.lock:
             STATE.arm_motion_running = True
@@ -1722,7 +1618,10 @@ def _run_release_arms() -> None:
 
 
 def _run_unrelease_arms() -> None:
-    _acquire_arm_control("unrelease_arms() waiting: arm controller is busy")
+    if not ARM_CONTROL_LOCK.acquire(blocking=False):
+        with STATE.lock:
+            STATE.status_msg = "unrelease_arms() skipped: arm controller is busy"
+        return
     try:
         ARM_CANCEL_EVENT.clear()
         with STATE.lock:
@@ -1907,10 +1806,6 @@ def _run_hand_action(action: str) -> None:
     with STATE.lock:
         arm_override = STATE.arm_override
     side = _hand_side_from_override(arm_override)
-    _run_hand_action_for_side(action, side)
-
-
-def _run_hand_action_for_side(action: str, side: str) -> None:
     try:
         feedback_available = _send_hand_action(action, side)
         with STATE.lock:
@@ -1921,28 +1816,163 @@ def _run_hand_action_for_side(action: str, side: str) -> None:
             STATE.status_msg = f"hand_{action}({side}) failed: {exc}"
 
 
-def _run_stable_hold() -> None:
-    _acquire_arm_control("stable hold waiting: arm controller is busy")
+# ---------------------------------------------------------------------------
+# Dex3 tactile feedback + mass-aware grip control
+# ---------------------------------------------------------------------------
+
+def _is_invalid_tactile_value(value: float) -> bool:
+    return abs(float(value) - TACTILE_INVALID_VALUE) < 0.5
+
+
+def _max_tactile_pressure(side: str) -> Optional[float]:
+    """Highest current raw fingertip pressure reading for one hand, or None
+    if tactile feedback isn't available (mock mode, RGBD-only control robot,
+    or no rt/dex3/{side}/state messages yet).
+    """
+    if _CONTROL_ROBOT is None or not hasattr(_CONTROL_ROBOT, "get_tactile_pressures"):
+        return None
     try:
-        ARM_CANCEL_EVENT.clear()
-        with STATE.lock:
-            STATE.arm_motion_running = True
-            STATE.arm_motion_label = "stable hold"
-        if _CONTROL_ROBOT is None:
-            raise RuntimeError(_CONTROL_STATUS)
-        _ensure_arm_authority(_CONTROL_ROBOT, duration_s=0.4)
-        result = _CONTROL_ROBOT.hold_arm_pose(STABLE_HOLD_ARM_JOINTS)
-        with STATE.lock:
-            STATE.status_msg = f"stable hold reached: {result}"
-    except Exception as exc:
-        with STATE.lock:
-            STATE.status_msg = f"stable hold failed: {exc}"
-    finally:
-        with STATE.lock:
-            STATE.arm_motion_running = False
-            STATE.arm_motion_label = ""
-        ARM_CANCEL_EVENT.clear()
-        ARM_CONTROL_LOCK.release()
+        sensors = _CONTROL_ROBOT.get_tactile_pressures(side)
+    except Exception:
+        return None
+    if not sensors:
+        return None
+    valid_values = [
+        float(value)
+        for sensor_values in sensors
+        for value in sensor_values
+        if not _is_invalid_tactile_value(value)
+    ]
+    if not valid_values:
+        return 0.0
+    return max(valid_values)
+
+
+def _tactile_status_text() -> str:
+    if _CONTROL_ROBOT is None or not hasattr(_CONTROL_ROBOT, "get_tactile_pressures"):
+        return "tactile: unavailable (no Dex3 state feed)"
+    parts = []
+    for side in ("left", "right"):
+        pressure = _max_tactile_pressure(side)
+        if pressure is None:
+            parts.append(f"{side}=n/a")
+        else:
+            contact = "contact" if pressure >= TACTILE_VALID_THRESHOLD else "no contact"
+            parts.append(f"{side}={pressure:.0f} raw ({contact})")
+    return "tactile: " + "  ".join(parts)
+
+
+def _grip_target_pressure_raw(mass_kg: float) -> float:
+    """Heavier objects need a firmer grip before the hand stops closing —
+    scale the target fingertip pressure with the entered object mass.
+    """
+    mass_kg = max(0.0, float(mass_kg))
+    target = DEFAULT_TACTILE_BASE_TARGET_RAW + DEFAULT_TACTILE_PER_KG_RAW * mass_kg
+    return float(min(DEFAULT_TACTILE_MAX_TARGET_RAW, target))
+
+
+def _tactile_guided_hand_close(arm: str, mass_kg: float) -> Dict[str, Any]:
+    """Close the hand in small steps, checking measured fingertip pressure
+    after each one, and stop as soon as the mass-scaled target pressure is
+    reached instead of always running the fixed hand_close() sequence to
+    completion. Falls back to the original one-shot close when tactile
+    feedback or per-joint hand_pose() targets aren't available (mock mode,
+    RGBD-only control robot, sdk_hand target helpers missing).
+    """
+    side = arm if arm in ("left", "right") else _hand_side_from_override(arm)
+    open_t = _hand_action_target("open", side)
+    closed_t = _hand_action_target("close", side)
+    tactile_ready = (
+        open_t is not None
+        and closed_t is not None
+        and len(open_t) == len(closed_t)
+        and _CONTROL_ROBOT is not None
+        and hasattr(_CONTROL_ROBOT, "hand_pose")
+        and hasattr(_CONTROL_ROBOT, "get_tactile_pressures")
+    )
+    if not tactile_ready:
+        _log(f"[recognition_app] Tactile-guided close unavailable for {side}; falling back to fixed close.")
+        _send_hand_action("close", side, hold_s=0.6)
+        return {"success": True, "method": "fixed_close", "side": side}
+
+    target_pressure = _grip_target_pressure_raw(mass_kg)
+    _log(
+        f"[recognition_app] Tactile-guided close ({side}): object_mass={mass_kg:.2f}kg "
+        f"target_pressure={target_pressure:.0f} raw."
+    )
+    steps = DEFAULT_TACTILE_CLOSE_STEPS
+    last_pressure = 0.0
+    last_fraction = 0.0
+    for step in range(1, steps + 1):
+        if ARM_CANCEL_EVENT.is_set():
+            _log(f"[recognition_app] Tactile-guided close cancelled at step {step}/{steps}.")
+            return {"success": False, "method": "tactile", "reason": "cancelled", "side": side}
+        fraction = step / float(steps)
+        target_positions = [o + fraction * (c - o) for o, c in zip(open_t, closed_t)]
+        try:
+            _CONTROL_ROBOT.hand_pose(
+                target_positions, hand=side,
+                hold_s=DEFAULT_TACTILE_STEP_HOLD_S, rate_hz=50.0,
+                kp=1.4, kd=0.06, tau=0.06, ramp_s=0.06,
+            )
+        except Exception as exc:
+            _log(f"[recognition_app] Tactile-guided close step {step} command failed: {exc}")
+            break
+        time.sleep(DEFAULT_TACTILE_STEP_SETTLE_S)
+        pressure = _max_tactile_pressure(side)
+        last_fraction = fraction
+        if pressure is not None:
+            last_pressure = pressure
+        _log(
+            f"[recognition_app] grip step {step}/{steps} fraction={fraction:.2f} "
+            f"pressure={'n/a' if pressure is None else f'{pressure:.0f}'} raw "
+            f"target={target_pressure:.0f} raw"
+        )
+        if pressure is not None and pressure >= target_pressure:
+            _log(
+                f"[recognition_app] Grip target reached ({side}): "
+                f"fraction={fraction:.2f} pressure={pressure:.0f} raw."
+            )
+            result = {
+                "success": True, "method": "tactile", "side": side,
+                "fraction": fraction, "pressure": pressure,
+                "target_pressure": target_pressure, "mass_kg": mass_kg,
+            }
+            with STATE.lock:
+                STATE.last_grip_result = dict(result)
+            return result
+
+    _log(
+        f"[recognition_app] Tactile-guided close reached full closure without hitting "
+        f"target pressure ({side}); last_pressure={last_pressure:.0f} raw "
+        f"target={target_pressure:.0f} raw (object may be thinner/lighter than expected, "
+        "or tactile feedback is unavailable)."
+    )
+    result = {
+        "success": True, "method": "tactile_full_close", "side": side,
+        "fraction": last_fraction, "pressure": last_pressure,
+        "target_pressure": target_pressure, "mass_kg": mass_kg,
+    }
+    with STATE.lock:
+        STATE.last_grip_result = dict(result)
+    return result
+
+
+def _lift_tuning_for_mass(mass_kg: float) -> Tuple[float, float, float, float]:
+    """Post-grasp lift stiffness (kp/kd), duration, and speed scale for the
+    entered object mass: heavier objects get a stiffer hold, more time to
+    get there, and a slower joint speed so the lift is less likely to shake
+    the object loose.
+    """
+    mass_kg = max(0.0, float(mass_kg))
+    kp = min(MAX_LIFT_KP, DEFAULT_LIFT_KP + LIFT_KP_PER_KG * mass_kg)
+    kd = min(MAX_LIFT_KD, DEFAULT_LIFT_KD + LIFT_KD_PER_KG * mass_kg)
+    duration_s = min(
+        MAX_LIFT_DURATION_S,
+        DEFAULT_POST_GRASP_LIFT_DURATION_S * (1.0 + LIFT_DURATION_PER_KG * mass_kg),
+    )
+    speed_scale = 1.0 / (1.0 + LIFT_SPEED_SLOWDOWN_PER_KG * mass_kg)
+    return kp, kd, duration_s, speed_scale
 
 
 def _run_damp() -> None:
@@ -2073,63 +2103,30 @@ def _run_stop_grabbing() -> None:
 
 
 def _read_current_arm_q(robot, arm: str) -> np.ndarray:
+    js = robot.get_joint_states()
+    joints = js.get("joints", {}) if js else {}
     joint_indices = LEFT_ARM_JOINTS if arm == "left" else RIGHT_ARM_JOINTS
-    with STATE.lock:
-        q_full = None if STATE.lowstate_q_full is None else STATE.lowstate_q_full.copy()
-        ts = float(STATE.hand_fk_ts)
-    if q_full is None or (time.time() - ts) > STALE_AFTER_S:
-        q_full = _read_robot_joint_state_q_full(robot, required_indices=joint_indices)
-    if q_full is None:
-        raise RuntimeError(
-            f"cannot read current {arm} arm joints; lowstate is stale or unavailable"
-        )
+    seen_indices = set()
+    q_full = np.zeros(30, dtype=np.float64)
+    for name, data in joints.items():
+        idx = _joint_entry_index(name, data)
+        if 0 <= idx < q_full.size and data.get("position") is not None:
+            q_full[idx] = float(data.get("position"))
+            seen_indices.add(idx)
+    missing = [idx for idx in joint_indices if idx not in seen_indices]
+    if missing:
+        raise RuntimeError(f"cannot read current {arm} arm joints from lowstate; missing indices {missing}")
     return q_full[joint_indices]
 
 
 def _read_joint_position(robot, joint_index: int) -> float:
-    with STATE.lock:
-        q_full = None if STATE.lowstate_q_full is None else STATE.lowstate_q_full.copy()
-        ts = float(STATE.hand_fk_ts)
-    if q_full is None or (time.time() - ts) > STALE_AFTER_S:
-        q_full = _read_robot_joint_state_q_full(robot, required_indices=[int(joint_index)])
-    if q_full is None:
-        raise RuntimeError(
-            f"cannot read joint index {joint_index}; lowstate is stale or unavailable"
-        )
-    if int(joint_index) < 0 or int(joint_index) >= q_full.size:
-        raise RuntimeError(f"joint index {joint_index} is outside shared lowstate size {q_full.size}")
-    return float(q_full[int(joint_index)])
-
-
-def _read_robot_joint_state_q_full(
-    robot,
-    required_indices: Optional[List[int]] = None,
-) -> Optional[np.ndarray]:
-    """Fallback for actions when the app's FK/lowstate cache has not updated."""
-    if robot is None or not hasattr(robot, "get_joint_states"):
-        return None
-    try:
-        js = robot.get_joint_states()
-    except Exception as exc:
-        _log(f"[recognition_app] direct get_joint_states() failed: {exc}")
-        return None
-    if not js:
-        return None
-    joints = js.get("joints", {})
-    q = np.zeros(30, dtype=np.float64)
-    seen_indices = set()
-    for label, data in joints.items():
-        idx = _joint_entry_index(label, data)
-        if 0 <= idx < q.size:
-            try:
-                q[idx] = float(data.get("position", 0.0))
-            except Exception:
-                q[idx] = 0.0
-            seen_indices.add(int(idx))
-    required = [int(idx) for idx in (required_indices or [])]
-    if not seen_indices or any(idx not in seen_indices for idx in required):
-        return None
-    return q
+    js = robot.get_joint_states()
+    joints = js.get("joints", {}) if js else {}
+    for name, data in joints.items():
+        idx = _joint_entry_index(name, data)
+        if idx == int(joint_index) and data.get("position") is not None:
+            return float(data.get("position"))
+    raise RuntimeError(f"cannot read joint index {joint_index} from lowstate")
 
 
 def _center_object_with_waist_yaw(
@@ -2411,7 +2408,10 @@ def _run_reset_to_extend_arm_reference(
 
 
 def _run_extend_arm() -> None:
-    _acquire_arm_control("extend arm waiting: arm controller is busy")
+    if not ARM_CONTROL_LOCK.acquire(blocking=False):
+        with STATE.lock:
+            STATE.status_msg = "extend arm skipped: arm controller is busy"
+        return
     try:
         ARM_CANCEL_EVENT.clear()
         with STATE.lock:
@@ -2593,9 +2593,11 @@ def _lift_end_effector_z_slowly(
     max_joint_step_rad: float,
     max_joint_speed_rad_s: float,
     lift_m: float = DEFAULT_POST_GRASP_LIFT_M,
+    mass_kg: float = 0.0,
 ) -> Dict[str, Any]:
     if lift_m <= 0.0:
         return {"success": True, "reason": "lift_disabled"}
+    kp, kd, duration_s, speed_scale = _lift_tuning_for_mass(mass_kg)
     q_cur = _read_current_arm_q(robot, arm)
     fk = ArmFK(arm=arm, backend="urdf")
     T_start = fk.compute_arm(q_cur)
@@ -2613,21 +2615,22 @@ def _lift_end_effector_z_slowly(
     executor = ArmExecutor(
         robot,
         arm=arm,
-        kp=30.0,
-        kd=1.5,
+        kp=kp,
+        kd=kd,
         max_reach_m=DEFAULT_DIRECT_MAX_REACH_M,
         max_joint_step_rad=max_joint_step_rad,
-        max_joint_speed_rad_s=max_joint_speed_rad_s,
+        max_joint_speed_rad_s=max_joint_speed_rad_s * speed_scale,
     )
     result = executor.execute(
         q_solution,
-        duration_s=DEFAULT_POST_GRASP_LIFT_DURATION_S,
+        duration_s=duration_s,
         q_arm_start=q_cur,
         T_base_desired=T_lift,
         stop_event=ARM_CANCEL_EVENT,
     )
     result["ik_info"] = info
     result["lift_m"] = float(lift_m)
+    result["mass_kg"] = float(mass_kg)
     return result
 
 
@@ -2636,9 +2639,17 @@ def _lift_end_effector_z_with_continuous_executor(
     arm: str,
     executor: ArmExecutor,
     lift_m: float = DEFAULT_POST_GRASP_LIFT_M,
+    mass_kg: float = 0.0,
 ) -> Dict[str, Any]:
     if lift_m <= 0.0:
         return {"success": True, "reason": "lift_disabled"}
+    kp, kd, duration_s, speed_scale = _lift_tuning_for_mass(mass_kg)
+    # ArmExecutor reads kp/kd/max_joint_speed_rad_s live at publish time (see
+    # ArmExecutor._send_command), so bumping them here stiffens/slows this
+    # lift without needing a new executor instance.
+    executor.kp = kp
+    executor.kd = kd
+    executor.max_joint_speed_rad_s = executor.max_joint_speed_rad_s * speed_scale
     q_cur = _read_current_arm_q(robot, arm)
     fk = ArmFK(arm=arm, backend="urdf")
     T_start = fk.compute_arm(q_cur)
@@ -2667,7 +2678,7 @@ def _lift_end_effector_z_with_continuous_executor(
         }
     executor.submit_target(q_solution)
     t0 = time.time()
-    while time.time() - t0 < DEFAULT_POST_GRASP_LIFT_DURATION_S:
+    while time.time() - t0 < duration_s:
         if ARM_CANCEL_EVENT.is_set():
             return {
                 "success": False,
@@ -2675,6 +2686,7 @@ def _lift_end_effector_z_with_continuous_executor(
                 "duration_s": time.time() - t0,
                 "ik_info": info,
                 "lift_m": float(lift_m),
+                "mass_kg": float(mass_kg),
             }
         time.sleep(0.05)
     return {
@@ -2683,6 +2695,7 @@ def _lift_end_effector_z_with_continuous_executor(
         "duration_s": time.time() - t0,
         "ik_info": info,
         "lift_m": float(lift_m),
+        "mass_kg": float(mass_kg),
     }
 
 
@@ -2694,6 +2707,7 @@ def _run_direct_grab_inline(
     T_base_object: np.ndarray,
     max_joint_step_rad: float,
     max_joint_speed_rad_s: float,
+    mass_kg: float = 0.0,
 ) -> None:
     global ACTIVE_DIRECT_NAV
     if _CONTROL_ROBOT is None:
@@ -2756,9 +2770,11 @@ def _run_direct_grab_inline(
             obstacles,
             fixed_R_base=fixed_R_base,
         )
+        grasp_standoff_m = _grasp_standoff_for_det(det)
         T_base_direct_target = _direct_nav_target_frame_from_hand_pose(
             T_base_direct_hand,
             arm,
+            grasp_standoff_m,
         )
         T_camera_direct_target = np.linalg.inv(T_base_camera) @ T_base_direct_target
 
@@ -2770,7 +2786,11 @@ def _run_direct_grab_inline(
         config = {
             "arm": arm,
             "detection_method": "fixed",
-            "standoff_m": DEFAULT_GRASP_STANDOFF_M,
+            # Must match the standoff used above to build T_base_direct_target:
+            # DirectHandPoseNav re-applies GraspPlanner(standoff_m=...) to this
+            # "fixed" target internally (see direct_nav.py), so a mismatch here
+            # would double-apply (or under-apply) the surface-aware standoff.
+            "standoff_m": grasp_standoff_m,
             "rate_hz": DEFAULT_SLOW_GRAB_RATE_HZ,
             "timeout_s": DEFAULT_SLOW_GRAB_TIMEOUT_S,
             "ik_solver": "dls",
@@ -2931,10 +2951,10 @@ def _run_direct_grab_inline(
         try:
             closed_hand = False
             if hasattr(_CONTROL_ROBOT, "hand_close"):
-                _log("[recognition_app] Holding EE pose while closing hand.")
-                _send_hand_action("close", arm, hold_s=0.6)
-                closed_hand = True
-                _log(f"[recognition_app] Closed {arm} hand.")
+                _log("[recognition_app] Holding EE pose while closing hand (tactile-guided).")
+                grip_result = _tactile_guided_hand_close(arm, mass_kg)
+                closed_hand = bool(grip_result.get("success"))
+                _log(f"[recognition_app] Closed {arm} hand: {grip_result}")
             if not closed_hand:
                 _log("[recognition_app] Hand close unavailable; skipping post-grasp lift.")
                 if nav_holding:
@@ -2964,6 +2984,7 @@ def _run_direct_grab_inline(
                     _CONTROL_ROBOT,
                     arm,
                     hold_executor,
+                    mass_kg=mass_kg,
                 )
             else:
                 lift_result = _lift_end_effector_z_slowly(
@@ -2971,6 +2992,7 @@ def _run_direct_grab_inline(
                     arm,
                     max_joint_step_rad,
                     max_joint_speed_rad_s,
+                    mass_kg=mass_kg,
                 )
             _log(f"[recognition_app] post-grasp lift result: {lift_result}")
         except Exception as exc:
@@ -2997,6 +3019,7 @@ def _run_grab_impl() -> None:
         max_joint_step_rad = STATE.max_joint_step_rad
         max_joint_speed_rad_s = STATE.max_joint_speed_rad_s
         planning_mode = STATE.planning_mode
+        mass_kg = STATE.object_mass_kg
         STATE.grab_running = True
 
     if det is None or detection_age_s > STALE_AFTER_S:
@@ -3041,7 +3064,8 @@ def _run_grab_impl() -> None:
     )
     _log(
         f"[recognition_app] arm={arm} label={det.label!r} "
-        f"auto_step_base={auto_step_base} planning_mode={planning_mode}"
+        f"auto_step_base={auto_step_base} planning_mode={planning_mode} "
+        f"object_mass={mass_kg:.2f}kg"
     )
     _log(
         "[recognition_app] object camera xyz="
@@ -3087,6 +3111,7 @@ def _run_grab_impl() -> None:
             T_base_object,
             max_joint_step_rad,
             max_joint_speed_rad_s,
+            mass_kg=mass_kg,
         )
     finally:
         with STATE.lock:
@@ -3100,227 +3125,6 @@ def _run_grab() -> None:
         _log(f"[recognition_app] Grab worker failed before launch: {exc!r}")
         with STATE.lock:
             STATE.grab_running = False
-
-
-# ---------------------------------------------------------------------------
-# Voice-control API — plain Flask routes on app.server, alongside the Dash UI.
-# Each route just does what the matching button/callback already does
-# (STATE.lock-guarded field set, or a daemon thread launch); no new behavior.
-# ---------------------------------------------------------------------------
-
-def _api_authorized() -> bool:
-    token = str(getattr(_ARGS, "api_token", "") or "")
-    if not token:
-        return True
-    auth = str(request.headers.get("Authorization", ""))
-    return auth == f"Bearer {token}"
-
-
-def _api_control_unavailable():
-    status = str(globals().get("_CONTROL_STATUS", "control robot unavailable"))
-    with STATE.lock:
-        STATE.status_msg = status
-    return jsonify({"ok": False, "error": "control_unavailable", "status": status}), 503
-
-
-def _find_detection_by_label(name: str) -> Optional[Detection]:
-    wanted = str(name).strip().lower()
-    if not wanted:
-        return None
-    with STATE.lock:
-        candidates = list(STATE.detections.values())
-    best: Optional[Detection] = None
-    best_score = 0.0
-    for det in candidates:
-        label = str(det.label).strip().lower()
-        if wanted == label or wanted in label or label in wanted:
-            return det
-        score = difflib.SequenceMatcher(None, wanted, label).ratio()
-        if score > best_score:
-            best, best_score = det, score
-    return best if best_score >= 0.6 else None
-
-
-@app.server.route("/api/objects", methods=["GET"])
-def api_objects():
-    if not _api_authorized():
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    with STATE.lock:
-        fresh = (time.time() - STATE.last_detection_ts) <= STALE_AFTER_S if STATE.last_detection_ts else False
-        objects = [
-            {"id": det.id, "label": det.label, "score": round(float(det.score), 3)}
-            for det in STATE.detections.values()
-        ]
-    return jsonify({"ok": True, "stale": not fresh, "objects": objects})
-
-
-@app.server.route("/api/status", methods=["GET"])
-def api_status():
-    if not _api_authorized():
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    with STATE.lock:
-        return jsonify({
-            "ok": True,
-            "status_msg": STATE.status_msg,
-            "grab_log": list(STATE.grab_log[-50:]),
-            "grab_running": STATE.grab_running,
-            "arm_motion_running": STATE.arm_motion_running,
-            "selected_id": STATE.selected_id,
-            "arm_override": STATE.arm_override,
-            "vision_classes": list(STATE.vision_classes),
-        })
-
-
-@app.server.route("/api/select_arm/<side>", methods=["POST"])
-def api_select_arm(side: str):
-    if not _api_authorized():
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    side = str(side).strip().lower()
-    if side not in {"left", "right"}:
-        return jsonify({"ok": False, "error": "invalid_side"}), 400
-    with STATE.lock:
-        STATE.arm_override = side
-    return jsonify({"ok": True, "arm_override": side})
-
-
-@app.server.route("/api/select_object/<det_id>", methods=["POST"])
-def api_select_object(det_id: str):
-    if not _api_authorized():
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    with STATE.lock:
-        if det_id not in STATE.detections:
-            return jsonify({"ok": False, "error": "not_found"}), 404
-        STATE.selected_id = det_id
-    return jsonify({"ok": True, "selected_id": det_id})
-
-
-@app.server.route("/api/prepare", methods=["POST"])
-def api_prepare():
-    if not _api_authorized():
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    threading.Thread(target=_run_prepare, daemon=True).start()
-    return jsonify({"ok": True, "started": True})
-
-
-@app.server.route("/api/walk", methods=["POST"])
-def api_walk():
-    if not _api_authorized():
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    threading.Thread(target=_run_walk, daemon=True).start()
-    return jsonify({"ok": True, "started": True})
-
-
-@app.server.route("/api/stop_moving", methods=["POST"])
-def api_stop_moving():
-    if not _api_authorized():
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    threading.Thread(target=_run_stop_moving, daemon=True).start()
-    return jsonify({"ok": True, "started": True})
-
-
-@app.server.route("/api/extend_arm", methods=["POST"])
-def api_extend_arm():
-    if not _api_authorized():
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    if _CONTROL_ROBOT is None:
-        return _api_control_unavailable()
-    threading.Thread(target=_run_extend_arm, daemon=True).start()
-    return jsonify({"ok": True, "started": True})
-
-
-@app.server.route("/api/stop_grabbing", methods=["POST"])
-def api_stop_grabbing():
-    if not _api_authorized():
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    threading.Thread(target=_run_stop_grabbing, daemon=True).start()
-    return jsonify({"ok": True, "started": True})
-
-
-@app.server.route("/api/release_arms", methods=["POST"])
-def api_release_arms():
-    if not _api_authorized():
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    threading.Thread(target=_run_release_arms, daemon=True).start()
-    return jsonify({"ok": True, "started": True})
-
-
-@app.server.route("/api/unrelease_arms", methods=["POST"])
-def api_unrelease_arms():
-    if not _api_authorized():
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    threading.Thread(target=_run_unrelease_arms, daemon=True).start()
-    return jsonify({"ok": True, "started": True})
-
-
-@app.server.route("/api/hand/<side>/<action>", methods=["POST"])
-def api_hand_action(side: str, action: str):
-    if not _api_authorized():
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    side = str(side).strip().lower()
-    action = str(action).strip().lower()
-    if side not in {"left", "right"}:
-        return jsonify({"ok": False, "error": "invalid_side"}), 400
-    if action not in {"open", "close"}:
-        return jsonify({"ok": False, "error": "invalid_action"}), 400
-    threading.Thread(target=_run_hand_action_for_side, args=(action, side), daemon=True).start()
-    return jsonify({"ok": True, "started": True, "side": side, "action": action})
-
-
-@app.server.route("/api/stable_hold", methods=["POST"])
-def api_stable_hold():
-    if not _api_authorized():
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    threading.Thread(target=_run_stable_hold, daemon=True).start()
-    return jsonify({"ok": True, "started": True})
-
-
-@app.server.route("/api/damp", methods=["POST"])
-def api_damp():
-    if not _api_authorized():
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    if _CONTROL_ROBOT is None:
-        return _api_control_unavailable()
-    threading.Thread(target=_run_damp, daemon=True).start()
-    return jsonify({"ok": True, "started": True})
-
-
-@app.server.route("/api/set_prompt", methods=["POST"])
-def api_set_prompt():
-    if not _api_authorized():
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    body = request.get_json(silent=True) or {}
-    text = str(body.get("text", "") or "")
-    classes = _VISION.set_prompt(text)
-    with STATE.lock:
-        STATE.vision_classes = classes
-    if not _VISION.available:
-        return jsonify({"ok": False, "error": _VISION.error, "classes": classes}), 503
-    return jsonify({"ok": True, "classes": classes})
-
-
-@app.server.route("/api/grab", methods=["POST"])
-def api_grab():
-    if not _api_authorized():
-        return jsonify({"ok": False, "error": "unauthorized"}), 401
-    body = request.get_json(silent=True) or {}
-    name = str(body.get("object", "") or "")
-    if name:
-        det = _find_detection_by_label(name)
-        if det is None:
-            return jsonify({"ok": False, "error": "not_found"}), 404
-        with STATE.lock:
-            STATE.selected_id = det.id
-        matched_label = det.label
-        selected_id = det.id
-    else:
-        with STATE.lock:
-            selected_id = STATE.selected_id
-            det = STATE.detections.get(selected_id or "")
-            matched_label = det.label if det is not None else ""
-        if not selected_id:
-            return jsonify({"ok": False, "error": "no_selection"}), 400
-    threading.Thread(target=_run_grab, daemon=True).start()
-    return jsonify({"ok": True, "matched_label": matched_label, "id": selected_id})
 
 
 # ---------------------------------------------------------------------------
@@ -3346,12 +3150,6 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--host", default="0.0.0.0")
     p.add_argument("--port", type=int, default=8060)
     p.add_argument("--debug", action="store_true")
-    p.add_argument("--api-token", default="",
-                    help="Optional bearer token required by the /api/* voice-control routes.")
-    p.add_argument("--voice-asr-url", default=DEFAULT_VOICE_ASR_URL,
-                    help="Browser-facing navbot ASR endpoint used by the integrated headset controls.")
-    p.add_argument("--voice-asr-token", default=DEFAULT_VOICE_ASR_TOKEN,
-                    help="Bearer token sent by the integrated headset controls when posting voice commands.")
     return p.parse_args()
 
 
