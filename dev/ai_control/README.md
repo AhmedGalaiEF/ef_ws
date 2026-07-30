@@ -32,15 +32,54 @@ ollama pull llava:7b       # vision
 
 ## Run
 
-From `dev/`:
+Install from this directory if you want the `ai-control` command:
 
 ```bash
+cd ~/EF/ef_ws/dev/ai_control
+python3 -m pip install -e .
+ai-control
+```
+
+You can also run without installing:
+
+```bash
+cd ~/EF/ef_ws/dev
 python3 -m ai_control.cli                 # mock backend, no hardware needed
 python3 -m ai_control.cli --robot --iface eth0 --domain-id 0
 ```
 
+Running `python3 cli.py` from this `ai_control/` directory also works.
+
 Override model tags with `--router-model` / `--thinker-model` / `--vision-model`,
 or the Ollama host with `--host`.
+
+## SLAM / Named-Point Commands
+
+The CLI recognizes the `nav_bot.py` text commands before sending anything to
+Ollama. These commands are confirmed like other robot actions and then published
+to `/model_api/navbot_command` when `--robot` is enabled:
+
+```text
+start mapping
+stop mapping
+relocate
+save current point as kitchen
+go to kitchen
+list points
+clear points
+stop navigation
+resume navigation
+stop slam
+navigation status
+```
+
+Start the nav bot separately so that something is subscribed to the command
+topic, for example:
+
+```bash
+cd ~/EF/ef_ws
+python3 g1/modules/scripts/ollama_ai/nav_bot.py --iface eth0 --domain-id 0
+```
 
 ## Status
 

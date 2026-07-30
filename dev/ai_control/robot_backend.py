@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import time
 from typing import Protocol
 
 
@@ -17,6 +19,7 @@ class RobotBackend(Protocol):
     def hand_close(self, hand: str) -> str: ...
     def gesture(self, name: str) -> str: ...
     def say(self, text: str) -> str: ...
+    def navbot_command(self, text: str) -> str: ...
     def capture_frame(self) -> bytes | None: ...
 
 
@@ -56,6 +59,9 @@ class MockRobotBackend:
     def say(self, text: str) -> str:
         return self._record(f"say(text={text!r})")
 
+    def navbot_command(self, text: str) -> str:
+        return self._record(f"publish_navbot_command(text={text!r})")
+
     def capture_frame(self) -> bytes | None:
         self.log.append("capture_frame() -> no camera in mock mode")
         print("    [MOCK ROBOT] capture_frame() -> None (no camera attached)")
@@ -70,6 +76,8 @@ class RealRobotBackend:
         import sdk_lib  # local import: keeps the SDK dependency optional
 
         self._robot = sdk_lib.G1(iface=iface, domain_id=domain_id)
+        self._domain_id = domain_id
+        self._navbot_publisher = None
 
     def move(self, vx: float, vy: float, vyaw: float, duration: float) -> str:
         self._robot.move_for(duration, vx, vy, vyaw)
@@ -98,6 +106,30 @@ class RealRobotBackend:
     def say(self, text: str) -> str:
         code = self._robot.say(text)
         return f"spoke -> code {code}"
+
+    def navbot_command(self, text: str) -> str:
+        if self._navbot_publisher is None:
+            import rclpy
+            from rclpy.node import Node
+            from std_msgs.msg import String
+
+            os.environ.setdefault("ROS_DOMAIN_ID", str(int(self._domain_id)))
+            if not rclpy.ok():
+                rclpy.init(args=None)
+            node = Node("ai_control_navbot_command")
+            publisher = node.create_publisher(String, "/model_api/navbot_command", 10)
+            self._navbot_publisher = (node, publisher, String)
+        node, publisher, string_msg = self._navbot_publisher
+        deadline = time.time() + 1.0
+        while publisher.get_subscription_count() == 0 and time.time() < deadline:
+            import rclpy
+
+            rclpy.spin_once(node, timeout_sec=0.05)
+        for _ in range(3):
+            publisher.publish(string_msg(data=text))
+            time.sleep(0.05)
+        node.get_logger().info(f"published nav bot command: {text!r}")
+        return f"published nav bot command {text!r}"
 
     def capture_frame(self) -> bytes | None:
         return self._robot.get_camera_image_jpeg()

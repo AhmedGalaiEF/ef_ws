@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import base64
 import csv
+import importlib
 import json
 import math
 import numpy as np
@@ -54,7 +55,6 @@ ensure_cyclonedds_environment()
 
 try:
     from unitree_sdk2py.core.channel import ChannelSubscriber
-    from unitree_sdk2py.comm.motion_switcher.motion_switcher_client import MotionSwitcherClient
     from unitree_sdk2py.idl.sensor_msgs.msg.dds_ import PointCloud2_
     from unitree_sdk2py.idl.unitree_go.msg.dds_ import HeightMap_, SportModeState_
     from unitree_sdk2py.g1.loco.g1_loco_api import (
@@ -101,13 +101,32 @@ HAND_JOINT_NAMES = [
     "index_0",
     "index_1",
 ]
+G1_NUM_MOTOR = 29
+LEFT_LEG_JOINTS = [0, 1, 2, 3, 4, 5]
+RIGHT_LEG_JOINTS = [6, 7, 8, 9, 10, 11]
 LEFT_ARM_JOINTS = [15, 16, 17, 18, 19, 20, 21]
 WAIST_JOINTS = [12, 13, 14]
 RIGHT_ARM_JOINTS = [22, 23, 24, 25, 26, 27, 28]
+LEG_JOINTS = LEFT_LEG_JOINTS + RIGHT_LEG_JOINTS
 UPPER_BODY_JOINTS = WAIST_JOINTS + LEFT_ARM_JOINTS + RIGHT_ARM_JOINTS
+BODY_JOINTS = list(range(G1_NUM_MOTOR))
 ARM_SDK_NOT_USED_IDX = 29
 WAIST_HOLD_KP = 480.0
 WAIST_HOLD_KD = 12.0
+LOWCMD_DEFAULT_KP = [
+    60, 60, 60, 100, 40, 40,
+    60, 60, 60, 100, 40, 40,
+    60, 40, 40,
+    40, 40, 40, 40, 40, 40, 40,
+    40, 40, 40, 40, 40, 40, 40,
+]
+LOWCMD_DEFAULT_KD = [
+    1, 1, 1, 2, 1, 1,
+    1, 1, 1, 2, 1, 1,
+    1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1,
+]
 HL_ARM_ACTION_RELEASE = "release arm"
 HL_ARM_ACTION_DEFAULT_RELEASE_DELAY_S = 2.0
 HL_ARM_ACTIONS = {
@@ -323,6 +342,55 @@ class _ArmSdkPublisher:
         self._pub.Write(self._cmd)
 
 
+class _LowCmdPublisher:
+    def __init__(self, iface: str, domain_id: int) -> None:
+        from unitree_sdk2py.core.channel import ChannelPublisher
+        from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
+        from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_
+        from unitree_sdk2py.utils.crc import CRC
+
+        ensure_channel_factory_initialized(int(domain_id), str(iface))
+        self._pub = ChannelPublisher("rt/lowcmd", LowCmd_)
+        self._pub.Init()
+        self._crc = CRC()
+        self._cmd = unitree_hg_msg_dds__LowCmd_()
+        self._cmd.mode_pr = 0
+
+    def publish_targets(
+        self,
+        joint_targets: dict[int, float],
+        *,
+        mode_machine: int = 0,
+        kp: float | dict[int, float] = 40.0,
+        kd: float | dict[int, float] = 1.0,
+        dq: float = 0.0,
+        tau: float = 0.0,
+    ) -> None:
+        self._cmd.mode_pr = 0
+        self._cmd.mode_machine = int(mode_machine)
+        for motor_idx in range(G1_NUM_MOTOR):
+            mc = self._cmd.motor_cmd[motor_idx]
+            mc.mode = 0
+            mc.q = 0.0
+            mc.dq = 0.0
+            mc.kp = 0.0
+            mc.kd = 0.0
+            mc.tau = 0.0
+        for joint_index, target in joint_targets.items():
+            idx = int(joint_index)
+            if idx < 0 or idx >= G1_NUM_MOTOR:
+                raise ValueError(f"Invalid body joint index for rt/lowcmd: {idx}")
+            mc = self._cmd.motor_cmd[idx]
+            mc.mode = 1
+            mc.q = float(target)
+            mc.dq = float(dq)
+            mc.tau = float(tau)
+            mc.kp = float(kp.get(idx, 40.0) if isinstance(kp, dict) else kp)
+            mc.kd = float(kd.get(idx, 1.0) if isinstance(kd, dict) else kd)
+        self._cmd.crc = self._crc.Crc(self._cmd)
+        self._pub.Write(self._cmd)
+
+
 class Robot:
     """End-user wrapper around common G1 SDK workflows."""
 
@@ -410,6 +478,9 @@ class Robot:
         self._audio: RobotAudio | None = None
         self._video_client: Any = None
         self._arm_sdk: _ArmSdkPublisher | None = None
+        self._lowcmd: _LowCmdPublisher | None = None
+        self._robot_state_client: Any = None
+        self._ai_sport_enabled_estimate: bool | None = None
         self._arm_action_client: Any = None
         self._hands: dict[str, Dex3HandController] = {}
         self._usb_controller_thread: threading.Thread | None = None
@@ -463,6 +534,42 @@ class Robot:
         if self._arm_sdk is None:
             self._arm_sdk = _ArmSdkPublisher(iface=self.iface, domain_id=self.domain_id)
         return self._arm_sdk
+
+    def _get_lowcmd(self) -> _LowCmdPublisher:
+        if self._lowcmd is None:
+            self._lowcmd = _LowCmdPublisher(iface=self.iface, domain_id=self.domain_id)
+        return self._lowcmd
+
+    def _get_robot_state_client(self, *, timeout: float = 3.0) -> Any:
+        if self._robot_state_client is not None:
+            if hasattr(self._robot_state_client, "SetTimeout"):
+                self._robot_state_client.SetTimeout(float(timeout))
+            return self._robot_state_client
+
+        errors: list[str] = []
+        for module_name in (
+            "unitree_sdk2py.b2.robot_state.robot_state_client",
+            "unitree_sdk2py.go2.robot_state.robot_state_client",
+        ):
+            try:
+                module = importlib.import_module(module_name)
+                client_type = module.RobotStateClient
+                break
+            except ModuleNotFoundError as exc:
+                errors.append(f"{module_name}: {exc}")
+            except ImportError as exc:
+                errors.append(f"{module_name}: {exc}")
+        else:
+            details = "\n  ".join(errors) if errors else "no candidate modules found"
+            raise RuntimeError(f"RobotStateClient could not be imported:\n  {details}")
+
+        ensure_channel_factory_initialized(self.domain_id, self.iface)
+        client = client_type()
+        if hasattr(client, "SetTimeout"):
+            client.SetTimeout(float(timeout))
+        client.Init()
+        self._robot_state_client = client
+        return client
 
     def _get_arm_action_client(self) -> Any:
         if self._arm_action_client is None:
@@ -1001,7 +1108,7 @@ class Robot:
         self,
         joint_indices: list[int],
         *,
-        timeout: float = 3.0,
+        timeout: float = 10.0,
     ) -> dict[int, float]:
         if not self.wait_for_low_state(timeout=max(0.1, float(timeout))):
             raise TimeoutError("Timed out waiting for rt/lowstate joint positions.")
@@ -1013,6 +1120,178 @@ class Robot:
                 raise RuntimeError(f"Joint position for {name} is unavailable.")
             values[int(joint_index)] = float(value)
         return values
+
+    def _read_lowcmd_state_or_raise(
+        self,
+        *,
+        timeout: float = 10.0,
+    ) -> tuple[dict[int, float], int]:
+        if not self.wait_for_low_state(timeout=max(0.1, float(timeout))):
+            raise TimeoutError("Timed out waiting for rt/lowstate joint positions.")
+        msg = self.get_low_state_msg()
+        snapshot = self.get_low_state_snapshot()
+        if msg is None or snapshot is None:
+            raise RuntimeError("rt/lowstate is unavailable.")
+        if len(snapshot.joint_positions) < G1_NUM_MOTOR:
+            raise RuntimeError(
+                f"rt/lowstate has {len(snapshot.joint_positions)} joints, expected at least {G1_NUM_MOTOR}."
+            )
+        mode_machine = getattr(msg, "mode_machine", 0)
+        try:
+            mode_machine_int = int(mode_machine)
+        except Exception:
+            mode_machine_int = 0
+        return {
+            joint_index: float(snapshot.joint_positions[joint_index])
+            for joint_index in BODY_JOINTS
+        }, mode_machine_int
+
+    @staticmethod
+    def _smoothstep(ratio: float) -> float:
+        x = max(0.0, min(1.0, float(ratio)))
+        return x * x * (3.0 - 2.0 * x)
+
+    @staticmethod
+    def _resolve_body_joint_selection(joints: Any = "arms", *, arm: str = "both") -> list[int]:
+        groups = {
+            "left_leg": LEFT_LEG_JOINTS,
+            "left leg": LEFT_LEG_JOINTS,
+            "right_leg": RIGHT_LEG_JOINTS,
+            "right leg": RIGHT_LEG_JOINTS,
+            "legs": LEG_JOINTS,
+            "leg": LEG_JOINTS,
+            "waist": WAIST_JOINTS,
+            "left_arm": LEFT_ARM_JOINTS,
+            "left arm": LEFT_ARM_JOINTS,
+            "right_arm": RIGHT_ARM_JOINTS,
+            "right arm": RIGHT_ARM_JOINTS,
+            "arms": list(PBD_ARM_JOINTS[_normalize_arm_selection(arm)]),
+            "arm": list(PBD_ARM_JOINTS[_normalize_arm_selection(arm)]),
+            "upper_body": UPPER_BODY_JOINTS,
+            "upper body": UPPER_BODY_JOINTS,
+            "body": BODY_JOINTS,
+            "all": BODY_JOINTS,
+        }
+        if isinstance(joints, str):
+            full_key = str(joints).strip().lower().replace("-", "_")
+            if full_key in groups:
+                return list(groups[full_key])
+            raw_items = [item.strip() for item in re.split(r"[,\s]+", joints) if item.strip()]
+            if len(raw_items) == 1:
+                key = raw_items[0].lower().replace("-", "_")
+                if key in groups:
+                    return list(groups[key])
+            items: list[Any] = raw_items
+        else:
+            try:
+                items = list(joints)
+            except TypeError:
+                items = [joints]
+
+        resolved: list[int] = []
+        for item in items:
+            if isinstance(item, str):
+                token = item.strip()
+                key = token.lower().replace("-", "_")
+                if key in groups:
+                    resolved.extend(groups[key])
+                    continue
+                if key in BODY_JOINT_INDEX_BY_NAME:
+                    resolved.append(BODY_JOINT_INDEX_BY_NAME[key])
+                    continue
+                if key.startswith("j") and key[1:].isdigit():
+                    resolved.append(int(key[1:]))
+                    continue
+                if key.isdigit():
+                    resolved.append(int(key))
+                    continue
+                raise ValueError(f"Unknown body joint selector: {item!r}")
+            resolved.append(int(item))
+
+        unique = list(dict.fromkeys(resolved))
+        invalid = [joint_index for joint_index in unique if joint_index < 0 or joint_index >= G1_NUM_MOTOR]
+        if invalid:
+            raise ValueError(f"Invalid body joint indices: {invalid}")
+        if not unique:
+            raise ValueError("At least one body joint must be selected.")
+        return unique
+
+    @staticmethod
+    def _default_lowcmd_gains(joint_indices: list[int]) -> tuple[dict[int, float], dict[int, float]]:
+        return (
+            {joint_index: float(LOWCMD_DEFAULT_KP[joint_index]) for joint_index in joint_indices},
+            {joint_index: float(LOWCMD_DEFAULT_KD[joint_index]) for joint_index in joint_indices},
+        )
+
+    def _service_status(self, service_name: str, *, timeout: float = 3.0) -> int | None:
+        client = self._get_robot_state_client(timeout=timeout)
+        if not hasattr(client, "ServiceList"):
+            return None
+        code, service_states = client.ServiceList()
+        if int(code) != 0:
+            raise RuntimeError(f"ServiceList failed: code={int(code)}")
+        for state in service_states or []:
+            name = str(getattr(state, "name", "")).strip()
+            if name != service_name:
+                continue
+            status = getattr(state, "status", None)
+            try:
+                return None if status is None else int(status)
+            except Exception:
+                return None
+        return None
+
+    def switch_service(self, service_name: str, enabled: bool, *, timeout: float = 3.0) -> int:
+        """Switch a robot service using the robot_state ServiceSwitch API."""
+        client = self._get_robot_state_client(timeout=timeout)
+        if not hasattr(client, "ServiceSwitch"):
+            raise AttributeError("RobotStateClient does not support ServiceSwitch().")
+        return int(client.ServiceSwitch(str(service_name), bool(enabled)))
+
+    def _set_ai_sport_service(self, enabled: bool, *, timeout: float = 10.0, wait: bool = True) -> int:
+        if self._ai_sport_enabled_estimate == bool(enabled):
+            return 0
+        expected_status = 0 if enabled else 1
+        try:
+            current_status = self._service_status("ai_sport", timeout=timeout)
+        except Exception:
+            current_status = None
+        if current_status == expected_status:
+            self._ai_sport_enabled_estimate = bool(enabled)
+            return 0
+
+        code = self.switch_service("ai_sport", bool(enabled), timeout=timeout)
+        if code != 0:
+            try:
+                current_status = self._service_status("ai_sport", timeout=timeout)
+            except Exception:
+                current_status = None
+            if current_status == expected_status:
+                self._ai_sport_enabled_estimate = bool(enabled)
+                return 0
+            raise RuntimeError(f"ServiceSwitch('ai_sport', {bool(enabled)}) failed: code={code}")
+        if not wait:
+            self._ai_sport_enabled_estimate = bool(enabled)
+            return code
+        deadline = time.time() + max(0.0, float(timeout))
+        while time.time() < deadline:
+            status = self._service_status("ai_sport", timeout=timeout)
+            if status is None or status == expected_status:
+                self._ai_sport_enabled_estimate = bool(enabled)
+                return code
+            time.sleep(0.1)
+        raise TimeoutError(
+            f"Timed out waiting for ai_sport service to turn {'on' if enabled else 'off'}."
+        )
+
+    def enter_lowcmd_dev_mode(self, *, timeout: float = 10.0) -> int:
+        """Enter lowcmd developer mode by turning the ai_sport service off."""
+        return self._set_ai_sport_service(False, timeout=timeout)
+
+    def leave_lowcmd_dev_mode(self, *, timeout: float = 10.0) -> int:
+        """Leave lowcmd developer mode by turning the ai_sport service on."""
+        return self._set_ai_sport_service(True, timeout=timeout)
+
 
     def _read_upper_body_hold_pose(self, *, timeout: float = 3.0) -> dict[int, float]:
         """Capture the live upper-body pose to hold during arm_sdk handoff."""
@@ -1359,6 +1638,407 @@ class Robot:
             "command_rate_hz": float(command_rate_hz),
             "final_arm_sdk_weight": 1.0,
             "joint_count": len(positions),
+        }
+
+    def dev_mode_teach(
+        self,
+        *,
+        joints: Any = "arms",
+        arm: str = "both",
+        out: str = "/tmp/pbd_motion_lowcmd.npz",
+        log_path: str | None = None,
+        duration_s: float = 0.0,
+        poll_s: float = 0.01,
+        record_hands: bool = True,
+        include_legs_and_waist: bool = True,
+        zero_after_teach_s: float = 0.2,
+        ensure_dev_mode: bool = False,
+        timeout: float = 10.0,
+    ) -> dict[str, Any]:
+        """Record a body joint demonstration while publishing zero-gain rt/lowcmd.
+
+        `joints` may be a group name (`"arms"`, `"legs"`, `"waist"`,
+        `"upper_body"`, `"all"`), a joint name, or a list of indices/names.
+        By default this assumes `ai_sport` is already off. The leg and waist
+        joints are also included so they are recorded with zero gains and
+        replayed later. Leg joints are low-level only; use this with the robot
+        externally supported.
+        """
+        selected_joints = self._resolve_body_joint_selection(joints, arm=arm)
+        if include_legs_and_waist:
+            selected_joints = sorted(dict.fromkeys(selected_joints + LEG_JOINTS + WAIST_JOINTS))
+        done_event = threading.Event()
+
+        def _wait_for_enter() -> None:
+            try:
+                input("Press Enter when the dev-mode teach motion is complete...")
+            except EOFError:
+                return
+            done_event.set()
+
+        if ensure_dev_mode:
+            self.enter_lowcmd_dev_mode(timeout=timeout)
+        self._get_lowcmd()
+        positions, mode_machine = self._read_lowcmd_state_or_raise(timeout=timeout)
+        selected_positions = {joint: positions[joint] for joint in selected_joints}
+        self._get_lowcmd().publish_targets(
+            selected_positions,
+            mode_machine=mode_machine,
+            kp={joint: 0.0 for joint in selected_joints},
+            kd={joint: 0.0 for joint in selected_joints},
+        )
+        record_hands_enabled = bool(record_hands)
+        hands_zero_torqued = False
+        if record_hands_enabled:
+            self.zero_torque_fingers("both")
+            hands_zero_torqued = True
+            left_hand_snapshot = self.get_hand_state_snapshot("left")
+            right_hand_snapshot = self.get_hand_state_snapshot("right")
+            if left_hand_snapshot is None or right_hand_snapshot is None:
+                print("Hand state is unavailable; continuing body-only teach.")
+                record_hands_enabled = False
+
+        os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
+        resolved_log_path = log_path or f"{os.path.splitext(out)[0]}.csv"
+        os.makedirs(os.path.dirname(os.path.abspath(resolved_log_path)), exist_ok=True)
+
+        sample_period = max(1e-3, float(poll_s))
+        duration_limit = max(0.0, float(duration_s))
+        timestamps: list[float] = []
+        samples: list[list[float]] = []
+        left_hand_samples: list[list[float]] = []
+        right_hand_samples: list[list[float]] = []
+        start = time.time()
+        next_tick = start
+        prompt_thread = threading.Thread(
+            target=_wait_for_enter,
+            name="dev-mode-teach-enter-confirm",
+            daemon=True,
+        )
+        prompt_thread.start()
+
+        with open(resolved_log_path, "w", encoding="utf-8", newline="") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(["phase", "t_s", "joint_indices", "target_positions", "actual_positions"])
+            try:
+                while True:
+                    now = time.time()
+                    if now < next_tick:
+                        time.sleep(min(0.02, next_tick - now))
+                        continue
+                    next_tick += sample_period
+                    if done_event.is_set():
+                        break
+                    if duration_limit > 0.0 and (now - start) >= duration_limit:
+                        break
+
+                    positions, mode_machine = self._read_lowcmd_state_or_raise(timeout=timeout)
+                    row = [float(positions[joint]) for joint in selected_joints]
+                    zero_targets = {
+                        joint: float(row[idx])
+                        for idx, joint in enumerate(selected_joints)
+                    }
+                    self._get_lowcmd().publish_targets(
+                        zero_targets,
+                        mode_machine=mode_machine,
+                        kp={joint: 0.0 for joint in selected_joints},
+                        kd={joint: 0.0 for joint in selected_joints},
+                    )
+
+                    left_hand_row: list[float] = []
+                    right_hand_row: list[float] = []
+                    if record_hands_enabled:
+                        left_hand_snapshot = self.get_hand_state_snapshot("left")
+                        right_hand_snapshot = self.get_hand_state_snapshot("right")
+                        if left_hand_snapshot is None or right_hand_snapshot is None:
+                            record_hands_enabled = False
+                        else:
+                            left_hand_row = [
+                                float(left_hand_snapshot["positions"][joint_name])
+                                for joint_name in HAND_JOINT_NAMES
+                            ]
+                            right_hand_row = [
+                                float(right_hand_snapshot["positions"][joint_name])
+                                for joint_name in HAND_JOINT_NAMES
+                            ]
+                    if not record_hands_enabled:
+                        left_hand_row = []
+                        right_hand_row = []
+
+                    t_rel = now - start
+                    timestamps.append(t_rel)
+                    samples.append(row)
+                    if record_hands_enabled:
+                        left_hand_samples.append(left_hand_row)
+                        right_hand_samples.append(right_hand_row)
+                    writer.writerow(
+                        [
+                            "dev_mode_teach",
+                            f"{t_rel:.6f}",
+                            " ".join(
+                                [str(joint) for joint in selected_joints]
+                                + (PBD_HAND_JOINT_LABELS["left"] + PBD_HAND_JOINT_LABELS["right"] if record_hands_enabled else [])
+                            ),
+                            " ".join(
+                                [f"{value:.6f}" for value in row]
+                                + ([f"{value:.6f}" for value in left_hand_row] + [f"{value:.6f}" for value in right_hand_row] if record_hands_enabled else [])
+                            ),
+                            " ".join(
+                                [f"{value:.6f}" for value in row]
+                                + ([f"{value:.6f}" for value in left_hand_row] + [f"{value:.6f}" for value in right_hand_row] if record_hands_enabled else [])
+                            ),
+                        ]
+                    )
+                    handle.flush()
+                    print(
+                        f"[dev_mode_teach] t={t_rel:.3f}s joints={selected_joints} "
+                        f"actual={[round(value, 4) for value in row]}"
+                    )
+            except KeyboardInterrupt:
+                pass
+
+        if not timestamps:
+            raise RuntimeError("No samples recorded. Is rt/lowstate publishing?")
+
+        save_kwargs: dict[str, Any] = {
+            "joints": np.asarray(selected_joints, dtype=np.int32),
+            "joint_names": np.asarray([BODY_JOINT_NAME_BY_INDEX[joint] for joint in selected_joints], dtype="<U32"),
+            "ts": np.asarray(timestamps, dtype=np.float32),
+            "qs": np.asarray(samples, dtype=np.float32),
+            "poll_s": np.asarray([sample_period], dtype=np.float32),
+            "representation": np.asarray(["joint_space"], dtype="<U16"),
+            "control_topic": np.asarray(["rt/lowcmd"], dtype="<U16"),
+            "targeted_joints": np.asarray(["body"], dtype="<U16"),
+        }
+        if record_hands_enabled:
+            save_kwargs.update(
+                {
+                    "left_hand_joints": np.asarray(PBD_HAND_JOINT_LABELS["left"], dtype="<U32"),
+                    "right_hand_joints": np.asarray(PBD_HAND_JOINT_LABELS["right"], dtype="<U32"),
+                    "left_hand_qs": np.asarray(left_hand_samples, dtype=np.float32),
+                    "right_hand_qs": np.asarray(right_hand_samples, dtype=np.float32),
+                }
+            )
+        np.savez(out, **save_kwargs)
+
+        final_targets = {
+            joint: float(samples[-1][idx])
+            for idx, joint in enumerate(selected_joints)
+        }
+        zero_steps = max(0, int(max(0.0, float(zero_after_teach_s)) / sample_period))
+        for _ in range(zero_steps + 1):
+            _, mode_machine = self._read_lowcmd_state_or_raise(timeout=timeout)
+            self._get_lowcmd().publish_targets(
+                final_targets,
+                mode_machine=mode_machine,
+                kp={joint: 0.0 for joint in selected_joints},
+                kd={joint: 0.0 for joint in selected_joints},
+            )
+            if zero_steps > 0:
+                time.sleep(sample_period)
+        if hands_zero_torqued:
+            self.stop_release_fingers("both")
+        return {
+            "joint_count": len(selected_joints),
+            "sample_count": len(timestamps),
+            "duration_s": float(timestamps[-1]) if timestamps else 0.0,
+            "poll_s": sample_period,
+            "out": os.path.abspath(out),
+            "log_path": os.path.abspath(resolved_log_path),
+            "control_topic": "rt/lowcmd",
+            "targeted_joints": list(selected_joints),
+            "joint_names": [BODY_JOINT_NAME_BY_INDEX[joint] for joint in selected_joints],
+            "recorded_hands": bool(record_hands_enabled),
+        }
+
+    def dev_mode_repeat(
+        self,
+        *,
+        motion_file: str = "/tmp/pbd_motion_lowcmd.npz",
+        joints: Any | None = None,
+        arm: str = "both",
+        log_path: str | None = None,
+        speed: float = 1.0,
+        command_rate_hz: float = 50.0,
+        start_ramp_s: float = 0.8,
+        final_hold_s: float = 0.8,
+        kp: float | None = None,
+        kd: float | None = None,
+        replay_hands: bool = True,
+        zero_gains_on_exit: bool = False,
+        ensure_dev_mode: bool = False,
+        timeout: float = 10.0,
+    ) -> dict[str, Any]:
+        """Replay a saved body joint trajectory through rt/lowcmd.
+
+        By default this assumes `ai_sport` is already off. Pass
+        `ensure_dev_mode=True` only if this method should turn it off first.
+        """
+        data = _load_pbd_motion_file(motion_file)
+        if "joints" not in data or "ts" not in data or "qs" not in data:
+            raise ValueError("Motion file must contain 'joints', 'ts', and 'qs'.")
+        recorded_joints = [int(joint) for joint in np.asarray(data["joints"]).astype(int).tolist()]
+        ts = np.asarray(data["ts"], dtype=float)
+        qs = np.asarray(data["qs"], dtype=float)
+        if ts.size == 0 or qs.size == 0:
+            raise ValueError("No samples in motion file.")
+        if qs.shape[0] != ts.shape[0]:
+            raise ValueError("Invalid motion file: ts and qs length mismatch.")
+        if qs.shape[1] != len(recorded_joints):
+            raise ValueError("Invalid motion file: joints and qs width mismatch.")
+
+        selected_joints = (
+            list(recorded_joints)
+            if joints is None
+            else self._resolve_body_joint_selection(joints, arm=arm)
+        )
+        joint_to_col = {joint: idx for idx, joint in enumerate(recorded_joints)}
+        missing = [joint for joint in selected_joints if joint not in joint_to_col]
+        if missing:
+            raise ValueError(f"Motion file missing requested body joints: {missing}.")
+        active_cols = [joint_to_col[joint] for joint in selected_joints]
+        active_qs = qs[:, active_cols]
+        left_hand_qs = np.asarray(data.get("left_hand_qs", np.empty((0, 7))), dtype=float)
+        right_hand_qs = np.asarray(data.get("right_hand_qs", np.empty((0, 7))), dtype=float)
+        use_hands = (
+            replay_hands
+            and left_hand_qs.shape == (ts.shape[0], 7)
+            and right_hand_qs.shape == (ts.shape[0], 7)
+        )
+
+        if ensure_dev_mode:
+            self.enter_lowcmd_dev_mode(timeout=timeout)
+        self._get_lowcmd()
+        resolved_log_path = log_path or f"{os.path.splitext(motion_file)[0]}_dev_repeat.csv"
+        os.makedirs(os.path.dirname(os.path.abspath(resolved_log_path)), exist_ok=True)
+
+        rate_hz = max(1.0, float(command_rate_hz))
+        dt = 1.0 / rate_hz
+        replay_ts = ts / max(1e-6, float(speed))
+        t_final = float(replay_ts[-1])
+        start_positions, mode_machine = self._read_lowcmd_state_or_raise(timeout=timeout)
+        first_targets = {
+            joint: float(active_qs[0, idx])
+            for idx, joint in enumerate(selected_joints)
+        }
+        kp_map, kd_map = self._default_lowcmd_gains(selected_joints)
+        if kp is not None:
+            kp_map = {joint: float(kp) for joint in selected_joints}
+        if kd is not None:
+            kd_map = {joint: float(kd) for joint in selected_joints}
+
+        ramp_steps = max(1, int(max(0.0, float(start_ramp_s)) * rate_hz))
+        if float(start_ramp_s) > 0.0:
+            for step_idx in range(1, ramp_steps + 1):
+                ratio = self._smoothstep(float(step_idx) / float(ramp_steps))
+                targets = {
+                    joint: float(start_positions[joint]) + (first_targets[joint] - float(start_positions[joint])) * ratio
+                    for joint in selected_joints
+                }
+                _, mode_machine = self._read_lowcmd_state_or_raise(timeout=timeout)
+                self._get_lowcmd().publish_targets(targets, mode_machine=mode_machine, kp=kp_map, kd=kd_map)
+                time.sleep(dt)
+        else:
+            self._get_lowcmd().publish_targets(first_targets, mode_machine=mode_machine, kp=kp_map, kd=kd_map)
+
+        if use_hands:
+            self.stop_release_fingers("both")
+            self._get_hand("left").set_targets(
+                left_hand_qs[0].tolist(),
+                hold_s=max(0.8, float(start_ramp_s)),
+                rate_hz=rate_hz,
+                kp=0.55,
+                kd=0.05,
+                tau=0.015,
+                ramp_s=max(0.8, float(start_ramp_s)),
+            )
+            self._get_hand("right").set_targets(
+                right_hand_qs[0].tolist(),
+                hold_s=max(0.8, float(start_ramp_s)),
+                rate_hz=rate_hz,
+                kp=0.55,
+                kd=0.05,
+                tau=0.015,
+                ramp_s=max(0.8, float(start_ramp_s)),
+            )
+
+        started = time.time()
+        final_targets = first_targets
+        with open(resolved_log_path, "w", encoding="utf-8", newline="") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(["phase", "t_s", "joint_indices", "target_positions", "actual_positions"])
+            while True:
+                elapsed = time.time() - started
+                if elapsed > t_final:
+                    break
+                desired_row = np.asarray(_interp_motion_row(replay_ts, active_qs, elapsed), dtype=float)
+                final_targets = {
+                    joint: float(desired_row[idx])
+                    for idx, joint in enumerate(selected_joints)
+                }
+                positions, mode_machine = self._read_lowcmd_state_or_raise(timeout=timeout)
+                self._get_lowcmd().publish_targets(final_targets, mode_machine=mode_machine, kp=kp_map, kd=kd_map)
+                if use_hands:
+                    left_hand_desired = np.asarray(_interp_motion_row(replay_ts, left_hand_qs, elapsed), dtype=float)
+                    right_hand_desired = np.asarray(_interp_motion_row(replay_ts, right_hand_qs, elapsed), dtype=float)
+                    self._get_hand("left").write_targets_once(left_hand_desired.tolist(), kp=0.8, kd=0.05, tau=0.02)
+                    self._get_hand("right").write_targets_once(right_hand_desired.tolist(), kp=0.8, kd=0.05, tau=0.02)
+                actual_row = [float(positions[joint]) for joint in selected_joints]
+                target_row = [float(final_targets[joint]) for joint in selected_joints]
+                writer.writerow(
+                    [
+                        "dev_mode_repeat",
+                        f"{elapsed:.6f}",
+                        " ".join(str(joint) for joint in selected_joints),
+                        " ".join(f"{value:.6f}" for value in target_row),
+                        " ".join(f"{value:.6f}" for value in actual_row),
+                    ]
+                )
+                handle.flush()
+                print(
+                    f"[dev_mode_repeat] t={elapsed:.3f}s joints={selected_joints} "
+                    f"target={[round(value, 4) for value in target_row]} "
+                    f"actual={[round(value, 4) for value in actual_row]}"
+                )
+                time.sleep(dt)
+
+            hold_deadline = time.time() + max(0.0, float(final_hold_s))
+            while time.time() < hold_deadline:
+                positions, mode_machine = self._read_lowcmd_state_or_raise(timeout=timeout)
+                self._get_lowcmd().publish_targets(final_targets, mode_machine=mode_machine, kp=kp_map, kd=kd_map)
+                writer.writerow(
+                    [
+                        "dev_mode_repeat_final_hold",
+                        f"{time.time() - started:.6f}",
+                        " ".join(str(joint) for joint in selected_joints),
+                        " ".join(f"{float(final_targets[joint]):.6f}" for joint in selected_joints),
+                        " ".join(f"{float(positions[joint]):.6f}" for joint in selected_joints),
+                    ]
+                )
+                handle.flush()
+                time.sleep(dt)
+
+        if zero_gains_on_exit:
+            _, mode_machine = self._read_lowcmd_state_or_raise(timeout=timeout)
+            self._get_lowcmd().publish_targets(
+                final_targets,
+                mode_machine=mode_machine,
+                kp={joint: 0.0 for joint in selected_joints},
+                kd={joint: 0.0 for joint in selected_joints},
+            )
+        return {
+            "motion_file": os.path.abspath(motion_file),
+            "joint_count": len(selected_joints),
+            "sample_count": int(ts.shape[0]),
+            "command_rate_hz": rate_hz,
+            "speed": max(1e-6, float(speed)),
+            "duration_s": t_final,
+            "final_hold_s": max(0.0, float(final_hold_s)),
+            "log_path": os.path.abspath(resolved_log_path),
+            "control_topic": "rt/lowcmd",
+            "targeted_joints": list(selected_joints),
+            "joint_names": [BODY_JOINT_NAME_BY_INDEX[joint] for joint in selected_joints],
+            "replayed_hands": bool(use_hands),
         }
 
     def teach(
@@ -2457,17 +3137,11 @@ class Robot:
             return
         raise AttributeError("Current locomotion client does not support FSM mode setting API.")
 
-    def enter_dev_mode(self) -> None:
-        if hasattr(self._client, "SetGaitType"):
-            self._client.SetGaitType(3)
-            return
-        if hasattr(self._client, "SetBalanceMode"):
-            self._client.SetBalanceMode(3)
-            return
-        raise AttributeError("Current locomotion client does not support dev mode gait API.")
+    def enter_dev_mode(self, *, timeout: float = 10.0) -> int:
+        return self.enter_lowcmd_dev_mode(timeout=timeout)
 
-    def dev_mode(self) -> None:
-        self.enter_dev_mode()
+    def dev_mode(self, *, timeout: float = 10.0) -> int:
+        return self.enter_dev_mode(timeout=timeout)
 
     def _rpc_get_int(self, api_id: int) -> Optional[int]:
         return rpc_get_int(self._client, api_id)

@@ -74,6 +74,10 @@ def _say(backend: RobotBackend, args: dict[str, Any]) -> str:
     return backend.say(text=str(args["text"]))
 
 
+def _navbot_command(backend: RobotBackend, args: dict[str, Any]) -> str:
+    return backend.navbot_command(text=str(args["text"]))
+
+
 TOOL_SPECS: dict[str, ToolSpec] = {
     spec.name: spec
     for spec in (
@@ -125,6 +129,16 @@ TOOL_SPECS: dict[str, ToolSpec] = {
             description="Speak text out loud through the robot's loudspeaker.",
             args={"text": "text to announce"},
             handler=_say,
+        ),
+        ToolSpec(
+            name="navbot_command",
+            category="slam_navigation",
+            description=(
+                "Forward a text command to nav_bot.py on /model_api/navbot_command. "
+                "Use for SLAM mapping, relocation, named points, and named-point navigation."
+            ),
+            args={"text": "nav_bot.py command text, e.g. 'start mapping', 'save current point as kitchen', 'go to kitchen'"},
+            handler=_navbot_command,
         ),
     )
 }

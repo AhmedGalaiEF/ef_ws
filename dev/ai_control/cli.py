@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 import sys
 from typing import Any
 
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from ai_control import ollama_client, router, thinker, tools, vision
 from ai_control.config import AIConfig
+from ai_control.nav_commands import parse_nav_command
 from ai_control.robot_backend import MockRobotBackend, RealRobotBackend, RobotBackend
 
 BANNER = """\
@@ -15,6 +20,8 @@ ai_control -- placeholder multi-model robot control CLI
   vision:  {vision_model}
   backend: {backend}
 Type a message, or 'exit'/'quit' to leave. Ctrl-C also exits.
+SLAM prompt commands are recognized directly: start/stop mapping, relocate,
+save current point as <name>, go to <point>, list/clear points, stop/resume nav.
 """
 
 
@@ -96,6 +103,17 @@ def run(argv: list[str] | None = None) -> None:
             continue
         if user_text.lower() in ("exit", "quit"):
             break
+
+        nav_command = parse_nav_command(user_text)
+        if nav_command is not None:
+            print(f"  (intent: {nav_command.intent})")
+            tool_call = {"name": "navbot_command", "args": {"text": nav_command.command_text}}
+            print(f"assistant> {nav_command.response}")
+            history.append({"role": "user", "content": user_text})
+            history.append({"role": "assistant", "content": nav_command.response})
+            outcome_message = _confirm_and_dispatch(tool_call, backend)
+            history.append({"role": "system", "content": outcome_message})
+            continue
 
         try:
             route = router.classify(user_text, cfg)
