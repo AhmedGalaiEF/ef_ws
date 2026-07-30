@@ -26,8 +26,8 @@ confirm-before-execute gate on every tool call.
 ```bash
 ollama serve &
 ollama pull qwen2.5:0.5b   # router
-ollama pull qwen2.5:7b     # thinker
-ollama pull llava:7b       # vision
+ollama pull qwen3.5:9b     # thinker
+ollama pull qwen2.5vl:7b   # vision
 ```
 
 ## Run
@@ -51,7 +51,38 @@ python3 -m ai_control.cli --robot --iface eth0 --domain-id 0
 Running `python3 cli.py` from this `ai_control/` directory also works.
 
 Override model tags with `--router-model` / `--thinker-model` / `--vision-model`,
-or the Ollama host with `--host`.
+the Ollama host with `--host`, the nav bot command topic with
+`--navbot-command-topic`, or add local text/JSON knowledge for scenario answers
+with repeated `--knowledge-file PATH` flags.
+
+## Scenario Mode
+
+Type `scenario`, paste one step per line, then finish with `end scenario` or
+`.`. The runner executes recognized steps in order and still asks for operator
+confirmation before each robot tool call.
+
+Recognized step shapes include:
+
+```text
+announce: I am coming
+go to 'point A'
+greet people (wave) and introduce yourself in less than 12 words
+introduce EF Robotics
+ask do you have any questions?
+listen to question
+do thinking gesture & announce: let me think
+answer question in less than 20 words, use your RAG database
+wait for host to ask what objects do you see in front of you
+name 2 objects you see, look for <object A> and <object B>
+wait for host to tell you which object to grab
+grab <selected object>
+open right hand
+step back
+release arms
+```
+
+`grab` currently closes the right hand after the selected-object pause; there is
+not yet a perception-guided grasp planner in this CLI.
 
 ## SLAM / Named-Point Commands
 
@@ -74,7 +105,8 @@ navigation status
 ```
 
 Start the nav bot separately so that something is subscribed to the command
-topic, for example:
+topic. If the CLI reports `subscribers=0`, the command was published but no
+nav bot received it yet. For example:
 
 ```bash
 cd ~/EF/ef_ws

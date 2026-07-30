@@ -70,6 +70,10 @@ def _gesture(backend: RobotBackend, args: dict[str, Any]) -> str:
     return backend.gesture(name)
 
 
+def _release_arms(backend: RobotBackend, args: dict[str, Any]) -> str:
+    return backend.release_arms()
+
+
 def _say(backend: RobotBackend, args: dict[str, Any]) -> str:
     return backend.say(text=str(args["text"]))
 
@@ -122,6 +126,13 @@ TOOL_SPECS: dict[str, ToolSpec] = {
             description="Play a predefined high-level arm gesture.",
             args={"name": f"one of: {', '.join(GESTURE_NAMES)}"},
             handler=_gesture,
+        ),
+        ToolSpec(
+            name="release_arms",
+            category="gesture",
+            description="Release the arms back to their neutral controlled state.",
+            args={},
+            handler=_release_arms,
         ),
         ToolSpec(
             name="say",

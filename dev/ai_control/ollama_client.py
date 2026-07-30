@@ -47,6 +47,18 @@ def chat(
     try:
         with urllib.request.urlopen(request, timeout=timeout_s) as response:
             raw = response.read()
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        if exc.code == 404:
+            raise OllamaError(
+                f"Ollama could not find model {model!r} at {host}. "
+                f"Run `ollama pull {model}` or choose an installed model with the CLI flags. "
+                f"Underlying response: {detail[:200]}"
+            ) from exc
+        raise OllamaError(
+            f"Ollama HTTP error {exc.code} at {host} (model={model!r}). "
+            f"Underlying response: {detail[:200]}"
+        ) from exc
     except urllib.error.URLError as exc:
         raise OllamaError(
             f"Could not reach Ollama at {host} (model={model!r}). "

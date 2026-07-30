@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import os
-import time
+import subprocess
+import sys
 from typing import Protocol
 
 
@@ -18,6 +19,7 @@ class RobotBackend(Protocol):
     def hand_open(self, hand: str) -> str: ...
     def hand_close(self, hand: str) -> str: ...
     def gesture(self, name: str) -> str: ...
+    def release_arms(self) -> str: ...
     def say(self, text: str) -> str: ...
     def navbot_command(self, text: str) -> str: ...
     def capture_frame(self) -> bytes | None: ...
@@ -56,6 +58,9 @@ class MockRobotBackend:
     def gesture(self, name: str) -> str:
         return self._record(f"execute_arm_action(action={name!r})")
 
+    def release_arms(self) -> str:
+        return self._record("release_arm()")
+
     def say(self, text: str) -> str:
         return self._record(f"say(text={text!r})")
 
@@ -72,12 +77,12 @@ class RealRobotBackend:
     """Wraps `sdk_lib.G1`. Only imported/constructed when --robot is passed,
     since it requires the Unitree SDK2 Python stack to be installed."""
 
-    def __init__(self, iface: str, domain_id: int) -> None:
+    def __init__(self, iface: str, domain_id: int, navbot_command_topic: str = "/model_api/navbot_command") -> None:
         import sdk_lib  # local import: keeps the SDK dependency optional
 
         self._robot = sdk_lib.G1(iface=iface, domain_id=domain_id)
         self._domain_id = domain_id
-        self._navbot_publisher = None
+        self._navbot_command_topic = str(navbot_command_topic)
 
     def move(self, vx: float, vy: float, vyaw: float, duration: float) -> str:
         self._robot.move_for(duration, vx, vy, vyaw)
@@ -103,33 +108,65 @@ class RealRobotBackend:
         code = self._robot.execute_arm_action(name)
         return f"gesture {name!r} -> code {code}"
 
+    def release_arms(self) -> str:
+        code = self._robot.release_arm()
+        return f"released arms -> code {code}"
+
     def say(self, text: str) -> str:
         code = self._robot.say(text)
         return f"spoke -> code {code}"
 
     def navbot_command(self, text: str) -> str:
-        if self._navbot_publisher is None:
-            import rclpy
-            from rclpy.node import Node
-            from std_msgs.msg import String
+        code = r"""
+import sys
+import time
 
-            os.environ.setdefault("ROS_DOMAIN_ID", str(int(self._domain_id)))
-            if not rclpy.ok():
-                rclpy.init(args=None)
-            node = Node("ai_control_navbot_command")
-            publisher = node.create_publisher(String, "/model_api/navbot_command", 10)
-            self._navbot_publisher = (node, publisher, String)
-        node, publisher, string_msg = self._navbot_publisher
-        deadline = time.time() + 1.0
-        while publisher.get_subscription_count() == 0 and time.time() < deadline:
-            import rclpy
+import rclpy
+from rclpy.node import Node
+from std_msgs.msg import String
 
-            rclpy.spin_once(node, timeout_sec=0.05)
-        for _ in range(3):
-            publisher.publish(string_msg(data=text))
-            time.sleep(0.05)
-        node.get_logger().info(f"published nav bot command: {text!r}")
-        return f"published nav bot command {text!r}"
+topic = sys.argv[1]
+text = sys.argv[2]
+
+rclpy.init(args=None)
+node = Node("ai_control_navbot_command_once")
+publisher = node.create_publisher(String, topic, 10)
+deadline = time.time() + 1.0
+subscribers = 0
+while time.time() < deadline:
+    rclpy.spin_once(node, timeout_sec=0.05)
+    subscribers = publisher.get_subscription_count()
+    if subscribers:
+        break
+msg = String()
+msg.data = text
+for _ in range(3):
+    publisher.publish(msg)
+    rclpy.spin_once(node, timeout_sec=0.05)
+    time.sleep(0.05)
+print(subscribers)
+node.destroy_node()
+rclpy.shutdown()
+"""
+        env = os.environ.copy()
+        env["ROS_DOMAIN_ID"] = str(int(self._domain_id))
+        env.setdefault("ROS_LOG_DIR", "/tmp/ros_log")
+        try:
+            result = subprocess.run(
+                [sys.executable, "-c", code, self._navbot_command_topic, str(text)],
+                check=False,
+                capture_output=True,
+                env=env,
+                text=True,
+                timeout=5.0,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(f"timed out publishing nav bot command on {self._navbot_command_topic}") from exc
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout).strip()
+            raise RuntimeError(f"failed to publish nav bot command on {self._navbot_command_topic}: {detail}")
+        subscribers = (result.stdout or "0").strip().splitlines()[-1]
+        return f"published nav bot command {text!r} on {self._navbot_command_topic} (subscribers={subscribers})"
 
     def capture_frame(self) -> bytes | None:
         return self._robot.get_camera_image_jpeg()
