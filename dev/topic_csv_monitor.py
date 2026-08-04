@@ -7,6 +7,7 @@ import argparse
 import array
 import csv
 import json
+import math
 import signal
 import sys
 import threading
@@ -159,6 +160,26 @@ def normalize_topic(topic: str) -> str:
     if not topic:
         return topic
     return topic if topic.startswith("/") else f"/{topic}"
+
+
+def positive_float(value: str) -> float:
+    try:
+        parsed = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a number") from exc
+    if not math.isfinite(parsed) or parsed <= 0.0:
+        raise argparse.ArgumentTypeError("must be a finite value > 0")
+    return parsed
+
+
+def nonnegative_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be an integer") from exc
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("must be >= 0")
+    return parsed
 
 
 def load_topics(path: Path) -> set[str]:
@@ -360,7 +381,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument(
         "--discovery-period",
-        type=float,
+        type=positive_float,
         default=2.0,
         help="Seconds between topic discovery scans. Default: 2.0",
     )
@@ -371,19 +392,19 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument(
         "--max-sequence",
-        type=int,
+        type=nonnegative_int,
         default=32,
         help="Maximum list/array items stored in each message field preview. Default: 32",
     )
     parser.add_argument(
         "--max-string",
-        type=int,
+        type=nonnegative_int,
         default=2000,
         help="Maximum string characters stored before summarizing. Default: 2000",
     )
     parser.add_argument(
         "--max-depth",
-        type=int,
+        type=nonnegative_int,
         default=8,
         help="Maximum nested message depth converted to JSON. Default: 8",
     )
@@ -411,9 +432,9 @@ def main(argv: list[str] | None = None) -> int:
         monitor_all=args.all,
         discovery_period=args.discovery_period,
         reliable=args.reliable,
-        max_sequence=max(0, args.max_sequence),
-        max_string=max(0, args.max_string),
-        max_depth=max(1, args.max_depth),
+        max_sequence=args.max_sequence,
+        max_string=args.max_string,
+        max_depth=args.max_depth,
     )
 
     stop_requested = False

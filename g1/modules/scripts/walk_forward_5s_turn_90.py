@@ -18,15 +18,15 @@ from dds_env import default_dds_iface
 
 def nonnegative_float(value: str) -> float:
     parsed = float(value)
-    if parsed < 0.0:
-        raise argparse.ArgumentTypeError("value must be non-negative")
+    if not math.isfinite(parsed) or parsed < 0.0:
+        raise argparse.ArgumentTypeError("value must be finite and non-negative")
     return parsed
 
 
 def positive_float(value: str) -> float:
     parsed = float(value)
-    if parsed <= 0.0:
-        raise argparse.ArgumentTypeError("value must be greater than zero")
+    if not math.isfinite(parsed) or parsed <= 0.0:
+        raise argparse.ArgumentTypeError("value must be finite and greater than zero")
     return parsed
 
 

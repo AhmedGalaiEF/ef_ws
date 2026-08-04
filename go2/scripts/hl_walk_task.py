@@ -52,8 +52,8 @@ def _get_pose_xy() -> tuple[float, float] | None:
 
 
 def _wait_for_pose(timeout: float) -> bool:
-    deadline = time.time() + max(0.0, float(timeout))
-    while time.time() < deadline:
+    deadline = time.monotonic() + max(0.0, float(timeout))
+    while time.monotonic() < deadline:
         if last_imu_yaw is not None and _get_pose_xy() is not None:
             return True
         time.sleep(0.05)
@@ -65,36 +65,48 @@ def _turn_to_delta(client: Any, delta_yaw: float, yaw_rate: float, tick: float =
         raise RuntimeError("IMU yaw not available")
     start = last_imu_yaw
     target = abs(delta_yaw)
-    end_time = time.time() + timeout
-    while time.time() < end_time:
-        if last_imu_yaw is None:
+    end_time = time.monotonic() + max(0.0, float(timeout))
+    reached = False
+    try:
+        while time.monotonic() < end_time:
+            if last_imu_yaw is None:
+                time.sleep(tick)
+                continue
+            progress = abs(_wrap_angle(last_imu_yaw - start))
+            if progress >= target:
+                reached = True
+                break
+            client.Move(0.0, 0.0, yaw_rate)
             time.sleep(tick)
-            continue
-        progress = abs(_wrap_angle(last_imu_yaw - start))
-        if progress >= target:
-            break
-        client.Move(0.0, 0.0, yaw_rate)
-        time.sleep(tick)
-    client.StopMove()
+    finally:
+        client.StopMove()
+    if not reached:
+        raise TimeoutError(f"Turn timed out after {timeout:.1f}s before reaching {math.degrees(target):.1f} degrees")
 
 
 def _walk_distance(client: Any, speed: float, distance: float, tick: float = 0.1, timeout: float = 20.0) -> None:
     start = _get_pose_xy()
     if start is None:
         raise RuntimeError("No position source available (odom/sportstate)")
-    end_time = time.time() + timeout
-    while time.time() < end_time:
-        pos = _get_pose_xy()
-        if pos is None:
+    end_time = time.monotonic() + max(0.0, float(timeout))
+    reached = False
+    try:
+        while time.monotonic() < end_time:
+            pos = _get_pose_xy()
+            if pos is None:
+                time.sleep(tick)
+                continue
+            dx = pos[0] - start[0]
+            dy = pos[1] - start[1]
+            if math.hypot(dx, dy) >= distance:
+                reached = True
+                break
+            client.Move(speed, 0.0, 0.0)
             time.sleep(tick)
-            continue
-        dx = pos[0] - start[0]
-        dy = pos[1] - start[1]
-        if math.hypot(dx, dy) >= distance:
-            break
-        client.Move(speed, 0.0, 0.0)
-        time.sleep(tick)
-    client.StopMove()
+    finally:
+        client.StopMove()
+    if not reached:
+        raise TimeoutError(f"Walk timed out after {timeout:.1f}s before reaching {distance:.2f} m")
 
 
 def main() -> int:

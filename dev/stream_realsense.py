@@ -33,17 +33,15 @@ from __future__ import annotations
 import os
 import sys
 import time
-from typing import Optional
+from typing import Any, Optional
 
 import cv2
 import numpy as np
 
 try:
     import pyrealsense2 as rs  # type: ignore
-except ImportError as exc:  # pragma: no cover – only happens if dependency missing
-    raise SystemExit(
-        "pyrealsense2 is not installed. Install it with 'pip install pyrealsense2'"
-    ) from exc
+except ImportError:  # pragma: no cover - depends on the host environment
+    rs: Any = None
 
 
 # ---------------------------------------------------------------------------
@@ -95,6 +93,11 @@ def run(
     display: str = "auto",
 ):
     """Open a pipeline, start streaming, and display frames."""
+
+    if rs is None:
+        raise RuntimeError(
+            "pyrealsense2 is not installed. Install it with 'pip install pyrealsense2'."
+        )
 
     ctx = rs.context()
     device = get_first_device(ctx)

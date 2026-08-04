@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import select
 import statistics
 import sys
@@ -15,9 +16,6 @@ import tty
 from pathlib import Path
 from typing import Any
 
-from sdk_lib import G1
-
-
 UP_ARROW = "\x1b[A"
 DOWN_ARROW = "\x1b[B"
 RIGHT_ARROW = "\x1b[C"
@@ -25,7 +23,7 @@ LEFT_ARROW = "\x1b[D"
 
 
 def infer_forward_speed(csv_path: Path) -> float:
-    """Estimate forward command magnitude from recorded wirelesscontroller ly."""
+    """Estimate a positive forward speed from recorded controller input."""
     samples: list[float] = []
     with csv_path.open(newline="", encoding="utf-8") as handle:
         for row in csv.DictReader(handle):
@@ -34,10 +32,10 @@ def infer_forward_speed(csv_path: Path) -> float:
             try:
                 msg = json.loads(row["message_json"])
                 ly = float(msg.get("ly", 0.0))
-            except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+            except (AttributeError, KeyError, TypeError, ValueError, json.JSONDecodeError):
                 continue
-            if abs(ly) > 0.05:
-                samples.append(ly)
+            if math.isfinite(ly) and abs(ly) > 0.05:
+                samples.append(abs(ly))
 
     if not samples:
         raise RuntimeError(f"No active /wirelesscontroller ly samples found in {csv_path}")
@@ -65,12 +63,39 @@ def read_key(timeout_s: float) -> str | None:
     return first + second + third
 
 
-def parse_args(argv: list[str]) -> argparse.Namespace:
+def nonnegative_finite_float(value: str) -> float:
+    try:
+        parsed = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a number") from exc
+    if not math.isfinite(parsed) or parsed < 0.0:
+        raise argparse.ArgumentTypeError("must be a finite value >= 0")
+    return parsed
+
+
+def positive_finite_float(value: str) -> float:
+    parsed = nonnegative_finite_float(value)
+    if parsed <= 0.0:
+        raise argparse.ArgumentTypeError("must be a finite value > 0")
+    return parsed
+
+
+def nonnegative_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be an integer") from exc
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("must be >= 0")
+    return parsed
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Press and hold Up arrow to walk forward. Space stops. q exits."
     )
     parser.add_argument("--iface", default="eth0", help="Robot network interface. Default: eth0")
-    parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id. Default: 0")
+    parser.add_argument("--domain-id", type=nonnegative_int, default=0, help="DDS domain id. Default: 0")
     parser.add_argument(
         "--csv",
         type=Path,
@@ -79,12 +104,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument(
         "--speed",
-        type=float,
+        type=nonnegative_finite_float,
         help="Forward velocity command. Defaults to median /wirelesscontroller ly from CSV.",
     )
     parser.add_argument(
         "--deadman-timeout",
-        type=float,
+        type=positive_finite_float,
         default=0.35,
         help="Stop if no Up-arrow repeat arrives for this many seconds. Default: 0.35",
     )
@@ -98,20 +123,43 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
-    speed = float(args.speed) if args.speed is not None else infer_forward_speed(args.csv)
+    try:
+        speed = float(args.speed) if args.speed is not None else infer_forward_speed(args.csv)
+    except (OSError, RuntimeError, ValueError) as exc:
+        print(f"Cannot determine forward speed: {exc}", file=sys.stderr)
+        return 2
 
-    robot = G1(iface=args.iface, domain_id=args.domain_id)
-    if not args.no_fsm_walk:
-        robot.fsm_walk()
+    if not sys.stdin.isatty():
+        print("This utility needs an interactive terminal for arrow-key input.", file=sys.stderr)
+        return 2
+
+    try:
+        from .sdk_lib import G1
+    except ImportError:
+        try:
+            from sdk_lib import G1
+        except ImportError as exc:
+            print(f"Cannot import the Unitree SDK wrapper: {exc}", file=sys.stderr)
+            return 1
 
     print(f"Forward speed: {speed:.3f}")
     print("Hold Up arrow to walk forward. Space stops. q exits.")
 
-    original_termios: Any = termios.tcgetattr(sys.stdin)
+    robot = None
+    try:
+        robot = G1(iface=args.iface, domain_id=args.domain_id)
+    except Exception as exc:
+        print(f"Cannot connect to robot: {exc}", file=sys.stderr)
+        return 1
+
+    original_termios: Any = None
     last_up = 0.0
     moving = False
 
     try:
+        if not args.no_fsm_walk:
+            robot.fsm_walk()
+        original_termios = termios.tcgetattr(sys.stdin)
         tty.setcbreak(sys.stdin.fileno())
         while True:
             key = read_key(0.05)
@@ -131,11 +179,17 @@ def main(argv: list[str] | None = None) -> int:
             if moving and now - last_up > max(0.05, float(args.deadman_timeout)):
                 robot.stop()
                 moving = False
+    except Exception as exc:
+        print(f"Walking utility failed: {exc}", file=sys.stderr)
+        return 1
     finally:
         try:
             robot.stop()
+        except Exception as exc:
+            print(f"Warning: failed to stop robot cleanly: {exc}", file=sys.stderr)
         finally:
-            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, original_termios)
+            if original_termios is not None:
+                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, original_termios)
 
     return 0
 

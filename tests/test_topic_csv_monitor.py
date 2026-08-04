@@ -8,7 +8,7 @@ import pytest
 
 rclpy = pytest.importorskip("rclpy")
 
-from dev.topic_csv_monitor import compact_value, load_topics, normalize_topic, selected_topics
+from dev.topic_csv_monitor import compact_value, load_topics, normalize_topic, parse_args, selected_topics
 
 
 def test_normalize_topic_adds_leading_slash_and_preserves_existing_one() -> None:
@@ -60,3 +60,10 @@ def test_compact_value_summarizes_long_arrays_and_strings() -> None:
         "__string_len__": 6,
         "preview": "abc",
     }
+
+
+def test_parse_args_rejects_invalid_monitor_limits() -> None:
+    with pytest.raises(SystemExit):
+        parse_args(["--discovery-period", "0"])
+    with pytest.raises(SystemExit):
+        parse_args(["--max-sequence", "-1"])

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from dev.arrow_walk_forward import infer_forward_speed
+from dev.arrow_walk_forward import infer_forward_speed, parse_args
 
 
 def write_rows(path: Path, rows: list[dict[str, str]]) -> None:
@@ -44,3 +44,24 @@ def test_infer_forward_speed_raises_when_no_active_samples_exist(tmp_path: Path)
 
     with pytest.raises(RuntimeError, match="No active /wirelesscontroller ly samples found"):
         infer_forward_speed(csv_path)
+
+
+def test_infer_forward_speed_uses_magnitude_for_negative_input(tmp_path: Path) -> None:
+    csv_path = tmp_path / "walk_forward.csv"
+    write_rows(
+        csv_path,
+        [
+            {"topic": "/wirelesscontroller", "message_json": json.dumps({"ly": -0.30})},
+            {"topic": "/wirelesscontroller", "message_json": json.dumps({"ly": -0.90})},
+            {"topic": "/wirelesscontroller", "message_json": json.dumps({"ly": -0.60})},
+            {"topic": "/wirelesscontroller", "message_json": json.dumps(["invalid"])},
+        ],
+    )
+
+    assert infer_forward_speed(csv_path) == pytest.approx(0.60)
+
+
+@pytest.mark.parametrize("option", ["--speed", "--deadman-timeout"])
+def test_parse_args_rejects_non_finite_motion_values(option: str) -> None:
+    with pytest.raises(SystemExit):
+        parse_args([option, "nan"])
