@@ -5,17 +5,18 @@ import math
 import time
 from typing import Any
 
+try:
+    from .hl_motion_helpers import turn_to_delta, wait_for_pose, walk_distance, wrap_angle
+except ImportError:  # Direct execution: python go2/scripts/hl_walk_wave_task.py
+    from hl_motion_helpers import turn_to_delta, wait_for_pose, walk_distance, wrap_angle
+
 last_imu_yaw: float | None = None
 last_sport_pos: list[float] | None = None
 last_odom_pos: list[float] | None = None
 
 
 def _wrap_angle(a):
-    while a > math.pi:
-        a -= 2.0 * math.pi
-    while a < -math.pi:
-        a += 2.0 * math.pi
-    return a
+    return wrap_angle(a)
 
 
 def _positive_float(value: str) -> float:
@@ -62,61 +63,15 @@ def _get_pose_xy() -> tuple[float, float] | None:
 
 
 def _wait_for_pose(timeout: float) -> bool:
-    deadline = time.monotonic() + max(0.0, float(timeout))
-    while time.monotonic() < deadline:
-        if last_imu_yaw is not None and _get_pose_xy() is not None:
-            return True
-        time.sleep(0.05)
-    return last_imu_yaw is not None and _get_pose_xy() is not None
+    return wait_for_pose(lambda: last_imu_yaw is not None and _get_pose_xy() is not None, timeout)
 
 
 def _turn_to_delta(client: Any, delta_yaw: float, yaw_rate: float, tick: float = 0.05, timeout: float = 8.0) -> None:
-    if last_imu_yaw is None:
-        raise RuntimeError("IMU yaw not available")
-    start = last_imu_yaw
-    target = abs(delta_yaw)
-    end_time = time.monotonic() + max(0.0, float(timeout))
-    reached = False
-    try:
-        while time.monotonic() < end_time:
-            if last_imu_yaw is None:
-                time.sleep(tick)
-                continue
-            progress = abs(_wrap_angle(last_imu_yaw - start))
-            if progress >= target:
-                reached = True
-                break
-            client.Move(0.0, 0.0, yaw_rate)
-            time.sleep(tick)
-    finally:
-        client.StopMove()
-    if not reached:
-        raise TimeoutError(f"Turn timed out after {timeout:.1f}s before reaching {math.degrees(target):.1f} degrees")
+    turn_to_delta(client, lambda: last_imu_yaw, delta_yaw, yaw_rate, tick=tick, timeout=timeout)
 
 
 def _walk_distance(client: Any, speed: float, distance: float, tick: float = 0.1, timeout: float = 20.0) -> None:
-    start = _get_pose_xy()
-    if start is None:
-        raise RuntimeError("No position source available (odom/sportstate)")
-    end_time = time.monotonic() + max(0.0, float(timeout))
-    reached = False
-    try:
-        while time.monotonic() < end_time:
-            pos = _get_pose_xy()
-            if pos is None:
-                time.sleep(tick)
-                continue
-            dx = pos[0] - start[0]
-            dy = pos[1] - start[1]
-            if math.hypot(dx, dy) >= distance:
-                reached = True
-                break
-            client.Move(speed, 0.0, 0.0)
-            time.sleep(tick)
-    finally:
-        client.StopMove()
-    if not reached:
-        raise TimeoutError(f"Walk timed out after {timeout:.1f}s before reaching {distance:.2f} m")
+    walk_distance(client, _get_pose_xy, speed, distance, tick=tick, timeout=timeout)
 
 
 def main() -> int:
