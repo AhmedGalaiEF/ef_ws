@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 import time
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
@@ -49,6 +50,36 @@ FINGER_TO_IDXS: dict[str, tuple[int, ...]] = {
 DEFAULT_OPEN_ORDER = ("thumb", "index", "middle", "ring", "little")
 
 
+def _positive_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be an integer") from exc
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be > 0")
+    return parsed
+
+
+def _nonnegative_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be an integer") from exc
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("must be >= 0")
+    return parsed
+
+
+def _nonnegative_float(value: str) -> float:
+    try:
+        parsed = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a number") from exc
+    if parsed < 0.0 or not math.isfinite(parsed):
+        raise argparse.ArgumentTypeError("must be a finite value >= 0")
+    return parsed
+
+
 class SerialHand:
     def __init__(
         self,
@@ -67,6 +98,14 @@ class SerialHand:
         self.write_delay_s = float(write_delay_s)
         self.verbose = bool(verbose)
         self.ser: serial.Serial | None = None
+        if self.baudrate <= 0:
+            raise ValueError("baudrate must be > 0")
+        if self.hand_id < 0:
+            raise ValueError("hand_id must be >= 0")
+        if self.timeout_s < 0.0 or not math.isfinite(self.timeout_s):
+            raise ValueError("timeout_s must be a finite value >= 0")
+        if self.write_delay_s < 0.0 or not math.isfinite(self.write_delay_s):
+            raise ValueError("write_delay_s must be a finite value >= 0")
 
     def __enter__(self) -> SerialHand:
         self.connect()
@@ -134,11 +173,11 @@ def add_serial_connection_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--both-hands", action="store_true", help="Run the sequence on both hands.")
     parser.add_argument("--right-port", default=HAND_CONFIGS["right"].port, help="TTY device for the right hand.")
     parser.add_argument("--left-port", default=HAND_CONFIGS["left"].port, help="TTY device for the left hand.")
-    parser.add_argument("--baudrate", type=int, default=115200, help="Serial baudrate.")
-    parser.add_argument("--right-id", type=int, default=1, help="Hand ID for the right hand.")
-    parser.add_argument("--left-id", type=int, default=1, help="Hand ID for the left hand.")
-    parser.add_argument("--timeout-s", type=float, default=0.05, help="Serial read/write timeout.")
-    parser.add_argument("--write-delay-s", type=float, default=0.01, help="Delay after each serial frame.")
+    parser.add_argument("--baudrate", type=_positive_int, default=115200, help="Serial baudrate.")
+    parser.add_argument("--right-id", type=_nonnegative_int, default=1, help="Hand ID for the right hand.")
+    parser.add_argument("--left-id", type=_nonnegative_int, default=1, help="Hand ID for the left hand.")
+    parser.add_argument("--timeout-s", type=_nonnegative_float, default=0.05, help="Serial read/write timeout.")
+    parser.add_argument("--write-delay-s", type=_nonnegative_float, default=0.01, help="Delay after each serial frame.")
     parser.add_argument("--verbose-serial", action="store_true", help="Print raw serial frames.")
     parser.add_argument("--dry-run", action="store_true", help="Print targets without sending commands.")
 
