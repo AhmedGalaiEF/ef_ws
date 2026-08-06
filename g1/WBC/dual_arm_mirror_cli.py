@@ -39,8 +39,6 @@ Key bindings (also shown in footer)
 """
 
 from __future__ import annotations
-from sdk_client import Robot
-from dds_env import ensure_cyclonedds_environment
 
 import argparse
 import curses
@@ -60,6 +58,10 @@ MODULES_DIR = os.path.join(ROOT_DIR, "modules")
 for _p in (ROOT_DIR, MODULES_DIR):
     if _p not in sys.path:
         sys.path.insert(0, _p)
+
+
+from dds_env import ensure_cyclonedds_environment
+from sdk_client import Robot
 
 
 ensure_cyclonedds_environment()

@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 
+from __future__ import annotations
+
+import math
 import threading
-from typing import List, Tuple
+from typing import Any
 
 import rclpy
 from rclpy.node import Node
@@ -12,7 +15,7 @@ from unitree_sdk2py.idl.unitree_go.msg.dds_ import LowState_
 
 try:
     import unitree_legged_const as go2_const
-except Exception:  # unitree_legged_const may not be available in all envs
+except ImportError:  # unitree_legged_const may not be available in all envs
     go2_const = None
 
 
@@ -28,7 +31,7 @@ class Go2StateBridge(Node):
         self._publish_rate_hz = (
             self.get_parameter("publish_rate_hz").get_parameter_value().double_value
         )
-        if self._publish_rate_hz <= 0.0:
+        if not math.isfinite(self._publish_rate_hz) or self._publish_rate_hz <= 0.0:
             self._publish_rate_hz = 50.0
 
         self._joint_map = self._build_joint_map()
@@ -51,7 +54,7 @@ class Go2StateBridge(Node):
             1.0 / self._publish_rate_hz, self._publish_latest_state
         )
 
-    def _build_joint_map(self) -> List[Tuple[str, int]]:
+    def _build_joint_map(self) -> list[tuple[str, int]]:
         # Default Unitree motor index order for Go2 (FR, FL, RR, RL).
         default_map = [
             ("FR_hip_joint", 0),
@@ -105,13 +108,13 @@ class Go2StateBridge(Node):
         joint_msg.header.stamp = self.get_clock().now().to_msg()
         joint_msg.name = [name for name, _ in self._joint_map]
 
-        positions = []
-        velocities = []
-        efforts = []
+        positions: list[float] = []
+        velocities: list[float] = []
+        efforts: list[float] = []
         for _, index in self._joint_map:
             try:
                 motor = state.motor_state[index]
-            except Exception:
+            except (AttributeError, IndexError, KeyError, TypeError):
                 positions.append(0.0)
                 velocities.append(0.0)
                 efforts.append(0.0)
@@ -132,13 +135,17 @@ class Go2StateBridge(Node):
 
 def main() -> None:
     rclpy.init()
-    node = Go2StateBridge()
+    node: Go2StateBridge | None = None
     try:
+        node = Go2StateBridge()
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
-    node.destroy_node()
-    rclpy.shutdown()
+    finally:
+        if node is not None:
+            node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":

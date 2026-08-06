@@ -40,6 +40,7 @@ if [[ -z "${REAL_HOME}" || ! -d "${REAL_HOME}" ]]; then
   echo "Could not resolve home for ${REAL_USER}: '${REAL_HOME}'" >&2
   exit 1
 fi
+REAL_GROUP="$(id -gn "${REAL_USER}")"
 
 as_user() {
   sudo -u "${REAL_USER}" -H bash -lc "$*"
@@ -56,7 +57,7 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
   build-essential cmake ninja-build pkg-config git curl ca-certificates \
   python3-dev \
   mesa-utils libgl1-mesa-dev \
-  libssl-dev
+  libssl-dev perl
 
 log "Install uv (Astral) if missing"
 if ! as_user 'command -v uv >/dev/null 2>&1'; then
@@ -65,7 +66,7 @@ fi
 as_user 'uv --version'
 
 log "Apply ~/.bashrc env template from /home/ag/.bashrc"
-TEMPLATE_BASHRC="/home/ag/.bashrc"
+TEMPLATE_BASHRC="${EF_WS_BASHRC_TEMPLATE:-/home/ag/.bashrc}"
 TARGET_BASHRC="${REAL_HOME}/.bashrc"
 MARK_BEGIN="# >>> ef_ws env (from /home/ag/.bashrc) >>>"
 MARK_END="# <<< ef_ws env (from /home/ag/.bashrc) <<<"
@@ -73,21 +74,25 @@ MARK_END="# <<< ef_ws env (from /home/ag/.bashrc) <<<"
 TMP_ENV="$(mktemp)"
 trap 'rm -f "${TMP_ENV}"' EXIT
 
-awk '/^(export|unset)[[:space:]]+/{print}' "${TEMPLATE_BASHRC}" \
-  | sed -e 's#/home/ag#'$REAL_HOME'#g' \
-  > "${TMP_ENV}"
+if [[ -f "${TEMPLATE_BASHRC}" ]]; then
+  awk '/^(export|unset)[[:space:]]+/{print}' "${TEMPLATE_BASHRC}" \
+    | sed -e "s#/home/ag#${REAL_HOME}#g" \
+    > "${TMP_ENV}"
 
-if grep -qF "${MARK_BEGIN}" "${TARGET_BASHRC}" 2>/dev/null; then
-  perl -0777 -i -pe 's/\Q'"${MARK_BEGIN}"'\E.*?\Q'"${MARK_END}"'\E\n?/''/s' "${TARGET_BASHRC}"
+  if grep -qF "${MARK_BEGIN}" "${TARGET_BASHRC}" 2>/dev/null; then
+    perl -0777 -i -pe 's/\Q'"${MARK_BEGIN}"'\E.*?\Q'"${MARK_END}"'\E\n?/''/s' "${TARGET_BASHRC}"
+  fi
+
+  {
+    echo
+    echo "${MARK_BEGIN}"
+    cat "${TMP_ENV}"
+    echo "${MARK_END}"
+  } >> "${TARGET_BASHRC}"
+  chown "${REAL_USER}:${REAL_GROUP}" "${TARGET_BASHRC}"
+else
+  log "Environment template not found at ${TEMPLATE_BASHRC}; skipping ~/.bashrc changes"
 fi
-
-{
-  echo
-  echo "${MARK_BEGIN}"
-  cat "${TMP_ENV}"
-  echo "${MARK_END}"
-} >> "${TARGET_BASHRC}"
-chown "${REAL_USER}:${REAL_USER}" "${TARGET_BASHRC}"
 
 clone_or_update() {
   local url="$1"

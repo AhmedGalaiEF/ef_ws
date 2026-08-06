@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import argparse
 import queue
 import sys
@@ -7,9 +9,6 @@ from dataclasses import dataclass
 
 import cv2
 import numpy as np
-import torch
-from torchvision import transforms
-from torchvision.models.segmentation import deeplabv3_mobilenet_v3_large
 
 try:
     import pyrealsense2 as rs
@@ -17,8 +16,14 @@ except ImportError:
     rs = None
 
 try:
+    import torch
+    from torchvision import transforms
+    from torchvision.models.segmentation import deeplabv3_mobilenet_v3_large
     from torchvision.models.segmentation import DeepLabV3_MobileNet_V3_Large_Weights
-except ImportError:
+except ImportError:  # ML dependencies are only needed when segmentation starts.
+    torch = None
+    transforms = None
+    deeplabv3_mobilenet_v3_large = None
     DeepLabV3_MobileNet_V3_Large_Weights = None
 
 
@@ -58,6 +63,11 @@ class SegmentationResult:
 
 class AsyncSegmenter:
     def __init__(self, device: str, input_size: int):
+        if torch is None or transforms is None or deeplabv3_mobilenet_v3_large is None:
+            raise RuntimeError(
+                "PyTorch and TorchVision are required for segmentation. "
+                "Install them before starting a camera mode."
+            )
         self.device = torch.device(device)
         self.input_size = input_size
         self.model = self._build_model()
@@ -77,6 +87,8 @@ class AsyncSegmenter:
         self.worker = threading.Thread(target=self._run, daemon=True)
 
     def _build_model(self):
+        if deeplabv3_mobilenet_v3_large is None:
+            raise RuntimeError("TorchVision segmentation models are unavailable")
         if DeepLabV3_MobileNet_V3_Large_Weights is not None:
             model = deeplabv3_mobilenet_v3_large(weights=DeepLabV3_MobileNet_V3_Large_Weights.DEFAULT)
         else:
