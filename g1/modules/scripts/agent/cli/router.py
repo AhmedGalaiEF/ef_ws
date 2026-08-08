@@ -1,0 +1,465 @@
+"""``G1Agent`` orchestrator + the deterministic ``/settings`` CLI namespace
+(spec sections 5, 14, 16, 17, 31).
+
+``/settings`` (and ``/status``, ``/memory``, ``/tools``, ``/help``) never
+touch the planner -- they are plain deterministic code, per spec section
+14. ``/chat`` and ``/audio_msg`` are the two paths that construct a
+``PlannerInput`` and call ``planner.decide()``.
+"""
+from __future__ import annotations
+
+import time
+from dataclasses import dataclass
+from typing import Any, Optional
+
+from ..announcements import announce
+from ..capabilities import CapabilityResolver, PolicyDecision
+from ..checkpoint import CheckpointStore
+from ..lifecycle import LifecycleController, classify_startup
+from ..memory.manager import MemoryManager, MemoryProposalError
+from ..models import (
+    CapabilityStatus,
+    EventType,
+    IntentAnnouncement,
+    IntentType,
+    LifecycleState,
+    PlannerDecision,
+    PlannerInput,
+    RobotStateSnapshot,
+    RuntimeCheckpoint,
+)
+from ..planner import Planner
+from ..scheduler import CognitiveScheduler
+from ..settings.manager import InvalidSettingError, SettingsManager
+from ..settings.models import SkillMode
+from ..skills import SkillInvocationOutcome, SkillRegistry, SkillResult, resolve_and_maybe_invoke
+from ..state import RobotStateSource, build_robot_state
+
+try:
+    from ..knowledge.sdk_wrapper_knowledge import SdkWrapperKnowledge
+except Exception:  # pragma: no cover - always importable (stdlib-only), kept defensive
+    SdkWrapperKnowledge = None  # type: ignore[assignment]
+
+
+@dataclass
+class TurnOutcome:
+    decision: PlannerDecision
+    grounded_response: Optional[str]
+    skill_outcomes: list[tuple[str, SkillInvocationOutcome]]
+    announcement: Any = None
+
+
+class G1Agent:
+    """Ties scheduler + lifecycle + checkpoint + settings + memory + skills
+    + planner into the one coherent agent-level loop the spec asks for."""
+
+    def __init__(
+        self,
+        *,
+        planner: Planner,
+        skills: SkillRegistry,
+        state_source: RobotStateSource,
+        settings: Optional[SettingsManager] = None,
+        memory: Optional[MemoryManager] = None,
+        checkpoint_store: Optional[CheckpointStore] = None,
+        sdk_knowledge: "Optional[SdkWrapperKnowledge]" = None,
+        document_rag: Optional[Any] = None,
+        auto_confirm: bool = False,
+    ) -> None:
+        self.planner = planner
+        self.skills = skills
+        self.state_source = state_source
+        self.settings = settings or SettingsManager()
+        self.memory = memory or MemoryManager()
+        self.checkpoint_store = checkpoint_store or CheckpointStore()
+        self.sdk_knowledge = sdk_knowledge
+        self.document_rag = document_rag
+        self.resolver = CapabilityResolver()
+        self.scheduler = CognitiveScheduler()
+        # Non-interactive confirmation policy for tests/scripted runs: when
+        # True, a "needs_confirmation" skill is treated as approved without
+        # prompting on stdin. The CLI REPL leaves this False and prompts.
+        self.auto_confirm = auto_confirm
+
+        previous_checkpoint = self.checkpoint_store.load()
+        boot_event, entry_state = classify_startup(previous_checkpoint)
+        self.lifecycle = LifecycleController(state=entry_state)
+        self.scheduler.seed_from_checkpoint(previous_checkpoint)
+        self._previous_checkpoint = previous_checkpoint
+        self._boot_event = boot_event
+        self._booted = False
+
+    @property
+    def boot_event(self) -> EventType:
+        return self._boot_event
+
+    # -- boot -------------------------------------------------------------
+
+    def boot(self) -> PlannerDecision:
+        """Run the first cognitive turn: agent_first_boot / _restart / _wake."""
+        now = time.time()
+        robot_state = build_robot_state(self.state_source)
+        runtime: dict[str, Any] = {"platform": "Unitree G1", "reason": self._boot_event.value}
+        prev = self._previous_checkpoint
+        if self._boot_event == EventType.AGENT_RESTART and prev is not None:
+            runtime.update(
+                previous_lifecycle_state=prev.lifecycle_state.value,
+                previous_task=prev.active_task,
+                previous_scenario=prev.active_scenario,
+                previous_robot_state_summary=prev.last_robot_state_summary,
+            )
+        elif self._boot_event == EventType.AGENT_WAKE and prev is not None:
+            runtime.update(
+                sleep_reason=prev.sleep_reason,
+                sleep_timestamp=prev.sleep_timestamp,
+                pre_sleep_state=prev.last_robot_state_summary,
+                memory_restored=True,
+            )
+
+        planner_input = self._build_planner_input(
+            event=self._boot_event,
+            timestamp=now,
+            user_text=None,
+            input_source="system",
+            robot_state=robot_state,
+            runtime=runtime,
+        )
+        decision = self.planner.decide(planner_input)
+        # Reach AWAKE before persisting the checkpoint, so a boot turn's
+        # checkpoint always records "awake", not a transitional state.
+        self.lifecycle.transition(LifecycleState.AWAKE)
+        self._after_turn(planner_input, decision)
+        self._booted = True
+        return decision
+
+    # -- /chat and /audio_msg ----------------------------------------------
+
+    def handle_chat(self, text: str) -> TurnOutcome:
+        """``/chat`` -- always active, independent of every audio setting."""
+        return self._handle_user_text(text, input_source="chat")
+
+    def handle_audio_msg(self, text: str) -> Optional[TurnOutcome]:
+        """``/audio_msg`` -- gated by ``audio.asr_enabled`` (spec section 15).
+
+        Returns ``None`` (no conversational model event constructed at
+        all) when ASR is disabled; ``/chat`` is unaffected either way.
+        ``audio.audio_to_state_enabled`` is a separate toggle for a live
+        ambient-audio-derived state pipeline, which this phase does not
+        implement (there is no continuous audio stream here, only this
+        explicit transcript command) -- it intentionally does not gate
+        ``/audio_msg``.
+        """
+        if not self.settings.effective().audio.asr_enabled:
+            return None
+        return self._handle_user_text(text, input_source="audio")
+
+    def _handle_user_text(self, text: str, *, input_source: str) -> TurnOutcome:
+        now = time.time()
+        event = EventType.ASR_MESSAGE if input_source == "audio" else EventType.USER_MESSAGE
+        robot_state = build_robot_state(self.state_source)
+        planner_input = self._build_planner_input(
+            event=event, timestamp=now, user_text=text, input_source=input_source, robot_state=robot_state
+        )
+        decision = self.planner.decide(planner_input)
+        self._after_turn(planner_input, decision)
+        return self._execute_decision(decision, planner_input)
+
+    # -- planner input construction ----------------------------------------
+
+    def _build_planner_input(
+        self,
+        *,
+        event: EventType,
+        timestamp: float,
+        user_text: Optional[str],
+        input_source: Optional[str],
+        robot_state: RobotStateSnapshot,
+        runtime: Optional[dict[str, Any]] = None,
+    ) -> PlannerInput:
+        settings = self.settings.effective()
+        query = user_text or ""
+
+        memory_refs = self.memory.retrieve(query) if query else {"episodic": [], "semantic": [], "procedural": []}
+
+        sdk_refs = []
+        if self.sdk_knowledge is not None:
+            try:
+                sdk_refs = self.sdk_knowledge.search(query)
+            except Exception:
+                sdk_refs = []
+
+        doc_refs = []
+        if self.document_rag is not None and query:
+            try:
+                doc_refs = self.document_rag.search(query)
+            except Exception:
+                doc_refs = []
+
+        arm_policy = self.resolver.resolve_arm_motion(settings=settings, robot_state=robot_state)
+        capability_summary = {
+            "arm_motion": CapabilityStatus(available=arm_policy.allowed, reason=arm_policy.reason),
+        }
+
+        return PlannerInput(
+            event=event,
+            timestamp=timestamp,
+            previous_cognitive_timestamp=self.scheduler.last_cognitive_timestamp,
+            elapsed_since_last_cognition_s=self.scheduler.elapsed_since_last_cognition(timestamp),
+            input_source=input_source,
+            user_text=user_text,
+            robot_state=robot_state,
+            lifecycle_state=self.lifecycle.state,
+            available_skills=self.skills.names(),
+            capability_summary=capability_summary,
+            settings=settings.as_flat_dict(),
+            documentary_rag=doc_refs,
+            sdk_wrapper_knowledge=sdk_refs,
+            episodic_memory=memory_refs["episodic"],
+            semantic_memory=memory_refs["semantic"],
+            procedural_memory=memory_refs["procedural"],
+            autobiography_summary=self.memory.autobiography_summary(),
+            available_tools=[],
+            runtime=runtime or {},
+        )
+
+    # -- post-turn bookkeeping ----------------------------------------------
+
+    def _after_turn(self, planner_input: PlannerInput, decision: PlannerDecision) -> None:
+        self.scheduler.record_cognition(planner_input.timestamp, decision.next_tick_s)
+        checkpoint = RuntimeCheckpoint(
+            last_cognitive_timestamp=planner_input.timestamp,
+            lifecycle_state=self.lifecycle.state,
+            last_event_type=planner_input.event,
+            last_decision=decision.intent,
+            active_skill=(decision.requested_skills[0] if decision.requested_skills else None),
+            last_robot_state_summary=planner_input.robot_state.model_dump(),
+        )
+        self.checkpoint_store.save(checkpoint)
+        self._previous_checkpoint = checkpoint
+
+        if decision.memory_proposal is not None:
+            try:
+                self.memory.apply_proposal(decision.memory_proposal)
+            except MemoryProposalError as exc:
+                print(f"[memory] rejected proposal: {exc}")
+        if decision.maintenance_proposal is not None:
+            print(
+                "[maintenance] proposal recorded (no automated consolidation job in this "
+                f"phase): {decision.maintenance_proposal.description}"
+            )
+
+    # -- decision execution ---------------------------------------------------
+
+    def _execute_decision(self, decision: PlannerDecision, planner_input: PlannerInput) -> TurnOutcome:
+        settings = self.settings.effective()
+        robot_state = planner_input.robot_state
+        outcome = TurnOutcome(decision=decision, grounded_response=decision.response_text, skill_outcomes=[])
+
+        if decision.intent == IntentType.QUERY_CAPABILITY and (decision.target or "").strip().lower() == "arm":
+            policy = self.resolver.resolve_arm_motion(settings=settings, robot_state=robot_state)
+            outcome.grounded_response = self._phrase_capability_answer(policy)
+            return outcome
+
+        if decision.intent == IntentType.QUERY_STATE:
+            outcome.grounded_response = decision.response_text or self._describe_state(robot_state)
+            return outcome
+
+        if decision.intent in (IntentType.NO_ACTION, IntentType.CONVERSATION, IntentType.MAINTENANCE):
+            return outcome
+
+        outcome.announcement = announce(
+            decision.intent_announcement,
+            registry=self.skills,
+            resolver=self.resolver,
+            settings=settings,
+            robot_state=robot_state,
+            is_denial=False,
+        )
+
+        for skill_name in decision.requested_skills:
+            skill_outcome = resolve_and_maybe_invoke(
+                self.skills, self.resolver, skill_name, settings=settings, robot_state=robot_state
+            )
+            if skill_outcome.status == "needs_confirmation":
+                approved = self.auto_confirm or self._confirm_prompt(skill_name, skill_outcome.policy)
+                if approved:
+                    skill_outcome = resolve_and_maybe_invoke(
+                        self.skills,
+                        self.resolver,
+                        skill_name,
+                        settings=settings,
+                        robot_state=robot_state,
+                        confirmed=True,
+                    )
+                else:
+                    skill_outcome = SkillInvocationOutcome(
+                        policy=PolicyDecision(
+                            allowed=False,
+                            requires_approval=True,
+                            risk=skill_outcome.policy.risk,
+                            reason="Denied by operator (confirmation declined).",
+                        ),
+                        skill_mode=skill_outcome.skill_mode,
+                        status="denied",
+                        result=SkillResult(ok=False, message="denied by operator"),
+                    )
+            if skill_outcome.status == "denied":
+                announce(
+                    IntentAnnouncement(speech=f"I can't do that: {skill_outcome.policy.reason}"),
+                    registry=self.skills,
+                    resolver=self.resolver,
+                    settings=settings,
+                    robot_state=robot_state,
+                    is_denial=True,
+                )
+            outcome.skill_outcomes.append((skill_name, skill_outcome))
+
+        if decision.intent == IntentType.REQUEST_SLEEP and any(
+            o.status == "executed" and o.result and o.result.ok for _, o in outcome.skill_outcomes
+        ):
+            self._enter_sleep(decision)
+
+        return outcome
+
+    def _confirm_prompt(self, skill_name: str, policy: PolicyDecision) -> bool:
+        try:
+            reply = input(f"  [confirm] execute skill '{skill_name}'? ({policy.reason}) [y/N] ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return False
+        return reply in ("y", "yes")
+
+    def _enter_sleep(self, decision: PlannerDecision) -> None:
+        self.lifecycle.transition(LifecycleState.PRE_SLEEP)
+        self.lifecycle.transition(LifecycleState.SLEEPING)
+        checkpoint = RuntimeCheckpoint(
+            last_cognitive_timestamp=self.scheduler.last_cognitive_timestamp,
+            lifecycle_state=LifecycleState.SLEEPING,
+            last_event_type=EventType.USER_MESSAGE,
+            last_decision=decision.intent,
+            sleep_reason=decision.target or "unspecified",
+            sleep_timestamp=time.time(),
+        )
+        self.checkpoint_store.save(checkpoint)
+        self._previous_checkpoint = checkpoint
+        print(
+            "[lifecycle] checkpoint written with lifecycle_state=sleeping. Phase 1 does NOT "
+            "issue a real OS shutdown -- see the request_sleep skill result message and the "
+            "plan's deferred-TODO list."
+        )
+
+    @staticmethod
+    def _phrase_capability_answer(policy: PolicyDecision) -> str:
+        prefix = "Yes." if policy.allowed else "No."
+        return f"{prefix} {policy.reason}"
+
+    @staticmethod
+    def _describe_state(state: RobotStateSnapshot) -> str:
+        return (
+            f"posture={state.posture}, stability={state.stability}, "
+            f"arm_control_state={state.arm_control_state}, "
+            f"faults={state.active_faults or ['none']} (source={state.source})"
+        )
+
+    # -- deterministic /settings /status /memory /tools namespaces ------------
+
+    def cmd_settings(self, args: list[str]) -> str:
+        if not args or args[0] == "show":
+            flat = self.settings.as_flat_dict()
+            lines = [f"{key} = {value}" for key, value in sorted(flat.items())]
+            return "\n".join(lines) if lines else "(no settings)"
+        if args[0] == "get" and len(args) == 2:
+            try:
+                return f"{args[1]} = {self.settings.get(args[1])}"
+            except InvalidSettingError as exc:
+                return f"error: {exc}"
+        if args[0] == "set" and len(args) == 3:
+            key, raw_value = args[1], args[2]
+            value = self._coerce_setting_value(raw_value)
+            try:
+                self.settings.set(key, value)
+            except InvalidSettingError as exc:
+                return f"error: {exc}"
+            return f"{key} = {self.settings.get(key)}"
+        if args[0] == "skill" and len(args) == 3:
+            skill_name, mode = args[1], args[2]
+            try:
+                self.settings.set_skill_mode(skill_name, mode)
+            except ValueError as exc:
+                return f"error: invalid mode {mode!r}: {exc}"
+            return f"skills.{skill_name} = {self.settings.get_skill_mode(skill_name).value}"
+        if args[0] == "skills":
+            modes = {name: self.settings.get_skill_mode(name).value for name in self.skills.names()}
+            return "\n".join(f"{name}: {mode}" for name, mode in sorted(modes.items()))
+        return "usage: /settings show | get <key> | set <key> <value> | skill <name> <auto|confirm|disabled> | skills"
+
+    @staticmethod
+    def _coerce_setting_value(raw: str) -> Any:
+        lowered = raw.strip().lower()
+        if lowered in ("true", "false"):
+            return lowered == "true"
+        try:
+            return int(raw)
+        except ValueError:
+            pass
+        try:
+            return float(raw)
+        except ValueError:
+            pass
+        return raw
+
+    def cmd_status(self) -> str:
+        robot_state = build_robot_state(self.state_source)
+        now = time.time()
+        lines = [
+            f"lifecycle_state = {self.lifecycle.state.value}",
+            f"last_boot_event = {self._boot_event.value}",
+            f"previous_cognitive_timestamp = {self.scheduler.last_cognitive_timestamp}",
+            f"elapsed_since_last_cognition_s = {self.scheduler.elapsed_since_last_cognition(now)}",
+            f"robot_state = {robot_state.model_dump()}",
+            f"skills_backend = {self.skills.backend_label}",
+        ]
+        return "\n".join(lines)
+
+    def cmd_memory(self, args: list[str]) -> str:
+        if not args or args[0] == "show":
+            episodes = self.memory.episodic.all()
+            claims = self.memory.semantic.all()
+            adaptations = self.memory.procedural.all()
+            bio = self.memory.autobiography_summary() or "(empty)"
+            return (
+                f"episodic: {len(episodes)} entries\n"
+                f"semantic: {len(claims)} claims\n"
+                f"procedural: {len(adaptations)} adaptations\n"
+                f"autobiography:\n{bio}"
+            )
+        if args[0] == "search" and len(args) >= 2:
+            query = " ".join(args[1:])
+            refs = self.memory.retrieve(query)
+            lines = []
+            for kind, items in refs.items():
+                lines.append(f"-- {kind} --")
+                lines.extend(f"  {ref.text}" for ref in items)
+            return "\n".join(lines) if lines else "(no matches)"
+        return "usage: /memory show | search <query>"
+
+    def cmd_tools(self) -> str:
+        descriptions = self.skills.describe()
+        lines = []
+        for name in sorted(descriptions):
+            mode = self.settings.get_skill_mode(name).value
+            lines.append(f"{name} [{mode}]: {descriptions[name]}")
+        return "\n".join(lines)
+
+    @staticmethod
+    def cmd_help() -> str:
+        return (
+            "/chat <text>                converse (always active)\n"
+            "/audio_msg <text>           simulated ASR transcript (gated by audio.asr_enabled)\n"
+            "/settings show|get|set|skill|skills\n"
+            "/status                     lifecycle + robot state snapshot\n"
+            "/memory show|search <query>\n"
+            "/tools                      list skills and their auto/confirm/disabled mode\n"
+            "/help\n"
+            "/exit"
+        )
