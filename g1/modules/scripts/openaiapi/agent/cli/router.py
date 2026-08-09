@@ -181,6 +181,14 @@ class G1Agent:
         now = time.time()
         event = EventType.ASR_MESSAGE if input_source == "audio" else EventType.USER_MESSAGE
         robot_state = build_robot_state(self.state_source)
+        memory_response = self._maybe_handle_memory_query(text, robot_state)
+        if memory_response is not None:
+            decision = PlannerDecision(intent=IntentType.CONVERSATION, response_text=memory_response)
+            planner_input = self._build_planner_input(
+                event=event, timestamp=now, user_text=text, input_source=input_source, robot_state=robot_state
+            )
+            self._after_turn(planner_input, decision)
+            return self._execute_decision(decision, planner_input)
         planner_input = self._build_planner_input(
             event=event, timestamp=now, user_text=text, input_source=input_source, robot_state=robot_state
         )
@@ -188,6 +196,19 @@ class G1Agent:
         decision = self._apply_command_fallbacks(decision, planner_input)
         self._after_turn(planner_input, decision)
         return self._execute_decision(decision, planner_input)
+
+    def _maybe_handle_memory_query(self, text: str, robot_state: RobotStateSnapshot) -> Optional[str]:
+        lowered = text.strip().lower()
+        if "remember" not in lowered and "memory" not in lowered:
+            return None
+        bio = self.memory.autobiography_summary() or "(empty)"
+        return (
+            "My memory system is available. Current autobiographical memory:\n"
+            f"{bio}\n"
+            f"Current state summary: posture={robot_state.posture}, "
+            f"stability={robot_state.stability}, active_faults={robot_state.active_faults or ['none']}. "
+            "Stale hand-state topics affect gripper feedback only; they do not affect memory."
+        )
 
     # -- planner input construction ----------------------------------------
 
@@ -543,11 +564,18 @@ class G1Agent:
 
     def cmd_faults(self) -> str:
         robot_state = build_robot_state(self.state_source)
-        if not robot_state.active_faults:
-            return "No stale sensor topics are currently reported."
-        lines = ["Active stale sensor topics:"]
+        lines: list[str] = []
+        if robot_state.active_faults:
+            lines.append("Active faults affecting robot state:")
+        else:
+            lines.append("No active robot-state faults are currently reported.")
         for fault in robot_state.active_faults:
             lines.append(f"- {fault}: {self._fault_hint(fault)}")
+        diagnostics = [fault for fault in robot_state.stale_sensor_topics if fault not in robot_state.active_faults]
+        if diagnostics:
+            lines.append("Stale watched-topic diagnostics:")
+            for fault in diagnostics:
+                lines.append(f"- {fault}: {self._fault_hint(fault)}")
         return "\n".join(lines)
 
     @staticmethod

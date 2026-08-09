@@ -196,6 +196,7 @@ def build_offline_registry() -> SkillRegistry:
 
     skills: dict[str, Skill] = {
         "move": Skill("move", "Drive the base for a duration at (vx, vy, vyaw).", _wrap(backend.move, "move"), "ai_control.robot_backend.MockRobotBackend"),
+        "step_back": Skill("step_back", "Step backward a short distance.", lambda **_kwargs: SkillResult(ok=True, message=backend.move(vx=-0.25, vy=0.0, vyaw=0.0, duration=1.0), detail={"backend": "mock", "skill": "step_back"}), "ai_control.robot_backend.MockRobotBackend"),
         "navigate_to": Skill("navigate_to", "Navigate to an (x, y, yaw) pose.", _wrap(backend.navigate_to, "navigate_to"), "ai_control.robot_backend.MockRobotBackend"),
         "stop": Skill("stop", "Stop all base motion.", _wrap(backend.stop, "stop"), "ai_control.robot_backend.MockRobotBackend"),
         "hand_open": Skill("hand_open", "Open the given hand.", _wrap(backend.hand_open, "hand_open"), "ai_control.robot_backend.MockRobotBackend"),
@@ -260,6 +261,15 @@ def build_live_registry(*, robot: Optional[Any] = None, scene_ctx: Optional[Any]
                     name=tool_name,
                     description=f"llm_client robot tool '{tool_name}' (see robot_tools.py for its JSON schema).",
                     handler=_wrap_tool(fn, tool_name),
+                    source="llm_client.robot_tools.build_robot_tools",
+                )
+            if "move" in tools:
+                skills["step_back"] = Skill(
+                    name="step_back",
+                    description="Step backward a short distance using llm_client.robot_tools.move().",
+                    handler=lambda **_kwargs: _wrap_tool(tools["move"], "step_back")(
+                        direction="backward", distance_m=0.3, speed_mps=0.2
+                    ),
                     source="llm_client.robot_tools.build_robot_tools",
                 )
         if hasattr(robot, "say"):

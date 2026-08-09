@@ -84,7 +84,9 @@ class SdkClientRobotStateSource(RobotStateSource):
         mode = raw.get("mode")
         is_moving = bool(raw.get("is_moving"))
         stale = raw.get("sensor_stale") or {}
-        active_faults = [name for name, is_stale in stale.items() if is_stale]
+        sensor_timestamps = raw.get("sensor_timestamps") or {}
+        stale_topics = [name for name, is_stale in stale.items() if is_stale]
+        active_faults = self._active_faults_from_stale(stale, lowstate=lowstate, raw=raw)
         if lowstate is None and "lowstate" not in active_faults:
             active_faults.append("lowstate")
 
@@ -113,8 +115,43 @@ class SdkClientRobotStateSource(RobotStateSource):
             arm_control_state=arm_control_state,
             lowstate=lowstate,
             battery=battery,
+            sensor_stale=stale,
+            sensor_timestamps=sensor_timestamps,
+            stale_sensor_topics=stale_topics,
             source="sdk_client.Robot",
         )
+
+    @staticmethod
+    def _active_faults_from_stale(
+        stale: dict[str, Any],
+        *,
+        lowstate: dict[str, Any] | None,
+        raw: dict[str, Any],
+    ) -> list[str]:
+        """Convert watched-topic staleness into active faults.
+
+        The SDK watches several alternative lidar/SLAM topic names. If one
+        usable cloud or pose source is fresh, stale aliases remain available
+        as diagnostics but do not degrade the robot state.
+        """
+        has_fresh_lidar_cloud = any(
+            name.startswith("lidar_cloud") and not is_stale for name, is_stale in stale.items()
+        )
+        has_pose = raw.get("position") is not None or raw.get("odom_pose") is not None or raw.get("slam_pose") is not None
+        faults: list[str] = []
+        for name, is_stale in stale.items():
+            if not is_stale:
+                continue
+            if name.startswith("lidar_cloud") and has_fresh_lidar_cloud:
+                continue
+            if name in {"lidar_map", "odom", "slam_odom"} and has_pose:
+                continue
+            if name == "lowstate" and lowstate is not None:
+                continue
+            if name in {"left_hand_state", "right_hand_state"}:
+                continue
+            faults.append(name)
+        return faults
 
     def _read_lowstate_summary(self) -> dict[str, Any] | None:
         """Attach semantic lowstate telemetry to every cognition snapshot.

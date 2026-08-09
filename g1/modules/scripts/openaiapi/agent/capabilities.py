@@ -80,9 +80,10 @@ class CapabilityResolver:
 
     @staticmethod
     def _matching_faults(robot_state: RobotStateSnapshot, prefixes: tuple[str, ...]) -> list[str]:
+        observed = list(robot_state.active_faults) + list(robot_state.stale_sensor_topics)
         return [
             fault
-            for fault in robot_state.active_faults
+            for fault in observed
             if any(fault == prefix or fault.startswith(f"{prefix}[") for prefix in prefixes)
         ]
 

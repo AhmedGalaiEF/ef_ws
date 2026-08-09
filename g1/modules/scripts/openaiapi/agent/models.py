@@ -75,6 +75,9 @@ class RobotStateSnapshot(BaseModel):
     left_hand_state: Optional[str] = None
     lowstate: Optional[Dict[str, Any]] = None
     battery: Optional[Dict[str, Any]] = None
+    sensor_stale: Dict[str, Any] = Field(default_factory=dict)
+    sensor_timestamps: Dict[str, Any] = Field(default_factory=dict)
+    stale_sensor_topics: List[str] = Field(default_factory=list)
     source: str = "unavailable"  # e.g. "sdk_client.Robot" or "mock"
 
 

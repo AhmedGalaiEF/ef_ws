@@ -69,6 +69,10 @@ class OpenAIPlanner(Planner):
             from llm_client import chat as chat_module
         except Exception as exc:
             raise PlannerError(f"llm_client.chat is unavailable: {exc}") from exc
+        try:
+            import llm_client.secrets  # noqa: F401  (side effect: fills os.environ)
+        except Exception:
+            pass
 
         api_key = os.environ.get(api_key_env)
         if not api_key:
@@ -159,6 +163,20 @@ class MockPlanner(Planner):
         if not text:
             return PlannerDecision(intent=IntentType.NO_ACTION)
 
+        if "who are you" in text or "what are you" in text:
+            return PlannerDecision(
+                intent=IntentType.CONVERSATION,
+                response_text=(
+                    "I am the local cognitive CLI for a Unitree G1 robot. "
+                    "Right now I am using the offline MockPlanner because OPENAI_API_KEY is not set."
+                ),
+            )
+        if "remember" in text or "memory" in text:
+            bio = planner_input.autobiography_summary or "No autobiographical memory has been recorded yet."
+            return PlannerDecision(
+                intent=IntentType.CONVERSATION,
+                response_text=f"My current autobiographical memory is:\n{bio}",
+            )
         if "sleep" in text:
             return PlannerDecision(
                 intent=IntentType.REQUEST_SLEEP,
@@ -166,11 +184,23 @@ class MockPlanner(Planner):
                 response_text="Understood, I'll get ready to sleep.",
                 requested_skills=["request_sleep"],
             )
-        if "charge" in text or "battery" in text:
+        if "battery" in text:
+            return PlannerDecision(
+                intent=IntentType.QUERY_STATE,
+                target="battery",
+            )
+        if "charge" in text:
             return PlannerDecision(
                 intent=IntentType.REQUEST_CHARGE,
                 response_text="Let me see about charging.",
                 requested_skills=["request_charge"],
+            )
+        if "step back" in text or "move back" in text or "back up" in text:
+            return PlannerDecision(
+                intent=IntentType.EXECUTE_TASK,
+                target="step_back",
+                response_text="I'll step back.",
+                requested_skills=["step_back"],
             )
         if "arm" in text and ("move" in text or "can you" in text or "raise" in text):
             wants_action = "raise" in text or "please raise" in text
