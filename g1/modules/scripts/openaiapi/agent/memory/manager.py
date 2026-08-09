@@ -13,6 +13,7 @@ dedups on exact claim text, which is as far as this phase goes.
 from __future__ import annotations
 
 from pathlib import Path
+import os
 from typing import Optional
 
 from ..models import KnowledgeRef, MemoryProposal
@@ -22,24 +23,21 @@ from .procedural import ProceduralAdaptation, ProceduralStore
 from .semantic import SemanticClaim, SemanticStore
 
 
+DEFAULT_MEMORY_DIR = Path(os.environ.get("G1_AGENT_MEMORY_DIR", "~/.g1_agent/memory")).expanduser()
+
+
 class MemoryProposalError(ValueError):
     pass
 
 
 class MemoryManager:
     def __init__(self, *, base_dir: Optional[Path | str] = None) -> None:
-        if base_dir is not None:
-            base = Path(base_dir).expanduser()
-            base.mkdir(parents=True, exist_ok=True)
-            self.episodic = EpisodicStore(base / "episodic.jsonl")
-            self.semantic = SemanticStore(base / "semantic.json")
-            self.procedural = ProceduralStore(base / "procedural.json")
-            self.autobiography = AutobiographyStore(base / "autobiography.jsonl")
-        else:
-            self.episodic = EpisodicStore()
-            self.semantic = SemanticStore()
-            self.procedural = ProceduralStore()
-            self.autobiography = AutobiographyStore()
+        base = Path(base_dir).expanduser() if base_dir is not None else DEFAULT_MEMORY_DIR
+        base.mkdir(parents=True, exist_ok=True)
+        self.episodic = EpisodicStore(base / "episodic.jsonl")
+        self.semantic = SemanticStore(base / "semantic.json")
+        self.procedural = ProceduralStore(base / "procedural.json")
+        self.autobiography = AutobiographyStore(base / "autobiography.jsonl")
 
     # -- retrieval, for PlannerInput construction -----------------------
 

@@ -34,7 +34,18 @@ class PlannerError(RuntimeError):
 
 
 def _bootstrap_llm_client_path() -> None:
-    scripts_dir = Path(__file__).resolve().parents[1]  # g1/modules/scripts
+    here = Path(__file__).resolve()
+    scripts_dir = next(
+        (
+            parent
+            for parent in here.parents
+            if (parent / "llm_client").exists() and (parent / "sdk_client.py").exists() is False
+        ),
+        None,
+    )
+    if scripts_dir is None:
+        modules_dir = next((parent for parent in here.parents if (parent / "sdk_client.py").exists()), None)
+        scripts_dir = modules_dir / "scripts" if modules_dir is not None else here.parents[1]
     if scripts_dir.exists() and str(scripts_dir) not in sys.path:
         sys.path.insert(0, str(scripts_dir))
 

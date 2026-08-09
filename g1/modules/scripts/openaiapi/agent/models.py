@@ -10,7 +10,7 @@ servo packet, or an arbitrary trajectory. See ``agent/skills.py`` for how
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -69,19 +69,21 @@ class RobotStateSnapshot(BaseModel):
     battery_pct: Optional[float] = None
     charging: Optional[bool] = None
     stability: str = "unknown"
-    active_faults: list[str] = Field(default_factory=list)
+    active_faults: List[str] = Field(default_factory=list)
     arm_control_state: str = "unknown"
     right_hand_state: Optional[str] = None
     left_hand_state: Optional[str] = None
+    lowstate: Optional[Dict[str, Any]] = None
+    battery: Optional[Dict[str, Any]] = None
     source: str = "unavailable"  # e.g. "sdk_client.Robot" or "mock"
 
 
 class ScenarioState(BaseModel):
     name: Optional[str] = None
     phase: Optional[str] = None
-    objectives: list[str] = Field(default_factory=list)
-    constraints: list[str] = Field(default_factory=list)
-    available_transitions: list[str] = Field(default_factory=list)
+    objectives: List[str] = Field(default_factory=list)
+    constraints: List[str] = Field(default_factory=list)
+    available_transitions: List[str] = Field(default_factory=list)
 
 
 class CapabilityStatus(BaseModel):
@@ -113,15 +115,15 @@ class MemoryProposal(BaseModel):
     """A proposed memory write the model may suggest; never applied directly (spec section 9)."""
 
     kind: str  # "episodic" | "semantic" | "procedural" | "autobiographical"
-    content: dict[str, Any]
+    content: Dict[str, Any]
     confidence: float = 0.5
-    derived_from: list[str] = Field(default_factory=list)
+    derived_from: List[str] = Field(default_factory=list)
 
 
 class MaintenanceProposal(BaseModel):
     kind: str
     description: str
-    details: dict[str, Any] = Field(default_factory=dict)
+    details: Dict[str, Any] = Field(default_factory=dict)
 
 
 class IntentAnnouncement(BaseModel):
@@ -153,21 +155,21 @@ class PlannerInput(BaseModel):
     current_task: Optional[str] = None
     current_skill: Optional[str] = None
 
-    available_skills: list[str] = Field(default_factory=list)
-    capability_summary: dict[str, CapabilityStatus] = Field(default_factory=dict)
-    settings: dict[str, Any] = Field(default_factory=dict)
+    available_skills: List[str] = Field(default_factory=list)
+    capability_summary: Dict[str, CapabilityStatus] = Field(default_factory=dict)
+    settings: Dict[str, Any] = Field(default_factory=dict)
 
-    documentary_rag: list[KnowledgeRef] = Field(default_factory=list)
-    sdk_wrapper_knowledge: list[KnowledgeRef] = Field(default_factory=list)
-    episodic_memory: list[KnowledgeRef] = Field(default_factory=list)
-    semantic_memory: list[KnowledgeRef] = Field(default_factory=list)
-    procedural_memory: list[KnowledgeRef] = Field(default_factory=list)
+    documentary_rag: List[KnowledgeRef] = Field(default_factory=list)
+    sdk_wrapper_knowledge: List[KnowledgeRef] = Field(default_factory=list)
+    episodic_memory: List[KnowledgeRef] = Field(default_factory=list)
+    semantic_memory: List[KnowledgeRef] = Field(default_factory=list)
+    procedural_memory: List[KnowledgeRef] = Field(default_factory=list)
     autobiography_summary: Optional[str] = None
 
-    available_tools: list[str] = Field(default_factory=list)
+    available_tools: List[str] = Field(default_factory=list)
 
     # Only populated for agent_first_boot / agent_restart / agent_wake.
-    runtime: dict[str, Any] = Field(default_factory=dict)
+    runtime: Dict[str, Any] = Field(default_factory=dict)
 
 
 class PlannerDecision(BaseModel):
@@ -178,7 +180,7 @@ class PlannerDecision(BaseModel):
     intent: IntentType
     target: Optional[str] = None
     response_text: Optional[str] = None
-    requested_skills: list[str] = Field(default_factory=list)
+    requested_skills: List[str] = Field(default_factory=list)
     intent_announcement: Optional[IntentAnnouncement] = None
     memory_proposal: Optional[MemoryProposal] = None
     maintenance_proposal: Optional[MaintenanceProposal] = None
@@ -199,7 +201,7 @@ class RuntimeCheckpoint(BaseModel):
     scenario_phase: Optional[str] = None
     active_task: Optional[str] = None
     active_skill: Optional[str] = None
-    last_robot_state_summary: dict[str, Any] = Field(default_factory=dict)
+    last_robot_state_summary: Dict[str, Any] = Field(default_factory=dict)
     sleep_reason: Optional[str] = None
     sleep_timestamp: Optional[float] = None
     wake_timestamp: Optional[float] = None

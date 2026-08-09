@@ -97,10 +97,16 @@ class SkillUnavailable(RuntimeError):
 
 def _bootstrap_repo_paths() -> dict[str, Path]:
     here = Path(__file__).resolve()
-    scripts_dir = here.parents[1]  # g1/modules/scripts
-    modules_dir = here.parents[2]  # g1/modules
-    g1_dir = here.parents[3]  # g1
-    ef_ws_root = here.parents[4]  # ~/ef_ws
+    ef_ws_root = next(
+        (parent for parent in here.parents if (parent / "dev" / "ai_control").exists()),
+        here.parents[4],
+    )
+    modules_dir = next(
+        (parent / "g1" / "modules" for parent in (ef_ws_root, *ef_ws_root.parents) if (parent / "g1" / "modules").exists()),
+        ef_ws_root / "g1" / "modules",
+    )
+    scripts_dir = modules_dir / "scripts"
+    g1_dir = modules_dir.parent
     ollama_ai_dir = scripts_dir / "ollama_ai"
     wbc_dir = g1_dir / "WBC"
 
@@ -195,6 +201,8 @@ def build_offline_registry() -> SkillRegistry:
         "hand_open": Skill("hand_open", "Open the given hand.", _wrap(backend.hand_open, "hand_open"), "ai_control.robot_backend.MockRobotBackend"),
         "hand_close": Skill("hand_close", "Close the given hand.", _wrap(backend.hand_close, "hand_close"), "ai_control.robot_backend.MockRobotBackend"),
         "gesture": Skill("gesture", "Play a named high-level arm gesture.", _wrap(backend.gesture, "gesture"), "ai_control.robot_backend.MockRobotBackend"),
+        "wave": Skill("wave", "Wave using the face-wave high-level arm gesture.", lambda **_kwargs: SkillResult(ok=True, message=backend.gesture("face wave"), detail={"backend": "mock", "skill": "wave"}), "ai_control.robot_backend.MockRobotBackend"),
+        "high_wave": Skill("high_wave", "Wave high using the high-wave high-level arm gesture.", lambda **_kwargs: SkillResult(ok=True, message=backend.gesture("high wave"), detail={"backend": "mock", "skill": "high_wave"}), "ai_control.robot_backend.MockRobotBackend"),
         "release_arms": Skill("release_arms", "Release arm control authority.", _wrap(backend.release_arms, "release_arms"), "ai_control.robot_backend.MockRobotBackend"),
         "announce": Skill("announce", "Speak text through the robot's speaker.", _wrap(backend.say, "announce"), "ai_control.robot_backend.MockRobotBackend"),
     }
@@ -254,6 +262,58 @@ def build_live_registry(*, robot: Optional[Any] = None, scene_ctx: Optional[Any]
                     handler=_wrap_tool(fn, tool_name),
                     source="llm_client.robot_tools.build_robot_tools",
                 )
+        if hasattr(robot, "say"):
+            def _announce(**kwargs: Any) -> SkillResult:
+                text = str(kwargs.get("text", "")).strip()
+                if not text:
+                    return SkillResult(ok=False, message="no announcement text provided")
+                code = robot.say(text)
+                return SkillResult(
+                    ok=True,
+                    message=f"spoke through sdk_client.Robot.say() -> code {code}",
+                    detail={"backend": "sdk_client.Robot.say", "skill": "announce", "code": code},
+                )
+
+            skills["announce"] = Skill(
+                name="announce",
+                description="Speak text through sdk_client.Robot.say().",
+                handler=_announce,
+                source="sdk_client.Robot.say",
+            )
+
+        if hasattr(robot, "execute_arm_action"):
+            def _run_arm_action(action_name: str) -> SkillResult:
+                code = robot.execute_arm_action(action_name)
+                return SkillResult(
+                    ok=True,
+                    message=f"executed high-level arm action {action_name!r} -> code {code}",
+                    detail={"backend": "sdk_client.Robot.execute_arm_action", "skill": action_name, "code": code},
+                )
+
+            def _gesture(**kwargs: Any) -> SkillResult:
+                name = str(kwargs.get("name", "face wave")).strip()
+                if not name:
+                    return SkillResult(ok=False, message="no gesture name provided")
+                return _run_arm_action(name)
+
+            skills["gesture"] = Skill(
+                name="gesture",
+                description="Play a named high-level arm gesture through sdk_client.Robot.execute_arm_action().",
+                handler=_gesture,
+                source="sdk_client.Robot.execute_arm_action",
+            )
+            skills["wave"] = Skill(
+                name="wave",
+                description="Wave using the SDK 'face wave' high-level arm action.",
+                handler=lambda **_kwargs: _run_arm_action("face wave"),
+                source="sdk_client.Robot.execute_arm_action",
+            )
+            skills["high_wave"] = Skill(
+                name="high_wave",
+                description="Wave high using the SDK 'high wave' high-level arm action.",
+                handler=lambda **_kwargs: _run_arm_action("high wave"),
+                source="sdk_client.Robot.execute_arm_action",
+            )
 
     if scene_ctx is not None:
         try:

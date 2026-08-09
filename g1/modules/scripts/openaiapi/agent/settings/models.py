@@ -9,7 +9,7 @@ left to the model's discretion.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any
+from typing import Any, Dict, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -81,7 +81,7 @@ class SkillsSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     default_mode: SkillMode = SkillMode.CONFIRM
-    overrides: dict[str, SkillMode] = Field(default_factory=dict)
+    overrides: Dict[str, SkillMode] = Field(default_factory=dict)
 
     def mode_for(self, skill_name: str) -> SkillMode:
         return self.overrides.get(skill_name, self.default_mode)
@@ -100,7 +100,7 @@ class AgentSettings(BaseModel):
     def get_skill_mode(self, skill_name: str) -> SkillMode:
         return self.skills.mode_for(skill_name)
 
-    def set_skill_mode(self, skill_name: str, mode: SkillMode | str) -> None:
+    def set_skill_mode(self, skill_name: str, mode: Union[SkillMode, str]) -> None:
         """Set a per-skill override (``/settings skill <name> <auto|confirm|disabled>``).
 
         Kept as a dedicated method rather than forced through
@@ -155,8 +155,8 @@ class AgentSettings(BaseModel):
         updated = section_cls.model_validate(data)
         setattr(self, section_name, updated)
 
-    def as_flat_dict(self) -> dict[str, Any]:
-        flat: dict[str, Any] = {}
+    def as_flat_dict(self) -> Dict[str, Any]:
+        flat: Dict[str, Any] = {}
         for section_name in type(self).model_fields:
             section = getattr(self, section_name)
             for field_name in type(section).model_fields:

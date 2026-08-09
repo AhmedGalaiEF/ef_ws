@@ -32,7 +32,13 @@ from ..planner import Planner
 from ..scheduler import CognitiveScheduler
 from ..settings.manager import InvalidSettingError, SettingsManager
 from ..settings.models import SkillMode
-from ..skills import SkillInvocationOutcome, SkillRegistry, SkillResult, resolve_and_maybe_invoke
+from ..skills import (
+    SkillInvocationOutcome,
+    SkillRegistry,
+    SkillResult,
+    invoke_with_capability_check,
+    resolve_and_maybe_invoke,
+)
 from ..state import RobotStateSource, build_robot_state
 
 try:
@@ -64,6 +70,7 @@ class G1Agent:
         checkpoint_store: Optional[CheckpointStore] = None,
         sdk_knowledge: "Optional[SdkWrapperKnowledge]" = None,
         document_rag: Optional[Any] = None,
+        resolver: Optional[CapabilityResolver] = None,
         auto_confirm: bool = False,
     ) -> None:
         self.planner = planner
@@ -74,7 +81,7 @@ class G1Agent:
         self.checkpoint_store = checkpoint_store or CheckpointStore()
         self.sdk_knowledge = sdk_knowledge
         self.document_rag = document_rag
-        self.resolver = CapabilityResolver()
+        self.resolver = resolver or CapabilityResolver()
         self.scheduler = CognitiveScheduler()
         # Non-interactive confirmation policy for tests/scripted runs: when
         # True, a "needs_confirmation" skill is treated as approved without
@@ -129,6 +136,7 @@ class G1Agent:
         # checkpoint always records "awake", not a transitional state.
         self.lifecycle.transition(LifecycleState.AWAKE)
         self._after_turn(planner_input, decision)
+        self._record_boot_memory(robot_state)
         self._booted = True
         return decision
 
@@ -153,6 +161,22 @@ class G1Agent:
             return None
         return self._handle_user_text(text, input_source="audio")
 
+    def handle_cognitive_tick(self) -> TurnOutcome:
+        """Run one periodic mostly-idle cognition turn."""
+        now = time.time()
+        robot_state = build_robot_state(self.state_source)
+        planner_input = self._build_planner_input(
+            event=EventType.COGNITIVE_TICK,
+            timestamp=now,
+            user_text=None,
+            input_source="system",
+            robot_state=robot_state,
+            runtime={"reason": "periodic_tick"},
+        )
+        decision = self.planner.decide(planner_input)
+        self._after_turn(planner_input, decision, announce_maintenance=False)
+        return self._execute_decision(decision, planner_input)
+
     def _handle_user_text(self, text: str, *, input_source: str) -> TurnOutcome:
         now = time.time()
         event = EventType.ASR_MESSAGE if input_source == "audio" else EventType.USER_MESSAGE
@@ -161,6 +185,7 @@ class G1Agent:
             event=event, timestamp=now, user_text=text, input_source=input_source, robot_state=robot_state
         )
         decision = self.planner.decide(planner_input)
+        decision = self._apply_command_fallbacks(decision, planner_input)
         self._after_turn(planner_input, decision)
         return self._execute_decision(decision, planner_input)
 
@@ -224,7 +249,13 @@ class G1Agent:
 
     # -- post-turn bookkeeping ----------------------------------------------
 
-    def _after_turn(self, planner_input: PlannerInput, decision: PlannerDecision) -> None:
+    def _after_turn(
+        self,
+        planner_input: PlannerInput,
+        decision: PlannerDecision,
+        *,
+        announce_maintenance: bool = True,
+    ) -> None:
         self.scheduler.record_cognition(planner_input.timestamp, decision.next_tick_s)
         checkpoint = RuntimeCheckpoint(
             last_cognitive_timestamp=planner_input.timestamp,
@@ -242,11 +273,29 @@ class G1Agent:
                 self.memory.apply_proposal(decision.memory_proposal)
             except MemoryProposalError as exc:
                 print(f"[memory] rejected proposal: {exc}")
-        if decision.maintenance_proposal is not None:
+        if decision.maintenance_proposal is not None and announce_maintenance:
             print(
                 "[maintenance] proposal recorded (no automated consolidation job in this "
                 f"phase): {decision.maintenance_proposal.description}"
             )
+
+    def _record_boot_memory(self, robot_state: RobotStateSnapshot) -> None:
+        lowstate = "available" if robot_state.lowstate else "unavailable"
+        battery = (
+            f"{robot_state.battery_pct:.0f}%"
+            if robot_state.battery_pct is not None
+            else "unavailable"
+        )
+        faults = ", ".join(robot_state.active_faults) if robot_state.active_faults else "none"
+        summary = (
+            f"Boot event {self._boot_event.value}; lifecycle entered awake; "
+            f"posture={robot_state.posture}; stability={robot_state.stability}; "
+            f"battery={battery}; lowstate={lowstate}; active_faults={faults}."
+        )
+        try:
+            self.memory.autobiography.append(summary)
+        except Exception as exc:
+            print(f"[memory] could not record boot memory: {exc}")
 
     # -- decision execution ---------------------------------------------------
 
@@ -258,13 +307,20 @@ class G1Agent:
         if decision.intent == IntentType.QUERY_CAPABILITY and (decision.target or "").strip().lower() == "arm":
             policy = self.resolver.resolve_arm_motion(settings=settings, robot_state=robot_state)
             outcome.grounded_response = self._phrase_capability_answer(policy)
+            self._speak_grounded_response(outcome.grounded_response, settings=settings, robot_state=robot_state)
             return outcome
 
         if decision.intent == IntentType.QUERY_STATE:
-            outcome.grounded_response = decision.response_text or self._describe_state(robot_state)
+            target = (decision.target or "").strip().lower()
+            if "battery" in target or "charge" in target:
+                outcome.grounded_response = self._describe_battery(robot_state)
+            else:
+                outcome.grounded_response = decision.response_text or self._describe_state(robot_state)
+            self._speak_grounded_response(outcome.grounded_response, settings=settings, robot_state=robot_state)
             return outcome
 
         if decision.intent in (IntentType.NO_ACTION, IntentType.CONVERSATION, IntentType.MAINTENANCE):
+            self._speak_grounded_response(outcome.grounded_response, settings=settings, robot_state=robot_state)
             return outcome
 
         outcome.announcement = announce(
@@ -321,6 +377,35 @@ class G1Agent:
 
         return outcome
 
+    def _apply_command_fallbacks(
+        self, decision: PlannerDecision, planner_input: PlannerInput
+    ) -> PlannerDecision:
+        """Deterministic recovery for simple robot commands the planner missed."""
+        if decision.requested_skills:
+            return decision
+        if planner_input.event not in (EventType.USER_MESSAGE, EventType.ASR_MESSAGE):
+            return decision
+        text = (planner_input.user_text or "").strip().lower()
+        if "wave" not in text:
+            return decision
+        if "high_wave" in self.skills.skills and ("high" in text or "big" in text):
+            return PlannerDecision(
+                intent=IntentType.EXECUTE_TASK,
+                target="high_wave",
+                response_text="I'll try a high wave.",
+                requested_skills=["high_wave"],
+                intent_announcement=IntentAnnouncement(speech="I'll wave high."),
+            )
+        if "wave" in self.skills.skills:
+            return PlannerDecision(
+                intent=IntentType.EXECUTE_TASK,
+                target="wave",
+                response_text="I'll try a wave.",
+                requested_skills=["wave"],
+                intent_announcement=IntentAnnouncement(speech="I'll wave."),
+            )
+        return decision
+
     def _confirm_prompt(self, skill_name: str, policy: PolicyDecision) -> bool:
         try:
             reply = input(f"  [confirm] execute skill '{skill_name}'? ({policy.reason}) [y/N] ").strip().lower()
@@ -348,6 +433,32 @@ class G1Agent:
             "plan's deferred-TODO list."
         )
 
+    def _speak_grounded_response(
+        self,
+        text: Optional[str],
+        *,
+        settings: Any,
+        robot_state: RobotStateSnapshot,
+    ) -> None:
+        """Best-effort TTS for normal printed responses."""
+        if not text or not settings.announcements.audio_enabled:
+            return
+        if "announce" not in self.skills.skills:
+            print("[warn] announcements.audio_enabled=true but no 'announce' skill is available")
+            return
+        decision, result = invoke_with_capability_check(
+            self.skills,
+            self.resolver,
+            "announce",
+            settings=settings,
+            robot_state=robot_state,
+            text=text,
+        )
+        if not decision.allowed:
+            print(f"[warn] speech denied: {decision.reason}")
+        elif result is not None and not result.ok:
+            print(f"[warn] speech failed: {result.message}")
+
     @staticmethod
     def _phrase_capability_answer(policy: PolicyDecision) -> str:
         prefix = "Yes." if policy.allowed else "No."
@@ -360,6 +471,15 @@ class G1Agent:
             f"arm_control_state={state.arm_control_state}, "
             f"faults={state.active_faults or ['none']} (source={state.source})"
         )
+
+    @staticmethod
+    def _describe_battery(state: RobotStateSnapshot) -> str:
+        if state.battery_pct is None:
+            return "Battery percentage is unavailable: rt/lowstate.bms_state.soc is not present in the current robot state."
+        charging = ""
+        if state.charging is not None:
+            charging = " and appears to be charging" if state.charging else " and does not appear to be charging"
+        return f"Battery is at {state.battery_pct:.0f}%{charging}."
 
     # -- deterministic /settings /status /memory /tools namespaces ------------
 
@@ -421,6 +541,35 @@ class G1Agent:
         ]
         return "\n".join(lines)
 
+    def cmd_faults(self) -> str:
+        robot_state = build_robot_state(self.state_source)
+        if not robot_state.active_faults:
+            return "No stale sensor topics are currently reported."
+        lines = ["Active stale sensor topics:"]
+        for fault in robot_state.active_faults:
+            lines.append(f"- {fault}: {self._fault_hint(fault)}")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _fault_hint(fault: str) -> str:
+        if fault == "lidar_map":
+            return "No fresh rt/utlidar/map_state. Start/check the lidar or SLAM mapping publisher; verify DDS iface/domain."
+        if fault.startswith("lidar_cloud"):
+            return "No fresh point cloud on this lidar topic. Check the lidar driver/SLAM pipeline and topic name."
+        if fault == "odom":
+            return "No fresh rt/odom. Check odometry publisher or use the sport-state odom fallback if navigation does not require rt/odom."
+        if fault == "lowstate":
+            return "No fresh rt/lowstate. Check DDS interface/domain and Unitree lowstate publication before arm/lowstate-dependent actions."
+        if fault == "left_hand_state":
+            return "No fresh rt/dex3/left/state. Check Dex3 left hand power, topic publisher, and hand SDK connection."
+        if fault == "right_hand_state":
+            return "No fresh rt/dex3/right/state. Check Dex3 right hand power, topic publisher, and hand SDK connection."
+        if fault == "lidar_imu":
+            return "No fresh rt/utlidar/imu_livox_mid360. Check lidar IMU publisher."
+        if fault == "slam_odom":
+            return "No fresh SLAM odometry. Start/check the SLAM odom publisher."
+        return "No specific hint known; inspect robot_state.sensor_timestamps and DDS topic publication."
+
     def cmd_memory(self, args: list[str]) -> str:
         if not args or args[0] == "show":
             episodes = self.memory.episodic.all()
@@ -457,7 +606,9 @@ class G1Agent:
             "/chat <text>                converse (always active)\n"
             "/audio_msg <text>           simulated ASR transcript (gated by audio.asr_enabled)\n"
             "/settings show|get|set|skill|skills\n"
+            "/settings-ui                interactive settings editor (arrow keys)\n"
             "/status                     lifecycle + robot state snapshot\n"
+            "/faults                     explain stale sensor topics and fixes\n"
             "/memory show|search <query>\n"
             "/tools                      list skills and their auto/confirm/disabled mode\n"
             "/help\n"

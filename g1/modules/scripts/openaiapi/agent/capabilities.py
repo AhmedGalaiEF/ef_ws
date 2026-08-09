@@ -36,8 +36,11 @@ from .settings.models import AgentSettings
 # authority and a commandable arm, but have no /arm_sdk or /low_cmd
 # backend to be "available" or not.
 LOW_LEVEL_ARM_SKILLS = {"move_arm_demo", "reach_forward"}
-HIGH_LEVEL_ARM_SKILLS = {"gesture", "release_arms"}
-ARM_SKILLS = LOW_LEVEL_ARM_SKILLS | HIGH_LEVEL_ARM_SKILLS
+HIGH_LEVEL_ARM_SKILLS = {"gesture", "wave", "high_wave", "release_arms"}
+HAND_SKILLS = {"grab", "release"}
+ARM_SKILLS = LOW_LEVEL_ARM_SKILLS | HIGH_LEVEL_ARM_SKILLS | HAND_SKILLS
+LOW_LEVEL_ARM_FAULTS = ("lowstate",)
+HAND_FAULTS = ("left_hand_state", "right_hand_state")
 
 
 @dataclass(frozen=True)
@@ -75,6 +78,14 @@ class CapabilityResolver:
         self._arm_sdk_available = arm_sdk_available
         self._low_cmd_available = low_cmd_available
 
+    @staticmethod
+    def _matching_faults(robot_state: RobotStateSnapshot, prefixes: tuple[str, ...]) -> list[str]:
+        return [
+            fault
+            for fault in robot_state.active_faults
+            if any(fault == prefix or fault.startswith(f"{prefix}[") for prefix in prefixes)
+        ]
+
     def resolve_arm_motion(
         self, *, settings: AgentSettings, robot_state: RobotStateSnapshot
     ) -> PolicyDecision:
@@ -95,12 +106,13 @@ class CapabilityResolver:
                 reason="The arm is currently in a released/uncommandable state.",
             )
 
-        if robot_state.active_faults:
+        arm_faults = self._matching_faults(robot_state, LOW_LEVEL_ARM_FAULTS)
+        if arm_faults:
             return PolicyDecision(
                 allowed=False,
                 requires_approval=True,
                 risk="high",
-                reason=f"Active faults present: {', '.join(robot_state.active_faults)}.",
+                reason=f"Arm-relevant faults present: {', '.join(arm_faults)}.",
             )
 
         arm_sdk_permitted = settings.motion.allow_arm_sdk
@@ -168,18 +180,37 @@ class CapabilityResolver:
                 risk="low",
                 reason="The arm is currently in a released/uncommandable state.",
             )
-        if robot_state.active_faults:
-            return PolicyDecision(
-                allowed=False,
-                requires_approval=True,
-                risk="high",
-                reason=f"Active faults present: {', '.join(robot_state.active_faults)}.",
-            )
         return PolicyDecision(
             allowed=True,
             requires_approval=False,
             risk="low",
             reason="High-level arm action is available.",
+        )
+
+    def resolve_hand_action(
+        self, *, settings: AgentSettings, robot_state: RobotStateSnapshot
+    ) -> PolicyDecision:
+        """Gate gripper actions against hand-state availability."""
+        if not settings.motion.allow_arm_motion:
+            return PolicyDecision(
+                allowed=False,
+                requires_approval=False,
+                risk="low",
+                reason="Hand motion is disabled because motion.allow_arm_motion=false.",
+            )
+        hand_faults = self._matching_faults(robot_state, HAND_FAULTS)
+        if hand_faults:
+            return PolicyDecision(
+                allowed=False,
+                requires_approval=True,
+                risk="high",
+                reason=f"Hand-state faults present: {', '.join(hand_faults)}.",
+            )
+        return PolicyDecision(
+            allowed=True,
+            requires_approval=False,
+            risk="low",
+            reason="Gripper action is available.",
         )
 
     def resolve_skill(
@@ -190,6 +221,8 @@ class CapabilityResolver:
             return self.resolve_arm_motion(settings=settings, robot_state=robot_state)
         if skill_name in HIGH_LEVEL_ARM_SKILLS:
             return self.resolve_high_level_arm_action(settings=settings, robot_state=robot_state)
+        if skill_name in HAND_SKILLS:
+            return self.resolve_hand_action(settings=settings, robot_state=robot_state)
         # Non-arm skills (announce, navigate, base move, stop, ...) are not
         # gated here beyond the settings toggles their own handlers already
         # read -- see the nav/ll checks scene_executor.STEP_HANDLERS
