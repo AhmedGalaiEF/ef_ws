@@ -195,7 +195,7 @@ class OpenAIVisionGrabber:
         T_base_object = _stable_vision_object_pose(p_base)
         side = str(arm_override).strip().lower()
         if side not in {"left", "right"}:
-            side = "left" if p_base[1] > 0 else "right"
+            side = "left" if p_base[1] > 0.12 else "right"
         standoff_m, T_base_desired, reach_reason = _choose_reachable_standoff(
             T_base_object,
             side,

@@ -244,7 +244,7 @@ def _dispatch(agent: G1Agent, line: str) -> None:
         _print_turn(agent.handle_vision_question(line[len("/vision "):]))
     elif line.startswith("/sehen "):
         _print_turn(agent.handle_vision_question(line[len("/sehen "):]))
-    elif line in ("/settings-ui", "/settings ui", "/einstellungen-ui"):
+    elif line in ("/settings-ui", "/setting-ui", "/settings ui", "/einstellungen-ui"):
         _run_settings_ui(agent)
     elif line.startswith("/settings") or line.startswith("/einstellungen"):
         args = line.split()[1:]

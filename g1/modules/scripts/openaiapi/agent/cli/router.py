@@ -522,10 +522,30 @@ class G1Agent:
         if planner_input.event not in (EventType.USER_MESSAGE, EventType.ASR_MESSAGE):
             return decision
         text = (planner_input.user_text or "").strip().lower()
+        direct_skill_aliases = {
+            "turn_left": ("turn_left", "I'll turn left.", "Ich drehe mich nach links."),
+            "turn_right": ("turn_right", "I'll turn right.", "Ich drehe mich nach rechts."),
+            "release_arms": ("release_arms", "I'll release arm control authority.", "Ich gebe die Armsteuerung frei."),
+            "wave": ("wave", "I'll try a wave.", "Ich versuche zu winken."),
+            "high_wave": ("high_wave", "I'll try a high wave.", "Ich versuche hoch zu winken."),
+        }
+        if text in direct_skill_aliases:
+            skill_name, english, german_text = direct_skill_aliases[text]
+            if skill_name in self.skills.skills:
+                german = getattr(self.settings.effective().interface.reply_language, "value", "auto") == "de"
+                return PlannerDecision(
+                    intent=IntentType.EXECUTE_TASK,
+                    target=skill_name,
+                    response_text=german_text if german else english,
+                    requested_skills=[skill_name],
+                )
         wants_extend_arm = (
             "extend arm" in text
+            or "extend the arm" in text
             or "extend right arm" in text
+            or "extend the right arm" in text
             or "extend left arm" in text
+            or "extend the left arm" in text
             or "arm forward" in text
         )
         if wants_extend_arm and "reach_forward" in self.skills.skills:
@@ -559,6 +579,24 @@ class G1Agent:
                 target="release_arms",
                 response_text="Ich gebe die Armsteuerung frei." if german else "I'll release arm control authority.",
                 requested_skills=["release_arms"],
+            )
+        wants_turn_left = "turn left" in text or "rotate left" in text or "dreh links" in text
+        wants_turn_right = "turn right" in text or "rotate right" in text or "dreh rechts" in text
+        if wants_turn_left and "turn_left" in self.skills.skills:
+            german = getattr(self.settings.effective().interface.reply_language, "value", "auto") == "de"
+            return PlannerDecision(
+                intent=IntentType.EXECUTE_TASK,
+                target="turn_left",
+                response_text="Ich drehe mich nach links." if german else "I'll turn left.",
+                requested_skills=["turn_left"],
+            )
+        if wants_turn_right and "turn_right" in self.skills.skills:
+            german = getattr(self.settings.effective().interface.reply_language, "value", "auto") == "de"
+            return PlannerDecision(
+                intent=IntentType.EXECUTE_TASK,
+                target="turn_right",
+                response_text="Ich drehe mich nach rechts." if german else "I'll turn right.",
+                requested_skills=["turn_right"],
             )
         wants_grab = any(word in text for word in ("grab", "grba", "grasp", "pick up", "greif", "greife", "nimm"))
         if wants_grab and "grab" in self.skills.skills:
@@ -614,8 +652,11 @@ class G1Agent:
         if (
             decision.intent == IntentType.MOVE_ARM
             or "extend arm" in text
+            or "extend the arm" in text
             or "extend right arm" in text
+            or "extend the right arm" in text
             or "extend left arm" in text
+            or "extend the left arm" in text
             or "arm forward" in text
         ):
             if "reach_forward" in self.skills.skills and (not skills or "move" in skills):
@@ -645,6 +686,24 @@ class G1Agent:
                 target="release_arms",
                 response_text="I'll release arm control authority.",
                 requested_skills=["release_arms"],
+                intent_announcement=decision.intent_announcement,
+            )
+        wants_turn_left = "turn left" in text or "rotate left" in text or "dreh links" in text
+        wants_turn_right = "turn right" in text or "rotate right" in text or "dreh rechts" in text
+        if wants_turn_left and "turn_left" in self.skills.skills and (not skills or "move" in skills):
+            return PlannerDecision(
+                intent=IntentType.EXECUTE_TASK,
+                target="turn_left",
+                response_text="I'll turn left.",
+                requested_skills=["turn_left"],
+                intent_announcement=decision.intent_announcement,
+            )
+        if wants_turn_right and "turn_right" in self.skills.skills and (not skills or "move" in skills):
+            return PlannerDecision(
+                intent=IntentType.EXECUTE_TASK,
+                target="turn_right",
+                response_text="I'll turn right.",
+                requested_skills=["turn_right"],
                 intent_announcement=decision.intent_announcement,
             )
         return decision
@@ -688,7 +747,7 @@ class G1Agent:
         except (EOFError, KeyboardInterrupt):
             print()
             return False
-        return reply in ("y", "yes")
+        return reply in ("y", "yes", "j", "ja")
 
     def _enter_sleep(self, decision: PlannerDecision) -> None:
         self.lifecycle.transition(LifecycleState.PRE_SLEEP)
