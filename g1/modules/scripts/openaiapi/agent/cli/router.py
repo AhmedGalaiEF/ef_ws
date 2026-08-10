@@ -523,6 +523,8 @@ class G1Agent:
             return decision
         text = (planner_input.user_text or "").strip().lower()
         direct_skill_aliases = {
+            "step_forward": ("step_forward", "I'll step forward.", "Ich gehe einen Schritt nach vorne."),
+            "step_back": ("step_back", "I'll step backward.", "Ich gehe einen Schritt zurück."),
             "turn_left": ("turn_left", "I'll turn left.", "Ich drehe mich nach links."),
             "turn_right": ("turn_right", "I'll turn right.", "Ich drehe mich nach rechts."),
             "release_arms": ("release_arms", "I'll release arm control authority.", "Ich gebe die Armsteuerung frei."),
@@ -579,6 +581,46 @@ class G1Agent:
                 target="release_arms",
                 response_text="Ich gebe die Armsteuerung frei." if german else "I'll release arm control authority.",
                 requested_skills=["release_arms"],
+            )
+        wants_step_forward = (
+            "move forward" in text
+            or "step forward" in text
+            or "go forward" in text
+            or "walk forward" in text
+            or "forward" == text
+            or "geh nach vorne" in text
+            or "gehe nach vorne" in text
+            or "vorwärts" in text
+        )
+        wants_step_back = (
+            "move backward" in text
+            or "move back" in text
+            or "step backward" in text
+            or "step back" in text
+            or "go backward" in text
+            or "go back" in text
+            or "walk backward" in text
+            or "backward" == text
+            or "back" == text
+            or "geh zurück" in text
+            or "gehe zurück" in text
+            or "rückwärts" in text
+        )
+        if wants_step_forward and "step_forward" in self.skills.skills:
+            german = getattr(self.settings.effective().interface.reply_language, "value", "auto") == "de"
+            return PlannerDecision(
+                intent=IntentType.EXECUTE_TASK,
+                target="step_forward",
+                response_text="Ich gehe einen Schritt nach vorne." if german else "I'll step forward.",
+                requested_skills=["step_forward"],
+            )
+        if wants_step_back and "step_back" in self.skills.skills:
+            german = getattr(self.settings.effective().interface.reply_language, "value", "auto") == "de"
+            return PlannerDecision(
+                intent=IntentType.EXECUTE_TASK,
+                target="step_back",
+                response_text="Ich gehe einen Schritt zurück." if german else "I'll step backward.",
+                requested_skills=["step_back"],
             )
         wants_turn_left = "turn left" in text or "rotate left" in text or "dreh links" in text
         wants_turn_right = "turn right" in text or "rotate right" in text or "dreh rechts" in text
@@ -686,6 +728,46 @@ class G1Agent:
                 target="release_arms",
                 response_text="I'll release arm control authority.",
                 requested_skills=["release_arms"],
+                intent_announcement=decision.intent_announcement,
+            )
+        wants_step_forward = (
+            "move forward" in text
+            or "step forward" in text
+            or "go forward" in text
+            or "walk forward" in text
+            or "forward" == text
+            or "geh nach vorne" in text
+            or "gehe nach vorne" in text
+            or "vorwärts" in text
+        )
+        wants_step_back = (
+            "move backward" in text
+            or "move back" in text
+            or "step backward" in text
+            or "step back" in text
+            or "go backward" in text
+            or "go back" in text
+            or "walk backward" in text
+            or "backward" == text
+            or "back" == text
+            or "geh zurück" in text
+            or "gehe zurück" in text
+            or "rückwärts" in text
+        )
+        if wants_step_forward and "step_forward" in self.skills.skills and (not skills or "move" in skills):
+            return PlannerDecision(
+                intent=IntentType.EXECUTE_TASK,
+                target="step_forward",
+                response_text="I'll step forward.",
+                requested_skills=["step_forward"],
+                intent_announcement=decision.intent_announcement,
+            )
+        if wants_step_back and "step_back" in self.skills.skills and (not skills or "move" in skills):
+            return PlannerDecision(
+                intent=IntentType.EXECUTE_TASK,
+                target="step_back",
+                response_text="I'll step backward.",
+                requested_skills=["step_back"],
                 intent_announcement=decision.intent_announcement,
             )
         wants_turn_left = "turn left" in text or "rotate left" in text or "dreh links" in text

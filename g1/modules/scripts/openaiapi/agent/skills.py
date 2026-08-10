@@ -196,6 +196,7 @@ def build_offline_registry() -> SkillRegistry:
 
     skills: dict[str, Skill] = {
         "move": Skill("move", "Drive the base for a duration at (vx, vy, vyaw).", _wrap(backend.move, "move"), "ai_control.robot_backend.MockRobotBackend"),
+        "step_forward": Skill("step_forward", "Step forward a short distance.", lambda **_kwargs: SkillResult(ok=True, message=backend.move(vx=0.25, vy=0.0, vyaw=0.0, duration=1.0), detail={"backend": "mock", "skill": "step_forward"}), "ai_control.robot_backend.MockRobotBackend"),
         "step_back": Skill("step_back", "Step backward a short distance.", lambda **_kwargs: SkillResult(ok=True, message=backend.move(vx=-0.25, vy=0.0, vyaw=0.0, duration=1.0), detail={"backend": "mock", "skill": "step_back"}), "ai_control.robot_backend.MockRobotBackend"),
         "turn_left": Skill("turn_left", "Turn left in place by a small angle.", lambda **_kwargs: SkillResult(ok=True, message=backend.move(vx=0.0, vy=0.0, vyaw=0.5, duration=1.0), detail={"backend": "mock", "skill": "turn_left"}), "ai_control.robot_backend.MockRobotBackend"),
         "turn_right": Skill("turn_right", "Turn right in place by a small angle.", lambda **_kwargs: SkillResult(ok=True, message=backend.move(vx=0.0, vy=0.0, vyaw=-0.5, duration=1.0), detail={"backend": "mock", "skill": "turn_right"}), "ai_control.robot_backend.MockRobotBackend"),
@@ -338,6 +339,19 @@ def build_live_registry(
                     source="llm_client.robot_tools.build_robot_tools",
                 )
             if hasattr(robot, "move_for"):
+                def _step(direction: str) -> SkillResult:
+                    side = str(direction).strip().lower()
+                    if side not in {"forward", "backward"}:
+                        return SkillResult(ok=False, message=f"step direction must be forward or backward, got {direction!r}")
+                    vx = 0.25 if side == "forward" else -0.25
+                    duration_s = 1.0
+                    robot.move_for(duration_s, vx=vx, vy=0.0, vyaw=0.0)
+                    return SkillResult(
+                        ok=True,
+                        message=f"stepped {side} for {duration_s:.1f}s at vx={vx:+.2f}m/s",
+                        detail={"backend": "sdk_client.Robot.move_for", "skill": f"step_{side}", "vx": vx},
+                    )
+
                 def _turn(direction: str) -> SkillResult:
                     side = str(direction).strip().lower()
                     if side not in {"left", "right"}:
@@ -351,6 +365,18 @@ def build_live_registry(
                         detail={"backend": "sdk_client.Robot.move_for", "skill": f"turn_{side}", "vyaw": vyaw},
                     )
 
+                skills["step_forward"] = Skill(
+                    name="step_forward",
+                    description="Step forward a short distance using sdk_client.Robot.move_for().",
+                    handler=lambda **_kwargs: _step("forward"),
+                    source="sdk_client.Robot.move_for",
+                )
+                skills["step_back"] = Skill(
+                    name="step_back",
+                    description="Step backward a short distance using sdk_client.Robot.move_for().",
+                    handler=lambda **_kwargs: _step("backward"),
+                    source="sdk_client.Robot.move_for",
+                )
                 skills["turn_left"] = Skill(
                     name="turn_left",
                     description="Turn left in place using sdk_client.Robot.move_for().",
