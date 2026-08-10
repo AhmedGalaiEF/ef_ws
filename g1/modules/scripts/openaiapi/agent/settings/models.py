@@ -84,6 +84,13 @@ class VisionSettings(BaseModel):
     openai_model: str = "gpt-4o-mini"
 
 
+class ResponseSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    max_chars: int = 700
+    memory_max_entries: int = 3
+
+
 class SkillMode(str, Enum):
     """Per-skill execution policy (distinct from capability/physical gating).
 
@@ -130,6 +137,7 @@ class AgentSettings(BaseModel):
     interface: InterfaceSettings = Field(default_factory=InterfaceSettings)
     motion: MotionSettings = Field(default_factory=MotionSettings)
     vision: VisionSettings = Field(default_factory=VisionSettings)
+    response: ResponseSettings = Field(default_factory=ResponseSettings)
     skills: SkillsSettings = Field(default_factory=SkillsSettings)
 
     def get_skill_mode(self, skill_name: str) -> SkillMode:

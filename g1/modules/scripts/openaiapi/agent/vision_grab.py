@@ -241,7 +241,7 @@ class OpenAIVisionGrabber:
             "convergence_rot_rad": 3.14,
             "max_joint_step_rad": 0.06,
             "max_joint_speed_rad_s": 0.35,
-            "max_reach_m": 0.42,
+            "max_reach_m": 0.52,
         }
         nav = DirectHandPoseNav(config, fixed_result=fixed_result, robot=self.robot)
         ok = False
@@ -424,11 +424,11 @@ def _choose_reachable_standoff(
     GraspPlanner: Any,
     ReachabilityChecker: Any,
 ) -> tuple[Optional[float], Any, str]:
-    checker = ReachabilityChecker(arm=arm, max_reach_m=0.42)
+    checker = ReachabilityChecker(arm=arm, max_reach_m=0.52)
     best: tuple[float, Any, list[str]] | None = None
-    # For near objects, a smaller standoff keeps the wrist out of the torso.
-    # For far objects, a larger standoff pulls the wrist back toward the robot.
-    for standoff_m in (0.0, 0.02, 0.04, 0.06, 0.08, 0.10):
+    # recognition_app_v3 defaults to 0.08m. Prefer that, then adjust only if
+    # reachability requires a different offset.
+    for standoff_m in (0.08, 0.10, 0.06, 0.04, 0.02, 0.0):
         T_desired = GraspPlanner(arm=arm, standoff_m=standoff_m).compute(T_base_object)
         result = checker.check_target_reachable(T_desired)
         if result.safe:

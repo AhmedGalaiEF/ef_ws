@@ -43,6 +43,8 @@ SETTING_CHOICES = {
     "announcements.tts_speaker": [-1, 0, 1, 2, 3],
     "interface.command_language": ["en", "de", "both"],
     "interface.reply_language": ["auto", "en", "de"],
+    "response.max_chars": [300, 500, 700, 1000, 1500],
+    "response.memory_max_entries": [1, 2, 3, 5, 10],
     "vision.openai_model": ["gpt-4o-mini", "gpt-4o"],
 }
 SETTING_LABELS = {
@@ -51,6 +53,8 @@ SETTING_LABELS = {
     "announcements.tts_speaker": "announcements.tts_speaker",
     "interface.command_language": "interface.command_language (commands)",
     "interface.reply_language": "interface.reply_language (answers)",
+    "response.max_chars": "response.max_chars",
+    "response.memory_max_entries": "response.memory_max_entries",
     "vision.rgbd_enabled": "vision.rgbd_enabled (camera)",
     "vision.rgbd_host": "vision.rgbd_host",
     "vision.rgbd_port": "vision.rgbd_port",
@@ -154,11 +158,15 @@ def build_agent(args: argparse.Namespace) -> G1Agent:
     sdk_knowledge = SdkWrapperKnowledge()
 
     document_rag = None
-    if args.knowledge_file:
+    knowledge_files = list(args.knowledge_file or [])
+    default_knowledge_file = Path(__file__).resolve().parents[1] / "knowledge" / "default_sdk_knowledge.md"
+    if default_knowledge_file.exists():
+        knowledge_files.insert(0, str(default_knowledge_file))
+    if knowledge_files:
         try:
             from agent.knowledge.document_rag import DocumentRAG
 
-            document_rag = DocumentRAG(args.knowledge_file)
+            document_rag = DocumentRAG(knowledge_files)
         except Exception as exc:
             print(f"[warn] documentary RAG unavailable: {exc}")
 
@@ -212,6 +220,7 @@ def build_agent(args: argparse.Namespace) -> G1Agent:
         document_rag=document_rag,
         resolver=resolver,
         auto_confirm=args.auto_confirm,
+        robot=robot,
     )
 
 
@@ -415,6 +424,66 @@ def _tick_loop(agent: G1Agent, interval_s: float, stop_event: threading.Event, a
             _print(_style(f"\n[tick error] {exc}", Color.red))
 
 
+def _extract_asr_text(record: object) -> str:
+    if not isinstance(record, dict):
+        return ""
+    payload = record.get("payload")
+    if isinstance(payload, dict):
+        for key in ("text", "transcript", "result", "data"):
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    text = record.get("text")
+    if isinstance(text, str) and text.strip():
+        return text.strip()
+    raw = record.get("raw")
+    return raw.strip() if isinstance(raw, str) else ""
+
+
+def _asr_loop(agent: G1Agent, stop_event: threading.Event, agent_lock: threading.RLock) -> None:
+    robot = getattr(agent, "robot", None)
+    if robot is None or not hasattr(robot, "get_mic"):
+        return
+    last_text = ""
+    last_ts = 0.0
+    last_error = ""
+    last_error_ts = 0.0
+    while not stop_event.is_set():
+        try:
+            settings = agent.settings.effective()
+            if not (settings.audio.input_enabled and settings.audio.asr_enabled):
+                stop_event.wait(0.5)
+                continue
+            records = robot.get_mic(
+                duration_s=1.0,
+                max_messages=1,
+                print_messages=False,
+                use_cli=True,
+            )
+            now = time.time()
+            for record in records:
+                text = _extract_asr_text(record)
+                if not text:
+                    continue
+                if text == last_text and now - last_ts < 3.0:
+                    continue
+                last_text = text
+                last_ts = now
+                with agent_lock:
+                    outcome = agent.handle_audio_msg(text)
+                if outcome is not None:
+                    _print(_style(f"\n[asr] {text}", Color.dim))
+                    _print_turn(outcome)
+        except Exception as exc:
+            now = time.time()
+            message = str(exc)
+            if message != last_error or now - last_error_ts > 30.0:
+                _print(_style(f"\n[asr error] {message}", Color.red))
+                last_error = message
+                last_error_ts = now
+            stop_event.wait(2.0)
+
+
 def repl(agent: G1Agent, *, tick_interval_s: float = 30.0, periodic_ticks: bool = True) -> None:
     _setup_readline_history()
     agent_lock = threading.RLock()
@@ -426,6 +495,7 @@ def repl(agent: G1Agent, *, tick_interval_s: float = 30.0, periodic_ticks: bool 
 
     stop_event = threading.Event()
     tick_thread: threading.Thread | None = None
+    asr_thread: threading.Thread | None = None
     if periodic_ticks and tick_interval_s > 0:
         tick_thread = threading.Thread(
             target=_tick_loop,
@@ -434,6 +504,14 @@ def repl(agent: G1Agent, *, tick_interval_s: float = 30.0, periodic_ticks: bool 
         )
         tick_thread.start()
         _print(_style(f"[ticks] periodic cognition every {tick_interval_s:g}s", Color.dim))
+    if getattr(agent, "robot", None) is not None and hasattr(getattr(agent, "robot", None), "get_mic"):
+        asr_thread = threading.Thread(
+            target=_asr_loop,
+            args=(agent, stop_event, agent_lock),
+            daemon=True,
+        )
+        asr_thread.start()
+        _print(_style("[asr] listening on /audio_msg when audio input is enabled", Color.dim))
 
     try:
         while True:
@@ -452,6 +530,8 @@ def repl(agent: G1Agent, *, tick_interval_s: float = 30.0, periodic_ticks: bool 
         stop_event.set()
         if tick_thread is not None:
             tick_thread.join(timeout=2.0)
+        if asr_thread is not None:
+            asr_thread.join(timeout=2.0)
 
 
 def main(argv: list[str] | None = None) -> int:

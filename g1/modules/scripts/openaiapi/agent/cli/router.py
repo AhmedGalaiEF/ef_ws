@@ -73,6 +73,7 @@ class G1Agent:
         document_rag: Optional[Any] = None,
         resolver: Optional[CapabilityResolver] = None,
         auto_confirm: bool = False,
+        robot: Optional[Any] = None,
     ) -> None:
         self.planner = planner
         self.skills = skills
@@ -83,6 +84,7 @@ class G1Agent:
         self.sdk_knowledge = sdk_knowledge
         self.document_rag = document_rag
         self.resolver = resolver or CapabilityResolver()
+        self.robot = robot
         self.scheduler = CognitiveScheduler()
         # Non-interactive confirmation policy for tests/scripted runs: when
         # True, a "needs_confirmation" skill is treated as approved without
@@ -97,6 +99,8 @@ class G1Agent:
         self._boot_event = boot_event
         self._booted = False
         self._vision_answerer: Any = None
+        self._boot_time = time.time()
+        self._cognition_count = 0
 
     @property
     def boot_event(self) -> EventType:
@@ -183,6 +187,30 @@ class G1Agent:
         now = time.time()
         event = EventType.ASR_MESSAGE if input_source == "audio" else EventType.USER_MESSAGE
         robot_state = build_robot_state(self.state_source)
+        age_response = self._maybe_handle_age_query(text)
+        if age_response is not None:
+            decision = PlannerDecision(intent=IntentType.CONVERSATION, response_text=age_response)
+            planner_input = self._build_planner_input(
+                event=event, timestamp=now, user_text=text, input_source=input_source, robot_state=robot_state
+            )
+            self._after_turn(planner_input, decision)
+            return self._execute_decision(decision, planner_input)
+        rag_response = self._maybe_handle_rag_help_query(text)
+        if rag_response is not None:
+            decision = PlannerDecision(intent=IntentType.CONVERSATION, response_text=rag_response)
+            planner_input = self._build_planner_input(
+                event=event, timestamp=now, user_text=text, input_source=input_source, robot_state=robot_state
+            )
+            self._after_turn(planner_input, decision)
+            return self._execute_decision(decision, planner_input)
+        thought_response = self._maybe_handle_thought_query(text, robot_state)
+        if thought_response is not None:
+            decision = PlannerDecision(intent=IntentType.CONVERSATION, response_text=thought_response)
+            planner_input = self._build_planner_input(
+                event=event, timestamp=now, user_text=text, input_source=input_source, robot_state=robot_state
+            )
+            self._after_turn(planner_input, decision)
+            return self._execute_decision(decision, planner_input)
         memory_response = self._maybe_handle_memory_query(text, robot_state)
         if memory_response is not None:
             decision = PlannerDecision(intent=IntentType.CONVERSATION, response_text=memory_response)
@@ -216,22 +244,76 @@ class G1Agent:
         lowered = text.strip().lower()
         if not any(term in lowered for term in ("remember", "memory", "erinner", "gedächtnis", "gedaechtnis")):
             return None
-        bio = self.memory.autobiography_summary() or "(empty)"
-        reply_language = getattr(self.settings.effective().interface.reply_language, "value", "auto")
+        settings = self.settings.effective()
+        max_entries = max(1, min(10, int(getattr(settings.response, "memory_max_entries", 3))))
+        bio = self.memory.autobiography.summary(max_entries=max_entries) or "(empty)"
+        total_entries = len(self.memory.autobiography.all())
+        reply_language = self._effective_reply_language(self.settings.effective())
         if reply_language == "de":
             return (
-                "Mein Gedächtnissystem ist verfügbar. Aktuelles autobiografisches Gedächtnis:\n"
+                f"Mein Gedächtnissystem ist verfügbar. Ich zeige die letzten {max_entries} von {total_entries} autobiografischen Einträgen:\n"
                 f"{bio}\n"
-                f"Aktueller Zustand: Haltung={robot_state.posture}, "
-                f"Stabilität={robot_state.stability}, aktive_Fehler={robot_state.active_faults or ['keine']}. "
-                "Veraltete Hand-State-Topics betreffen nur das Greifer-Feedback; sie beeinflussen mein Gedächtnis nicht."
+                f"Aktueller Zustand: Haltung={robot_state.posture}, Stabilität={robot_state.stability}."
             )
         return (
-            "My memory system is available. Current autobiographical memory:\n"
+            f"My memory system is available. Showing the last {max_entries} of {total_entries} autobiographical entries:\n"
             f"{bio}\n"
-            f"Current state summary: posture={robot_state.posture}, "
-            f"stability={robot_state.stability}, active_faults={robot_state.active_faults or ['none']}. "
-            "Stale hand-state topics affect gripper feedback only; they do not affect memory."
+            f"Current state summary: posture={robot_state.posture}, stability={robot_state.stability}."
+        )
+
+    def _maybe_handle_age_query(self, text: str) -> Optional[str]:
+        lowered = text.strip().lower()
+        if not ("how old are you" in lowered or "what is your age" in lowered or "wie alt bist du" in lowered):
+            return None
+        uptime_s = max(0.0, time.time() - self._boot_time)
+        reply_language = self._effective_reply_language(self.settings.effective())
+        if reply_language == "de":
+            return f"Ich bin seit {uptime_s:.0f} Sekunden in diesem Prozess wach und hatte {self._cognition_count} Kognitionsdurchläufe."
+        return f"I have been awake in this process for {uptime_s:.0f} seconds and have completed {self._cognition_count} cognition iterations."
+
+    def _maybe_handle_thought_query(self, text: str, robot_state: RobotStateSnapshot) -> Optional[str]:
+        lowered = text.strip().lower()
+        triggers = (
+            "what are you thinking",
+            "what do you think about",
+            "what are your cognition",
+            "cognition iteration",
+            "woran denkst du",
+            "was denkst du",
+            "kognitions",
+        )
+        if not any(trigger in lowered for trigger in triggers):
+            return None
+        settings = self.settings.effective()
+        uptime_s = max(0.0, time.time() - self._boot_time)
+        faults = ", ".join(robot_state.active_faults[:5]) if robot_state.active_faults else "none"
+        if self._effective_reply_language(settings) == "de":
+            return (
+                f"Ich laufe meistens im Leerlauf und prüfe alle Zustände. "
+                f"Seit dem Start bin ich {uptime_s:.0f} Sekunden wach, hatte {self._cognition_count} "
+                f"Kognitionsdurchläufe und beobachte aktuell: Haltung={robot_state.posture}, "
+                f"Stabilität={robot_state.stability}, Fehler={faults}."
+            )
+        return (
+            f"I am mostly idle and monitoring state. Since this process started I have been awake "
+            f"for {uptime_s:.0f} seconds, completed {self._cognition_count} cognition iterations, "
+            f"and I am currently tracking posture={robot_state.posture}, stability={robot_state.stability}, "
+            f"faults={faults}."
+        )
+
+    def _maybe_handle_rag_help_query(self, text: str) -> Optional[str]:
+        lowered = text.strip().lower()
+        if not ("rag" in lowered or "knowledge" in lowered and "configured" in lowered or "add files" in lowered):
+            return None
+        return (
+            "RAG loads the automatic SDK notes from `agent/knowledge/default_sdk_knowledge.md`, plus any "
+            "extra startup files passed with repeated `--knowledge-file <path>` arguments. Those files are "
+            "loaded by `agent.knowledge.document_rag.DocumentRAG`, which wraps the existing "
+            "`ollama_ai/nav_bot.py` keyword retriever. Source-code SDK wrapper snippets are also searched via "
+            "`agent/knowledge/sdk_wrapper_knowledge.py`. Conversation memory is separate under `~/.g1_agent/` "
+            "unless overridden with `G1_AGENT_MEMORY_DIR` / `G1_AGENT_AUTOBIOGRAPHY`. "
+            "For robot-learned facts, the planner can emit validated memory proposals; automatic self-extension "
+            "of documentary RAG files is not enabled yet because it needs operator review to avoid polluting the knowledge base."
         )
 
     def handle_vision_question(self, question: str) -> TurnOutcome:
@@ -272,7 +354,7 @@ class G1Agent:
 
     def _answer_vision_question(self, question: str) -> str:
         settings = self.settings.effective()
-        reply_language = getattr(settings.interface.reply_language, "value", "auto")
+        reply_language = self._effective_reply_language(settings)
         german = str(reply_language) == "de"
         if not settings.vision.rgbd_enabled:
             if german:
@@ -313,7 +395,9 @@ class G1Agent:
     ) -> PlannerInput:
         settings = self.settings.effective()
         runtime_payload = dict(runtime or {})
-        runtime_payload.setdefault("reply_language", getattr(settings.interface.reply_language, "value", settings.interface.reply_language))
+        runtime_payload.setdefault("reply_language", self._effective_reply_language(settings))
+        runtime_payload.setdefault("cognition_count", self._cognition_count)
+        runtime_payload.setdefault("agent_uptime_s", max(0.0, time.time() - self._boot_time))
         query = user_text or ""
 
         memory_refs = self.memory.retrieve(query) if query else {"episodic": [], "semantic": [], "procedural": []}
@@ -354,7 +438,9 @@ class G1Agent:
             episodic_memory=memory_refs["episodic"],
             semantic_memory=memory_refs["semantic"],
             procedural_memory=memory_refs["procedural"],
-            autobiography_summary=self.memory.autobiography_summary(),
+            autobiography_summary=self.memory.autobiography.summary(
+                max_entries=max(1, min(10, int(getattr(settings.response, "memory_max_entries", 3))))
+            ),
             available_tools=[],
             runtime=runtime_payload,
         )
@@ -368,6 +454,7 @@ class G1Agent:
         *,
         announce_maintenance: bool = True,
     ) -> None:
+        self._cognition_count += 1
         self.scheduler.record_cognition(planner_input.timestamp, decision.next_tick_s)
         checkpoint = RuntimeCheckpoint(
             last_cognitive_timestamp=planner_input.timestamp,
@@ -419,6 +506,7 @@ class G1Agent:
         if decision.intent == IntentType.QUERY_CAPABILITY and (decision.target or "").strip().lower() == "arm":
             policy = self.resolver.resolve_arm_motion(settings=settings, robot_state=robot_state)
             outcome.grounded_response = self._phrase_capability_answer(policy)
+            outcome.grounded_response = self._limit_response(outcome.grounded_response, settings=settings)
             self._speak_grounded_response(outcome.grounded_response, settings=settings, robot_state=robot_state)
             return outcome
 
@@ -428,10 +516,12 @@ class G1Agent:
                 outcome.grounded_response = self._describe_battery(robot_state)
             else:
                 outcome.grounded_response = decision.response_text or self._describe_state(robot_state)
+            outcome.grounded_response = self._limit_response(outcome.grounded_response, settings=settings)
             self._speak_grounded_response(outcome.grounded_response, settings=settings, robot_state=robot_state)
             return outcome
 
         if decision.intent in (IntentType.NO_ACTION, IntentType.CONVERSATION, IntentType.MAINTENANCE):
+            outcome.grounded_response = self._limit_response(outcome.grounded_response, settings=settings)
             self._speak_grounded_response(outcome.grounded_response, settings=settings, robot_state=robot_state)
             return outcome
 
@@ -494,6 +584,7 @@ class G1Agent:
         ):
             self._enter_sleep(decision)
 
+        outcome.grounded_response = self._limit_response(outcome.grounded_response, settings=settings)
         return outcome
 
     def _skill_kwargs(
@@ -536,14 +627,33 @@ class G1Agent:
             "step_back": ("step_back", "I'll step backward.", "Ich gehe einen Schritt zurück."),
             "turn_left": ("turn_left", "I'll turn left.", "Ich drehe mich nach links."),
             "turn_right": ("turn_right", "I'll turn right.", "Ich drehe mich nach rechts."),
+            "start_mapping": ("start_mapping", "I'll start SLAM mapping.", "Ich starte das SLAM-Mapping."),
+            "save_map": ("save_map", "I'll save the SLAM map.", "Ich speichere die SLAM-Karte."),
+            "start_relocation": ("start_relocation", "I'll start SLAM relocation.", "Ich starte die SLAM-Relokalisierung."),
+            "add_current_nav_pose": ("add_current_nav_pose", "I'll add the current pose as a navigation task.", "Ich füge die aktuelle Pose als Navigationsziel hinzu."),
+            "navigate_selected_pose": ("navigate_selected_pose", "I'll navigate to the selected pose.", "Ich navigiere zur ausgewählten Pose."),
+            "execute_nav_tasks": ("execute_nav_tasks", "I'll execute the queued navigation tasks.", "Ich führe die Navigationsaufgaben aus."),
+            "pause_navigation": ("pause_navigation", "I'll pause navigation.", "Ich pausiere die Navigation."),
+            "resume_navigation": ("resume_navigation", "I'll resume navigation.", "Ich setze die Navigation fort."),
+            "stop_slam": ("stop_slam", "I'll stop SLAM.", "Ich stoppe SLAM."),
+            "slam_status": ("slam_status", "I'll check SLAM status.", "Ich prüfe den SLAM-Status."),
             "release_arms": ("release_arms", "I'll release arm control authority.", "Ich gebe die Armsteuerung frei."),
             "wave": ("wave", "I'll try a wave.", "Ich versuche zu winken."),
+            "face_wave": ("face_wave", "I'll try a face wave.", "Ich versuche vor dem Gesicht zu winken."),
             "high_wave": ("high_wave", "I'll try a high wave.", "Ich versuche hoch zu winken."),
+            "clap": ("clap", "I'll clap.", "Ich klatsche."),
+            "left_kiss": ("left_kiss", "I'll do a left-kiss gesture.", "Ich mache die Left-Kiss-Geste."),
+            "shake_hand": ("shake_hand", "I'll offer a handshake.", "Ich biete einen Handschlag an."),
+            "squat": ("squat", "I'll enter squat mode.", "Ich gehe in den Squat-Modus."),
+            "prepare": ("prepare", "I'll enter prepare mode.", "Ich gehe in den Prepare-Modus."),
+            "damp": ("damp", "I'll enter damp mode.", "Ich gehe in den Damp-Modus."),
+            "zero_torque": ("zero_torque", "I'll enter zero-torque mode.", "Ich gehe in den Zero-Torque-Modus."),
+            "dev_mode": ("dev_mode", "I'll enter developer mode.", "Ich gehe in den Developer-Modus."),
         }
         if text in direct_skill_aliases:
             skill_name, english, german_text = direct_skill_aliases[text]
             if skill_name in self.skills.skills:
-                german = getattr(self.settings.effective().interface.reply_language, "value", "auto") == "de"
+                german = self._effective_reply_language(self.settings.effective()) == "de"
                 return PlannerDecision(
                     intent=IntentType.EXECUTE_TASK,
                     target=skill_name,
@@ -561,7 +671,7 @@ class G1Agent:
         )
         if wants_extend_arm and "reach_forward" in self.skills.skills:
             side = "left" if "left" in text else "right"
-            german = getattr(self.settings.effective().interface.reply_language, "value", "auto") == "de"
+            german = self._effective_reply_language(self.settings.effective()) == "de"
             return PlannerDecision(
                 intent=IntentType.EXECUTE_TASK,
                 target=f"{side}_arm",
@@ -584,12 +694,34 @@ class G1Agent:
             or "freigeben" in text
         )
         if wants_release_arms and "release_arms" in self.skills.skills:
-            german = getattr(self.settings.effective().interface.reply_language, "value", "auto") == "de"
+            german = self._effective_reply_language(self.settings.effective()) == "de"
             return PlannerDecision(
                 intent=IntentType.EXECUTE_TASK,
                 target="release_arms",
                 response_text="Ich gebe die Armsteuerung frei." if german else "I'll release arm control authority.",
                 requested_skills=["release_arms"],
+            )
+        slam_skill = self._match_slam_command(text)
+        if slam_skill and slam_skill in self.skills.skills:
+            german = self._effective_reply_language(self.settings.effective()) == "de"
+            responses = {
+                "start_mapping": ("I'll start SLAM mapping.", "Ich starte das SLAM-Mapping."),
+                "save_map": ("I'll save the SLAM map.", "Ich speichere die SLAM-Karte."),
+                "start_relocation": ("I'll start SLAM relocation.", "Ich starte die SLAM-Relokalisierung."),
+                "add_current_nav_pose": ("I'll add the current pose as a navigation task.", "Ich füge die aktuelle Pose als Navigationsziel hinzu."),
+                "navigate_selected_pose": ("I'll navigate to the selected pose.", "Ich navigiere zur ausgewählten Pose."),
+                "execute_nav_tasks": ("I'll execute the queued navigation tasks.", "Ich führe die Navigationsaufgaben aus."),
+                "pause_navigation": ("I'll pause navigation.", "Ich pausiere die Navigation."),
+                "resume_navigation": ("I'll resume navigation.", "Ich setze die Navigation fort."),
+                "stop_slam": ("I'll stop SLAM.", "Ich stoppe SLAM."),
+                "slam_status": ("I'll check SLAM status.", "Ich prüfe den SLAM-Status."),
+            }
+            english, german_text = responses[slam_skill]
+            return PlannerDecision(
+                intent=IntentType.EXECUTE_TASK,
+                target=slam_skill,
+                response_text=german_text if german else english,
+                requested_skills=[slam_skill],
             )
         wants_step_forward = (
             "move forward" in text
@@ -616,7 +748,7 @@ class G1Agent:
             or "rückwärts" in text
         )
         if wants_step_forward and "step_forward" in self.skills.skills:
-            german = getattr(self.settings.effective().interface.reply_language, "value", "auto") == "de"
+            german = self._effective_reply_language(self.settings.effective()) == "de"
             return PlannerDecision(
                 intent=IntentType.EXECUTE_TASK,
                 target="step_forward",
@@ -624,7 +756,7 @@ class G1Agent:
                 requested_skills=["step_forward"],
             )
         if wants_step_back and "step_back" in self.skills.skills:
-            german = getattr(self.settings.effective().interface.reply_language, "value", "auto") == "de"
+            german = self._effective_reply_language(self.settings.effective()) == "de"
             return PlannerDecision(
                 intent=IntentType.EXECUTE_TASK,
                 target="step_back",
@@ -655,7 +787,7 @@ class G1Agent:
         if wants_turn_around and not wants_turn_left and not wants_turn_right:
             wants_turn_left = True
         if wants_turn_left and "turn_left" in self.skills.skills:
-            german = getattr(self.settings.effective().interface.reply_language, "value", "auto") == "de"
+            german = self._effective_reply_language(self.settings.effective()) == "de"
             degrees = self._extract_turn_degrees(planner_input.user_text or "")
             response = f"I'll turn left about {degrees:.0f} degrees."
             german_response = f"Ich drehe mich etwa {degrees:.0f} Grad nach links."
@@ -666,7 +798,7 @@ class G1Agent:
                 requested_skills=["turn_left"],
             )
         if wants_turn_right and "turn_right" in self.skills.skills:
-            german = getattr(self.settings.effective().interface.reply_language, "value", "auto") == "de"
+            german = self._effective_reply_language(self.settings.effective()) == "de"
             degrees = self._extract_turn_degrees(planner_input.user_text or "")
             response = f"I'll turn right about {degrees:.0f} degrees."
             german_response = f"Ich drehe mich etwa {degrees:.0f} Grad nach rechts."
@@ -678,7 +810,7 @@ class G1Agent:
             )
         wants_grab = any(word in text for word in ("grab", "grba", "grasp", "pick up", "greif", "greife", "nimm"))
         if wants_grab and "grab" in self.skills.skills:
-            german = getattr(self.settings.effective().interface.reply_language, "value", "auto") == "de"
+            german = self._effective_reply_language(self.settings.effective()) == "de"
             prompt = self._extract_grab_prompt(planner_input.user_text or "")
             return PlannerDecision(
                 intent=IntentType.EXECUTE_TASK,
@@ -697,11 +829,38 @@ class G1Agent:
                     )
                 ),
             )
+        phrase_skills = (
+            (
+                "face_wave",
+                ("face wave", "wave face", "wink face", "gesicht wink"),
+                "I'll try a face wave.",
+                "Ich versuche vor dem Gesicht zu winken.",
+            ),
+            ("high_wave", ("high wave", "big wave", "wave high", "hoch wink"), "I'll try a high wave.", "Ich versuche hoch zu winken."),
+            ("clap", ("clap", "klatsch"), "I'll clap.", "Ich klatsche."),
+            ("left_kiss", ("left kiss", "left hand kiss", "lefthand kiss", "linker kuss"), "I'll do a left-kiss gesture.", "Ich mache die Left-Kiss-Geste."),
+            ("shake_hand", ("shake hand", "handshake", "shake my hand", "handschlag"), "I'll offer a handshake.", "Ich biete einen Handschlag an."),
+            ("squat", ("squat", "hocke"), "I'll enter squat mode.", "Ich gehe in den Squat-Modus."),
+            ("prepare", ("prepare mode", "prepare", "bereit machen"), "I'll enter prepare mode.", "Ich gehe in den Prepare-Modus."),
+            ("damp", ("damp mode", "damp", "dämpfen", "daempfen"), "I'll enter damp mode.", "Ich gehe in den Damp-Modus."),
+            ("zero_torque", ("zero torque", "zero-torque", "zero_torque", "nullmoment"), "I'll enter zero-torque mode.", "Ich gehe in den Zero-Torque-Modus."),
+            ("dev_mode", ("dev mode", "developer mode", "entwickler modus"), "I'll enter developer mode.", "Ich gehe in den Developer-Modus."),
+        )
+        for skill_name, phrases, english, german_text in phrase_skills:
+            if skill_name in self.skills.skills and any(phrase in text for phrase in phrases):
+                german = self._effective_reply_language(self.settings.effective()) == "de"
+                return PlannerDecision(
+                    intent=IntentType.EXECUTE_TASK,
+                    target=skill_name,
+                    response_text=german_text if german else english,
+                    requested_skills=[skill_name],
+                    intent_announcement=IntentAnnouncement(speech=german_text if german else english),
+                )
         wants_wave = "wave" in text or "wink" in text
         if not wants_wave:
             return decision
         if "high_wave" in self.skills.skills and ("high" in text or "big" in text or "hoch" in text):
-            german = getattr(self.settings.effective().interface.reply_language, "value", "auto") == "de"
+            german = self._effective_reply_language(self.settings.effective()) == "de"
             return PlannerDecision(
                 intent=IntentType.EXECUTE_TASK,
                 target="high_wave",
@@ -710,7 +869,7 @@ class G1Agent:
                 intent_announcement=IntentAnnouncement(speech="Ich winke hoch." if german else "I'll wave high."),
             )
         if "wave" in self.skills.skills:
-            german = getattr(self.settings.effective().interface.reply_language, "value", "auto") == "de"
+            german = self._effective_reply_language(self.settings.effective()) == "de"
             return PlannerDecision(
                 intent=IntentType.EXECUTE_TASK,
                 target="wave",
@@ -764,6 +923,26 @@ class G1Agent:
                 target="release_arms",
                 response_text="I'll release arm control authority.",
                 requested_skills=["release_arms"],
+                intent_announcement=decision.intent_announcement,
+            )
+        slam_skill = self._match_slam_command(text)
+        if slam_skill and slam_skill in self.skills.skills and (not skills or "move" in skills):
+            return PlannerDecision(
+                intent=IntentType.EXECUTE_TASK,
+                target=slam_skill,
+                response_text={
+                    "start_mapping": "I'll start SLAM mapping.",
+                    "save_map": "I'll save the SLAM map.",
+                    "start_relocation": "I'll start SLAM relocation.",
+                    "add_current_nav_pose": "I'll add the current pose as a navigation task.",
+                    "navigate_selected_pose": "I'll navigate to the selected pose.",
+                    "execute_nav_tasks": "I'll execute the queued navigation tasks.",
+                    "pause_navigation": "I'll pause navigation.",
+                    "resume_navigation": "I'll resume navigation.",
+                    "stop_slam": "I'll stop SLAM.",
+                    "slam_status": "I'll check SLAM status.",
+                }[slam_skill],
+                requested_skills=[slam_skill],
                 intent_announcement=decision.intent_announcement,
             )
         wants_step_forward = (
@@ -848,6 +1027,30 @@ class G1Agent:
                 intent_announcement=decision.intent_announcement,
             )
         return decision
+
+    @staticmethod
+    def _match_slam_command(text: str) -> Optional[str]:
+        if "slam status" in text or "mapping status" in text or "map status" in text:
+            return "slam_status"
+        if "start mapping" in text or "begin mapping" in text or "mapping starten" in text:
+            return "start_mapping"
+        if "save map" in text or "end mapping" in text or "karte speichern" in text:
+            return "save_map"
+        if "start relocation" in text or "start localization" in text or "localize on map" in text:
+            return "start_relocation"
+        if "add current pose" in text or "add current location" in text or "save current pose" in text:
+            return "add_current_nav_pose"
+        if "go to selected" in text or "navigate selected" in text:
+            return "navigate_selected_pose"
+        if "execute nav" in text or "execute task" in text or "run nav task" in text:
+            return "execute_nav_tasks"
+        if "pause navigation" in text or "pause nav" in text:
+            return "pause_navigation"
+        if "resume navigation" in text or "resume nav" in text:
+            return "resume_navigation"
+        if "stop slam" in text or "stop mapping" in text or "slam stoppen" in text:
+            return "stop_slam"
+        return None
 
     @staticmethod
     def _extract_turn_degrees(text: str) -> float:
@@ -946,7 +1149,7 @@ class G1Agent:
             settings=settings,
             robot_state=robot_state,
             text=text,
-            language=settings.announcements.tts_language or None,
+            language=self._effective_tts_language(settings),
             voice_model=settings.announcements.tts_voice_model or None,
             speaker=settings.announcements.tts_speaker,
         )
@@ -954,6 +1157,38 @@ class G1Agent:
             print(f"[warn] speech denied: {decision.reason}")
         elif result is not None and not result.ok:
             print(f"[warn] speech failed: {result.message}")
+
+    @staticmethod
+    def _effective_tts_language(settings: Any) -> Optional[str]:
+        explicit = str(getattr(settings.announcements, "tts_language", "") or "").strip()
+        if explicit:
+            return explicit
+        reply = G1Agent._effective_reply_language(settings)
+        return reply if reply in {"en", "de"} else None
+
+    @staticmethod
+    def _effective_reply_language(settings: Any) -> str:
+        reply = getattr(settings.interface.reply_language, "value", settings.interface.reply_language)
+        if str(reply) in {"en", "de"}:
+            return str(reply)
+        command = getattr(settings.interface.command_language, "value", settings.interface.command_language)
+        if str(command) in {"en", "de"}:
+            return str(command)
+        return "auto"
+
+    @staticmethod
+    def _limit_response(text: Optional[str], *, settings: Any) -> Optional[str]:
+        if not text:
+            return text
+        try:
+            max_chars = int(getattr(settings.response, "max_chars", 700))
+        except Exception:
+            max_chars = 700
+        max_chars = max(120, min(4000, max_chars))
+        if len(text) <= max_chars:
+            return text
+        suffix = "\n...[response truncated; raise response.max_chars in /settings-ui to show more]"
+        return text[: max(0, max_chars - len(suffix))].rstrip() + suffix
 
     @staticmethod
     def _phrase_capability_answer(policy: PolicyDecision) -> str:
@@ -1045,6 +1280,8 @@ class G1Agent:
         lines = [
             f"lifecycle_state = {self.lifecycle.state.value}",
             f"last_boot_event = {self._boot_event.value}",
+            f"agent_uptime_s = {max(0.0, now - self._boot_time):.1f}",
+            f"cognition_iterations = {self._cognition_count}",
             f"previous_cognitive_timestamp = {self.scheduler.last_cognitive_timestamp}",
             f"elapsed_since_last_cognition_s = {self.scheduler.elapsed_since_last_cognition(now)}",
             f"robot_state = {robot_state.model_dump()}",

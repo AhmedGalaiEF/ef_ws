@@ -36,8 +36,26 @@ from .settings.models import AgentSettings
 # authority and a commandable arm, but have no /arm_sdk or /low_cmd
 # backend to be "available" or not.
 LOW_LEVEL_ARM_SKILLS = {"move_arm_demo", "reach_forward", "grab"}
-HIGH_LEVEL_ARM_SKILLS = {"gesture", "wave", "high_wave", "release", "release_arms"}
-HAND_SKILLS = {"release"}
+HIGH_LEVEL_ARM_SKILLS = {
+    "gesture",
+    "wave",
+    "face_wave",
+    "high_wave",
+    "clap",
+    "left_kiss",
+    "shake_hand",
+    "release",
+    "release_arms",
+}
+HAND_SKILLS = {
+    "hand_open",
+    "hand_close",
+    "open_hand",
+    "close_hand",
+    "hand_sensors",
+    "tactile",
+    "tactile_status",
+}
 ARM_SKILLS = LOW_LEVEL_ARM_SKILLS | HIGH_LEVEL_ARM_SKILLS | HAND_SKILLS
 LOW_LEVEL_ARM_FAULTS = ("lowstate",)
 HAND_FAULTS = ("left_hand_state", "right_hand_state")

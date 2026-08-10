@@ -217,6 +217,16 @@ def build_offline_registry() -> SkillRegistry:
         "step_back": Skill("step_back", "Step backward a short distance.", lambda **_kwargs: SkillResult(ok=True, message=backend.move(vx=-0.25, vy=0.0, vyaw=0.0, duration=1.0), detail={"backend": "mock", "skill": "step_back"}), "ai_control.robot_backend.MockRobotBackend"),
         "turn_left": Skill("turn_left", "Turn left in place by a requested angle.", lambda **kwargs: _mock_turn("left", **kwargs), "ai_control.robot_backend.MockRobotBackend"),
         "turn_right": Skill("turn_right", "Turn right in place by a requested angle.", lambda **kwargs: _mock_turn("right", **kwargs), "ai_control.robot_backend.MockRobotBackend"),
+        "start_mapping": Skill("start_mapping", "Start SLAM mapping (live mode only).", lambda **_kwargs: SkillResult(ok=False, message="SLAM mapping requires --robot live mode."), "mock"),
+        "save_map": Skill("save_map", "Save SLAM map (live mode only).", lambda **_kwargs: SkillResult(ok=False, message="SLAM map saving requires --robot live mode."), "mock"),
+        "start_relocation": Skill("start_relocation", "Start SLAM relocation (live mode only).", lambda **_kwargs: SkillResult(ok=False, message="SLAM relocation requires --robot live mode."), "mock"),
+        "add_current_nav_pose": Skill("add_current_nav_pose", "Add current SLAM pose as a navigation task (live mode only).", lambda **_kwargs: SkillResult(ok=False, message="SLAM navigation requires --robot live mode."), "mock"),
+        "navigate_selected_pose": Skill("navigate_selected_pose", "Navigate to selected SLAM pose (live mode only).", lambda **_kwargs: SkillResult(ok=False, message="SLAM navigation requires --robot live mode."), "mock"),
+        "execute_nav_tasks": Skill("execute_nav_tasks", "Execute queued SLAM navigation tasks (live mode only).", lambda **_kwargs: SkillResult(ok=False, message="SLAM navigation requires --robot live mode."), "mock"),
+        "pause_navigation": Skill("pause_navigation", "Pause SLAM navigation (live mode only).", lambda **_kwargs: SkillResult(ok=False, message="SLAM navigation requires --robot live mode."), "mock"),
+        "resume_navigation": Skill("resume_navigation", "Resume SLAM navigation (live mode only).", lambda **_kwargs: SkillResult(ok=False, message="SLAM navigation requires --robot live mode."), "mock"),
+        "stop_slam": Skill("stop_slam", "Stop SLAM (live mode only).", lambda **_kwargs: SkillResult(ok=False, message="SLAM stop requires --robot live mode."), "mock"),
+        "slam_status": Skill("slam_status", "Show SLAM status (live mode only).", lambda **_kwargs: SkillResult(ok=False, message="SLAM status requires --robot live mode."), "mock"),
         "navigate_to": Skill("navigate_to", "Navigate to an (x, y, yaw) pose.", _wrap(backend.navigate_to, "navigate_to"), "ai_control.robot_backend.MockRobotBackend"),
         "stop": Skill("stop", "Stop all base motion.", _wrap(backend.stop, "stop"), "ai_control.robot_backend.MockRobotBackend"),
         "hand_open": Skill("hand_open", "Open the given hand.", _wrap(backend.hand_open, "hand_open"), "ai_control.robot_backend.MockRobotBackend"),
@@ -246,8 +256,17 @@ def build_offline_registry() -> SkillRegistry:
         ),
         "gesture": Skill("gesture", "Play a named high-level arm gesture.", _wrap(backend.gesture, "gesture"), "ai_control.robot_backend.MockRobotBackend"),
         "wave": Skill("wave", "Wave using the face-wave high-level arm gesture.", lambda **_kwargs: SkillResult(ok=True, message=backend.gesture("face wave"), detail={"backend": "mock", "skill": "wave"}), "ai_control.robot_backend.MockRobotBackend"),
+        "face_wave": Skill("face_wave", "Wave near the face using the SDK face-wave action.", lambda **_kwargs: SkillResult(ok=True, message=backend.gesture("face wave"), detail={"backend": "mock", "skill": "face_wave"}), "ai_control.robot_backend.MockRobotBackend"),
         "high_wave": Skill("high_wave", "Wave high using the high-wave high-level arm gesture.", lambda **_kwargs: SkillResult(ok=True, message=backend.gesture("high wave"), detail={"backend": "mock", "skill": "high_wave"}), "ai_control.robot_backend.MockRobotBackend"),
+        "clap": Skill("clap", "Clap using the SDK high-level arm action.", lambda **_kwargs: SkillResult(ok=True, message=backend.gesture("clap"), detail={"backend": "mock", "skill": "clap"}), "ai_control.robot_backend.MockRobotBackend"),
+        "left_kiss": Skill("left_kiss", "Play the SDK left-kiss high-level arm action.", lambda **_kwargs: SkillResult(ok=True, message=backend.gesture("left kiss"), detail={"backend": "mock", "skill": "left_kiss"}), "ai_control.robot_backend.MockRobotBackend"),
+        "shake_hand": Skill("shake_hand", "Play the SDK shake-hand high-level arm action.", lambda **_kwargs: SkillResult(ok=True, message=backend.gesture("shake hand"), detail={"backend": "mock", "skill": "shake_hand"}), "ai_control.robot_backend.MockRobotBackend"),
         "release_arms": Skill("release_arms", "Release arm control authority.", _wrap(backend.release_arms, "release_arms"), "ai_control.robot_backend.MockRobotBackend"),
+        "squat": Skill("squat", "Enter the SDK squat FSM placeholder/mode.", lambda **_kwargs: SkillResult(ok=False, message="squat requires live sdk_client.Robot.fsm_2_squat().", detail={"backend": "mock", "skill": "squat"}), "mock"),
+        "prepare": Skill("prepare", "Enter prepare FSM mode.", lambda **_kwargs: SkillResult(ok=False, message="prepare mode requires live sdk_client.Robot.prepare().", detail={"backend": "mock", "skill": "prepare"}), "mock"),
+        "damp": Skill("damp", "Enter damp FSM mode.", lambda **_kwargs: SkillResult(ok=False, message="damp mode requires live sdk_client.Robot.damp().", detail={"backend": "mock", "skill": "damp"}), "mock"),
+        "zero_torque": Skill("zero_torque", "Enter zero-torque FSM mode.", lambda **_kwargs: SkillResult(ok=False, message="zero-torque mode requires live sdk_client.Robot.zero_torque().", detail={"backend": "mock", "skill": "zero_torque"}), "mock"),
+        "dev_mode": Skill("dev_mode", "Enter low-command developer mode.", lambda **_kwargs: SkillResult(ok=False, message="developer mode requires live sdk_client.Robot.dev_mode().", detail={"backend": "mock", "skill": "dev_mode"}), "mock"),
         "announce": Skill("announce", "Speak text through the robot's speaker.", _wrap(backend.say, "announce"), "ai_control.robot_backend.MockRobotBackend"),
     }
     skills.update(_new_skills())
@@ -417,6 +436,76 @@ def build_live_registry(
                     handler=lambda **kwargs: _turn("right", kwargs.get("degrees")),
                     source="sdk_client.Robot.move_for",
                 )
+            try:
+                from agent.slam import SlamBackend
+            except Exception as exc:
+                unavailable.append(f"SLAM backend unavailable: {exc}")
+            else:
+                slam_backend = SlamBackend(iface=iface, domain_id=domain_id)
+
+                skills["start_mapping"] = Skill(
+                    name="start_mapping",
+                    description="Start Unitree SLAM mapping through slam_web_app.SlamWebState.",
+                    handler=lambda **kwargs: SkillResult(
+                        ok=True,
+                        message=slam_backend.start_mapping(str(kwargs.get("slam_type") or "indoor")),
+                    ),
+                    source="slam_web_app.SlamWebState",
+                )
+                skills["save_map"] = Skill(
+                    name="save_map",
+                    description="Save the current SLAM map.",
+                    handler=lambda **kwargs: SkillResult(ok=True, message=slam_backend.save_map(kwargs.get("path"))),
+                    source="slam_web_app.SlamWebState",
+                )
+                skills["start_relocation"] = Skill(
+                    name="start_relocation",
+                    description="Start SLAM relocation/localization on the saved map.",
+                    handler=lambda **kwargs: SkillResult(ok=True, message=slam_backend.start_relocation(kwargs.get("path"))),
+                    source="slam_web_app.SlamWebState",
+                )
+                skills["add_current_nav_pose"] = Skill(
+                    name="add_current_nav_pose",
+                    description="Add current SLAM pose to the navigation task queue.",
+                    handler=lambda **_kwargs: SkillResult(ok=True, message=slam_backend.add_current_pose()),
+                    source="slam_web_app.SlamWebState",
+                )
+                skills["navigate_selected_pose"] = Skill(
+                    name="navigate_selected_pose",
+                    description="Navigate to the currently selected SLAM pose.",
+                    handler=lambda **_kwargs: SkillResult(ok=True, message=slam_backend.go_to_selected_pose()),
+                    source="slam_web_app.SlamWebState",
+                )
+                skills["execute_nav_tasks"] = Skill(
+                    name="execute_nav_tasks",
+                    description="Execute queued SLAM navigation tasks.",
+                    handler=lambda **_kwargs: SkillResult(ok=True, message=slam_backend.execute_tasks()),
+                    source="slam_web_app.SlamWebState",
+                )
+                skills["pause_navigation"] = Skill(
+                    name="pause_navigation",
+                    description="Pause SLAM navigation.",
+                    handler=lambda **_kwargs: SkillResult(ok=True, message=slam_backend.pause()),
+                    source="slam_web_app.SlamWebState",
+                )
+                skills["resume_navigation"] = Skill(
+                    name="resume_navigation",
+                    description="Resume SLAM navigation.",
+                    handler=lambda **_kwargs: SkillResult(ok=True, message=slam_backend.resume()),
+                    source="slam_web_app.SlamWebState",
+                )
+                skills["stop_slam"] = Skill(
+                    name="stop_slam",
+                    description="Stop Unitree SLAM.",
+                    handler=lambda **_kwargs: SkillResult(ok=True, message=slam_backend.stop_slam()),
+                    source="slam_web_app.SlamWebState",
+                )
+                skills["slam_status"] = Skill(
+                    name="slam_status",
+                    description="Summarize SLAM state and fresh map topics.",
+                    handler=lambda **_kwargs: SkillResult(ok=True, message=slam_backend.status()),
+                    source="slam_web_app.SlamWebState",
+                )
         if hasattr(robot, "say"):
             def _announce(**kwargs: Any) -> SkillResult:
                 text = str(kwargs.get("text", "")).strip()
@@ -477,15 +566,39 @@ def build_live_registry(
                 handler=lambda **_kwargs: _run_arm_action("face wave"),
                 source="sdk_client.Robot.execute_arm_action",
             )
+            skills["face_wave"] = Skill(
+                name="face_wave",
+                description="Wave near the face using the SDK 'face wave' high-level arm action.",
+                handler=lambda **_kwargs: _run_arm_action("face wave"),
+                source="sdk_client.Robot.execute_arm_action",
+            )
             skills["high_wave"] = Skill(
                 name="high_wave",
                 description="Wave high using the SDK 'high wave' high-level arm action.",
                 handler=lambda **_kwargs: _run_arm_action("high wave"),
                 source="sdk_client.Robot.execute_arm_action",
             )
+            skills["clap"] = Skill(
+                name="clap",
+                description="Clap using the SDK high-level arm action.",
+                handler=lambda **_kwargs: _run_arm_action("clap"),
+                source="sdk_client.Robot.execute_arm_action",
+            )
+            skills["left_kiss"] = Skill(
+                name="left_kiss",
+                description="Play the SDK 'left kiss' high-level arm action.",
+                handler=lambda **_kwargs: _run_arm_action("left kiss"),
+                source="sdk_client.Robot.execute_arm_action",
+            )
+            skills["shake_hand"] = Skill(
+                name="shake_hand",
+                description="Play the SDK 'shake hand' high-level arm action.",
+                handler=lambda **_kwargs: _run_arm_action("shake hand"),
+                source="sdk_client.Robot.execute_arm_action",
+            )
         if hasattr(robot, "release_arms"):
             def _release_arms(**kwargs: Any) -> SkillResult:
-                duration_s = float(kwargs.get("duration_s", 0.5))
+                duration_s = float(kwargs.get("duration_s", 3.0))
                 try:
                     result = robot.release_arms(duration_s=duration_s)
                 except TypeError:
@@ -501,6 +614,32 @@ def build_live_registry(
                 description="Release arm control authority through sdk_client.Robot.release_arms().",
                 handler=_release_arms,
                 source="sdk_client.Robot.release_arms",
+            )
+        fsm_methods = {
+            "squat": ("fsm_2_squat", "entered squat FSM mode through sdk_client.Robot.fsm_2_squat()"),
+            "prepare": ("prepare", "entered prepare FSM mode through sdk_client.Robot.prepare()"),
+            "damp": ("damp", "entered damp FSM mode through sdk_client.Robot.damp()"),
+            "zero_torque": ("zero_torque", "entered zero-torque FSM mode through sdk_client.Robot.zero_torque()"),
+            "dev_mode": ("dev_mode", "entered developer mode through sdk_client.Robot.dev_mode()"),
+        }
+
+        for skill_name, (method_name, message) in fsm_methods.items():
+            if not hasattr(robot, method_name):
+                continue
+
+            def _run_fsm(method_name: str = method_name, message: str = message, skill_name: str = skill_name, **_kwargs: Any) -> SkillResult:
+                result = getattr(robot, method_name)()
+                return SkillResult(
+                    ok=True,
+                    message=f"{message}: {result}",
+                    detail={"backend": f"sdk_client.Robot.{method_name}", "skill": skill_name},
+                )
+
+            skills[skill_name] = Skill(
+                name=skill_name,
+                description=message,
+                handler=_run_fsm,
+                source=f"sdk_client.Robot.{method_name}",
             )
 
     if scene_ctx is not None:

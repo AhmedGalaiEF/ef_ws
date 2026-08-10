@@ -20,6 +20,19 @@ from .settings.models import AgentSettings
 from .skills import SkillRegistry, SkillResult, invoke_with_capability_check
 
 
+def _effective_tts_language(settings: AgentSettings) -> Optional[str]:
+    explicit = str(settings.announcements.tts_language or "").strip()
+    if explicit:
+        return explicit
+    reply = getattr(settings.interface.reply_language, "value", settings.interface.reply_language)
+    if str(reply) in {"en", "de"}:
+        return str(reply)
+    command = getattr(settings.interface.command_language, "value", settings.interface.command_language)
+    if str(command) in {"en", "de"}:
+        return str(command)
+    return None
+
+
 @dataclass
 class AnnouncementOutcome:
     spoke: bool = False
@@ -68,7 +81,7 @@ def announce(
             settings=settings,
             robot_state=robot_state,
             text=announcement.speech,
-            language=settings.announcements.tts_language or None,
+            language=_effective_tts_language(settings),
         )
         outcome.speech_result = result
         outcome.spoke = bool(result and result.ok)
