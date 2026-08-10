@@ -209,6 +209,7 @@ class OpenAIVisionGrabber:
                 f"camera_xyz=({p_camera[0]:+.3f},{p_camera[1]:+.3f},{p_camera[2]:+.3f})m "
                 f"box={box_xyxy}"
             )
+        preposition_msg = _preposition_arm_for_grab(self.robot, side)
         T_camera_object = np.linalg.inv(T_base_camera) @ T_base_object
 
         fixed_result = DetectionResult(
@@ -239,7 +240,7 @@ class OpenAIVisionGrabber:
             "convergence_pos_m": 0.06,
             "convergence_rot_rad": 3.14,
             "max_joint_step_rad": 0.06,
-            "max_joint_speed_rad_s": 0.15,
+            "max_joint_speed_rad_s": 0.35,
             "max_reach_m": 0.42,
         }
         nav = DirectHandPoseNav(config, fixed_result=fixed_result, robot=self.robot)
@@ -263,12 +264,13 @@ class OpenAIVisionGrabber:
                 f"IK did not converge for {label!r}; "
                 f"object_base_xyz=({p_base[0]:+.3f},{p_base[1]:+.3f},{p_base[2]:+.3f})m "
                 f"desired_wrist_xyz=({T_base_desired[0, 3]:+.3f},{T_base_desired[1, 3]:+.3f},{T_base_desired[2, 3]:+.3f})m "
-                f"standoff={float(standoff_m):.3f}m last_status={_compact_status(last_status)}"
+                f"standoff={float(standoff_m):.3f}m preposition={preposition_msg!r} "
+                f"last_status={_compact_status(last_status)}"
             )
         close_msg = _close_hand_best_effort(self.robot, side)
         return (
             f"localized {label!r} at pixel=({u},{v}) depth={z:.2f}m; "
-            f"moved {side} end effector toward target with IK. {close_msg}"
+            f"{preposition_msg} moved {side} end effector toward target with IK. {close_msg}"
         )
 
 
@@ -310,7 +312,52 @@ def _clean_grab_prompt(text: str) -> str:
         if idx >= 0:
             cleaned = cleaned[idx + len(marker):].strip()
             break
+    lowered = cleaned.lower()
+    for suffix in (
+        " with right hand",
+        " with the right hand",
+        " with right arm",
+        " with the right arm",
+        " with left hand",
+        " with the left hand",
+        " with left arm",
+        " with the left arm",
+        " using right hand",
+        " using the right hand",
+        " using left hand",
+        " using the left hand",
+    ):
+        if lowered.endswith(suffix):
+            cleaned = cleaned[: -len(suffix)].strip()
+            break
     return cleaned or "object"
+
+
+def _preposition_arm_for_grab(robot: Any, arm: str) -> str:
+    """Move from a tucked/unknown pose into a forward pose before IK tracking.
+
+    DirectHandPoseNav works best when the initial FK pose is already in the
+    reachable workspace. Starting from a tucked arm often makes the first IK
+    solution differ by >1 rad, which the safety gate correctly rejects.
+    """
+    if not hasattr(robot, "extend_arm_forward"):
+        return "preposition skipped: robot.extend_arm_forward unavailable;"
+    try:
+        result = robot.extend_arm_forward(
+            arm=arm,
+            duration_s=2.5,
+            command_rate_hz=50.0,
+            timeout=3.0,
+        )
+    except TypeError:
+        try:
+            result = robot.extend_arm_forward(arm=arm)
+        except Exception as exc:
+            return f"preposition failed: {exc};"
+    except Exception as exc:
+        return f"preposition failed: {exc};"
+    time.sleep(0.25)
+    return f"prepositioned {arm} arm forward: {result};"
 
 
 def _coerce_box(value: Any) -> tuple[int, int, int, int]:

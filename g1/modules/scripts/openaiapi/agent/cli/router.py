@@ -509,12 +509,18 @@ class G1Agent:
             return {"arm": arm}
         if skill_name in {"turn_left", "turn_right"}:
             return {"degrees": self._extract_turn_degrees(planner_input.user_text or "")}
-        if skill_name != "grab":
-            return {}
-        prompt = decision.target or self._extract_grab_prompt(planner_input.user_text or "")
-        if prompt == "grab":
-            prompt = self._extract_grab_prompt(planner_input.user_text or "")
-        return {"prompt": prompt, "agent_settings": settings}
+        if skill_name == "grab":
+            text = (planner_input.user_text or "").lower()
+            prompt = decision.target or self._extract_grab_prompt(planner_input.user_text or "")
+            if prompt == "grab":
+                prompt = self._extract_grab_prompt(planner_input.user_text or "")
+            arm = "auto"
+            if "left" in text:
+                arm = "left"
+            elif "right" in text:
+                arm = "right"
+            return {"prompt": prompt, "agent_settings": settings, "arm": arm}
+        return {}
 
     def _apply_command_fallbacks(
         self, decision: PlannerDecision, planner_input: PlannerInput
