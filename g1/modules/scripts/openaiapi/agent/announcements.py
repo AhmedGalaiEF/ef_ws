@@ -68,6 +68,7 @@ def announce(
             settings=settings,
             robot_state=robot_state,
             text=announcement.speech,
+            language=settings.announcements.tts_language or None,
         )
         outcome.speech_result = result
         outcome.spoke = bool(result and result.ok)

@@ -97,8 +97,14 @@ class OpenAIPlanner(Planner):
         self._schema = PlannerDecision.model_json_schema()
 
     def decide(self, planner_input: PlannerInput) -> PlannerDecision:
+        reply_language = str((planner_input.runtime or {}).get("reply_language", "auto"))
+        language_instruction = {
+            "de": "Reply in German. Keep response_text, intent announcements, and user-facing text in German.",
+            "en": "Reply in English. Keep response_text, intent announcements, and user-facing text in English.",
+        }.get(reply_language, "Reply in the user's language when clear; otherwise use English.")
         messages = [
             {"role": "system", "content": SYSTEM_IDENTITY},
+            {"role": "system", "content": language_instruction},
             {"role": "user", "content": planner_input.model_dump_json()},
         ]
         response_format = {
@@ -163,19 +169,28 @@ class MockPlanner(Planner):
         if not text:
             return PlannerDecision(intent=IntentType.NO_ACTION)
 
-        if "who are you" in text or "what are you" in text:
+        reply_language = str((planner_input.runtime or {}).get("reply_language", "auto"))
+        german = reply_language == "de"
+        if "who are you" in text or "what are you" in text or "wer bist du" in text or "was bist du" in text:
             return PlannerDecision(
                 intent=IntentType.CONVERSATION,
                 response_text=(
-                    "I am the local cognitive CLI for a Unitree G1 robot. "
+                    "Ich bin die lokale kognitive CLI fuer einen Unitree G1 Roboter. "
+                    "Im Moment benutze ich den Offline-MockPlanner, weil OPENAI_API_KEY nicht gesetzt ist."
+                    if german
+                    else "I am the local cognitive CLI for a Unitree G1 robot. "
                     "Right now I am using the offline MockPlanner because OPENAI_API_KEY is not set."
                 ),
             )
-        if "remember" in text or "memory" in text:
+        if "remember" in text or "memory" in text or "erinner" in text or "gedächtnis" in text or "gedaechtnis" in text:
             bio = planner_input.autobiography_summary or "No autobiographical memory has been recorded yet."
             return PlannerDecision(
                 intent=IntentType.CONVERSATION,
-                response_text=f"My current autobiographical memory is:\n{bio}",
+                response_text=(
+                    f"Mein aktuelles autobiografisches Gedaechtnis ist:\n{bio}"
+                    if german
+                    else f"My current autobiographical memory is:\n{bio}"
+                ),
             )
         if "sleep" in text:
             return PlannerDecision(
@@ -184,7 +199,7 @@ class MockPlanner(Planner):
                 response_text="Understood, I'll get ready to sleep.",
                 requested_skills=["request_sleep"],
             )
-        if "battery" in text:
+        if "battery" in text or "batterie" in text or "akku" in text:
             return PlannerDecision(
                 intent=IntentType.QUERY_STATE,
                 target="battery",
@@ -195,11 +210,11 @@ class MockPlanner(Planner):
                 response_text="Let me see about charging.",
                 requested_skills=["request_charge"],
             )
-        if "step back" in text or "move back" in text or "back up" in text:
+        if "step back" in text or "move back" in text or "back up" in text or "geh zurück" in text or "geh zurueck" in text or "schritt zurück" in text or "schritt zurueck" in text:
             return PlannerDecision(
                 intent=IntentType.EXECUTE_TASK,
                 target="step_back",
-                response_text="I'll step back.",
+                response_text="Ich gehe einen Schritt zurueck." if german else "I'll step back.",
                 requested_skills=["step_back"],
             )
         if "arm" in text and ("move" in text or "can you" in text or "raise" in text):

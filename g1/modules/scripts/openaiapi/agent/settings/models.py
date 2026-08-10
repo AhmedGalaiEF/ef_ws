@@ -39,6 +39,9 @@ class AnnouncementSettings(BaseModel):
 
     audio_enabled: bool = False
     gesture_enabled: bool = False
+    tts_language: str = ""
+    tts_voice_model: str = ""
+    tts_speaker: int = -1
     announce_intent_before_action: bool = True
     announce_denials: bool = True
 
@@ -49,6 +52,36 @@ class MotionSettings(BaseModel):
     allow_arm_motion: bool = True
     allow_arm_sdk: bool = True
     allow_low_cmd: bool = False
+
+
+class CommandLanguage(str, Enum):
+    EN = "en"
+    DE = "de"
+    BOTH = "both"
+
+
+class ReplyLanguage(str, Enum):
+    AUTO = "auto"
+    EN = "en"
+    DE = "de"
+
+
+class InterfaceSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    command_language: CommandLanguage = CommandLanguage.EN
+    reply_language: ReplyLanguage = ReplyLanguage.AUTO
+
+
+class VisionSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    rgbd_enabled: bool = False
+    rgbd_host: str = "0.0.0.0"
+    rgbd_port: int = 5555
+    rgbd_topic: str = ""
+    rgbd_timeout_s: float = 2.0
+    openai_model: str = "gpt-4o-mini"
 
 
 class SkillMode(str, Enum):
@@ -94,7 +127,9 @@ class AgentSettings(BaseModel):
 
     audio: AudioSettings = Field(default_factory=AudioSettings)
     announcements: AnnouncementSettings = Field(default_factory=AnnouncementSettings)
+    interface: InterfaceSettings = Field(default_factory=InterfaceSettings)
     motion: MotionSettings = Field(default_factory=MotionSettings)
+    vision: VisionSettings = Field(default_factory=VisionSettings)
     skills: SkillsSettings = Field(default_factory=SkillsSettings)
 
     def get_skill_mode(self, skill_name: str) -> SkillMode:

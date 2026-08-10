@@ -201,6 +201,29 @@ def build_offline_registry() -> SkillRegistry:
         "stop": Skill("stop", "Stop all base motion.", _wrap(backend.stop, "stop"), "ai_control.robot_backend.MockRobotBackend"),
         "hand_open": Skill("hand_open", "Open the given hand.", _wrap(backend.hand_open, "hand_open"), "ai_control.robot_backend.MockRobotBackend"),
         "hand_close": Skill("hand_close", "Close the given hand.", _wrap(backend.hand_close, "hand_close"), "ai_control.robot_backend.MockRobotBackend"),
+        "reach_forward": Skill(
+            "reach_forward",
+            "Extend the chosen arm forward.",
+            lambda **kwargs: SkillResult(
+                ok=True,
+                message=f"mock reached {str(kwargs.get('arm') or 'right')} arm forward",
+                detail={"backend": "mock", "skill": "reach_forward"},
+            ),
+            "ai_control.robot_backend.MockRobotBackend",
+        ),
+        "grab": Skill(
+            "grab",
+            "Prompt-based RGB-D grab placeholder; live mode uses OpenAI vision + hand_pose_navigation IK.",
+            lambda **kwargs: SkillResult(
+                ok=False,
+                message=(
+                    "prompt-based grab requires --robot with live RGB-D input and OpenAI vision; "
+                    f"requested prompt={str(kwargs.get('prompt') or 'object')!r}"
+                ),
+                detail={"backend": "mock", "skill": "grab"},
+            ),
+            "ai_control.robot_backend.MockRobotBackend",
+        ),
         "gesture": Skill("gesture", "Play a named high-level arm gesture.", _wrap(backend.gesture, "gesture"), "ai_control.robot_backend.MockRobotBackend"),
         "wave": Skill("wave", "Wave using the face-wave high-level arm gesture.", lambda **_kwargs: SkillResult(ok=True, message=backend.gesture("face wave"), detail={"backend": "mock", "skill": "wave"}), "ai_control.robot_backend.MockRobotBackend"),
         "high_wave": Skill("high_wave", "Wave high using the high-wave high-level arm gesture.", lambda **_kwargs: SkillResult(ok=True, message=backend.gesture("high wave"), detail={"backend": "mock", "skill": "high_wave"}), "ai_control.robot_backend.MockRobotBackend"),
@@ -236,7 +259,13 @@ def _wrap_step(step_fn: Callable[[Any, dict], str], ctx: Any, step_type: str) ->
     return _handler
 
 
-def build_live_registry(*, robot: Optional[Any] = None, scene_ctx: Optional[Any] = None) -> SkillRegistry:
+def build_live_registry(
+    *,
+    robot: Optional[Any] = None,
+    scene_ctx: Optional[Any] = None,
+    iface: str = "eth0",
+    domain_id: int = 0,
+) -> SkillRegistry:
     """Bind real skills. Requires the Unitree SDK2 Python stack and, for
     ``robot``, a live DDS connection -- neither is available in this dev
     sandbox, so this path is only exercised on the actual deployment
@@ -263,6 +292,40 @@ def build_live_registry(*, robot: Optional[Any] = None, scene_ctx: Optional[Any]
                     handler=_wrap_tool(fn, tool_name),
                     source="llm_client.robot_tools.build_robot_tools",
                 )
+            try:
+                from agent.vision_grab import OpenAIVisionGrabber
+            except Exception as exc:
+                unavailable.append(f"prompt vision grab unavailable: {exc}")
+            else:
+                vision_grabber = OpenAIVisionGrabber(robot=robot, iface=iface, domain_id=domain_id)
+
+                def _vision_grab(**kwargs: Any) -> SkillResult:
+                    settings = kwargs.get("agent_settings")
+                    if settings is None or not hasattr(settings, "vision"):
+                        return SkillResult(ok=False, message="vision settings were not provided to grab skill")
+                    prompt = str(kwargs.get("prompt") or kwargs.get("object") or kwargs.get("target") or "object")
+                    arm = str(kwargs.get("arm") or "auto")
+                    message = vision_grabber.grab(settings=settings.vision, prompt=prompt, arm=arm)
+                    return SkillResult(
+                        ok=True,
+                        message=message,
+                        detail={
+                            "backend": "agent.vision_grab.OpenAIVisionGrabber",
+                            "skill": "grab",
+                            "prompt": prompt,
+                            "arm": arm,
+                        },
+                    )
+
+                skills["grab"] = Skill(
+                    name="grab",
+                    description=(
+                        "Prompt-based RGB-D grab: localize an object with OpenAI vision, "
+                        "then move the end effector toward it with hand_pose_navigation IK."
+                    ),
+                    handler=_vision_grab,
+                    source="agent.vision_grab.OpenAIVisionGrabber",
+                )
             if "move" in tools:
                 skills["step_back"] = Skill(
                     name="step_back",
@@ -277,11 +340,25 @@ def build_live_registry(*, robot: Optional[Any] = None, scene_ctx: Optional[Any]
                 text = str(kwargs.get("text", "")).strip()
                 if not text:
                     return SkillResult(ok=False, message="no announcement text provided")
-                code = robot.say(text)
+                language = kwargs.get("language") or None
+                voice_model = kwargs.get("voice_model") or None
+                speaker_raw = kwargs.get("speaker")
+                speaker = None
+                if speaker_raw is not None:
+                    speaker_value = int(speaker_raw)
+                    speaker = speaker_value if speaker_value >= 0 else None
+                code = robot.say(text, language=language, voice_model=voice_model, speaker=speaker)
                 return SkillResult(
                     ok=True,
                     message=f"spoke through sdk_client.Robot.say() -> code {code}",
-                    detail={"backend": "sdk_client.Robot.say", "skill": "announce", "code": code},
+                    detail={
+                        "backend": "sdk_client.Robot.say",
+                        "skill": "announce",
+                        "code": code,
+                        "language": language,
+                        "voice_model": voice_model,
+                        "speaker": speaker,
+                    },
                 )
 
             skills["announce"] = Skill(
@@ -323,6 +400,25 @@ def build_live_registry(*, robot: Optional[Any] = None, scene_ctx: Optional[Any]
                 description="Wave high using the SDK 'high wave' high-level arm action.",
                 handler=lambda **_kwargs: _run_arm_action("high wave"),
                 source="sdk_client.Robot.execute_arm_action",
+            )
+        if hasattr(robot, "release_arms"):
+            def _release_arms(**kwargs: Any) -> SkillResult:
+                duration_s = float(kwargs.get("duration_s", 0.5))
+                try:
+                    result = robot.release_arms(duration_s=duration_s)
+                except TypeError:
+                    result = robot.release_arms()
+                return SkillResult(
+                    ok=True,
+                    message=f"released arm control authority: {result}",
+                    detail={"backend": "sdk_client.Robot.release_arms", "skill": "release_arms"},
+                )
+
+            skills["release_arms"] = Skill(
+                name="release_arms",
+                description="Release arm control authority through sdk_client.Robot.release_arms().",
+                handler=_release_arms,
+                source="sdk_client.Robot.release_arms",
             )
 
     if scene_ctx is not None:

@@ -38,6 +38,36 @@ from agent.state import MockRobotStateSource, SdkClientRobotStateSource  # noqa:
 
 
 PRINT_LOCK = threading.RLock()
+SETTING_CHOICES = {
+    "announcements.tts_language": ["", "en", "de", "fr", "es", "ar"],
+    "announcements.tts_speaker": [-1, 0, 1, 2, 3],
+    "interface.command_language": ["en", "de", "both"],
+    "interface.reply_language": ["auto", "en", "de"],
+    "vision.openai_model": ["gpt-4o-mini", "gpt-4o"],
+}
+SETTING_LABELS = {
+    "announcements.tts_language": "announcements.tts_language (voice)",
+    "announcements.tts_voice_model": "announcements.tts_voice_model",
+    "announcements.tts_speaker": "announcements.tts_speaker",
+    "interface.command_language": "interface.command_language (commands)",
+    "interface.reply_language": "interface.reply_language (answers)",
+    "vision.rgbd_enabled": "vision.rgbd_enabled (camera)",
+    "vision.rgbd_host": "vision.rgbd_host",
+    "vision.rgbd_port": "vision.rgbd_port",
+    "vision.rgbd_topic": "vision.rgbd_topic",
+    "vision.rgbd_timeout_s": "vision.rgbd_timeout_s",
+    "vision.openai_model": "vision.openai_model",
+}
+GERMAN_SETTINGS_ARGS = {
+    "anzeigen": "show",
+    "zeige": "show",
+    "lesen": "get",
+    "setzen": "set",
+    "faehigkeit": "skill",
+    "fähigkeit": "skill",
+    "faehigkeiten": "skills",
+    "fähigkeiten": "skills",
+}
 
 
 class Color:
@@ -147,7 +177,7 @@ def build_agent(args: argparse.Namespace) -> G1Agent:
 
     if robot is not None:
         try:
-            skills = build_live_registry(robot=robot)
+            skills = build_live_registry(robot=robot, iface=args.iface, domain_id=args.domain_id)
             state_source: object = SdkClientRobotStateSource(robot)
             resolver = CapabilityResolver(
                 arm_sdk_available=lambda: hasattr(robot, "extend_arm_forward"),
@@ -210,19 +240,28 @@ def _dispatch(agent: G1Agent, line: str) -> None:
             _print(_style("(ASR disabled: audio.asr_enabled=false -- no conversational event generated)", Color.dim))
         else:
             _print_turn(outcome)
-    elif line in ("/settings-ui", "/settings ui"):
+    elif line.startswith("/vision "):
+        _print_turn(agent.handle_vision_question(line[len("/vision "):]))
+    elif line.startswith("/sehen "):
+        _print_turn(agent.handle_vision_question(line[len("/sehen "):]))
+    elif line in ("/settings-ui", "/settings ui", "/einstellungen-ui"):
         _run_settings_ui(agent)
-    elif line.startswith("/settings"):
-        _print(agent.cmd_settings(line.split()[1:]))
+    elif line.startswith("/settings") or line.startswith("/einstellungen"):
+        args = line.split()[1:]
+        if line.startswith("/einstellungen") and not args:
+            args = ["show"]
+        if line.startswith("/einstellungen") and args:
+            args[0] = GERMAN_SETTINGS_ARGS.get(args[0].lower(), args[0])
+        _print(agent.cmd_settings(args))
     elif line == "/status":
         _print(agent.cmd_status())
-    elif line == "/faults":
+    elif line in ("/faults", "/fehler"):
         _print(agent.cmd_faults())
-    elif line.startswith("/memory"):
+    elif line.startswith("/memory") or line.startswith("/speicher"):
         _print(agent.cmd_memory(line.split()[1:]))
-    elif line == "/tools":
+    elif line in ("/tools", "/werkzeuge"):
         _print(agent.cmd_tools())
-    elif line == "/help":
+    elif line in ("/help", "/hilfe"):
         _print(agent.cmd_help())
     elif line.startswith("/"):
         _print(_style(f"(unknown command: {line.split()[0]} -- try /help)", Color.yellow))
@@ -233,10 +272,35 @@ def _dispatch(agent: G1Agent, line: str) -> None:
 
 def _setting_rows(agent: G1Agent) -> list[tuple[str, object]]:
     settings = agent.settings.effective()
-    rows = sorted(settings.as_flat_dict().items())
+    rows = sorted(
+        (key, getattr(value, "value", value))
+        for key, value in settings.as_flat_dict().items()
+    )
     for skill_name in agent.skills.names():
         rows.append((f"skill.{skill_name}", settings.get_skill_mode(skill_name).value))
     return rows
+
+
+def _format_ui_value(key: str, value: object) -> str:
+    if key in ("announcements.tts_language", "announcements.tts_voice_model") and str(value) == "":
+        return "default"
+    if key == "announcements.tts_speaker" and int(value) < 0:
+        return "default"
+    if isinstance(value, dict):
+        cleaned = {
+            item_key: getattr(item_value, "value", item_value)
+            for item_key, item_value in value.items()
+        }
+        return str(cleaned)
+    return str(getattr(value, "value", value))
+
+
+def _format_ui_choices(key: str) -> str:
+    choices = SETTING_CHOICES.get(key)
+    if not choices:
+        return ""
+    labels = [str("default" if choice == "" or choice == -1 else choice) for choice in choices]
+    return "  [" + " | ".join(labels) + "]"
 
 
 def _change_setting(agent: G1Agent, key: str, value: object, delta: int) -> str:
@@ -250,13 +314,19 @@ def _change_setting(agent: G1Agent, key: str, value: object, delta: int) -> str:
         next_value = not value
         agent.settings.set(key, next_value)
         return str(next_value)
+    if key in SETTING_CHOICES:
+        choices = SETTING_CHOICES[key]
+        current = getattr(value, "value", str(value))
+        next_value = choices[(choices.index(current) + delta) % len(choices)] if current in choices else choices[0]
+        agent.settings.set(key, next_value)
+        return _format_ui_value(key, next_value)
     return str(value)
 
 
 def _edit_setting_value(stdscr: object, agent: G1Agent, key: str, old_value: object) -> str:
     curses.echo()
     max_y, max_x = stdscr.getmaxyx()
-    prompt = f"New value for {key} [{old_value}]: "
+    prompt = f"New value for {key} [{_format_ui_value(key, old_value)}]: "
     stdscr.move(max_y - 2, 0)
     stdscr.clrtoeol()
     stdscr.addnstr(max_y - 2, 0, prompt, max_x - 1)
@@ -296,7 +366,10 @@ def _settings_ui(stdscr: object, agent: G1Agent) -> None:
         stdscr.addnstr(1, 0, status, max_x - 1)
         for idx, (key, value) in enumerate(rows[top:top + visible], start=top):
             marker = "> " if idx == selected else "  "
-            line = f"{marker}{key:<42} {value}"
+            value_text = _format_ui_value(key, value)
+            choices = _format_ui_choices(key) if idx == selected else ""
+            label = SETTING_LABELS.get(key, key)
+            line = f"{marker}{label:<42} {value_text}{choices}"
             attr = curses.A_REVERSE if idx == selected else curses.A_NORMAL
             stdscr.addnstr(3 + idx - top, 0, line, max_x - 1, attr)
         stdscr.refresh()
@@ -371,7 +444,7 @@ def repl(agent: G1Agent, *, tick_interval_s: float = 30.0, periodic_ticks: bool 
                 break
             if not line:
                 continue
-            if line in ("/exit", "/quit"):
+            if line in ("/exit", "/quit", "/ende"):
                 break
             with agent_lock:
                 _dispatch(agent, line)

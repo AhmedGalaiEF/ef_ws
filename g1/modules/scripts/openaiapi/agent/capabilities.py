@@ -35,9 +35,9 @@ from .settings.models import AgentSettings
 # always-on G1ArmActionClient service -- they still require arm-motion
 # authority and a commandable arm, but have no /arm_sdk or /low_cmd
 # backend to be "available" or not.
-LOW_LEVEL_ARM_SKILLS = {"move_arm_demo", "reach_forward"}
-HIGH_LEVEL_ARM_SKILLS = {"gesture", "wave", "high_wave", "release_arms"}
-HAND_SKILLS = {"grab", "release"}
+LOW_LEVEL_ARM_SKILLS = {"move_arm_demo", "reach_forward", "grab"}
+HIGH_LEVEL_ARM_SKILLS = {"gesture", "wave", "high_wave", "release", "release_arms"}
+HAND_SKILLS = {"release"}
 ARM_SKILLS = LOW_LEVEL_ARM_SKILLS | HIGH_LEVEL_ARM_SKILLS | HAND_SKILLS
 LOW_LEVEL_ARM_FAULTS = ("lowstate",)
 HAND_FAULTS = ("left_hand_state", "right_hand_state")
