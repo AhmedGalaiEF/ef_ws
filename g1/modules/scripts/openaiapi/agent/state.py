@@ -18,11 +18,20 @@ actually dispatched.
 """
 from __future__ import annotations
 
+import threading
 import time
 from dataclasses import asdict, is_dataclass
 from typing import Any, Callable, Optional
 
 from .models import RobotStateSnapshot
+
+
+BMS_TOPICS = (
+    "rt/lf/bmsstate",
+    "rt/lf/agvbmsstate",
+    "rt/bmsstate",
+    "rt/agvbmsstate",
+)
 
 
 class RobotStateSource:
@@ -64,6 +73,11 @@ class SdkClientRobotStateSource(RobotStateSource):
     ) -> None:
         self._robot = robot
         self._arm_control_state_hint = arm_control_state_hint
+        self._bms_lock = threading.Lock()
+        self._latest_bms: tuple[Any, str, float] | None = None
+        self._bms_subscribers: list[Any] = []
+        self._bms_subscribe_error: str | None = None
+        self._bms_started = False
 
     def read(self) -> RobotStateSnapshot:
         now = time.time()
@@ -195,33 +209,129 @@ class SdkClientRobotStateSource(RobotStateSource):
         try:
             msg = self._robot.get_low_state_msg()
         except Exception:
-            return None
-        if msg is None:
-            return None
-        bms = getattr(msg, "bms_state", None)
-        if bms is None:
+            msg = None
+        lowstate_summary = self._battery_from_lowstate_msg(msg) if msg is not None else None
+        if lowstate_summary and lowstate_summary.get("soc") is not None:
+            return lowstate_summary
+
+        bms_summary = self._battery_from_bms_topics()
+        if bms_summary is not None and bms_summary.get("soc") is not None:
+            if lowstate_summary:
+                bms_summary["lowstate_power_v"] = lowstate_summary.get("power_v")
+                bms_summary["lowstate_power_a"] = lowstate_summary.get("power_a")
+            return bms_summary
+        if lowstate_summary is not None:
+            if bms_summary and bms_summary.get("error"):
+                lowstate_summary["bms_error"] = bms_summary.get("error")
+            return lowstate_summary
+        return bms_summary
+
+    def _battery_from_lowstate_msg(self, msg: Any) -> dict[str, Any] | None:
+        bms = self._read_attr(msg, "bms_state")
+        power_v = self._float_attr(msg, "power_v")
+        power_a = self._float_attr(msg, "power_a")
+        if bms is None and power_v is None and power_a is None:
             return None
 
-        def _int_attr(name: str) -> int | None:
-            try:
-                value = getattr(bms, name)
-            except Exception:
-                return None
-            try:
-                return int(value)
-            except Exception:
-                return None
-
-        current_ma = _int_attr("current")
+        current_ma = self._int_attr(bms, "current") if bms is not None else None
+        current_a = power_a if power_a is not None else (None if current_ma is None else current_ma / 1000.0)
+        soc = self._int_attr(bms, "soc") if bms is not None else None
         return {
-            "soc": _int_attr("soc"),
-            "soh": _int_attr("soh"),
-            "status": _int_attr("status"),
+            "soc": soc,
+            "soh": self._int_attr(bms, "soh") if bms is not None else None,
+            "status": self._int_attr(bms, "status") if bms is not None else None,
             "current_ma": current_ma,
-            "cycle": _int_attr("cycle"),
-            "charging": None if current_ma is None else current_ma > 0,
-            "source": "rt/lowstate.bms_state",
+            "current_a": current_a,
+            "cycle": self._int_attr(bms, "cycle") if bms is not None else None,
+            "power_v": power_v,
+            "power_a": power_a,
+            "charging": None if current_a is None else current_a > 0.05,
+            "source": "rt/lowstate.bms_state" if bms is not None else "rt/lowstate.power",
+            "available_fields": self._public_fields(bms if bms is not None else msg),
         }
+
+    def _battery_from_bms_topics(self) -> dict[str, Any] | None:
+        self._ensure_bms_subscribers()
+        with self._bms_lock:
+            latest = self._latest_bms
+            subscribe_error = self._bms_subscribe_error
+        if latest is None:
+            if subscribe_error:
+                return {"soc": None, "charging": None, "source": "bms_topics", "error": subscribe_error}
+            return None
+        msg, topic, stamp = latest
+        current_ma = self._int_attr(msg, "current")
+        current_a = None if current_ma is None else current_ma / 1000.0
+        return {
+            "soc": self._int_attr(msg, "soc"),
+            "soh": self._int_attr(msg, "soh"),
+            "status": self._int_attr(msg, "status"),
+            "current_ma": current_ma,
+            "current_a": current_a,
+            "cycle": self._int_attr(msg, "cycle"),
+            "charging": None if current_a is None else current_a > 0.05,
+            "source": topic,
+            "age_s": max(0.0, time.time() - stamp),
+            "available_fields": self._public_fields(msg),
+        }
+
+    def _ensure_bms_subscribers(self) -> None:
+        if self._bms_started:
+            return
+        self._bms_started = True
+        try:
+            from unitree_sdk2py.core.channel import ChannelSubscriber
+            from unitree_sdk2py.idl.unitree_go.msg.dds_ import BmsState_ as GoBmsState
+            from unitree_sdk2py.idl.unitree_hg.msg.dds_ import BmsState_ as HgBmsState
+        except Exception as exc:
+            self._bms_subscribe_error = f"BMS subscriber unavailable: {exc}"
+            return
+        for topic in BMS_TOPICS:
+            for msg_type in (HgBmsState, GoBmsState):
+                try:
+                    sub = ChannelSubscriber(topic, msg_type)
+                    sub.Init(self._make_bms_callback(topic), 10)
+                    self._bms_subscribers.append(sub)
+                except Exception as exc:
+                    self._bms_subscribe_error = f"{topic}: {exc}"
+
+    def _make_bms_callback(self, topic: str) -> Callable[[Any], None]:
+        def _callback(msg: Any) -> None:
+            with self._bms_lock:
+                self._latest_bms = (msg, topic, time.time())
+
+        return _callback
+
+    @staticmethod
+    def _read_attr(obj: Any, name: str) -> Any | None:
+        if obj is None or not hasattr(obj, name):
+            return None
+        try:
+            return getattr(obj, name)
+        except Exception:
+            return None
+
+    @classmethod
+    def _int_attr(cls, obj: Any, name: str) -> int | None:
+        try:
+            value = cls._read_attr(obj, name)
+            return None if value is None else int(value)
+        except Exception:
+            return None
+
+    @classmethod
+    def _float_attr(cls, obj: Any, name: str) -> float | None:
+        try:
+            value = cls._read_attr(obj, name)
+            return None if value is None else float(value)
+        except Exception:
+            return None
+
+    @staticmethod
+    def _public_fields(obj: Any) -> list[str]:
+        if obj is None:
+            return []
+        return [name for name in dir(obj) if not name.startswith("_")][:80]
 
 
 def build_robot_state(source: RobotStateSource) -> RobotStateSnapshot:

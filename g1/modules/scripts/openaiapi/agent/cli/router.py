@@ -8,6 +8,7 @@ touch the planner -- they are plain deterministic code, per spec section
 """
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass
 from typing import Any, Optional
@@ -506,6 +507,8 @@ class G1Agent:
             text = (planner_input.user_text or "").lower()
             arm = "left" if "left" in text else "right"
             return {"arm": arm}
+        if skill_name in {"turn_left", "turn_right"}:
+            return {"degrees": self._extract_turn_degrees(planner_input.user_text or "")}
         if skill_name != "grab":
             return {}
         prompt = decision.target or self._extract_grab_prompt(planner_input.user_text or "")
@@ -622,22 +625,49 @@ class G1Agent:
                 response_text="Ich gehe einen Schritt zurück." if german else "I'll step backward.",
                 requested_skills=["step_back"],
             )
-        wants_turn_left = "turn left" in text or "rotate left" in text or "dreh links" in text
-        wants_turn_right = "turn right" in text or "rotate right" in text or "dreh rechts" in text
+        wants_turn_around = (
+            "turn around" in text
+            or "turnaround" in text
+            or "turn round" in text
+            or "tunr around" in text
+            or "rotate 180" in text
+            or "180" in text and ("turn" in text or "rotate" in text)
+            or "umdrehen" in text
+        )
+        wants_turn_left = (
+            "turn left" in text
+            or "turn the robot" in text and "left" in text
+            or "rotate left" in text
+            or "dreh links" in text
+        )
+        wants_turn_right = (
+            "turn right" in text
+            or "turn the robot" in text and "right" in text
+            or "rotate right" in text
+            or "dreh rechts" in text
+        )
+        if wants_turn_around and not wants_turn_left and not wants_turn_right:
+            wants_turn_left = True
         if wants_turn_left and "turn_left" in self.skills.skills:
             german = getattr(self.settings.effective().interface.reply_language, "value", "auto") == "de"
+            degrees = self._extract_turn_degrees(planner_input.user_text or "")
+            response = f"I'll turn left about {degrees:.0f} degrees."
+            german_response = f"Ich drehe mich etwa {degrees:.0f} Grad nach links."
             return PlannerDecision(
                 intent=IntentType.EXECUTE_TASK,
                 target="turn_left",
-                response_text="Ich drehe mich nach links." if german else "I'll turn left.",
+                response_text=german_response if german else response,
                 requested_skills=["turn_left"],
             )
         if wants_turn_right and "turn_right" in self.skills.skills:
             german = getattr(self.settings.effective().interface.reply_language, "value", "auto") == "de"
+            degrees = self._extract_turn_degrees(planner_input.user_text or "")
+            response = f"I'll turn right about {degrees:.0f} degrees."
+            german_response = f"Ich drehe mich etwa {degrees:.0f} Grad nach rechts."
             return PlannerDecision(
                 intent=IntentType.EXECUTE_TASK,
                 target="turn_right",
-                response_text="Ich drehe mich nach rechts." if german else "I'll turn right.",
+                response_text=german_response if german else response,
                 requested_skills=["turn_right"],
             )
         wants_grab = any(word in text for word in ("grab", "grba", "grasp", "pick up", "greif", "greife", "nimm"))
@@ -770,25 +800,65 @@ class G1Agent:
                 requested_skills=["step_back"],
                 intent_announcement=decision.intent_announcement,
             )
-        wants_turn_left = "turn left" in text or "rotate left" in text or "dreh links" in text
-        wants_turn_right = "turn right" in text or "rotate right" in text or "dreh rechts" in text
+        wants_turn_around = (
+            "turn around" in text
+            or "turnaround" in text
+            or "turn round" in text
+            or "tunr around" in text
+            or "rotate 180" in text
+            or "180" in text and ("turn" in text or "rotate" in text)
+            or "umdrehen" in text
+        )
+        wants_turn_left = (
+            "turn left" in text
+            or "turn the robot" in text and "left" in text
+            or "rotate left" in text
+            or "dreh links" in text
+        )
+        wants_turn_right = (
+            "turn right" in text
+            or "turn the robot" in text and "right" in text
+            or "rotate right" in text
+            or "dreh rechts" in text
+        )
+        if wants_turn_around and not wants_turn_left and not wants_turn_right:
+            wants_turn_left = True
         if wants_turn_left and "turn_left" in self.skills.skills and (not skills or "move" in skills):
+            degrees = self._extract_turn_degrees(planner_input.user_text or "")
             return PlannerDecision(
                 intent=IntentType.EXECUTE_TASK,
                 target="turn_left",
-                response_text="I'll turn left.",
+                response_text=f"I'll turn left about {degrees:.0f} degrees.",
                 requested_skills=["turn_left"],
                 intent_announcement=decision.intent_announcement,
             )
         if wants_turn_right and "turn_right" in self.skills.skills and (not skills or "move" in skills):
+            degrees = self._extract_turn_degrees(planner_input.user_text or "")
             return PlannerDecision(
                 intent=IntentType.EXECUTE_TASK,
                 target="turn_right",
-                response_text="I'll turn right.",
+                response_text=f"I'll turn right about {degrees:.0f} degrees.",
                 requested_skills=["turn_right"],
                 intent_announcement=decision.intent_announcement,
             )
         return decision
+
+    @staticmethod
+    def _extract_turn_degrees(text: str) -> float:
+        lowered = text.lower()
+        if "turn around" in lowered or "turnaround" in lowered or "turn round" in lowered or "tunr around" in lowered or "umdrehen" in lowered:
+            return 180.0
+        match = re.search(r"\b(\d+(?:\.\d+)?)\s*(?:deg|degree|degrees|grad)\b", lowered)
+        if match:
+            try:
+                return max(5.0, min(180.0, float(match.group(1))))
+            except ValueError:
+                pass
+        if "180" in lowered:
+            return 180.0
+        if "90" in lowered:
+            return 90.0
+        return 28.6
 
     @staticmethod
     def _extract_grab_prompt(text: str) -> str:
@@ -895,11 +965,21 @@ class G1Agent:
     @staticmethod
     def _describe_battery(state: RobotStateSnapshot) -> str:
         if state.battery_pct is None:
-            return "Battery percentage is unavailable: rt/lowstate.bms_state.soc is not present in the current robot state."
+            if state.battery:
+                source = state.battery.get("source") or "unknown source"
+                fields = state.battery.get("available_fields") or []
+                field_text = f"; available fields: {', '.join(fields[:12])}" if fields else ""
+                error = state.battery.get("error")
+                error_text = f"; {error}" if error else ""
+                return f"Battery percentage is unavailable from {source}{field_text}{error_text}."
+            return "Battery percentage is unavailable: no lowstate or BMS battery packet has been received yet."
         charging = ""
         if state.charging is not None:
             charging = " and appears to be charging" if state.charging else " and does not appear to be charging"
-        return f"Battery is at {state.battery_pct:.0f}%{charging}."
+        source = ""
+        if state.battery and state.battery.get("source"):
+            source = f" (source: {state.battery.get('source')})"
+        return f"Battery is at {state.battery_pct:.0f}%{charging}{source}."
 
     # -- deterministic /settings /status /memory /tools namespaces ------------
 

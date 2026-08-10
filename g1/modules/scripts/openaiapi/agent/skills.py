@@ -31,6 +31,7 @@ packet (spec section 2).
 """
 from __future__ import annotations
 
+import math
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -194,12 +195,28 @@ def build_offline_registry() -> SkillRegistry:
 
         return _handler
 
+    def _mock_turn(direction: str, **kwargs: Any) -> SkillResult:
+        side = str(direction).strip().lower()
+        vyaw = 0.5 if side == "left" else -0.5
+        try:
+            angle_deg = float(kwargs.get("degrees")) if kwargs.get("degrees") is not None else 28.6
+        except (TypeError, ValueError):
+            angle_deg = 28.6
+        angle_deg = max(5.0, min(180.0, abs(angle_deg)))
+        duration_s = math.radians(angle_deg) / abs(vyaw)
+        message = backend.move(vx=0.0, vy=0.0, vyaw=vyaw, duration=duration_s)
+        return SkillResult(
+            ok=True,
+            message=message,
+            detail={"backend": "mock", "skill": f"turn_{side}", "degrees": angle_deg, "duration_s": duration_s},
+        )
+
     skills: dict[str, Skill] = {
         "move": Skill("move", "Drive the base for a duration at (vx, vy, vyaw).", _wrap(backend.move, "move"), "ai_control.robot_backend.MockRobotBackend"),
         "step_forward": Skill("step_forward", "Step forward a short distance.", lambda **_kwargs: SkillResult(ok=True, message=backend.move(vx=0.25, vy=0.0, vyaw=0.0, duration=1.0), detail={"backend": "mock", "skill": "step_forward"}), "ai_control.robot_backend.MockRobotBackend"),
         "step_back": Skill("step_back", "Step backward a short distance.", lambda **_kwargs: SkillResult(ok=True, message=backend.move(vx=-0.25, vy=0.0, vyaw=0.0, duration=1.0), detail={"backend": "mock", "skill": "step_back"}), "ai_control.robot_backend.MockRobotBackend"),
-        "turn_left": Skill("turn_left", "Turn left in place by a small angle.", lambda **_kwargs: SkillResult(ok=True, message=backend.move(vx=0.0, vy=0.0, vyaw=0.5, duration=1.0), detail={"backend": "mock", "skill": "turn_left"}), "ai_control.robot_backend.MockRobotBackend"),
-        "turn_right": Skill("turn_right", "Turn right in place by a small angle.", lambda **_kwargs: SkillResult(ok=True, message=backend.move(vx=0.0, vy=0.0, vyaw=-0.5, duration=1.0), detail={"backend": "mock", "skill": "turn_right"}), "ai_control.robot_backend.MockRobotBackend"),
+        "turn_left": Skill("turn_left", "Turn left in place by a requested angle.", lambda **kwargs: _mock_turn("left", **kwargs), "ai_control.robot_backend.MockRobotBackend"),
+        "turn_right": Skill("turn_right", "Turn right in place by a requested angle.", lambda **kwargs: _mock_turn("right", **kwargs), "ai_control.robot_backend.MockRobotBackend"),
         "navigate_to": Skill("navigate_to", "Navigate to an (x, y, yaw) pose.", _wrap(backend.navigate_to, "navigate_to"), "ai_control.robot_backend.MockRobotBackend"),
         "stop": Skill("stop", "Stop all base motion.", _wrap(backend.stop, "stop"), "ai_control.robot_backend.MockRobotBackend"),
         "hand_open": Skill("hand_open", "Open the given hand.", _wrap(backend.hand_open, "hand_open"), "ai_control.robot_backend.MockRobotBackend"),
@@ -352,17 +369,28 @@ def build_live_registry(
                         detail={"backend": "sdk_client.Robot.move_for", "skill": f"step_{side}", "vx": vx},
                     )
 
-                def _turn(direction: str) -> SkillResult:
+                def _turn(direction: str, degrees: Any = None) -> SkillResult:
                     side = str(direction).strip().lower()
                     if side not in {"left", "right"}:
                         return SkillResult(ok=False, message=f"turn direction must be left or right, got {direction!r}")
                     vyaw = 0.5 if side == "left" else -0.5
-                    duration_s = 1.0
+                    try:
+                        angle_deg = float(degrees) if degrees is not None else 28.6
+                    except (TypeError, ValueError):
+                        angle_deg = 28.6
+                    angle_deg = max(5.0, min(180.0, abs(angle_deg)))
+                    duration_s = math.radians(angle_deg) / abs(vyaw)
                     robot.move_for(duration_s, vx=0.0, vy=0.0, vyaw=vyaw)
                     return SkillResult(
                         ok=True,
-                        message=f"turned {side} in place for {duration_s:.1f}s at vyaw={vyaw:+.2f}rad/s",
-                        detail={"backend": "sdk_client.Robot.move_for", "skill": f"turn_{side}", "vyaw": vyaw},
+                        message=f"turned {side} about {angle_deg:.0f}deg for {duration_s:.1f}s at vyaw={vyaw:+.2f}rad/s",
+                        detail={
+                            "backend": "sdk_client.Robot.move_for",
+                            "skill": f"turn_{side}",
+                            "vyaw": vyaw,
+                            "degrees": angle_deg,
+                            "duration_s": duration_s,
+                        },
                     )
 
                 skills["step_forward"] = Skill(
@@ -380,13 +408,13 @@ def build_live_registry(
                 skills["turn_left"] = Skill(
                     name="turn_left",
                     description="Turn left in place using sdk_client.Robot.move_for().",
-                    handler=lambda **_kwargs: _turn("left"),
+                    handler=lambda **kwargs: _turn("left", kwargs.get("degrees")),
                     source="sdk_client.Robot.move_for",
                 )
                 skills["turn_right"] = Skill(
                     name="turn_right",
                     description="Turn right in place using sdk_client.Robot.move_for().",
-                    handler=lambda **_kwargs: _turn("right"),
+                    handler=lambda **kwargs: _turn("right", kwargs.get("degrees")),
                     source="sdk_client.Robot.move_for",
                 )
         if hasattr(robot, "say"):
