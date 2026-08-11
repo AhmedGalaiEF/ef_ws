@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
+from urllib.parse import urlparse
 
 
 @dataclass
@@ -28,3 +30,30 @@ class AIConfig:
     iface: str = "eth0"
     domain_id: int = 0
     navbot_command_topic: str = "/model_api/navbot_command"
+
+    def __post_init__(self) -> None:
+        host = str(self.ollama_host).strip().rstrip("/")
+        parsed = urlparse(host)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("ollama_host must be an http:// or https:// URL")
+        self.ollama_host = host
+
+        for field_name in ("router_model", "thinker_model", "vision_model", "iface", "navbot_command_topic"):
+            value = str(getattr(self, field_name)).strip()
+            if not value:
+                raise ValueError(f"{field_name} must not be empty")
+            setattr(self, field_name, value)
+
+        if isinstance(self.request_timeout_s, bool):
+            raise ValueError("request_timeout_s must be a positive finite number")
+        self.request_timeout_s = float(self.request_timeout_s)
+        if not math.isfinite(self.request_timeout_s) or self.request_timeout_s <= 0:
+            raise ValueError("request_timeout_s must be a positive finite number")
+
+        if isinstance(self.domain_id, bool) or not isinstance(self.domain_id, int):
+            raise ValueError("domain_id must be an integer from 0 through 232")
+        if not 0 <= self.domain_id <= 232:
+            raise ValueError("domain_id must be an integer from 0 through 232")
+
+        if not self.navbot_command_topic.startswith("/") or any(char.isspace() for char in self.navbot_command_topic):
+            raise ValueError("navbot_command_topic must be an absolute ROS topic without whitespace")

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
@@ -27,6 +28,15 @@ GESTURE_NAMES = (
     "shake hand",
 )
 
+# Keep model-proposed motion deliberately conservative.  These limits apply at
+# the final dispatch boundary, so they still protect the real backend when a
+# caller bypasses the model's prompt/schema and invokes ``dispatch`` directly.
+MAX_LINEAR_SPEED_MPS = 1.0
+MAX_ANGULAR_SPEED_RAD_S = 2.0
+MAX_MOVE_DURATION_S = 30.0
+MAX_NAVIGATION_DISTANCE_M = 50.0
+VALID_HANDS = frozenset({"left", "right", "both"})
+
 
 @dataclass
 class ToolSpec:
@@ -38,17 +48,79 @@ class ToolSpec:
     requires_confirmation: bool = True
 
 
+def _finite_number(args: dict[str, Any], name: str, default: float | None = None) -> float:
+    value = args.get(name, default)
+    if value is None:
+        raise ValueError(f"missing numeric argument {name!r}")
+    if isinstance(value, bool):
+        raise ValueError(f"{name} must be a finite number, not a boolean")
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a finite number") from exc
+    if not math.isfinite(number):
+        raise ValueError(f"{name} must be finite")
+    return number
+
+
+def _bounded_number(
+    args: dict[str, Any],
+    name: str,
+    *,
+    default: float | None = None,
+    minimum: float | None = None,
+    maximum: float | None = None,
+) -> float:
+    number = _finite_number(args, name, default)
+    if minimum is not None and number < minimum:
+        raise ValueError(f"{name} must be >= {minimum}")
+    if maximum is not None and number > maximum:
+        raise ValueError(f"{name} must be <= {maximum}")
+    return number
+
+
+def _hand(args: dict[str, Any]) -> str:
+    hand = str(args.get("hand", "right")).strip().lower()
+    if hand not in VALID_HANDS:
+        raise ValueError("hand must be 'left', 'right', or 'both'")
+    return hand
+
+
+def _text(args: dict[str, Any], name: str, *, max_length: int = 500) -> str:
+    text = str(args.get(name, "")).strip()
+    if not text:
+        raise ValueError(f"{name} must not be empty")
+    if len(text) > max_length:
+        raise ValueError(f"{name} is too long (maximum {max_length} characters)")
+    return text
+
+
 def _move(backend: RobotBackend, args: dict[str, Any]) -> str:
+    vx = _bounded_number(args, "vx", default=0.0, minimum=-MAX_LINEAR_SPEED_MPS, maximum=MAX_LINEAR_SPEED_MPS)
+    vy = _bounded_number(args, "vy", default=0.0, minimum=-MAX_LINEAR_SPEED_MPS, maximum=MAX_LINEAR_SPEED_MPS)
+    vyaw = _bounded_number(
+        args,
+        "vyaw",
+        default=0.0,
+        minimum=-MAX_ANGULAR_SPEED_RAD_S,
+        maximum=MAX_ANGULAR_SPEED_RAD_S,
+    )
+    duration = _bounded_number(args, "duration", default=1.0, minimum=0.01, maximum=MAX_MOVE_DURATION_S)
+    if abs(vyaw) > MAX_ANGULAR_SPEED_RAD_S:
+        raise ValueError(f"vyaw must be between {-MAX_ANGULAR_SPEED_RAD_S} and {MAX_ANGULAR_SPEED_RAD_S}")
     return backend.move(
-        vx=float(args.get("vx", 0.0)),
-        vy=float(args.get("vy", 0.0)),
-        vyaw=float(args.get("vyaw", 0.0)),
-        duration=float(args.get("duration", 1.0)),
+        vx=vx,
+        vy=vy,
+        vyaw=vyaw,
+        duration=duration,
     )
 
 
 def _navigate_to(backend: RobotBackend, args: dict[str, Any]) -> str:
-    return backend.navigate_to(x=float(args["x"]), y=float(args["y"]), yaw=float(args.get("yaw", 0.0)))
+    x = _bounded_number(args, "x", minimum=-MAX_NAVIGATION_DISTANCE_M, maximum=MAX_NAVIGATION_DISTANCE_M)
+    y = _bounded_number(args, "y", minimum=-MAX_NAVIGATION_DISTANCE_M, maximum=MAX_NAVIGATION_DISTANCE_M)
+    yaw = _finite_number(args, "yaw", 0.0)
+    return backend.navigate_to(x=x, y=y, yaw=yaw)
 
 
 def _stop(backend: RobotBackend, args: dict[str, Any]) -> str:
@@ -56,11 +128,11 @@ def _stop(backend: RobotBackend, args: dict[str, Any]) -> str:
 
 
 def _hand_open(backend: RobotBackend, args: dict[str, Any]) -> str:
-    return backend.hand_open(hand=str(args.get("hand", "right")))
+    return backend.hand_open(hand=_hand(args))
 
 
 def _hand_close(backend: RobotBackend, args: dict[str, Any]) -> str:
-    return backend.hand_close(hand=str(args.get("hand", "right")))
+    return backend.hand_close(hand=_hand(args))
 
 
 def _gesture(backend: RobotBackend, args: dict[str, Any]) -> str:
@@ -75,11 +147,11 @@ def _release_arms(backend: RobotBackend, args: dict[str, Any]) -> str:
 
 
 def _say(backend: RobotBackend, args: dict[str, Any]) -> str:
-    return backend.say(text=str(args["text"]))
+    return backend.say(text=_text(args, "text"))
 
 
 def _navbot_command(backend: RobotBackend, args: dict[str, Any]) -> str:
-    return backend.navbot_command(text=str(args["text"]))
+    return backend.navbot_command(text=_text(args, "text"))
 
 
 TOOL_SPECS: dict[str, ToolSpec] = {
@@ -148,7 +220,12 @@ TOOL_SPECS: dict[str, ToolSpec] = {
                 "Forward a text command to nav_bot.py on /model_api/navbot_command. "
                 "Use for SLAM mapping, relocation, named points, and named-point navigation."
             ),
-            args={"text": "nav_bot.py command text, e.g. 'start mapping', 'save current point as kitchen', 'go to kitchen'"},
+            args={
+                "text": (
+                    "nav_bot.py command text, e.g. 'start mapping', "
+                    "'save current point as kitchen', 'go to kitchen'"
+                )
+            },
             handler=_navbot_command,
         ),
     )

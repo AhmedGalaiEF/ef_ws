@@ -1,6 +1,6 @@
 """Standalone REPL entry point (spec section 31's example CLI session).
 
-Run with ``python -m agent.cli`` from ``g1/modules/scripts`` (no
+Run with ``python -m agent.cli`` from ``g1/modules/scripts/openaiapi`` (no
 ``--robot``, no OpenAI key needed -- offline mock backend + MockPlanner),
 or ``python -m agent.cli --robot --openai`` on the real deployment target.
 """
@@ -18,9 +18,13 @@ from pathlib import Path
 
 def _bootstrap_scripts_path() -> None:
     here = Path(__file__).resolve()
+    package_root = next((parent for parent in here.parents if (parent / "agent").is_dir()), here.parents[2])
     scripts_dir = next((parent for parent in here.parents if (parent / "llm_client").exists()), here.parents[2])
     modules_dir = scripts_dir.parent if (scripts_dir.parent / "sdk_client.py").exists() else None
-    for path in (scripts_dir, modules_dir):
+    # ``agent`` is nested in openaiapi, while shared transports remain one
+    # directory above it.  Put the package root first so this entrypoint
+    # cannot accidentally resolve a different package with the same name.
+    for path in (modules_dir, scripts_dir, package_root):
         if path is not None and str(path) not in sys.path:
             sys.path.insert(0, str(path))
 

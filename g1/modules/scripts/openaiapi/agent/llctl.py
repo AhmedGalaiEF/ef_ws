@@ -6,6 +6,7 @@ controller packets to the cognitive planner.
 from __future__ import annotations
 
 import sys
+import math
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -117,7 +118,13 @@ class LlctlAdapter:
         joint_name = str(joint).strip()
         if not joint_name:
             return False, "joint name is empty"
-        if not -6.3 <= float(q) <= 6.3:
+        try:
+            target = float(q)
+        except (TypeError, ValueError):
+            return False, "joint target must be a finite number"
+        if not math.isfinite(target):
+            return False, "joint target must be a finite number"
+        if not -6.3 <= target <= 6.3:
             return False, "joint target outside conservative [-6.3, +6.3] rad range"
         self.state.last_activity_at = time.time()
         return True, "validated by llctl front-end; dashboard controller still performs final safety checks"
@@ -130,7 +137,13 @@ class LlctlAdapter:
             return False, "llctl.allow_ik_control=false"
         if str(side).lower() not in {"left", "right"}:
             return False, "side must be left or right"
-        if not (-1.0 <= float(x) <= 1.0 and -1.0 <= float(y) <= 1.0 and -0.5 <= float(z) <= 1.5):
+        try:
+            target = tuple(float(value) for value in (x, y, z))
+        except (TypeError, ValueError):
+            return False, "EE target must contain finite numbers"
+        if not all(math.isfinite(value) for value in target):
+            return False, "EE target must contain finite numbers"
+        if not (-1.0 <= target[0] <= 1.0 and -1.0 <= target[1] <= 1.0 and -0.5 <= target[2] <= 1.5):
             return False, "EE target outside conservative workspace preview bounds"
         self.state.last_activity_at = time.time()
         return True, "validated by llctl front-end; dashboard IK/safety path remains final authority"
