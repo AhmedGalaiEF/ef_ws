@@ -10,7 +10,7 @@ servo packet, or an arbitrary trajectory. See ``agent/skills.py`` for how
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -31,7 +31,6 @@ class EventType(str, Enum):
     TASK_FAILED = "task_failed"
     ANOMALY = "anomaly"
     COGNITIVE_TICK = "cognitive_tick"
-    LEARNING_ANSWER = "learning_answer"
 
 
 class LifecycleState(str, Enum):
@@ -53,7 +52,6 @@ class IntentType(str, Enum):
     REQUEST_CHARGE = "request_charge"
     MAINTENANCE = "maintenance"
     REQUEST_SLEEP = "request_sleep"
-    ASK_USER_TO_LEARN = "ask_user_to_learn"
     NO_ACTION = "no_action"
 
 
@@ -131,28 +129,6 @@ class MaintenanceProposal(BaseModel):
     details: Dict[str, Any] = Field(default_factory=dict)
 
 
-class LearningQuestionProposal(BaseModel):
-    """A model-proposed question; runtime decides whether it is shown."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    question: str
-    topic: str
-    reason_summary: str
-    intended_memory_type: Literal[
-        "episodic",
-        "semantic",
-        "procedural_hint",
-        "user_preference",
-        "object_fact",
-        "environment_fact",
-    ]
-    confidence_gap: Optional[float] = None
-    related_memory_ids: List[str] = Field(default_factory=list)
-    related_episode_ids: List[str] = Field(default_factory=list)
-    urgency: Literal["low", "normal", "high"] = "normal"
-
-
 class IntentAnnouncement(BaseModel):
     speech: Optional[str] = None
     gesture: Optional[str] = None
@@ -211,7 +187,6 @@ class PlannerDecision(BaseModel):
     intent_announcement: Optional[IntentAnnouncement] = None
     memory_proposal: Optional[MemoryProposal] = None
     maintenance_proposal: Optional[MaintenanceProposal] = None
-    learning_question: Optional[LearningQuestionProposal] = None
     next_tick_s: Optional[float] = None
 
 
@@ -230,7 +205,6 @@ class RuntimeCheckpoint(BaseModel):
     active_task: Optional[str] = None
     active_skill: Optional[str] = None
     last_robot_state_summary: Dict[str, Any] = Field(default_factory=dict)
-    self_model_version: Optional[int] = None
     sleep_reason: Optional[str] = None
     sleep_timestamp: Optional[float] = None
     wake_timestamp: Optional[float] = None

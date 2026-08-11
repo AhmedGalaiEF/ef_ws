@@ -59,13 +59,6 @@ class SettingsManager:
     def _save(self) -> None:
         _atomic_write_text(self.path, self._persistent.model_dump_json(indent=2))
 
-    def reset_to_defaults(self, *, persist: bool = True) -> None:
-        self._persistent = AgentSettings()
-        self._session_overrides.clear()
-        self._session_skill_mode_overrides.clear()
-        if persist:
-            self._save()
-
     def effective(self) -> AgentSettings:
         """Persistent settings with session-only overrides layered on top."""
         merged = self._persistent.model_copy(deep=True)

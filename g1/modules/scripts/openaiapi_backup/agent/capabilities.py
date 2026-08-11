@@ -56,7 +56,6 @@ HAND_SKILLS = {
     "tactile",
     "tactile_status",
 }
-LOCOMOTION_MODE_SKILLS = {"walk_mode", "run_mode"}
 ARM_SKILLS = LOW_LEVEL_ARM_SKILLS | HIGH_LEVEL_ARM_SKILLS | HAND_SKILLS
 LOW_LEVEL_ARM_FAULTS = ("lowstate",)
 HAND_FAULTS = ("left_hand_state", "right_hand_state")
@@ -237,34 +236,6 @@ class CapabilityResolver:
         self, skill_name: str, *, settings: AgentSettings, robot_state: RobotStateSnapshot
     ) -> PolicyDecision:
         """Entry point ``agent/skills.py`` calls before dispatching any skill."""
-        if skill_name in LOCOMOTION_MODE_SKILLS:
-            if not settings.motion.allow_locomotion_mode_change:
-                return PolicyDecision(
-                    allowed=False,
-                    requires_approval=False,
-                    risk="low",
-                    reason="Locomotion mode changes are disabled in settings (motion.allow_locomotion_mode_change=false).",
-                )
-            if robot_state.stability not in {"stable", "unknown"}:
-                return PolicyDecision(
-                    allowed=False,
-                    requires_approval=True,
-                    risk="medium",
-                    reason=f"Robot stability is {robot_state.stability}; refusing locomotion mode transition.",
-                )
-            if any(str(fault).startswith("lowstate") for fault in robot_state.active_faults):
-                return PolicyDecision(
-                    allowed=False,
-                    requires_approval=True,
-                    risk="medium",
-                    reason="Lowstate is unavailable; locomotion mode transition cannot be grounded.",
-                )
-            return PolicyDecision(
-                allowed=True,
-                requires_approval=False,
-                risk="medium",
-                reason="Locomotion mode transition is permitted by settings and current semantic state.",
-            )
         if skill_name in LOW_LEVEL_ARM_SKILLS:
             return self.resolve_arm_motion(settings=settings, robot_state=robot_state)
         if skill_name in HIGH_LEVEL_ARM_SKILLS:

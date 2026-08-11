@@ -11,8 +11,6 @@ honoring the previous decision's ``next_tick_s`` when one was given).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-import heapq
-import itertools
 from typing import Optional
 
 from .models import EventType, RuntimeCheckpoint
@@ -24,15 +22,12 @@ DEFAULT_TICK_INTERVAL_S = 30.0
 class QueuedEvent:
     event_type: EventType
     payload: dict = field(default_factory=dict)
-    priority: int = 5
-    sequence: int = 0
 
 
 class CognitiveScheduler:
     def __init__(self, *, default_tick_interval_s: float = DEFAULT_TICK_INTERVAL_S) -> None:
         self.default_tick_interval_s = default_tick_interval_s
-        self._queue: list[tuple[int, int, QueuedEvent]] = []
-        self._sequence = itertools.count()
+        self._queue: list[QueuedEvent] = []
         self.last_cognitive_timestamp: Optional[float] = None
         self._next_tick_due_at: Optional[float] = None
 
@@ -51,10 +46,8 @@ class CognitiveScheduler:
 
     # -- queue ---------------------------------------------------------
 
-    def enqueue(self, event_type: EventType, *, priority: int = 5, **payload) -> None:
-        sequence = next(self._sequence)
-        event = QueuedEvent(event_type, payload, priority=int(priority), sequence=sequence)
-        heapq.heappush(self._queue, (event.priority, event.sequence, event))
+    def enqueue(self, event_type: EventType, **payload) -> None:
+        self._queue.append(QueuedEvent(event_type, payload))
 
     def has_pending(self) -> bool:
         return bool(self._queue)
@@ -62,7 +55,7 @@ class CognitiveScheduler:
     def pop_next(self) -> Optional[QueuedEvent]:
         if not self._queue:
             return None
-        return heapq.heappop(self._queue)[2]
+        return self._queue.pop(0)
 
     # -- timing --------------------------------------------------------
 
@@ -86,13 +79,5 @@ class CognitiveScheduler:
             return False
         if self._next_tick_due_at is None or now < self._next_tick_due_at:
             return False
-        self.enqueue(EventType.COGNITIVE_TICK, priority=5)
+        self.enqueue(EventType.COGNITIVE_TICK)
         return True
-
-    @property
-    def queue_size(self) -> int:
-        return len(self._queue)
-
-    @property
-    def next_tick_due_at(self) -> Optional[float]:
-        return self._next_tick_due_at

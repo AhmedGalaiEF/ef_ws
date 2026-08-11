@@ -17,7 +17,7 @@ import sys
 from abc import ABC, abstractmethod
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Callable, Optional
+from typing import Callable, Optional
 
 from .identity import SYSTEM_IDENTITY
 from .models import EventType, IntentAnnouncement, IntentType, PlannerDecision, PlannerInput
@@ -95,12 +95,6 @@ class OpenAIPlanner(Planner):
         self._base = base
         self._max_retries = max(0, max_retries)
         self._schema = PlannerDecision.model_json_schema()
-        self._tool_registry: Any = None
-        self._tool_context: Any = None
-
-    def set_tool_context(self, *, registry: Any, context: Any) -> None:
-        self._tool_registry = registry
-        self._tool_context = context
 
     def decide(self, planner_input: PlannerInput) -> PlannerDecision:
         reply_language = str((planner_input.runtime or {}).get("reply_language", "auto"))
@@ -117,14 +111,6 @@ class OpenAIPlanner(Planner):
             "type": "json_schema",
             "json_schema": {"name": "planner_decision", "schema": self._schema, "strict": False},
         }
-        tool_schemas = None
-        tools = None
-        max_iterations = 1
-        if self._tool_registry is not None and self._tool_context is not None:
-            session = self._tool_registry.session(self._tool_context)
-            tool_schemas = self._tool_registry.schemas_for(self._tool_context)
-            tools = self._tool_registry.callables_for(session)
-            max_iterations = max(1, int(getattr(self._tool_context.settings.tools, "max_calls_per_turn", 12)) + 1)
 
         attempts_left = self._max_retries + 1
         last_error: Optional[Exception] = None
@@ -135,10 +121,6 @@ class OpenAIPlanner(Planner):
                 messages=messages,
                 base=self._base,
                 extra_body={"response_format": response_format},
-                tools=tools,
-                tool_schemas=tool_schemas,
-                tool_choice="auto" if tool_schemas else None,
-                max_iterations=max_iterations,
             )
             try:
                 return PlannerDecision.model_validate_json(content)

@@ -173,19 +173,6 @@ def _new_skills() -> dict[str, Skill]:
     }
 
 
-def _unavailable_expressive(kind: str) -> Skill:
-    return Skill(
-        name=f"{kind}_motion",
-        description=f"Play an expressive {kind} CSV motion through Robot.repeat() when live motion files exist.",
-        handler=lambda **_kwargs: SkillResult(
-            ok=False,
-            message=f"{kind} expressive motion requires a live robot with Robot.repeat() and matching {kind}_*.csv files.",
-            detail={"backend": "mock", "skill": f"{kind}_motion"},
-        ),
-        source="agent.expressive_motion",
-    )
-
-
 # ---------------------------------------------------------------------------
 # Offline registry: ai_control.robot_backend.MockRobotBackend, reused as-is.
 # ---------------------------------------------------------------------------
@@ -242,10 +229,6 @@ def build_offline_registry() -> SkillRegistry:
         "stop_slam": Skill("stop_slam", "Stop SLAM (live mode only).", lambda **_kwargs: SkillResult(ok=False, message="SLAM stop requires --robot live mode."), "mock"),
         "slam_status": Skill("slam_status", "Show SLAM status (live mode only).", lambda **_kwargs: SkillResult(ok=False, message="SLAM status requires --robot live mode."), "mock"),
         "slam_preflight": Skill("slam_preflight", "Check SLAM prerequisites (live mode only).", lambda **_kwargs: SkillResult(ok=False, message="SLAM preflight requires --robot live mode."), "mock"),
-        "save_current_nav_point": Skill("save_current_nav_point", "Save current SLAM pose as a named point (live mode only).", lambda **_kwargs: SkillResult(ok=False, message="saving named SLAM points requires --robot live mode."), "mock"),
-        "list_nav_points": Skill("list_nav_points", "List named SLAM points (live mode only).", lambda **_kwargs: SkillResult(ok=False, message="listing named SLAM points requires --robot live mode."), "mock"),
-        "clear_nav_points": Skill("clear_nav_points", "Clear named SLAM points (live mode only).", lambda **_kwargs: SkillResult(ok=False, message="clearing named SLAM points requires --robot live mode."), "mock"),
-        "navigate_named_point": Skill("navigate_named_point", "Navigate to a named SLAM point (live mode only).", lambda **_kwargs: SkillResult(ok=False, message="named-point navigation requires --robot live mode."), "mock"),
         "navigate_to": Skill("navigate_to", "Navigate to an (x, y, yaw) pose.", _wrap(backend.navigate_to, "navigate_to"), "ai_control.robot_backend.MockRobotBackend"),
         "stop": Skill("stop", "Stop all base motion.", _wrap(backend.stop, "stop"), "ai_control.robot_backend.MockRobotBackend"),
         "hand_open": Skill("hand_open", "Open the given hand.", _wrap(backend.hand_open, "hand_open"), "ai_control.robot_backend.MockRobotBackend"),
@@ -287,11 +270,6 @@ def build_offline_registry() -> SkillRegistry:
         "zero_torque": Skill("zero_torque", "Enter zero-torque FSM mode.", lambda **_kwargs: SkillResult(ok=False, message="zero-torque mode requires live sdk_client.Robot.zero_torque().", detail={"backend": "mock", "skill": "zero_torque"}), "mock"),
         "dev_mode": Skill("dev_mode", "Enter low-command developer mode.", lambda **_kwargs: SkillResult(ok=False, message="developer mode requires live sdk_client.Robot.dev_mode().", detail={"backend": "mock", "skill": "dev_mode"}), "mock"),
         "exit_dev_mode": Skill("exit_dev_mode", "Leave low-command developer mode by re-enabling ai_sport.", lambda **_kwargs: SkillResult(ok=False, message="exit developer mode requires live sdk_client.Robot.leave_lowcmd_dev_mode().", detail={"backend": "mock", "skill": "exit_dev_mode"}), "mock"),
-        "walk_mode": Skill("walk_mode", "Enter Unitree walk locomotion FSM mode.", lambda **_kwargs: SkillResult(ok=False, message="walk mode requires live sdk_client.Robot.walk_mode().", detail={"backend": "mock", "skill": "walk_mode"}), "mock"),
-        "run_mode": Skill("run_mode", "Enter Unitree run locomotion FSM mode.", lambda **_kwargs: SkillResult(ok=False, message="run mode requires live sdk_client.Robot.run_mode().", detail={"backend": "mock", "skill": "run_mode"}), "mock"),
-        "thinking_motion": _unavailable_expressive("thinking"),
-        "explain_motion": _unavailable_expressive("explain"),
-        "thanking_motion": _unavailable_expressive("thanking"),
         "announce": Skill("announce", "Speak text through the robot's speaker.", _wrap(backend.say, "announce"), "ai_control.robot_backend.MockRobotBackend"),
     }
     skills.update(_new_skills())
@@ -537,30 +515,6 @@ def build_live_registry(
                     handler=lambda **_kwargs: SkillResult(ok=True, message=json.dumps(slam_backend.preflight(), ensure_ascii=False, sort_keys=True)),
                     source="slam_web_app.SlamWebState",
                 )
-                skills["save_current_nav_point"] = Skill(
-                    name="save_current_nav_point",
-                    description="Save the current SLAM pose as a named navigation point.",
-                    handler=lambda **kwargs: SkillResult(ok=True, message=slam_backend.save_current_point(str(kwargs.get("name") or ""))),
-                    source="slam_web_app.SlamWebState",
-                )
-                skills["list_nav_points"] = Skill(
-                    name="list_nav_points",
-                    description="List saved named SLAM navigation points.",
-                    handler=lambda **_kwargs: SkillResult(ok=True, message=slam_backend.list_points()),
-                    source="slam_web_app.SlamWebState",
-                )
-                skills["clear_nav_points"] = Skill(
-                    name="clear_nav_points",
-                    description="Clear saved named SLAM navigation points.",
-                    handler=lambda **_kwargs: SkillResult(ok=True, message=slam_backend.clear_points()),
-                    source="slam_web_app.SlamWebState",
-                )
-                skills["navigate_named_point"] = Skill(
-                    name="navigate_named_point",
-                    description="Navigate to a saved named SLAM point, relocating first if needed.",
-                    handler=lambda **kwargs: SkillResult(ok=True, message=slam_backend.go_to_point(str(kwargs.get("name") or ""), auto_relocate=bool(kwargs.get("auto_relocate", True)))),
-                    source="slam_web_app.SlamWebState",
-                )
         if hasattr(robot, "say"):
             def _announce(**kwargs: Any) -> SkillResult:
                 text = str(kwargs.get("text", "")).strip()
@@ -677,8 +631,6 @@ def build_live_registry(
             "zero_torque": ("zero_torque", "entered zero-torque FSM mode through sdk_client.Robot.zero_torque()"),
             "dev_mode": ("dev_mode", "entered developer mode through sdk_client.Robot.dev_mode()"),
             "exit_dev_mode": ("leave_lowcmd_dev_mode", "left developer mode by enabling ai_sport through sdk_client.Robot.leave_lowcmd_dev_mode()"),
-            "walk_mode": ("walk_mode", "entered walk locomotion mode through sdk_client.Robot.walk_mode()"),
-            "run_mode": ("run_mode", "entered run locomotion mode through sdk_client.Robot.run_mode()"),
         }
 
         for skill_name, (method_name, message) in fsm_methods.items():
@@ -699,28 +651,6 @@ def build_live_registry(
                 handler=_run_fsm,
                 source=f"sdk_client.Robot.{method_name}",
             )
-
-        if hasattr(robot, "repeat"):
-            try:
-                from agent.expressive_motion import ExpressiveMotionController
-
-                expressive = ExpressiveMotionController(robot=robot)
-            except Exception as exc:
-                unavailable.append(f"expressive motion unavailable: {exc}")
-            else:
-                for kind in ("thinking", "explain", "thanking"):
-                    def _run_expressive(kind: str = kind, **kwargs: Any) -> SkillResult:
-                        settings = kwargs.get("agent_settings")
-                        if settings is None:
-                            return SkillResult(ok=False, message="agent_settings is required for expressive motion")
-                        return expressive.run(kind, settings=settings, reason=str(kwargs.get("reason") or "skill"))
-
-                    skills[f"{kind}_motion"] = Skill(
-                        name=f"{kind}_motion",
-                        description=f"Play a random {kind}_*.csv expressive motion through sdk_client.Robot.repeat().",
-                        handler=_run_expressive,
-                        source="agent.expressive_motion.ExpressiveMotionController",
-                    )
 
     if scene_ctx is not None:
         try:

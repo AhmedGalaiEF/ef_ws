@@ -240,7 +240,7 @@ class SdkClientRobotStateSource(RobotStateSource):
                 "gyro": data.get("imu_gyro"),
                 "acc": data.get("imu_acc"),
             },
-            "source": "/lowstate",
+            "source": "rt/lowstate",
         }
 
     def _read_battery_summary(self) -> dict[str, Any] | None:
@@ -284,7 +284,7 @@ class SdkClientRobotStateSource(RobotStateSource):
             "power_v": power_v,
             "power_a": power_a,
             "charging": None if current_a is None else current_a > 0.05,
-            "source": "/lowstate.bms_state" if bms is not None else "/lowstate.power",
+            "source": "rt/lowstate.bms_state" if bms is not None else "rt/lowstate.power",
             "available_fields": self._public_fields(bms if bms is not None else msg),
         }
 

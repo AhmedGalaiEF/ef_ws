@@ -9,26 +9,15 @@ touch the planner -- they are plain deterministic code, per spec section
 from __future__ import annotations
 
 import re
-import threading
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from typing import Any, Optional
 
 from ..announcements import announce
-from ..active_learning import ActiveLearningManager, LearningQuestionRecord
-from ..activity import ActivityManager
-from ..asr import AsrRuntime
-from ..attention import AttentionManager
 from ..capabilities import CapabilityResolver, PolicyDecision
 from ..checkpoint import CheckpointStore
-from ..expressive_motion import ExpressiveMotionController
-from ..learning import LearningManager
 from ..lifecycle import LifecycleController, classify_startup
-from ..llctl import LlctlAdapter
 from ..memory.manager import MemoryManager, MemoryProposalError
-from ..monitor import MonitorEventBus
-from ..navigation import NavigationAdapter
 from ..models import (
     CapabilityStatus,
     EventType,
@@ -40,12 +29,8 @@ from ..models import (
     RobotStateSnapshot,
     RuntimeCheckpoint,
 )
-from ..outcomes import OutcomeEvaluator, SkillOutcome
 from ..planner import Planner
-from ..reset import ResetManager, ResetResult
 from ..scheduler import CognitiveScheduler
-from ..semantic_state import SemanticState, SemanticStateTracker
-from ..self_model import SelfModelStore
 from ..settings.manager import InvalidSettingError, SettingsManager
 from ..settings.models import SkillMode
 from ..skills import (
@@ -56,9 +41,6 @@ from ..skills import (
     resolve_and_maybe_invoke,
 )
 from ..state import RobotStateSource, build_robot_state
-from ..tacit import TacitKnowledgeService
-from ..tools import ToolContext, build_default_tool_registry
-from ..visual_observation import VisualObservationTracker
 
 try:
     from ..knowledge.sdk_wrapper_knowledge import SdkWrapperKnowledge
@@ -72,12 +54,6 @@ class TurnOutcome:
     grounded_response: Optional[str]
     skill_outcomes: list[tuple[str, SkillInvocationOutcome]]
     announcement: Any = None
-    skill_evaluations: list[SkillOutcome] | None = None
-    learning_question: Optional[LearningQuestionRecord] = None
-
-    def __post_init__(self) -> None:
-        if self.skill_evaluations is None:
-            self.skill_evaluations = []
 
 
 class G1Agent:
@@ -110,29 +86,6 @@ class G1Agent:
         self.resolver = resolver or CapabilityResolver()
         self.robot = robot
         self.scheduler = CognitiveScheduler()
-        self.monitor_bus = MonitorEventBus(max_events=self.settings.effective().monitor.event_buffer_size)
-        self.asr_runtime = AsrRuntime(monitor=self.monitor_bus)
-        self.expressive_motion = ExpressiveMotionController(robot=robot, monitor=self.monitor_bus)
-        self.activity = ActivityManager(robot=robot, monitor=self.monitor_bus, expressive_motion=self.expressive_motion)
-        self.active_learning = ActiveLearningManager(monitor=self.monitor_bus)
-        self.navigation = NavigationAdapter(robot=robot)
-        self.llctl = LlctlAdapter()
-        self.visual_observations = VisualObservationTracker()
-        self.semantic_tracker = SemanticStateTracker()
-        self.attention = AttentionManager()
-        self.outcome_evaluator = OutcomeEvaluator()
-        self.learning = LearningManager(self.memory, monitor=self.monitor_bus)
-        self_model_settings = self.settings.effective().self_model
-        self.self_model = SelfModelStore.from_memory_base(
-            base_dir=self.learning.base_dir,
-            robot_id=self_model_settings.robot_id or None,
-            monitor=self.monitor_bus,
-        )
-        self.reset_manager = ResetManager(agent=self, monitor=self.monitor_bus)
-        self.tacit = TacitKnowledgeService(agent=self)
-        self._mutation_lock = threading.RLock()
-        self.tool_registry = build_default_tool_registry(self)
-        self._last_tool_context: Optional[ToolContext] = None
         # Non-interactive confirmation policy for tests/scripted runs: when
         # True, a "needs_confirmation" skill is treated as approved without
         # prompting on stdin. The CLI REPL leaves this False and prompts.
@@ -148,30 +101,10 @@ class G1Agent:
         self._vision_answerer: Any = None
         self._boot_time = time.time()
         self._cognition_count = 0
-        self._last_semantic_state: SemanticState = self.semantic_tracker.current
-        self._current_objectives: list[dict[str, Any]] = []
-        self._behavior_owner: str = "none"
-        self._last_learning_question_shown: Optional[LearningQuestionRecord] = None
 
     @property
     def boot_event(self) -> EventType:
         return self._boot_event
-
-    def _update_semantic_state(
-        self,
-        robot_state: RobotStateSnapshot,
-        *,
-        interaction: str = "alone",
-        task: str = "idle",
-    ) -> tuple[SemanticState, list[str]]:
-        semantic_state, changes = self.semantic_tracker.update(
-            robot_state,
-            lifecycle=self.lifecycle.state.value,
-            interaction=interaction,
-            task=task,
-        )
-        self._last_semantic_state = semantic_state
-        return semantic_state, changes
 
     # -- boot -------------------------------------------------------------
 
@@ -179,13 +112,6 @@ class G1Agent:
         """Run the first cognitive turn: agent_first_boot / _restart / _wake."""
         now = time.time()
         robot_state = build_robot_state(self.state_source)
-        semantic_state, semantic_changes = self._update_semantic_state(robot_state, interaction="alone", task="idle")
-        self.monitor_bus.emit(
-            "event",
-            "event_received",
-            f"boot {self._boot_event.value}",
-            metadata={"semantic_changes": semantic_changes},
-        )
         runtime: dict[str, Any] = {"platform": "Unitree G1", "reason": self._boot_event.value}
         prev = self._previous_checkpoint
         if self._boot_event == EventType.AGENT_RESTART and prev is not None:
@@ -203,27 +129,20 @@ class G1Agent:
                 memory_restored=True,
             )
 
-        settings = self.settings.effective()
-        with self.activity.activity("thinking", settings=settings, reason=self._boot_event.value):
-            planner_input = self._build_planner_input(
-                event=self._boot_event,
-                timestamp=now,
-                user_text=None,
-                input_source="system",
-                robot_state=robot_state,
-                runtime=runtime,
-                semantic_state=semantic_state,
-            )
-            decision = self.planner.decide(planner_input)
-        self.monitor_bus.emit("planner", "planner_decision", f"intent={decision.intent.value} target={decision.target}")
+        planner_input = self._build_planner_input(
+            event=self._boot_event,
+            timestamp=now,
+            user_text=None,
+            input_source="system",
+            robot_state=robot_state,
+            runtime=runtime,
+        )
+        decision = self.planner.decide(planner_input)
         # Reach AWAKE before persisting the checkpoint, so a boot turn's
         # checkpoint always records "awake", not a transitional state.
         self.lifecycle.transition(LifecycleState.AWAKE)
-        semantic_state.lifecycle = self.lifecycle.state.value
-        self._last_semantic_state = semantic_state
         self._after_turn(planner_input, decision)
         self._record_boot_memory(robot_state)
-        self.monitor_bus.emit("lifecycle", "lifecycle_transition", f"entered {self.lifecycle.state.value}")
         self._booted = True
         return decision
 
@@ -232,13 +151,6 @@ class G1Agent:
     def handle_chat(self, text: str) -> TurnOutcome:
         """``/chat`` -- always active, independent of every audio setting."""
         return self._handle_user_text(text, input_source="chat")
-
-    def handle_cli_text(self, text: str) -> TurnOutcome:
-        """Bare REPL text; may answer a pending learning question."""
-        settings = self.settings.effective()
-        if self.active_learning.should_consume_text_as_answer(text, settings=settings):
-            return self._handle_learning_answer(text)
-        return self.handle_chat(text)
 
     def handle_audio_msg(self, text: str) -> Optional[TurnOutcome]:
         """``/audio_msg`` -- gated by ``audio.asr_enabled`` (spec section 15).
@@ -251,83 +163,30 @@ class G1Agent:
         explicit transcript command) -- it intentionally does not gate
         ``/audio_msg``.
         """
-        effective = self.settings.effective()
-        if not (effective.audio.asr_enabled and effective.asr.enabled):
+        if not self.settings.effective().audio.asr_enabled:
             return None
         return self._handle_user_text(text, input_source="audio")
 
     def handle_cognitive_tick(self) -> TurnOutcome:
         """Run one periodic mostly-idle cognition turn."""
-        self._last_learning_question_shown = None
         now = time.time()
-        settings = self.settings.effective()
         robot_state = build_robot_state(self.state_source)
-        semantic_state, semantic_changes = self._update_semantic_state(robot_state, interaction="alone", task="idle")
-        attention = self.attention.decide(
-            event_type=EventType.COGNITIVE_TICK.value,
-            semantic_state=semantic_state,
-            semantic_changes=semantic_changes,
-            settings=settings,
-            self_model=self.self_model,
+        planner_input = self._build_planner_input(
+            event=EventType.COGNITIVE_TICK,
+            timestamp=now,
+            user_text=None,
+            input_source="system",
+            robot_state=robot_state,
+            runtime={"reason": "periodic_tick"},
         )
-        self.monitor_bus.emit(
-            "attention",
-            "attention_decision",
-            f"priority=P{attention.priority} action={attention.action} reason={attention.reason_code}",
-            metadata={"event_summary": attention.event_summary, "semantic_changes": semantic_changes},
-        )
-        if attention.action in {"ignore", "record", "aggregate"}:
-            self.scheduler.record_cognition(now, settings.cognition.periodic_interval_s)
-            return TurnOutcome(
-                decision=PlannerDecision(intent=IntentType.NO_ACTION),
-                grounded_response=None,
-                skill_outcomes=[],
-            )
-        maintenance_result = None
-        if attention.reason_code == "maintenance_due" and settings.learning.enabled:
-            maintenance_result = self.learning.consolidate(settings=settings)
-        self.monitor_bus.emit("cognition", "cognition_started", f"tick reason={attention.reason_code}")
-        with self.activity.activity("thinking", settings=settings, reason=f"tick:{attention.reason_code}"):
-            planner_input = self._build_planner_input(
-                event=EventType.COGNITIVE_TICK,
-                timestamp=now,
-                user_text=None,
-                input_source="system",
-                robot_state=robot_state,
-                runtime={"reason": "periodic_tick", "attention": attention.model_dump(), "maintenance": maintenance_result},
-                semantic_state=semantic_state,
-            )
-            decision = self.planner.decide(planner_input)
-        self.monitor_bus.emit("planner", "planner_decision", f"intent={decision.intent.value} target={decision.target}")
+        decision = self.planner.decide(planner_input)
         self._after_turn(planner_input, decision, announce_maintenance=False)
         return self._execute_decision(decision, planner_input)
 
     def _handle_user_text(self, text: str, *, input_source: str) -> TurnOutcome:
         now = time.time()
-        self._last_learning_question_shown = None
         event = EventType.ASR_MESSAGE if input_source == "audio" else EventType.USER_MESSAGE
         robot_state = build_robot_state(self.state_source)
-        semantic_state, semantic_changes = self._update_semantic_state(robot_state, interaction="user_engaged", task="idle")
-        attention = self.attention.decide(
-            event_type=event.value,
-            semantic_state=semantic_state,
-            semantic_changes=semantic_changes,
-            settings=self.settings.effective(),
-            event_summary=text[:120],
-            self_model=self.self_model,
-        )
-        self.monitor_bus.emit("event", "event_received", f"{input_source}: {text[:120]}")
-        self.monitor_bus.emit(
-            "attention",
-            "attention_decision",
-            f"priority=P{attention.priority} action={attention.action} reason={attention.reason_code}",
-        )
-        if self._is_thanks_intent(text):
-            self.expressive_motion.run_background(
-                "thanking",
-                settings=self.settings.effective(),
-                reason="dialogue_thanking",
-            )
         age_response = self._maybe_handle_age_query(text)
         if age_response is not None:
             decision = PlannerDecision(intent=IntentType.CONVERSATION, response_text=age_response)
@@ -372,47 +231,14 @@ class G1Agent:
             )
             self._after_turn(planner_input, decision)
             return self._execute_decision(decision, planner_input)
-        with self.activity.activity("thinking", settings=self.settings.effective(), reason=f"user:{input_source}"):
-            planner_input = self._build_planner_input(
-                event=event, timestamp=now, user_text=text, input_source=input_source, robot_state=robot_state
-            )
-            decision = self.planner.decide(planner_input)
+        planner_input = self._build_planner_input(
+            event=event, timestamp=now, user_text=text, input_source=input_source, robot_state=robot_state
+        )
+        decision = self.planner.decide(planner_input)
         decision = self._normalize_decision(decision, planner_input)
         decision = self._apply_command_fallbacks(decision, planner_input)
         self._after_turn(planner_input, decision)
         return self._execute_decision(decision, planner_input)
-
-    def _handle_learning_answer(self, text: str) -> TurnOutcome:
-        now = time.time()
-        settings = self.settings.effective()
-        record, proposal = self.active_learning.answer(text, settings=settings)
-        robot_state = build_robot_state(self.state_source)
-        runtime = {
-            "reason": "learning_answer",
-            "related_question_id": None if record is None else record.id,
-            "learning_answer_provenance": None if proposal is None else proposal.content,
-        }
-        if proposal is not None:
-            try:
-                self.memory.apply_proposal(proposal)
-                self.monitor_bus.emit("memory", "memory_proposed", f"learning answer stored as {proposal.kind}")
-            except MemoryProposalError as exc:
-                self.monitor_bus.emit("memory", "memory_rejected", str(exc))
-        with self.activity.activity("thinking", settings=settings, reason="learning_answer"):
-            planner_input = self._build_planner_input(
-                event=EventType.LEARNING_ANSWER,
-                timestamp=now,
-                user_text=text,
-                input_source="learning_answer",
-                robot_state=robot_state,
-                runtime=runtime,
-            )
-            decision = self.planner.decide(planner_input)
-        self._after_turn(planner_input, decision)
-        outcome = self._execute_decision(decision, planner_input)
-        if outcome.grounded_response is None and record is not None:
-            outcome.grounded_response = "Thanks. I recorded that as operator-provided learning evidence."
-        return outcome
 
     def _maybe_handle_memory_query(self, text: str, robot_state: RobotStateSnapshot) -> Optional[str]:
         lowered = text.strip().lower()
@@ -434,11 +260,6 @@ class G1Agent:
             f"{bio}\n"
             f"Current state summary: posture={robot_state.posture}, stability={robot_state.stability}."
         )
-
-    @staticmethod
-    def _is_thanks_intent(text: str) -> bool:
-        lowered = text.strip().lower()
-        return any(token in lowered for token in ("thank you", "thanks", "danke", "vielen dank"))
 
     def _maybe_handle_age_query(self, text: str) -> Optional[str]:
         lowered = text.strip().lower()
@@ -550,30 +371,11 @@ class G1Agent:
                 from ..vision import OpenAIVisionAnswerer
 
                 self._vision_answerer = OpenAIVisionAnswerer()
-            answer = self._vision_answerer.answer(
+            return self._vision_answerer.answer(
                 settings=settings.vision,
                 question=question,
                 reply_language=str(reply_language),
             )
-            obs = self.visual_observations.observe_from_answer(
-                answer=answer,
-                model=str(settings.vision.openai_model),
-                confidence=0.6,
-            )
-            self.monitor_bus.emit(
-                "vision",
-                "visual_observation",
-                (obs.scene_summary or "")[:160],
-                metadata=obs.model_dump(),
-            )
-            if self.visual_observations.should_wake_cognition(obs):
-                self.monitor_bus.emit(
-                    "attention",
-                    "attention_decision",
-                    "priority=P4 action=record reason=visual_semantic_change",
-                    metadata={"notable_changes": list(obs.notable_changes)},
-                )
-            return answer
         except Exception as exc:
             if german:
                 return f"Ich kann das RGB-D-Bild gerade nicht auswerten: {exc}"
@@ -590,41 +392,34 @@ class G1Agent:
         input_source: Optional[str],
         robot_state: RobotStateSnapshot,
         runtime: Optional[dict[str, Any]] = None,
-        semantic_state: Optional[SemanticState] = None,
     ) -> PlannerInput:
         settings = self.settings.effective()
-        self.monitor_bus.resize(settings.monitor.event_buffer_size)
-        semantic_state = semantic_state or self._last_semantic_state
         runtime_payload = dict(runtime or {})
         runtime_payload.setdefault("reply_language", self._effective_reply_language(settings))
         runtime_payload.setdefault("cognition_count", self._cognition_count)
         runtime_payload.setdefault("agent_uptime_s", max(0.0, time.time() - self._boot_time))
-        runtime_payload.setdefault("semantic_state", semantic_state.model_dump())
-        runtime_payload.setdefault("self", self.self_model.summary())
         query = user_text or ""
 
-        memory_refs = {"episodic": [], "semantic": [], "procedural": []}
+        memory_refs = self.memory.retrieve(query) if query else {"episodic": [], "semantic": [], "procedural": []}
 
         sdk_refs = []
-        doc_refs = []
-        tool_context = self._make_tool_context(
-            settings=settings,
-            robot_state=robot_state,
-            event=event.value,
-            profile=self._tool_profile_for(event=event, user_text=user_text, runtime=runtime_payload),
-        )
-        self._last_tool_context = tool_context
-        if hasattr(self.planner, "set_tool_context"):
+        if self.sdk_knowledge is not None:
             try:
-                self.planner.set_tool_context(registry=self.tool_registry, context=tool_context)
+                sdk_refs = self.sdk_knowledge.search(query)
             except Exception:
-                pass
+                sdk_refs = []
+
+        doc_refs = []
+        if self.document_rag is not None and query:
+            try:
+                doc_refs = self.document_rag.search(query)
+            except Exception:
+                doc_refs = []
 
         arm_policy = self.resolver.resolve_arm_motion(settings=settings, robot_state=robot_state)
         capability_summary = {
             "arm_motion": CapabilityStatus(available=arm_policy.allowed, reason=arm_policy.reason),
         }
-        planner_robot_state = self._compact_planner_robot_state(robot_state)
 
         return PlannerInput(
             event=event,
@@ -633,7 +428,7 @@ class G1Agent:
             elapsed_since_last_cognition_s=self.scheduler.elapsed_since_last_cognition(timestamp),
             input_source=input_source,
             user_text=user_text,
-            robot_state=planner_robot_state,
+            robot_state=robot_state,
             lifecycle_state=self.lifecycle.state,
             available_skills=self.skills.names(),
             capability_summary=capability_summary,
@@ -646,49 +441,9 @@ class G1Agent:
             autobiography_summary=self.memory.autobiography.summary(
                 max_entries=max(1, min(10, int(getattr(settings.response, "memory_max_entries", 3))))
             ),
-            available_tools=[
-                row["name"]
-                for row in self.tool_registry.available_for(tool_context)
-                if row.get("availability") == "available"
-            ],
+            available_tools=[],
             runtime=runtime_payload,
         )
-
-    def _make_tool_context(
-        self,
-        *,
-        settings: Any,
-        robot_state: RobotStateSnapshot,
-        event: str,
-        profile: str,
-    ) -> ToolContext:
-        return ToolContext(agent=self, settings=settings, robot_state=robot_state, profile=profile, event=event)
-
-    @staticmethod
-    def _compact_planner_robot_state(robot_state: RobotStateSnapshot) -> RobotStateSnapshot:
-        data = robot_state.model_dump()
-        lowstate = data.get("lowstate") or {}
-        if lowstate:
-            data["lowstate"] = {
-                "timestamp": lowstate.get("timestamp"),
-                "joint_count": lowstate.get("joint_count"),
-                "imu": lowstate.get("imu"),
-                "source": lowstate.get("source"),
-            }
-        return RobotStateSnapshot(**data)
-
-    @staticmethod
-    def _tool_profile_for(*, event: EventType, user_text: Optional[str], runtime: Optional[dict[str, Any]]) -> str:
-        text = (user_text or "").lower()
-        if event in {EventType.TASK_FAILED, EventType.ANOMALY}:
-            return "diagnostic"
-        if any(token in text for token in ("why", "debug", "fault", "error", "didn't", "diagnostic")):
-            return "diagnostic"
-        if any(token in text for token in ("navigate", "slam", "map", "relocate")):
-            return "navigation"
-        if any(token in text for token in ("arm", "grab", "wave", "gesture", "hand")):
-            return "manipulation"
-        return "social"
 
     # -- post-turn bookkeeping ----------------------------------------------
 
@@ -700,12 +455,6 @@ class G1Agent:
         announce_maintenance: bool = True,
     ) -> None:
         self._cognition_count += 1
-        self.monitor_bus.emit(
-            "planner",
-            "planner_decision",
-            f"intent={decision.intent.value} target={decision.target}",
-            metadata={"event": planner_input.event.value},
-        )
         self.scheduler.record_cognition(planner_input.timestamp, decision.next_tick_s)
         checkpoint = RuntimeCheckpoint(
             last_cognitive_timestamp=planner_input.timestamp,
@@ -714,7 +463,6 @@ class G1Agent:
             last_decision=decision.intent,
             active_skill=(decision.requested_skills[0] if decision.requested_skills else None),
             last_robot_state_summary=planner_input.robot_state.model_dump(),
-            self_model_version=self.self_model.model.version,
         )
         self.checkpoint_store.save(checkpoint)
         self._previous_checkpoint = checkpoint
@@ -722,21 +470,9 @@ class G1Agent:
         if decision.memory_proposal is not None:
             try:
                 self.memory.apply_proposal(decision.memory_proposal)
-                self.monitor_bus.emit("memory", "memory_proposed", f"{decision.memory_proposal.kind} proposal accepted")
             except MemoryProposalError as exc:
-                self.monitor_bus.emit("memory", "memory_rejected", str(exc))
                 print(f"[memory] rejected proposal: {exc}")
-        if decision.learning_question is not None or decision.intent == IntentType.ASK_USER_TO_LEARN:
-            record = self.active_learning.consider(
-                decision.learning_question,
-                settings=self.settings.effective(),
-                interaction_state=self._active_learning_interaction_state(),
-            )
-            self._last_learning_question_shown = record
-            if record is not None:
-                self.activity.set("listening", reason="active_learning_question_shown")
         if decision.maintenance_proposal is not None and announce_maintenance:
-            self.monitor_bus.emit("maintenance", "maintenance_proposed", decision.maintenance_proposal.description)
             print(
                 "[maintenance] proposal recorded (no automated consolidation job in this "
                 f"phase): {decision.maintenance_proposal.description}"
@@ -766,8 +502,6 @@ class G1Agent:
         settings = self.settings.effective()
         robot_state = planner_input.robot_state
         outcome = TurnOutcome(decision=decision, grounded_response=decision.response_text, skill_outcomes=[])
-        outcome.learning_question = self._last_learning_question_shown
-        before_semantic = self._last_semantic_state
 
         if decision.intent == IntentType.QUERY_CAPABILITY and (decision.target or "").strip().lower() == "arm":
             policy = self.resolver.resolve_arm_motion(settings=settings, robot_state=robot_state)
@@ -775,13 +509,6 @@ class G1Agent:
             outcome.grounded_response = self._limit_response(outcome.grounded_response, settings=settings)
             self._speak_grounded_response(outcome.grounded_response, settings=settings, robot_state=robot_state)
             return outcome
-        if decision.intent == IntentType.QUERY_CAPABILITY:
-            target = (decision.target or planner_input.user_text or "").strip().lower()
-            grounded = self._maybe_describe_runtime_capability(target, robot_state)
-            if grounded is not None:
-                outcome.grounded_response = self._limit_response(grounded, settings=settings)
-                self._speak_grounded_response(outcome.grounded_response, settings=settings, robot_state=robot_state)
-                return outcome
 
         if decision.intent == IntentType.QUERY_STATE:
             target = (decision.target or "").strip().lower()
@@ -793,7 +520,7 @@ class G1Agent:
             self._speak_grounded_response(outcome.grounded_response, settings=settings, robot_state=robot_state)
             return outcome
 
-        if decision.intent in (IntentType.NO_ACTION, IntentType.CONVERSATION, IntentType.MAINTENANCE, IntentType.ASK_USER_TO_LEARN):
+        if decision.intent in (IntentType.NO_ACTION, IntentType.CONVERSATION, IntentType.MAINTENANCE):
             outcome.grounded_response = self._limit_response(outcome.grounded_response, settings=settings)
             self._speak_grounded_response(outcome.grounded_response, settings=settings, robot_state=robot_state)
             return outcome
@@ -809,13 +536,6 @@ class G1Agent:
 
         for skill_name in decision.requested_skills:
             skill_kwargs = self._skill_kwargs(skill_name, decision, planner_input, settings)
-            invocation_id = f"{skill_name}_{int(time.time() * 1000)}"
-            started_at = datetime.now(timezone.utc)
-            self._current_objectives = [
-                {"summary": f"execute {skill_name}", "priority": "P3"},
-                {"summary": "respond to CLI user", "priority": "P1"},
-            ]
-            self.monitor_bus.emit("skill", "skill_started", f"{skill_name} started", references=[invocation_id])
             skill_outcome = resolve_and_maybe_invoke(
                 self.skills,
                 self.resolver,
@@ -858,48 +578,6 @@ class G1Agent:
                     is_denial=True,
                 )
             outcome.skill_outcomes.append((skill_name, skill_outcome))
-            completed_at = datetime.now(timezone.utc)
-            try:
-                observed_robot_state = build_robot_state(self.state_source)
-                after_semantic, _ = self._update_semantic_state(
-                    observed_robot_state,
-                    interaction="user_engaged",
-                    task="completed" if skill_outcome.status == "executed" else "failed",
-                )
-            except Exception:
-                after_semantic = self._last_semantic_state
-            evaluation = self.outcome_evaluator.evaluate(
-                skill_id=skill_name,
-                invocation_id=invocation_id,
-                invocation_outcome=skill_outcome,
-                before=before_semantic,
-                after=after_semantic,
-                started_at=started_at,
-                completed_at=completed_at,
-            )
-            outcome.skill_evaluations.append(evaluation)
-            event_name = "skill_completed" if evaluation.goal_reached else "skill_failed"
-            self.monitor_bus.emit(
-                "skill",
-                event_name,
-                f"{skill_name} goal_reached={evaluation.goal_reached} failure={evaluation.failure_type}",
-                references=[invocation_id],
-                metadata={"outcome": evaluation.model_dump(mode="json")},
-            )
-            episode_id = self.learning.record_skill_outcome(
-                evaluation,
-                before=before_semantic,
-                after=after_semantic,
-                settings=settings,
-            )
-            if settings.self_model.enabled and settings.self_model.update_from_skill_outcomes:
-                self.self_model.update_from_skill_outcome(
-                    evaluation,
-                    episode_id=episode_id,
-                    before=before_semantic,
-                    after=after_semantic,
-                )
-            before_semantic = after_semantic
 
         if decision.intent == IntentType.REQUEST_SLEEP and any(
             o.status == "executed" and o.result and o.result.ok for _, o in outcome.skill_outcomes
@@ -907,16 +585,7 @@ class G1Agent:
             self._enter_sleep(decision)
 
         outcome.grounded_response = self._limit_response(outcome.grounded_response, settings=settings)
-        self._current_objectives = []
-        outcome.learning_question = self._last_learning_question_shown
         return outcome
-
-    def _active_learning_interaction_state(self) -> str:
-        if self._current_objectives:
-            return "task"
-        if self._last_semantic_state.task not in {"idle", "", None}:
-            return "task"
-        return "idle"
 
     def _skill_kwargs(
         self,
@@ -928,9 +597,7 @@ class G1Agent:
         if skill_name == "reach_forward":
             text = (planner_input.user_text or "").lower()
             arm = "left" if "left" in text else "right"
-            kwargs = {"arm": arm}
-            kwargs.update(self._learned_skill_kwargs(skill_name, settings))
-            return kwargs
+            return {"arm": arm}
         if skill_name in {"turn_left", "turn_right"}:
             return {"degrees": self._extract_turn_degrees(planner_input.user_text or "")}
         if skill_name == "grab":
@@ -943,42 +610,7 @@ class G1Agent:
                 arm = "left"
             elif "right" in text:
                 arm = "right"
-            kwargs = {"prompt": prompt, "agent_settings": settings, "arm": arm}
-            kwargs.update(self._learned_skill_kwargs(skill_name, settings))
-            return kwargs
-        if skill_name == "save_current_nav_point":
-            return {"name": self._extract_save_point_name(planner_input.user_text or "")}
-        if skill_name == "navigate_named_point":
-            return {"name": decision.target or self._extract_go_to_point_name(planner_input.user_text or ""), "auto_relocate": True}
-        if skill_name in {"thinking_motion", "explain_motion", "thanking_motion"}:
-            return {"agent_settings": settings, "reason": "user_request"}
-        return self._learned_skill_kwargs(skill_name, settings)
-
-    def _learned_skill_kwargs(self, skill_name: str, settings: Any) -> dict[str, Any]:
-        automatic_max = int(getattr(settings.learning, "automatic_level_max", 1))
-        if automatic_max < 3:
-            return {}
-        self_kwargs = self.self_model.learned_skill_kwargs(skill_name)
-        if self_kwargs:
-            self.monitor_bus.emit(
-                "self",
-                "self_model_procedure_applied",
-                f"applying {skill_name} from self-model {self_kwargs}",
-            )
-            return self_kwargs
-        for adaptation in self.memory.procedural.all():
-            if adaptation.skill != skill_name:
-                continue
-            pre_pose = adaptation.recommended_parameters.get("pre_pose")
-            if pre_pose:
-                self.self_model.apply_procedural_adaptation(adaptation)
-                self.monitor_bus.emit(
-                    "learning",
-                    "procedural_adaptation_validated",
-                    f"applying {skill_name} pre_pose={pre_pose}",
-                    references=list(adaptation.derived_from),
-                )
-                return {"learned_pre_pose": pre_pose}
+            return {"prompt": prompt, "agent_settings": settings, "arm": arm}
         return {}
 
     def _apply_command_fallbacks(
@@ -998,7 +630,6 @@ class G1Agent:
             "start_mapping": ("start_mapping", "I'll start SLAM mapping.", "Ich starte das SLAM-Mapping."),
             "save_map": ("save_map", "I'll save the SLAM map.", "Ich speichere die SLAM-Karte."),
             "start_relocation": ("start_relocation", "I'll start SLAM relocation.", "Ich starte die SLAM-Relokalisierung."),
-            "relocate": ("start_relocation", "I'll start SLAM relocation.", "Ich starte die SLAM-Relokalisierung."),
             "add_current_nav_pose": ("add_current_nav_pose", "I'll add the current pose as a navigation task.", "Ich füge die aktuelle Pose als Navigationsziel hinzu."),
             "navigate_selected_pose": ("navigate_selected_pose", "I'll navigate to the selected pose.", "Ich navigiere zur ausgewählten Pose."),
             "execute_nav_tasks": ("execute_nav_tasks", "I'll execute the queued navigation tasks.", "Ich führe die Navigationsaufgaben aus."),
@@ -1007,8 +638,6 @@ class G1Agent:
             "stop_slam": ("stop_slam", "I'll stop SLAM.", "Ich stoppe SLAM."),
             "slam_status": ("slam_status", "I'll check SLAM status.", "Ich prüfe den SLAM-Status."),
             "slam_preflight": ("slam_preflight", "I'll check SLAM mapping prerequisites.", "Ich prüfe die SLAM-Mapping-Voraussetzungen."),
-            "list_nav_points": ("list_nav_points", "I'll list saved SLAM points.", "Ich liste gespeicherte SLAM-Punkte auf."),
-            "clear_nav_points": ("clear_nav_points", "I'll clear saved SLAM points.", "Ich lösche gespeicherte SLAM-Punkte."),
             "release_arms": ("release_arms", "I'll release arm control authority.", "Ich gebe die Armsteuerung frei."),
             "wave": ("wave", "I'll try a wave.", "Ich versuche zu winken."),
             "face_wave": ("face_wave", "I'll try a face wave.", "Ich versuche vor dem Gesicht zu winken."),
@@ -1022,13 +651,6 @@ class G1Agent:
             "zero_torque": ("zero_torque", "I'll enter zero-torque mode.", "Ich gehe in den Zero-Torque-Modus."),
             "dev_mode": ("dev_mode", "I'll enter developer mode.", "Ich gehe in den Developer-Modus."),
             "exit_dev_mode": ("exit_dev_mode", "I'll exit developer mode and re-enable ai_sport.", "Ich verlasse den Developer-Modus und aktiviere ai_sport wieder."),
-            "walk_mode": ("walk_mode", "I'll enter walk mode.", "Ich gehe in den Walk-Modus."),
-            "walking_mode": ("walk_mode", "I'll enter walk mode.", "Ich gehe in den Walk-Modus."),
-            "run_mode": ("run_mode", "I'll enter run mode.", "Ich gehe in den Run-Modus."),
-            "running_mode": ("run_mode", "I'll enter run mode.", "Ich gehe in den Run-Modus."),
-            "thinking": ("thinking_motion", "I'll play the thinking expressive motion.", "Ich spiele die Thinking-Ausdrucksbewegung."),
-            "explain": ("explain_motion", "I'll play the explain expressive motion.", "Ich spiele die Explain-Ausdrucksbewegung."),
-            "thanking": ("thanking_motion", "I'll play the thanking expressive motion.", "Ich spiele die Thanking-Ausdrucksbewegung."),
         }
         if text in direct_skill_aliases:
             skill_name, english, german_text = direct_skill_aliases[text]
@@ -1088,10 +710,6 @@ class G1Agent:
                 "start_mapping": ("I'll start SLAM mapping.", "Ich starte das SLAM-Mapping."),
                 "save_map": ("I'll save the SLAM map.", "Ich speichere die SLAM-Karte."),
                 "start_relocation": ("I'll start SLAM relocation.", "Ich starte die SLAM-Relokalisierung."),
-                "save_current_nav_point": ("I'll save the current SLAM point.", "Ich speichere den aktuellen SLAM-Punkt."),
-                "list_nav_points": ("I'll list saved SLAM points.", "Ich liste gespeicherte SLAM-Punkte auf."),
-                "clear_nav_points": ("I'll clear saved SLAM points.", "Ich lösche gespeicherte SLAM-Punkte."),
-                "navigate_named_point": ("I'll navigate to the saved SLAM point.", "Ich navigiere zum gespeicherten SLAM-Punkt."),
                 "add_current_nav_pose": ("I'll add the current pose as a navigation task.", "Ich füge die aktuelle Pose als Navigationsziel hinzu."),
                 "navigate_selected_pose": ("I'll navigate to the selected pose.", "Ich navigiere zur ausgewählten Pose."),
                 "execute_nav_tasks": ("I'll execute the queued navigation tasks.", "Ich führe die Navigationsaufgaben aus."),
@@ -1107,24 +725,6 @@ class G1Agent:
                 target=slam_skill,
                 response_text=german_text if german else english,
                 requested_skills=[slam_skill],
-            )
-        point_name = self._extract_save_point_name(planner_input.user_text or "")
-        if point_name and "save_current_nav_point" in self.skills.skills:
-            german = self._effective_reply_language(self.settings.effective()) == "de"
-            return PlannerDecision(
-                intent=IntentType.EXECUTE_TASK,
-                target=point_name,
-                response_text=(f"Ich speichere den aktuellen SLAM-Punkt als {point_name}." if german else f"I'll save the current SLAM point as {point_name}."),
-                requested_skills=["save_current_nav_point"],
-            )
-        go_to_name = self._extract_go_to_point_name(planner_input.user_text or "")
-        if go_to_name and "navigate_named_point" in self.skills.skills:
-            german = self._effective_reply_language(self.settings.effective()) == "de"
-            return PlannerDecision(
-                intent=IntentType.EXECUTE_TASK,
-                target=go_to_name,
-                response_text=(f"Ich navigiere zum gespeicherten Punkt {go_to_name}." if german else f"I'll navigate to saved point {go_to_name}."),
-                requested_skills=["navigate_named_point"],
             )
         wants_step_forward = (
             "move forward" in text
@@ -1249,11 +849,6 @@ class G1Agent:
             ("zero_torque", ("zero torque", "zero-torque", "zero_torque", "nullmoment"), "I'll enter zero-torque mode.", "Ich gehe in den Zero-Torque-Modus."),
             ("exit_dev_mode", ("exit dev mode", "leave dev mode", "exit developer mode", "leave developer mode", "ai sport on", "enable ai_sport", "enable ai sport"), "I'll exit developer mode and re-enable ai_sport.", "Ich verlasse den Developer-Modus und aktiviere ai_sport wieder."),
             ("dev_mode", ("dev mode", "developer mode", "entwickler modus"), "I'll enter developer mode.", "Ich gehe in den Developer-Modus."),
-            ("walk_mode", ("walk mode", "walking mode", "set walk mode", "gehmodus"), "I'll enter walk mode.", "Ich gehe in den Walk-Modus."),
-            ("run_mode", ("run mode", "running mode", "set run mode", "rennmodus"), "I'll enter run mode.", "Ich gehe in den Run-Modus."),
-            ("thinking_motion", ("thinking motion", "denk bewegung"), "I'll play the thinking expressive motion.", "Ich spiele die Thinking-Ausdrucksbewegung."),
-            ("explain_motion", ("explain motion", "erklär bewegung", "erklaer bewegung"), "I'll play the explain expressive motion.", "Ich spiele die Explain-Ausdrucksbewegung."),
-            ("thanking_motion", ("thanking motion", "thank motion", "dank bewegung"), "I'll play the thanking expressive motion.", "Ich spiele die Thanking-Ausdrucksbewegung."),
         )
         for skill_name, phrases, english, german_text in phrase_skills:
             if skill_name in self.skills.skills and any(phrase in text for phrase in phrases):
@@ -1312,21 +907,6 @@ class G1Agent:
                 requested_skills=["exit_dev_mode"],
                 intent_announcement=decision.intent_announcement,
             )
-        wants_save_mapping = (
-            "stop mapping" in text
-            or "finish mapping" in text
-            or "end mapping" in text
-            or "save map" in text
-            or "save the map" in text
-        )
-        if wants_save_mapping and "save_map" in self.skills.skills:
-            return PlannerDecision(
-                intent=IntentType.EXECUTE_TASK,
-                target="save_map",
-                response_text="I'll save the SLAM map.",
-                requested_skills=["save_map"],
-                intent_announcement=decision.intent_announcement,
-            )
 
         if (
             decision.intent == IntentType.MOVE_ARM
@@ -1376,10 +956,6 @@ class G1Agent:
                     "start_mapping": "I'll start SLAM mapping.",
                     "save_map": "I'll save the SLAM map.",
                     "start_relocation": "I'll start SLAM relocation.",
-                    "save_current_nav_point": "I'll save the current SLAM point.",
-                    "list_nav_points": "I'll list saved SLAM points.",
-                    "clear_nav_points": "I'll clear saved SLAM points.",
-                    "navigate_named_point": "I'll navigate to the saved SLAM point.",
                     "add_current_nav_pose": "I'll add the current pose as a navigation task.",
                     "navigate_selected_pose": "I'll navigate to the selected pose.",
                     "execute_nav_tasks": "I'll execute the queued navigation tasks.",
@@ -1483,14 +1059,10 @@ class G1Agent:
             return "slam_preflight"
         if "start mapping" in text or "begin mapping" in text or "mapping starten" in text:
             return "start_mapping"
-        if "save map" in text or "end mapping" in text or "finish mapping" in text or "stop mapping" in text or "karte speichern" in text:
+        if "save map" in text or "end mapping" in text or "karte speichern" in text:
             return "save_map"
-        if "start relocation" in text or "start localization" in text or "localize on map" in text or text in {"relocate", "localize", "relocalize", "init pose"}:
+        if "start relocation" in text or "start localization" in text or "localize on map" in text:
             return "start_relocation"
-        if "list points" in text or "list saved points" in text or "saved points" in text:
-            return "list_nav_points"
-        if "clear points" in text or "clear saved points" in text:
-            return "clear_nav_points"
         if "add current pose" in text or "add current location" in text or "save current pose" in text:
             return "add_current_nav_pose"
         if "go to selected" in text or "navigate selected" in text:
@@ -1501,47 +1073,9 @@ class G1Agent:
             return "pause_navigation"
         if "resume navigation" in text or "resume nav" in text:
             return "resume_navigation"
-        if "stop slam" in text or "close slam" in text or "slam stoppen" in text:
+        if "stop slam" in text or "stop mapping" in text or "slam stoppen" in text:
             return "stop_slam"
         return None
-
-    @classmethod
-    def _extract_save_point_name(cls, text: str) -> str:
-        lowered = text.strip().lower()
-        patterns = (
-            r"(?:add|save|mark|remember)\s+(?:the\s+)?current\s+(?:slam\s+)?point\s+(?:as|called|named)\s+(.+)$",
-            r"(?:add|save|mark|remember)\s+(?:this\s+)?(?:place|location|position)\s+(?:as|called|named)\s+(.+)$",
-        )
-        for pattern in patterns:
-            match = re.search(pattern, lowered)
-            if match:
-                return cls._clean_point_name(match.group(1))
-        return ""
-
-    @classmethod
-    def _extract_go_to_point_name(cls, text: str) -> str:
-        lowered = text.strip().lower()
-        patterns = (
-            r"^(?:go|navigate|drive|walk)\s+to\s+(.+)$",
-            r"^take\s+me\s+to\s+(.+)$",
-            r"^go\s+to\s+point\s+(.+)$",
-            r"^navigate\s+to\s+point\s+(.+)$",
-        )
-        for pattern in patterns:
-            match = re.search(pattern, lowered)
-            if match:
-                name = cls._clean_point_name(match.group(1))
-                blocked = {"selected", "selected pose", "current", "current pose"}
-                return "" if name in blocked else name
-        return ""
-
-    @staticmethod
-    def _clean_point_name(text: str) -> str:
-        cleaned = str(text).strip().lower()
-        cleaned = re.sub(r"^(call it|name it|save it as|save as|called|named)\s+", "", cleaned).strip()
-        cleaned = re.sub(r"[^a-z0-9 _-]+", "", cleaned)
-        cleaned = re.sub(r"\s+", " ", cleaned).strip(" -_")
-        return cleaned
 
     @staticmethod
     def _extract_turn_degrees(text: str) -> float:
@@ -1630,17 +1164,6 @@ class G1Agent:
         """Best-effort TTS for normal printed responses."""
         if not text or not settings.announcements.audio_enabled:
             return
-        if len(text) >= int(getattr(settings.expressive_motion, "explain_minimum_speech_chars", 80)):
-            self.monitor_bus.emit(
-                "expressive",
-                "long_explanation_started",
-                f"speech chars={len(text)}",
-            )
-            self.expressive_motion.run_background(
-                "explain",
-                settings=settings,
-                reason="long_explanation_started",
-            )
         if "announce" not in self.skills.skills:
             print("[warn] announcements.audio_enabled=true but no 'announce' skill is available")
             return
@@ -1659,8 +1182,6 @@ class G1Agent:
             print(f"[warn] speech denied: {decision.reason}")
         elif result is not None and not result.ok:
             print(f"[warn] speech failed: {result.message}")
-        elif len(text) >= int(getattr(settings.expressive_motion, "explain_minimum_speech_chars", 80)):
-            self.monitor_bus.emit("expressive", "long_explanation_completed", "speech/explain event completed")
 
     @staticmethod
     def _effective_tts_language(settings: Any) -> Optional[str]:
@@ -1699,36 +1220,6 @@ class G1Agent:
         prefix = "Yes." if policy.allowed else "No."
         return f"{prefix} {policy.reason}"
 
-    def _maybe_describe_runtime_capability(self, target: str, robot_state: RobotStateSnapshot) -> Optional[str]:
-        lowered = str(target).lower()
-        if "navigate" in lowered or "navigation" in lowered:
-            nav = self.navigation.snapshot()
-            available = "start_mapping" in self.skills.skills or "navigate_named_point" in self.skills.skills
-            return (
-                ("Yes" if available else "No")
-                + f". Navigation/SLAM backend={available}; slam={nav.slam}; localization={nav.localization}; last_error={nav.last_error or 'none'}."
-            )
-        if "run" in lowered:
-            policy = self.resolver.resolve_skill("run_mode", settings=self.settings.effective(), robot_state=robot_state)
-            return self._phrase_capability_answer(policy)
-        if "walk" in lowered:
-            policy = self.resolver.resolve_skill("walk_mode", settings=self.settings.effective(), robot_state=robot_state)
-            return self._phrase_capability_answer(policy)
-        if "see" in lowered or "camera" in lowered or "vision" in lowered:
-            settings = self.settings.effective()
-            return (
-                ("Yes" if settings.vision.rgbd_enabled else "No")
-                + f". RGB-D vision enabled={settings.vision.rgbd_enabled}; source=tcp://{settings.vision.rgbd_host}:{settings.vision.rgbd_port}; model={settings.vision.openai_model}."
-            )
-        if "hear" in lowered or "audio" in lowered or "asr" in lowered:
-            settings = self.settings.effective()
-            available = settings.audio.input_enabled and settings.audio.asr_enabled and settings.asr.enabled
-            return (
-                ("Yes" if available else "No")
-                + f". Speech input enabled={available}; input topic=/audio_msg; /chat text input remains available."
-            )
-        return None
-
     @staticmethod
     def _describe_state(state: RobotStateSnapshot) -> str:
         return (
@@ -1755,253 +1246,6 @@ class G1Agent:
         if state.battery and state.battery.get("source"):
             source = f" (source: {state.battery.get('source')})"
         return f"Battery is at {state.battery_pct:.0f}%{charging}{source}."
-
-    def monitor_snapshot(self, *, panel: str = "overview") -> dict[str, Any]:
-        settings = self.settings.effective()
-        now = time.time()
-        next_due = self.scheduler.next_tick_due_at
-        memory_stats = self.learning.memory_stats(settings=settings)
-        disk_stats = self.learning.disk_stats(settings=settings)
-        learned = self.learning.learned.all()
-        capability_lines = {
-            "audio_response": settings.announcements.audio_enabled,
-            "gesture_response": settings.announcements.gesture_enabled,
-            "asr": settings.audio.asr_enabled and settings.audio.input_enabled and settings.asr.enabled,
-            "arm_motion": settings.motion.allow_arm_motion,
-            "arm_sdk": settings.motion.allow_arm_sdk,
-            "low_cmd": settings.motion.allow_low_cmd,
-            "locomotion_mode_change": settings.motion.allow_locomotion_mode_change,
-            "navigation": any(name in self.skills.skills for name in ("start_mapping", "navigate_named_point", "step_forward")),
-        }
-        nav_snapshot = self.navigation.snapshot().as_dict()
-        asr_snapshot = self.asr_runtime.snapshot()
-        vision_snapshot = self.visual_observations.snapshot()
-        llctl_snapshot = self.llctl.snapshot(settings)
-        expressive_snapshot = self.expressive_motion.runtime.snapshot()
-        active_learning_snapshot = self.active_learning.snapshot(settings=settings)
-        activity_snapshot = self.activity.snapshot()
-        tool_context = self._make_tool_context(
-            settings=settings,
-            robot_state=build_robot_state(self.state_source),
-            event="monitor",
-            profile="diagnostic" if panel in {"tools", "events"} else "social",
-        )
-        tool_snapshot = self.tool_registry.snapshot(tool_context)
-        return {
-            "panel": panel,
-            "lifecycle": self.lifecycle.state.value,
-            "model": type(self.planner).__name__,
-            "last_cognition_age_s": self.scheduler.elapsed_since_last_cognition(now),
-            "next_scheduled_check_s": None if next_due is None else max(0.0, next_due - now),
-            "attention_queue": self.scheduler.queue_size,
-            "semantic_state": self._last_semantic_state.model_dump(),
-            "self": self.self_model.summary(),
-            "objectives": list(self._current_objectives)
-            or [{"summary": "respond to CLI user", "priority": "P1"} if self._last_semantic_state.interaction == "user_engaged" else {"summary": "mostly idle state monitoring", "priority": "P5"}],
-            "events": [event.model_dump() for event in self.monitor_bus.recent(80)],
-            "learning": {
-                "candidate_claims": sum(1 for claim in learned if claim.status == "candidate"),
-                "active_claims": sum(1 for claim in learned if claim.status == "active"),
-                "contested_claims": sum(1 for claim in learned if claim.status == "contested"),
-                "deprecated_claims": sum(1 for claim in learned if claim.status == "deprecated"),
-                "procedural_rules": len(self.memory.procedural.all()),
-                "latest": [claim.model_dump() for claim in learned[-5:]],
-            },
-            "memory": memory_stats,
-            "disk": disk_stats,
-            "tools": capability_lines,
-            "navigation": nav_snapshot,
-            "asr": asr_snapshot,
-            "vision": vision_snapshot,
-            "llctl": llctl_snapshot,
-            "expressive": expressive_snapshot,
-            "active_learning": active_learning_snapshot,
-            "activity": activity_snapshot,
-            "tooling": tool_snapshot,
-        }
-
-    def navigation_snapshot(self) -> dict[str, Any]:
-        return self.navigation.snapshot().as_dict()
-
-    def navigation_action(self, name: str, **kwargs: Any) -> str:
-        result = self.navigation.action(name, **kwargs)
-        self.monitor_bus.emit("navigation", "navigation_action", f"{name}: {result[:160]}")
-        return result
-
-    def asr_snapshot(self) -> dict[str, Any]:
-        self.asr_runtime.update_settings(self.settings.effective())
-        return self.asr_runtime.snapshot()
-
-    def llctl_snapshot(self) -> dict[str, Any]:
-        return self.llctl.snapshot(self.settings.effective())
-
-    def llctl_enable(self) -> str:
-        result = self.llctl.enable_session(self.settings.effective())
-        self.monitor_bus.emit("llctl", "llctl_session", result)
-        return result
-
-    def llctl_disable(self) -> str:
-        result = self.llctl.disable_session()
-        self.monitor_bus.emit("llctl", "llctl_session", result)
-        return result
-
-    def tool_snapshot(self, *, profile: str = "social", include_unavailable: bool = True) -> dict[str, Any]:
-        settings = self.settings.effective()
-        context = self._make_tool_context(
-            settings=settings,
-            robot_state=build_robot_state(self.state_source),
-            event="cli_tools",
-            profile=profile,
-        )
-        snapshot = self.tool_registry.snapshot(context)
-        if not include_unavailable:
-            snapshot["tools"] = [row for row in snapshot["tools"] if row.get("availability") == "available"]
-        return snapshot
-
-    def _capability_tool_summary(self, robot_state: RobotStateSnapshot) -> dict[str, Any]:
-        settings = self.settings.effective()
-        return {
-            "arm_motion": self.resolver.resolve_arm_motion(settings=settings, robot_state=robot_state).__dict__,
-            "high_level_arm_action": self.resolver.resolve_high_level_arm_action(settings=settings, robot_state=robot_state).__dict__,
-            "hand_action": self.resolver.resolve_hand_action(settings=settings, robot_state=robot_state).__dict__,
-            "navigation": {
-                "available": any(name in self.skills.skills for name in ("start_mapping", "navigate_named_point", "step_forward")),
-                "source": self.navigation.snapshot().as_dict().get("planner_status"),
-            },
-            "asr": {
-                "available": settings.audio.input_enabled and settings.audio.asr_enabled and settings.asr.enabled,
-                "input_topic": "/audio_msg",
-            },
-            "vision": {
-                "available": settings.vision.rgbd_enabled,
-                "source": f"tcp://{settings.vision.rgbd_host}:{settings.vision.rgbd_port}",
-                "model": settings.vision.openai_model,
-            },
-        }
-
-    def reset(self, scope: str) -> ResetResult:
-        with self._mutation_lock:
-            return self.reset_manager.reset(scope)
-
-    def cmd_reset(self, scope: str) -> str:
-        result = self.reset(scope)
-        if result.ok and result.scope in {"runtime", "full"}:
-            boot_decision = self.boot()
-            return f"{result.message}\nboot event={self._boot_event.value} decision={boot_decision.intent.value}"
-        return result.message
-
-    def reset_backups(self) -> str:
-        backups = self.reset_manager.list_backups()
-        if not backups:
-            return "(no reset backups)"
-        return "\n".join(
-            f"{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(item['created_at']))}  {item['name']}  {item['path']}"
-            for item in backups
-        )
-
-    def tacit_lines(self, *, panel: str = "recent", item_id: Optional[str] = None) -> list[str]:
-        if not self.settings.effective().tacit.ui_enabled:
-            return ["tacit UI is disabled by tacit.ui_enabled=false"]
-        return self.tacit.render_lines(panel=panel, item_id=item_id)
-
-    def self_lines(self, *, panel: str = "summary") -> list[str]:
-        panel = (panel or "summary").strip().lower()
-        model = self.self_model.model
-        summary = self.self_model.summary()
-        if panel == "summary":
-            lines = [
-                "G1 SELF MODEL",
-                f"Robot ID             {model.robot_id}",
-                f"Platform             {model.platform}",
-                f"Version              {model.version}",
-                f"Last updated         {model.updated_at}",
-                f"Overall confidence   {summary.get('overall_confidence'):.2f}",
-                "",
-                "BODY",
-            ]
-            body_notes = summary.get("notable_body_facts") or []
-            lines.extend(f"- {note}" for note in body_notes[:8])
-            if not body_notes:
-                lines.append("(no learned body traits)")
-            lines.extend(["", "CAPABILITIES"])
-            for skill, info in sorted((summary.get("skill_confidence") or {}).items()):
-                lines.append(f"{skill:<20} reliability {float(info.get('success_rate') or 0):.2f} confidence {float(info.get('confidence') or 0):.2f}")
-            if not summary.get("skill_confidence"):
-                lines.append("(no skill experience yet)")
-            lines.extend(["", "ENERGY"])
-            energy = summary.get("energy") or {}
-            lines.append(f"Model calibrated      {energy.get('calibrated')}")
-            lines.append(f"Mean prediction error {energy.get('mean_prediction_error_pct')}")
-            lines.extend(["", "PREFERENCES"])
-            prefs = summary.get("important_learned_preferences") or []
-            lines.extend(f"- {pref}" for pref in prefs[:8])
-            if not prefs:
-                lines.append("(none)")
-            lines.extend(["", "COMMITMENTS"])
-            commitments = summary.get("current_commitments") or []
-            lines.extend(f"- {item}" for item in commitments[:8])
-            if not commitments:
-                lines.append("(none)")
-            return lines
-        if panel == "body":
-            body = model.body
-            lines = ["SELF / BODY", f"Confidence            {body.confidence:.2f}", f"Hardware revision     {body.hardware_revision or 'unknown'}", "", "Learned constraints"]
-            lines.extend(f"- {item.status} {item.confidence:.2f}: {item.description}" for item in body.learned_constraints)
-            return lines if len(lines) > 4 else lines + ["(none)"]
-        if panel == "capabilities":
-            lines = ["SELF / CAPABILITIES"]
-            for name, estimate in sorted(model.capabilities.estimates.items()):
-                lines.append(f"{name:<20} p={estimate.success_probability} confidence={estimate.confidence:.2f} status={estimate.status}")
-                if estimate.failure_modes:
-                    lines.append(f"  failures: {', '.join(estimate.failure_modes[:5])}")
-            return lines if len(lines) > 1 else lines + ["(none)"]
-        if panel == "skills":
-            lines = ["SELF / SKILLS"]
-            for name, record in sorted(model.skills.records.items()):
-                lines.append(f"{name:<20} attempts={record.attempts} success={record.success_rate} confidence={record.confidence:.2f}")
-                if record.active_procedures:
-                    lines.append(f"  active procedures: {', '.join(record.active_procedures)}")
-                if record.common_failure_modes:
-                    lines.append(f"  failure modes: {', '.join(record.common_failure_modes[:5])}")
-            return lines if len(lines) > 1 else lines + ["(none)"]
-        if panel == "energy":
-            energy = model.energy
-            lines = [
-                "SELF / ENERGY",
-                f"Calibrated            {energy.calibrated}",
-                f"Observations          {energy.observations}",
-                f"Mean prediction error {energy.mean_prediction_error_pct}",
-                f"Confidence            {energy.confidence:.2f}",
-                "Task costs",
-            ]
-            lines.extend(f"- {task}: {cost:.2f}%" for task, cost in sorted(energy.task_cost_pct.items()))
-            return lines
-        if panel == "preferences":
-            lines = ["SELF / PREFERENCES"]
-            lines.extend(f"- {pref.status} {pref.confidence:.2f} {pref.domain}: {pref.preferred_option}" for pref in model.preferences.preferences)
-            return lines if len(lines) > 1 else lines + ["(none)"]
-        if panel == "commitments":
-            lines = ["SELF / COMMITMENTS"]
-            lines.extend(f"- P{item.priority} {item.state}: {item.description}" for item in model.commitments.commitments)
-            return lines if len(lines) > 1 else lines + ["(none)"]
-        if panel == "relationships":
-            lines = ["SELF / RELATIONSHIPS"]
-            lines.extend(f"- {item.label}: {item.preferred_name or 'unnamed'} trust={item.trust}" for item in model.relationships.records)
-            return lines if len(lines) > 1 else lines + ["(none)"]
-        if panel == "history":
-            lines = ["SELF / HISTORY"]
-            for item in model.history[-20:]:
-                lines.append(f"v{item.version} <- v{item.previous_version} {item.timestamp} {','.join(item.domains_changed)}: {item.reason}")
-            return lines if len(lines) > 1 else lines + ["(none)"]
-        return ["usage: /self summary|body|capabilities|skills|energy|preferences|commitments|relationships|history|invalidate <target>"]
-
-    def cmd_self(self, args: list[str]) -> str:
-        if args and args[0] == "invalidate" and len(args) >= 2:
-            target = " ".join(args[1:])
-            self.self_model.invalidate(target, reason="operator hardware invalidation")
-            return f"self-model invalidated learned entries related to {target!r}"
-        panel = args[0] if args else "summary"
-        return "\n".join(self.self_lines(panel=panel))
 
     # -- deterministic /settings /status /memory /tools namespaces ------------
 
@@ -2096,42 +1340,33 @@ class G1Agent:
     @staticmethod
     def _fault_hint(fault: str) -> str:
         if fault == "lidar_map":
-            return "No fresh lidar map state. Check SLAM/lidar map publisher and DDS interface/domain."
+            return "No fresh rt/utlidar/map_state. Start/check the lidar or SLAM mapping publisher; verify DDS iface/domain."
         if fault.startswith("lidar_cloud"):
             return "No fresh point cloud on this lidar topic. Check the lidar driver/SLAM pipeline and topic name."
         if fault == "odom":
-            return "No fresh odometry. Check /odommodestate (unitree_go/msg/SportModeState) and SLAM odometry publishers."
+            return "No fresh rt/odom. Check odometry publisher or use the sport-state odom fallback if navigation does not require rt/odom."
         if fault == "lowstate":
-            return "No fresh /lowstate (unitree_hg/msg/LowState). Check ROS/DDS interface/domain and Unitree lowstate publication before lowstate-dependent actions."
+            return "No fresh rt/lowstate. Check DDS interface/domain and Unitree lowstate publication before arm/lowstate-dependent actions."
         if fault == "left_hand_state":
             return "No fresh rt/dex3/left/state. Check Dex3 left hand power, topic publisher, and hand SDK connection."
         if fault == "right_hand_state":
             return "No fresh rt/dex3/right/state. Check Dex3 right hand power, topic publisher, and hand SDK connection."
         if fault == "lidar_imu":
-            return "No fresh /utlidar/imu_livox_mid360. Check lidar IMU publisher."
+            return "No fresh rt/utlidar/imu_livox_mid360. Check lidar IMU publisher."
         if fault == "slam_odom":
             return "No fresh SLAM odometry. Start/check the SLAM odom publisher."
         return "No specific hint known; inspect robot_state.sensor_timestamps and DDS topic publication."
 
     def cmd_memory(self, args: list[str]) -> str:
-        if args and args[0] == "pin" and len(args) == 2:
-            self.learning.pin(args[1])
-            return f"pinned memory {args[1]}"
-        if args and args[0] == "unpin" and len(args) == 2:
-            self.learning.unpin(args[1])
-            return f"unpinned memory {args[1]}"
         if not args or args[0] == "show":
             episodes = self.memory.episodic.all()
             claims = self.memory.semantic.all()
             adaptations = self.memory.procedural.all()
-            learned = self.learning.learned.all()
             bio = self.memory.autobiography_summary() or "(empty)"
             return (
                 f"episodic: {len(episodes)} entries\n"
                 f"semantic: {len(claims)} claims\n"
                 f"procedural: {len(adaptations)} adaptations\n"
-                f"learned_semantic: {len(learned)} claims\n"
-                f"pinned: {len(self.learning.pinned_ids())}\n"
                 f"autobiography:\n{bio}"
             )
         if args[0] == "search" and len(args) >= 2:
@@ -2142,7 +1377,7 @@ class G1Agent:
                 lines.append(f"-- {kind} --")
                 lines.extend(f"  {ref.text}" for ref in items)
             return "\n".join(lines) if lines else "(no matches)"
-        return "usage: /memory show | search <query> | pin <id> | unpin <id>"
+        return "usage: /memory show | search <query>"
 
     def cmd_tools(self) -> str:
         descriptions = self.skills.describe()
@@ -2150,57 +1385,6 @@ class G1Agent:
         for name in sorted(descriptions):
             mode = self.settings.get_skill_mode(name).value
             lines.append(f"{name} [{mode}]: {descriptions[name]}")
-        return "\n".join(lines)
-
-    def cmd_tooling(self, args: list[str]) -> str:
-        profile = args[1] if len(args) > 1 else "social"
-        if args and args[0] == "mcp":
-            snapshot = self.tool_snapshot(profile="diagnostic")
-            lines = ["MCP"]
-            for name, health in sorted((snapshot.get("mcp") or {}).items()):
-                lines.append(
-                    f"{name:<16} connected={health.get('connected')} tools={health.get('available_tools')} "
-                    f"last_error={health.get('last_error') or 'none'}"
-                )
-            return "\n".join(lines)
-        if args and args[0] == "show" and len(args) >= 2:
-            snapshot = self.tool_snapshot(profile="diagnostic")
-            for row in snapshot.get("tools") or []:
-                if row.get("name") == args[1]:
-                    return "\n".join(f"{key} = {value}" for key, value in sorted(row.items()))
-            return f"tool {args[1]!r} not found"
-        if args and args[0] in {"available", "actions", "diagnostics", "memory", "knowledge", "observation"}:
-            snapshot = self.tool_snapshot(profile=profile)
-            rows = snapshot.get("tools") or []
-            if args[0] == "available":
-                rows = [row for row in rows if row.get("availability") == "available"]
-            elif args[0] == "actions":
-                rows = [row for row in rows if row.get("category") == "action"]
-            elif args[0] == "diagnostics":
-                rows = [row for row in rows if row.get("category") == "diagnostic"]
-            else:
-                rows = [row for row in rows if row.get("category") == args[0]]
-            return self._format_tool_rows(rows)
-        snapshot = self.tool_snapshot(profile="social")
-        return self._format_tool_rows(snapshot.get("tools") or [])
-
-    @staticmethod
-    def _format_tool_rows(rows: list[dict[str, Any]]) -> str:
-        if not rows:
-            return "(no tools)"
-        lines = ["TOOLS"]
-        current_category = None
-        for row in sorted(rows, key=lambda r: (r.get("category", ""), r.get("name", ""))):
-            category = row.get("category", "")
-            if category != current_category:
-                current_category = category
-                lines.append("")
-                lines.append(str(category).upper())
-            mark = "✓" if row.get("availability") == "available" else "✗"
-            suffix = "" if row.get("availability") == "available" else f"  {row.get('availability')}"
-            if row.get("operator_only"):
-                suffix = "  operator_only"
-            lines.append(f"{mark} {row.get('name'):<32} {row.get('risk_level'):<6}{suffix}")
         return "\n".join(lines)
 
     def cmd_help(self) -> str:
@@ -2211,19 +1395,11 @@ class G1Agent:
             "/audio_msg <text>           simulated ASR transcript (gated by audio.asr_enabled)\n"
             "/settings show|get|set|skill|skills\n"
             "/settings-ui                interactive settings editor (arrow keys)\n"
-            "/monitor [panel]            live read-only agent monitor\n"
-            "/tacit [panel]              read-only learned/tacit knowledge view\n"
-            "/self [panel]               read-only persistent functional self-model\n"
-            "/reset [scope|backups]      reset cognitive continuity by explicit scope\n"
-            "/navigation [panel|action]   SLAM/navigation monitor and supported actions\n"
-            "/asr                         microphone/ASR monitor\n"
-            "/llctl [enable|disable]      operator low-level-control panel\n"
             "/vision <question>          answer from RGB-D camera via OpenAI vision\n"
             "/status                     lifecycle + robot state snapshot\n"
             "/faults                     explain stale sensor topics and fixes\n"
-            "/memory show|search <query>|pin <id>|unpin <id>\n"
+            "/memory show|search <query>\n"
             "/tools                      list skills and their auto/confirm/disabled mode\n"
-            "/tools available|mcp|show   inspect cognitive tool/MCP availability\n"
             "/help\n"
             "/exit"
         )
@@ -2232,19 +1408,11 @@ class G1Agent:
             "/audio_msg <text>           simuliertes ASR-Transkript\n"
             "/einstellungen              Einstellungen anzeigen\n"
             "/einstellungen-ui           interaktiver Einstellungseditor (Pfeiltasten)\n"
-            "/tacit [panel]              gelernte/tazite Wissensansicht\n"
-            "/self [panel]               funktionales Selbstmodell anzeigen\n"
-            "/reset [scope|backups]      kognitive Kontinuität nach Bereich zurücksetzen\n"
-            "/monitor [bereich]          Live-Monitor des Agenten (nur lesen)\n"
-            "/navigation                 SLAM-/Navigationsmonitor\n"
-            "/asr                         Mikrofon-/ASR-Monitor\n"
-            "/llctl [enable|disable]      Bediener-Panel für Low-Level-Control\n"
             "/sehen <frage>              Antwort von der RGB-D-Kamera über OpenAI Vision\n"
             "/status                     Lebenszyklus und Roboterzustand\n"
             "/fehler                     Sensor-/Topic-Diagnose und Hinweise\n"
             "/speicher                   Gedächtnis anzeigen\n"
             "/werkzeuge                  verfügbare Fähigkeiten und Modi anzeigen\n"
-            "/werkzeuge available|mcp|show kognitive Tool-/MCP-Verfügbarkeit anzeigen\n"
             "/hilfe\n"
             "/ende"
         )
