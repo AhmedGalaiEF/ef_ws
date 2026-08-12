@@ -290,10 +290,46 @@ def entry_from_value(value: Any, *, source: str, path: str, fallback_title: str)
     return KnowledgeEntry(title=title, text=text, source=source, path=path, tokens=tokens)
 
 
+def entries_from_faqs(section: dict[str, Any], *, source: str, path: str, fallback_title: str) -> list[KnowledgeEntry]:
+    faqs = section.get("faqs")
+    if not isinstance(faqs, list):
+        return []
+    section_title = compact_text(str(section.get("title", fallback_title)))
+    category = compact_text(str(section.get("category", "")))
+    entries: list[KnowledgeEntry] = []
+    for index, item in enumerate(faqs):
+        if not isinstance(item, dict):
+            continue
+        question = compact_text(str(item.get("question", "")))
+        answer = compact_text(str(item.get("answer", "")))
+        if not question or not answer:
+            continue
+        item_path = f"{path}.faqs[{index}]"
+        text = "\n".join(
+            line
+            for line in (
+                f"Section: {section_title}",
+                f"Category: {category}" if category else "",
+                f"Question: {question}",
+                f"Answer: {answer}",
+            )
+            if line
+        )
+        tokens = tokenize(text)
+        if tokens:
+            entries.append(KnowledgeEntry(title=question, text=text, source=source, path=item_path, tokens=tokens))
+    return entries
+
+
 def entries_from_json(data: Any, *, source: str) -> list[KnowledgeEntry]:
     entries: list[KnowledgeEntry] = []
     if isinstance(data, list):
         for index, item in enumerate(data):
+            if isinstance(item, dict):
+                faq_entries = entries_from_faqs(item, source=source, path=f"$[{index}]", fallback_title=f"record {index + 1}")
+                if faq_entries:
+                    entries.extend(faq_entries)
+                    continue
             entry = entry_from_value(item, source=source, path=f"$[{index}]", fallback_title=f"record {index + 1}")
             if entry:
                 entries.append(entry)
@@ -301,10 +337,19 @@ def entries_from_json(data: Any, *, source: str) -> list[KnowledgeEntry]:
         for key, value in data.items():
             if isinstance(value, list):
                 for index, item in enumerate(value):
+                    if isinstance(item, dict):
+                        faq_entries = entries_from_faqs(item, source=source, path=f"$.{key}[{index}]", fallback_title=f"{key} {index + 1}")
+                        if faq_entries:
+                            entries.extend(faq_entries)
+                            continue
                     entry = entry_from_value(item, source=source, path=f"$.{key}[{index}]", fallback_title=f"{key} {index + 1}")
                     if entry:
                         entries.append(entry)
             elif isinstance(value, dict):
+                faq_entries = entries_from_faqs(value, source=source, path=f"$.{key}", fallback_title=str(key))
+                if faq_entries:
+                    entries.extend(faq_entries)
+                    continue
                 entry = entry_from_value(value, source=source, path=f"$.{key}", fallback_title=str(key))
                 if entry:
                     entries.append(entry)
@@ -334,6 +379,7 @@ class KnowledgeRetriever:
         if not query_tokens:
             return []
         query_set = set(query_tokens)
+        query_low = normalize_text(query)
         scored: list[tuple[KnowledgeEntry, float]] = []
         for entry in self.entries:
             counts: dict[str, int] = {}
@@ -345,12 +391,36 @@ class KnowledgeRetriever:
                     score += self.idf.get(token, 1.0) * (1.0 + math.log(counts[token]))
             if query.strip().lower() in entry.text.lower():
                 score += 2.0
+            score += self._intent_boost(query_low, entry)
             norm = math.sqrt(max(1, len(query_set)) * max(1, len(set(entry.tokens))))
             score /= norm
             if score >= min_score:
                 scored.append((entry, score))
         scored.sort(key=lambda item: item[1], reverse=True)
         return scored[: max(1, top_k)]
+
+    @staticmethod
+    def _intent_boost(query_low: str, entry: KnowledgeEntry) -> float:
+        title = normalize_text(entry.title)
+        text = normalize_text(entry.text)
+        overview_cues = (
+            "was ist", "wer ist", "erzähl", "erzaehl", "erzähle", "erzaehle",
+            "über dich", "ueber dich", "über ef robotics", "ueber ef robotics",
+            "what is", "who is", "tell me about",
+        )
+        if "ef robotics" in query_low and any(cue in query_low for cue in overview_cues):
+            if title == "what is ef robotics":
+                return 8.0
+            if "company overview" in text:
+                return 1.5
+        if ("unitree g1" in query_low or "g1" in query_low) and any(cue in query_low for cue in overview_cues):
+            if title == "what is the unitree g1":
+                return 8.0
+        if "autoxing" in query_low and "relationship" in query_low and "relationship between ef robotics and autoxing" in title:
+            return 6.0
+        if "cenobots" in query_low and "relationship" in query_low and "relationship between ef robotics and cenobots" in title:
+            return 6.0
+        return 0.0
 
     def format_context(self, query: str, *, top_k: int, min_score: float, max_chars: int) -> str:
         parts: list[str] = []
@@ -1015,6 +1085,10 @@ class NavBotNode(Node):
 
     def _dispatch(self, text: str) -> dict[str, Any]:
         low = normalize_text(text)
+        chat_answer = self._simple_chat_answer(low)
+        if chat_answer:
+            return {"ok": True, "code": 0, "intent": "chat", "answer": chat_answer}
+
         if self.pending_add_point:
             self.pending_add_point = False
             result = self.nav.add_current_point(text)
@@ -1110,7 +1184,12 @@ class NavBotNode(Node):
             if used_knowledge:
                 return {"ok": True, "code": 0, "intent": "rag_question", "used_knowledge": True, "answer": answer}
 
-        return {"ok": False, "code": 1, "intent": "unknown", "answer": ""}
+        return {
+            "ok": False,
+            "code": 1,
+            "intent": "unknown",
+            "answer": "Das habe ich nicht als Navigationsbefehl verstanden. Du kannst zum Beispiel sagen: Was ist EF Robotics, winke, oder fahre zu Punkt Labor.",
+        }
 
     def _rag_answer(self, text: str) -> tuple[str, bool]:
         context = ""
@@ -1151,14 +1230,18 @@ class NavBotNode(Node):
         parts: list[str] = []
         for entry, _score in matches:
             cleaned_lines = []
+            answer_lines = []
             for line in entry.text.splitlines():
                 line = compact_text(line)
                 if not line or line.startswith("$.") or line.startswith("$["):
                     continue
+                if line.lower().startswith("answer:"):
+                    answer_lines.append(line.split(":", 1)[1].strip())
+                    continue
                 cleaned_lines.append(line)
                 if len(" ".join(cleaned_lines)) >= 260:
                     break
-            summary = " ".join(cleaned_lines) or compact_text(entry.text)
+            summary = " ".join(answer_lines or cleaned_lines) or compact_text(entry.text)
             if len(summary) > 280:
                 summary = summary[:280].rsplit(" ", 1)[0].strip()
             parts.append(summary)
@@ -1170,6 +1253,16 @@ class NavBotNode(Node):
     def _is_knowledge_question(self, low: str) -> bool:
         if self.retriever is None:
             return False
+        known_subjects = ("ef robotics", "unitree", "g1", "autoxing", "cenobots", "cenobot")
+        if any(subject in low for subject in known_subjects) and any(
+            cue in low
+            for cue in (
+                "was", "wer", "wie", "warum", "wann", "wo", "welche", "welcher", "welches",
+                "erzähl", "erzaehl", "erzähle", "erzaehle", "sag", "sage", "kannst du",
+                "what", "who", "how", "why", "when", "where", "which", "tell",
+            )
+        ):
+            return True
         if any(phrase in low for phrase in (
             "from your knowledge", "local knowledge", "knowledge file", "tell me about", "what is", "what are",
             "aus deinem wissen", "lokales wissen", "wissensdatei", "erzähl mir", "erzaehl mir",
@@ -1178,6 +1271,25 @@ class NavBotNode(Node):
             return True
         first = low.split(" ", 1)[0] if low else ""
         return first in {"what", "why", "how", "when", "where", "who", "which", "was", "warum", "wie", "wann", "wo", "wer", "welche", "welcher", "welches"} and bool(tokenize(low))
+
+    @staticmethod
+    def _simple_chat_answer(low: str) -> str:
+        words = set(tokenize(low))
+        if not low:
+            return ""
+        greeting_words = {"hallo", "hello", "hi", "hey", "guten", "morgen", "tag", "abend"}
+        asks_name = (
+            "wie heißt du" in low
+            or "wie heisst du" in low
+            or "wer bist du" in low
+            or "what is your name" in low
+            or "who are you" in low
+        )
+        if asks_name:
+            return "Ich bin der G1 Navigationsbot von EF Robotics. Ich kann navigieren, Gesten ausführen und Fragen aus meinem lokalen Wissen beantworten."
+        if words and words <= greeting_words:
+            return "Hallo. Ich bin bereit."
+        return ""
 
     @staticmethod
     def _wants_clear_points(low: str) -> bool:
@@ -1259,7 +1371,7 @@ class NavBotNode(Node):
             return "shake_hand", "Freut mich."
         if "hände hoch" in low or "haende hoch" in low or "hands up" in low or "raise your hands" in low:
             return "hands_up", "Ich hebe die Hände."
-        if "herz" in low or "heart" in low:
+        if re.search(r"\bherz\b", low) or re.search(r"\bheart\b", low):
             return "heart", "Ich mache ein Herz."
         if "hoch winken" in low or "high wave" in low or "big wave" in low:
             return "high_wave", "Ich winke."

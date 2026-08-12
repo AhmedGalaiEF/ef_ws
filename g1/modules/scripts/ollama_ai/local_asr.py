@@ -5,6 +5,7 @@ import argparse
 import json
 import os
 import queue
+import re
 import select
 import sys
 import tempfile
@@ -54,6 +55,12 @@ def parse_args() -> argparse.Namespace:
                         help="Normalize non-quiet chunks to this RMS before writing WAV; use 0 to disable.")
     parser.add_argument("--language", "--lang", dest="language", default=os.environ.get("LOCAL_ASR_LANGUAGE", "de"),
                         help="ASR language code, for example de or en.")
+    parser.add_argument("--asr-context", default=os.environ.get(
+        "LOCAL_ASR_CONTEXT",
+        "EF Robotics, Unitree G1, AutoXing, CenoBots, Navigation, Kartierung, Lokalisierung, Gesten, winken, klatschen"
+    ), help="Words and names to bias ASR transcription toward.")
+    parser.add_argument("--no-brand-corrections", dest="brand_corrections", action="store_false", default=True,
+                        help="Disable local correction of common brand-name ASR mistakes.")
     parser.add_argument("--beam-size", type=int, default=5,
                         help="Beam size for faster-whisper decoding; higher is slower but usually more accurate.")
     parser.add_argument("--once", action="store_true", help="Transcribe one chunk and exit.")
@@ -286,10 +293,12 @@ class FasterWhisperBackend:
         compute_type: str,
         download_root: str | None,
         beam_size: int,
+        asr_context: str,
     ) -> None:
         fw = require_module("faster_whisper")
         self.language = language
         self.beam_size = max(1, int(beam_size))
+        self.asr_context = asr_context.strip()
         kwargs: dict[str, Any] = {
             "device": str(compute_device),
             "compute_type": str(compute_type),
@@ -303,12 +312,19 @@ class FasterWhisperBackend:
         self.model = fw.WhisperModel(model_name, **kwargs)
 
     def transcribe(self, wav_path: Path) -> str:
-        segments, _info = self.model.transcribe(
-            str(wav_path),
-            language=self.language,
-            vad_filter=True,
-            beam_size=self.beam_size,
-        )
+        kwargs: dict[str, Any] = {
+            "language": self.language,
+            "vad_filter": True,
+            "beam_size": self.beam_size,
+        }
+        if self.asr_context:
+            kwargs["initial_prompt"] = self.asr_context
+            kwargs["hotwords"] = self.asr_context
+        try:
+            segments, _info = self.model.transcribe(str(wav_path), **kwargs)
+        except TypeError:
+            kwargs.pop("hotwords", None)
+            segments, _info = self.model.transcribe(str(wav_path), **kwargs)
         return " ".join(seg.text.strip() for seg in segments).strip()
 
 
@@ -355,6 +371,7 @@ def make_backend(args: argparse.Namespace) -> Any:
             compute_type=str(args.compute_type),
             download_root=args.download_root,
             beam_size=int(args.beam_size),
+            asr_context=str(args.asr_context),
         )
     if backend == "whisper":
         return OpenAIWhisperBackend(str(args.model), str(args.language))
@@ -374,6 +391,30 @@ def post_text(args: argparse.Namespace, text: str) -> None:
             print(f"POST {response.status}: {response.read().decode('utf-8', errors='replace')}", flush=True)
     except urllib.error.URLError as exc:
         print(f"POST failed: {exc}", file=sys.stderr, flush=True)
+
+
+def apply_brand_corrections(text: str) -> str:
+    corrected = str(text)
+    replacements = (
+        (r"\bD\s*F\s+Robotics\b", "EF Robotics"),
+        (r"\bE\s*F\s+Robotics\b", "EF Robotics"),
+        (r"\bF[\s-]?Botix\b", "EF Robotics"),
+        (r"\bF[\s-]?Robotics\b", "EF Robotics"),
+        (r"\bE[\s-]?Robotics\b", "EF Robotics"),
+        (r"\bE[\s-]?Accordion\b", "EF Robotics"),
+        (r"\bEF\s+Robotik\b", "EF Robotics"),
+        (r"\bDF\s+Robotics\b", "EF Robotics"),
+        (r"\bUnitree\s+G\s*1\b", "Unitree G1"),
+        (r"\bUnitree\s+gee\s+one\b", "Unitree G1"),
+        (r"\bG\s*One\b", "G1"),
+        (r"\bAuto\s*Xing\b", "AutoXing"),
+        (r"\bAuto\s*Crossing\b", "AutoXing"),
+        (r"\bCeno\s*Bots\b", "CenoBots"),
+        (r"\bZeno\s*Bots\b", "CenoBots"),
+    )
+    for pattern, replacement in replacements:
+        corrected = re.sub(pattern, replacement, corrected, flags=re.IGNORECASE)
+    return corrected
 
 
 def normalize_toggle_key(key: str) -> str:
@@ -463,7 +504,12 @@ def transcribe_and_post(args: argparse.Namespace, backend: Any, audio: Any, rms:
         except OSError:
             pass
     if text:
+        original_text = text
+        if bool(args.brand_corrections):
+            text = apply_brand_corrections(text)
         print(f"heard: {text}", flush=True)
+        if text != original_text:
+            print(f"corrected: {original_text} -> {text}", flush=True)
         post_text(args, text)
     else:
         print(f"no transcript rms={rms:.4f}", flush=True)
