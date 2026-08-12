@@ -234,6 +234,12 @@ def _print(text: str = "") -> None:
         print(text, flush=True)
 
 
+def _clear_terminal_input_line() -> None:
+    if sys.stdout.isatty():
+        sys.stdout.write("\r\033[2K")
+        sys.stdout.flush()
+
+
 def _setup_readline_history() -> None:
     """Enable up-arrow command history when readline is available."""
     try:
@@ -401,6 +407,8 @@ def _dispatch(agent: G1Agent, line: str) -> None:
             _print(_style("(ASR disabled: audio.asr_enabled=false -- no conversational event generated)", Color.dim))
         else:
             _print_turn(outcome)
+    elif line == "/vision":
+        _print("usage: /vision <question>")
     elif line.startswith("/vision "):
         _print_turn(agent.handle_vision_question(line[len("/vision "):]))
     elif line.startswith("/sehen "):
@@ -428,12 +436,12 @@ def _dispatch(agent: G1Agent, line: str) -> None:
             _run_navigation_ui(agent, panel=panel)
     elif line.startswith("/asr"):
         _run_asr_ui(agent)
+    elif line == "/llctl-ui":
+        _run_llctl_ui(agent)
     elif line.startswith("/llctl"):
         parts = line.split()
-        if len(parts) > 1 and parts[1] == "enable":
-            _print(agent.llctl_enable())
-        elif len(parts) > 1 and parts[1] in {"disable", "off"}:
-            _print(agent.llctl_disable())
+        if len(parts) > 1:
+            _print(agent.llctl_command(parts[1:]))
         else:
             _run_llctl_ui(agent)
     elif line.startswith("/reset"):
@@ -595,7 +603,10 @@ def _run_settings_ui(agent: G1Agent) -> None:
         _print("settings UI requires an interactive terminal")
         return
     with PRINT_LOCK:
-        curses.wrapper(_settings_ui, agent)
+        try:
+            curses.wrapper(_settings_ui, agent)
+        finally:
+            _clear_terminal_input_line()
 
 
 MONITOR_PANELS = [
@@ -853,7 +864,10 @@ def _run_monitor_ui(agent: G1Agent, *, panel: str = "overview") -> None:
             _print(f"{event.get('category')}:{event.get('event')} {event.get('summary')}")
         return
     with PRINT_LOCK:
-        curses.wrapper(_monitor_ui, agent, panel)
+        try:
+            curses.wrapper(_monitor_ui, agent, panel)
+        finally:
+            _clear_terminal_input_line()
 
 
 def _navigation_lines(nav: dict) -> list[str]:
@@ -917,7 +931,10 @@ def _run_navigation_ui(agent: G1Agent, *, panel: str = "status") -> None:
             _print(line)
         return
     with PRINT_LOCK:
-        curses.wrapper(_navigation_ui, agent, panel)
+        try:
+            curses.wrapper(_navigation_ui, agent, panel)
+        finally:
+            _clear_terminal_input_line()
 
 
 def _asr_lines(asr: dict) -> list[str]:
@@ -997,11 +1014,15 @@ def _run_asr_ui(agent: G1Agent) -> None:
             _print(line)
         return
     with PRINT_LOCK:
-        curses.wrapper(_asr_ui, agent)
+        try:
+            curses.wrapper(_asr_ui, agent)
+        finally:
+            _clear_terminal_input_line()
 
 
 def _llctl_lines(snapshot: dict) -> list[str]:
-    return [
+    defaults = snapshot.get("selected_joint_defaults") or {}
+    lines = [
         "LLCTL",
         f"Session enabled      {snapshot.get('session_enabled')}",
         f"Commands allowed     {snapshot.get('manual_commands_allowed')}",
@@ -1010,18 +1031,122 @@ def _llctl_lines(snapshot: dict) -> list[str]:
         f"IK control           {snapshot.get('allow_ik_control')}",
         f"Backend available    {snapshot.get('backend_available')}",
         f"Backend              {snapshot.get('control_backend')}",
+        f"Connected            {snapshot.get('connected')}",
+        f"Selected backend     {snapshot.get('selected_backend')} dev_mode={snapshot.get('dev_mode')}",
+        f"Selected joint       {snapshot.get('selected_joint')}",
+        f"Arm engaged          {snapshot.get('arm_engaged')} weight={snapshot.get('arm_weight')}",
         f"Dashboard            {snapshot.get('dashboard_path')}",
         f"Features             {', '.join(snapshot.get('dashboard_features') or [])}",
+        f"Last command         {snapshot.get('last_command') or ''}",
+        f"Last result          {snapshot.get('last_result') or ''}",
         f"Backend error        {snapshot.get('backend_error') or 'none'}",
+        "",
+        "Commands:",
+        "  /llctl enable | disable | status",
+        "  /llctl select <joint_id|joint_name>",
+        "  /llctl backend arm_sdk|lowcmd",
+        "  /llctl joint <joint> q <rad> [dq <rad/s>] [kp <gain>] [kd|kq <gain>] [tau <Nm>] [ramp <s>] [backend arm_sdk|lowcmd]",
+        "  /llctl ee left|right <x> <y> <z> <roll> <pitch> <yaw>",
+        "  /llctl ee left|right x <m> y <m> z <m> roll <rad> pitch <rad> yaw <rad>",
+        "  /llctl ee left|right [dx <m>] [dy <m>] [dz <m>] [droll <rad>] [dpitch <rad>] [dyaw <rad>]",
+        "  /llctl release_arms",
     ]
+    if defaults:
+        lines.extend([
+            "",
+            "Selected joint defaults:",
+            f"  id/name/group        {defaults.get('id')} {defaults.get('name')} {defaults.get('group')}",
+            f"  q sensed/target      {defaults.get('sensed_q')} / {defaults.get('q')}",
+            f"  limits               {defaults.get('q_min')} .. {defaults.get('q_max')}",
+            f"  dq/kp/kd/tau/ramp    {defaults.get('dq')} / {defaults.get('kp')} / {defaults.get('kd')} / {defaults.get('tau')} / {defaults.get('ramp_s')}",
+            f"  locked               {defaults.get('locked')}",
+        ])
+    return lines
+
+
+LLCTL_JOINT_FIELDS = ["q", "dq", "kp", "kd", "tau", "ramp"]
+LLCTL_JOINT_STEPS = {"q": 0.02, "dq": 0.02, "kp": 1.0, "kd": 0.1, "tau": 0.05, "ramp": 0.1}
+LLCTL_EE_FIELDS = ["x", "y", "z", "roll", "pitch", "yaw"]
+LLCTL_EE_STEPS = {"x": 0.01, "y": 0.01, "z": 0.01, "roll": 0.05, "pitch": 0.05, "yaw": 0.05}
+
+
+def _llctl_value_lines(mode: str, selected_field: int, joint_id: int, joint_values: dict, ee_side: str, ee_values: dict) -> list[str]:
+    lines = []
+    if mode == "joint":
+        lines.append(f"MODE joint    joint={joint_id}")
+        for idx, field in enumerate(LLCTL_JOINT_FIELDS):
+            marker = ">" if idx == selected_field else " "
+            lines.append(f"{marker} {field:<5} {float(joint_values.get(field, 0.0)):+.3f}")
+    else:
+        lines.append(f"MODE ee       side={ee_side}")
+        for idx, field in enumerate(LLCTL_EE_FIELDS):
+            marker = ">" if idx == selected_field else " "
+            lines.append(f"{marker} {field:<5} {float(ee_values.get(field, 0.0)):+.3f}")
+    return lines
+
+
+def _llctl_load_joint_defaults(agent: G1Agent, joint_id: int, current: dict) -> dict:
+    agent.llctl.select_joint(agent.settings.effective(), joint=str(joint_id))
+    defaults = (agent.llctl_snapshot().get("selected_joint_defaults") or {})
+    if defaults.get("error"):
+        return current
+    return {
+        "q": float(defaults.get("q") or 0.0),
+        "dq": float(defaults.get("dq") or 0.0),
+        "kp": float(defaults.get("kp") or 30.0),
+        "kd": float(defaults.get("kd") or 1.5),
+        "tau": float(defaults.get("tau") or 0.0),
+        "ramp": float(defaults.get("ramp_s") or 0.6),
+    }
+
+
+def _llctl_apply_joint(agent: G1Agent, joint_id: int, values: dict, backend: str) -> str:
+    return agent.llctl_command([
+        "joint",
+        str(joint_id),
+        "q",
+        str(values["q"]),
+        "dq",
+        str(values["dq"]),
+        "kp",
+        str(values["kp"]),
+        "kd",
+        str(values["kd"]),
+        "tau",
+        str(values["tau"]),
+        "ramp",
+        str(values["ramp"]),
+        "backend",
+        backend,
+    ])
+
+
+def _llctl_apply_ee(agent: G1Agent, side: str, values: dict) -> str:
+    return agent.llctl_command([
+        "ee",
+        side,
+        str(values["x"]),
+        str(values["y"]),
+        str(values["z"]),
+        str(values["roll"]),
+        str(values["pitch"]),
+        str(values["yaw"]),
+    ])
 
 
 def _llctl_ui(stdscr: object, agent: G1Agent) -> None:
     curses.curs_set(0)
     stdscr.keypad(True)
-    status = "q exits, e enable session, d disable session"
+    mode = "joint"
+    selected_field = 0
+    joint_id = int((agent.llctl_snapshot().get("selected_joint") or 22))
+    joint_values = {"q": 0.0, "dq": 0.0, "kp": 30.0, "kd": 1.5, "tau": 0.0, "ramp": 0.6}
+    ee_side = "right"
+    ee_values = {"x": 0.20, "y": -0.20, "z": 0.30, "roll": 0.0, "pitch": 0.0, "yaw": 0.0}
+    status = "q exits, e enable, d disable, TAB switches joint/EE, arrows edit, a apply, r release"
     while True:
         snap = agent.llctl_snapshot()
+        backend = str(snap.get("selected_backend") or "arm_sdk")
         max_y, max_x = stdscr.getmaxyx()
         stdscr.erase()
         _add_line(stdscr, 0, 0, "LLCTL ENGINEERING CONTROL", max_x, curses.A_BOLD)
@@ -1031,6 +1156,18 @@ def _llctl_ui(stdscr: object, agent: G1Agent) -> None:
             y = _add_line(stdscr, y, 0, line, max_x, curses.A_BOLD if line == "LLCTL" else 0)
             if y >= max_y - 1:
                 break
+        if y < max_y - 1:
+            y = _add_line(stdscr, y + 1, 0, "LIVE CONTROLS", max_x, curses.A_BOLD)
+            for line in _llctl_value_lines(mode, selected_field, joint_id, joint_values, ee_side, ee_values):
+                y = _add_line(stdscr, y, 0, line, max_x)
+                if y >= max_y - 1:
+                    break
+        if y < max_y - 1:
+            controls = (
+                "Keys: e enable | d disable | b backend | [/] joint | s side | up/down field | "
+                "left/right value | g load sensed/defaults | a apply | r release | TAB mode | q exit"
+            )
+            _add_line(stdscr, max_y - 1, 0, controls, max_x, curses.A_DIM)
         stdscr.refresh()
         stdscr.timeout(500)
         ch = stdscr.getch()
@@ -1040,6 +1177,54 @@ def _llctl_ui(stdscr: object, agent: G1Agent) -> None:
             status = agent.llctl_enable()
         elif ch == ord("d"):
             status = agent.llctl_disable()
+        elif ch == 9:
+            mode = "ee" if mode == "joint" else "joint"
+            selected_field = 0
+        elif ch in (curses.KEY_UP, ord("k")):
+            fields = LLCTL_JOINT_FIELDS if mode == "joint" else LLCTL_EE_FIELDS
+            selected_field = (selected_field - 1) % len(fields)
+        elif ch in (curses.KEY_DOWN, ord("j")):
+            fields = LLCTL_JOINT_FIELDS if mode == "joint" else LLCTL_EE_FIELDS
+            selected_field = (selected_field + 1) % len(fields)
+        elif ch in (curses.KEY_LEFT, curses.KEY_RIGHT):
+            direction = -1.0 if ch == curses.KEY_LEFT else 1.0
+            if mode == "joint":
+                field = LLCTL_JOINT_FIELDS[selected_field]
+                joint_values[field] = float(joint_values[field]) + direction * LLCTL_JOINT_STEPS[field]
+                if field == "ramp":
+                    joint_values[field] = max(0.1, joint_values[field])
+            else:
+                field = LLCTL_EE_FIELDS[selected_field]
+                ee_values[field] = float(ee_values[field]) + direction * LLCTL_EE_STEPS[field]
+        elif ch == ord("["):
+            joint_id = max(0, joint_id - 1)
+            joint_values = _llctl_load_joint_defaults(agent, joint_id, joint_values)
+            status = f"selected joint {joint_id}"
+        elif ch == ord("]"):
+            joint_id = min(28, joint_id + 1)
+            joint_values = _llctl_load_joint_defaults(agent, joint_id, joint_values)
+            status = f"selected joint {joint_id}"
+        elif ch == ord("g"):
+            if mode == "joint":
+                joint_values = _llctl_load_joint_defaults(agent, joint_id, joint_values)
+                status = f"loaded defaults for joint {joint_id}"
+        elif ch == ord("s"):
+            ee_side = "left" if ee_side == "right" else "right"
+            if ee_side == "left" and ee_values.get("y", 0.0) < 0:
+                ee_values["y"] = abs(float(ee_values["y"]))
+            elif ee_side == "right" and ee_values.get("y", 0.0) > 0:
+                ee_values["y"] = -abs(float(ee_values["y"]))
+            status = f"EE side {ee_side}"
+        elif ch == ord("b"):
+            next_backend = "lowcmd" if backend == "arm_sdk" else "arm_sdk"
+            status = agent.llctl_command(["backend", next_backend])
+        elif ch == ord("r"):
+            status = agent.llctl_command(["release_arms"])
+        elif ch in (ord("a"), 10, 13):
+            if mode == "joint":
+                status = _llctl_apply_joint(agent, joint_id, joint_values, backend)
+            else:
+                status = _llctl_apply_ee(agent, ee_side, ee_values)
 
 
 def _run_llctl_ui(agent: G1Agent) -> None:
@@ -1048,7 +1233,10 @@ def _run_llctl_ui(agent: G1Agent) -> None:
             _print(line)
         return
     with PRINT_LOCK:
-        curses.wrapper(_llctl_ui, agent)
+        try:
+            curses.wrapper(_llctl_ui, agent)
+        finally:
+            _clear_terminal_input_line()
 
 
 RESET_SCOPES = ["runtime", "conversation", "learned", "autobiography", "full"]
@@ -1178,7 +1366,10 @@ def _run_reset_ui(agent: G1Agent) -> None:
             _print(line)
         return
     with PRINT_LOCK:
-        curses.wrapper(_reset_ui, agent)
+        try:
+            curses.wrapper(_reset_ui, agent)
+        finally:
+            _clear_terminal_input_line()
 
 
 def _handle_tacit_command(agent: G1Agent, args: list[str]) -> None:
@@ -1228,7 +1419,10 @@ def _run_tacit_ui(agent: G1Agent, *, panel: str = "recent") -> None:
             _print(line)
         return
     with PRINT_LOCK:
-        curses.wrapper(_tacit_ui, agent, panel)
+        try:
+            curses.wrapper(_tacit_ui, agent, panel)
+        finally:
+            _clear_terminal_input_line()
 
 
 def _tick_loop(agent: G1Agent, interval_s: float, stop_event: threading.Event, agent_lock: threading.RLock) -> None:

@@ -1,0 +1,457 @@
+{
+  "metadata": {
+    "title": "EF Robotics FAQ Knowledge Base",
+    "purpose": "Company-level RAG knowledge for EF Robotics. Keep detailed robot manuals, error codes, APIs, and model-specific procedures in separate product-specific knowledge files.",
+    "language": "en",
+    "answering_rules": [
+      "Describe EF Robotics as a robotics solutions provider that combines robot products with consulting, testing, deployment, configuration, training, maintenance, and support.",
+      "Do not describe EF Robotics as the manufacturer of every robot it sells; many robots are produced by partner manufacturers.",
+      "Capabilities are robot-specific and must be linked to the exact manufacturer, model, hardware configuration, and software version.",
+      "For technical procedures, use documentation for the specific robot model and technician authorization level.",
+      "For repairs, distinguish between operator maintenance, dealer-authorized technical work, EF Robotics service work, and manufacturer-level repair.",
+      "When authorization is uncertain, recommend verification or escalation.",
+      "Treat internal training drafts as guidance, not automatically final company policy.",
+      "Resolve conflicting information by preferring current approved EF Robotics internal documentation, current manufacturer documentation, current EF Robotics public information, then older training material."
+    ]
+  },
+  "knowledge": [
+    {
+      "title": "Company overview",
+      "category": "EF Robotics company overview robotics solutions provider integrator distributor locations Schacht-Audorf Hannover Dubai DACH",
+      "faqs": [
+        {
+          "question": "What is EF Robotics?",
+          "answer": "EF Robotics is a robotics solutions provider focused on helping businesses automate repetitive, time-consuming, and physically demanding tasks with service robots. The company provides robots as well as consulting, testing, deployment, configuration, training, maintenance, and technical support."
+        },
+        {
+          "question": "What problem does EF Robotics solve?",
+          "answer": "EF Robotics helps companies address operational challenges such as staff shortages, repetitive manual work, long transport routes, cleaning workloads, and inefficient internal processes by introducing suitable robotic automation."
+        },
+        {
+          "question": "What is the goal of EF Robotics?",
+          "answer": "The goal of EF Robotics is not simply to sell robots, but to find practical robotic solutions that improve productivity and reduce the workload placed on employees."
+        },
+        {
+          "question": "Does EF Robotics manufacture all of its robots?",
+          "answer": "No. EF Robotics works with robotics manufacturers and technology partners and offers selected robots as part of its portfolio. EF Robotics focuses heavily on selecting, deploying, configuring, supporting, and integrating robots for customer applications."
+        },
+        {
+          "question": "Is EF Robotics a robot manufacturer or a robot integrator?",
+          "answer": "EF Robotics primarily acts as a robotics solutions provider, distributor, integrator, and service partner. Depending on the product, EF Robotics may distribute third-party platforms, configure them for customers, provide deployment services, and offer ongoing technical support."
+        },
+        {
+          "question": "Where is EF Robotics based?",
+          "answer": "EF Robotics' main German location is in Schacht-Audorf. The company also has a location in Hannover and a presence in Dubai, United Arab Emirates."
+        },
+        {
+          "question": "In which regions does EF Robotics provide on-site setup?",
+          "answer": "EF Robotics states that it provides on-site robot setup in Germany, Austria, and Switzerland."
+        }
+      ]
+    },
+    {
+      "title": "What EF Robotics offers",
+      "category": "services consulting demos testing setup mapping commissioning training maintenance support warranty replacement premium 24/7",
+      "faqs": [
+        {
+          "question": "What services does EF Robotics provide?",
+          "answer": "EF Robotics provides services including robot consulting, product selection, demonstrations, testing, on-site setup, mapping, configuration, commissioning, customer handover, technical support, maintenance, troubleshooting, and dealer training."
+        },
+        {
+          "question": "Does EF Robotics only sell robots?",
+          "answer": "No. The EF Robotics offering includes services around the complete robot lifecycle, from selecting and testing a robot to deployment, support, maintenance, and troubleshooting."
+        },
+        {
+          "question": "Can EF Robotics help a customer choose the correct robot?",
+          "answer": "Yes. EF Robotics advises customers on which robot and configuration best fit the intended application and operating environment."
+        },
+        {
+          "question": "Does EF Robotics offer robot demonstrations?",
+          "answer": "Yes. Customers can request demonstrations to evaluate robot solutions and determine whether automation is suitable for their operation."
+        },
+        {
+          "question": "Can customers test robots before buying them?",
+          "answer": "Yes. EF Robotics offers the possibility of testing robots. The company publicly advertises a two-week robot test as one of its services."
+        },
+        {
+          "question": "Does EF Robotics install robots at the customer site?",
+          "answer": "Yes. EF Robotics performs on-site setup and commissioning for supported deployments."
+        },
+        {
+          "question": "What happens during a typical robot deployment?",
+          "answer": "A deployment can include a site assessment, preparation of the operating area, installation of charging or service stations, creation or selection of maps, definition of zones or destinations, configuration of tasks, robot-to-cloud assignment, testing, validation, documentation, and customer handover."
+        },
+        {
+          "question": "Does EF Robotics provide customer training?",
+          "answer": "Yes. Robot deployments can include operator instruction and explanation of normal operation, safety limits, routine maintenance, and the support process."
+        },
+        {
+          "question": "Does EF Robotics provide maintenance?",
+          "answer": "Yes. Maintenance is part of EF Robotics' service offering and can also be included in service packages."
+        },
+        {
+          "question": "Does EF Robotics provide technical support?",
+          "answer": "Yes. EF Robotics provides technical support for deployed robot systems."
+        },
+        {
+          "question": "Does EF Robotics offer 24/7 support?",
+          "answer": "EF Robotics advertises Premium Service packages that can include 24/7 support. The exact support coverage depends on the customer's service agreement."
+        },
+        {
+          "question": "Does EF Robotics offer replacement services?",
+          "answer": "EF Robotics advertises fast replacement service as part of its Premium Service offering. Exact conditions depend on the customer's service package and applicable agreement."
+        },
+        {
+          "question": "Does EF Robotics offer extended warranty?",
+          "answer": "Yes. EF Robotics publicly offers the possibility of extending the standard warranty by an additional three years, depending on product and contract."
+        }
+      ]
+    },
+    {
+      "title": "Robot portfolio",
+      "category": "portfolio delivery transport cleaning service logistics humanoid Unitree G1 AutoXing CenoBots distributor",
+      "faqs": [
+        {
+          "question": "What types of robots does EF Robotics offer?",
+          "answer": "The EF Robotics portfolio includes delivery and transport robots, cleaning robots, service robots, logistics robots, and humanoid robots."
+        },
+        {
+          "question": "Does EF Robotics offer delivery robots?",
+          "answer": "Yes. EF Robotics offers autonomous delivery and transport robots that can move food, beverages, materials, parts, or other items between destinations."
+        },
+        {
+          "question": "Does EF Robotics offer cleaning robots?",
+          "answer": "Yes. EF Robotics offers commercial cleaning robots for tasks such as floor scrubbing, vacuuming, and autonomous cleaning of commercial environments."
+        },
+        {
+          "question": "Does EF Robotics offer humanoid robots?",
+          "answer": "Yes. The EF Robotics portfolio includes humanoid robotics platforms such as the Unitree G1."
+        },
+        {
+          "question": "Does EF Robotics sell the Unitree G1?",
+          "answer": "Yes. Unitree G1 is listed as part of the EF Robotics robot portfolio."
+        },
+        {
+          "question": "Does EF Robotics work with AutoXing?",
+          "answer": "Yes. AutoXing is an important technology partner in the EF Robotics portfolio."
+        },
+        {
+          "question": "Is EF Robotics an AutoXing distributor?",
+          "answer": "EF Robotics states that it is an exclusive distributor of AutoXing and has direct contact with the manufacturer for product-related coordination."
+        },
+        {
+          "question": "Which AutoXing products does EF Robotics work with?",
+          "answer": "The portfolio includes AutoXing platforms such as Mars, Juno, Juno Plus, Juno Lift, Juno Max Lift, Vesta, Base, Pollux, Sub Lift, and Sub Max Lift. Portfolio availability can change over time."
+        },
+        {
+          "question": "Does EF Robotics work with CenoBots?",
+          "answer": "Yes. EF Robotics supports CenoBots autonomous cleaning robots and provides training, deployment, maintenance, and technical support processes around supported CenoBots products."
+        },
+        {
+          "question": "Which CenoBots products does EF Robotics support?",
+          "answer": "EF Robotics materials include products such as the CenoBot L3 family, L4, L50, SP50, and X2 Pro. Exact availability and support scope can depend on market and current portfolio."
+        },
+        {
+          "question": "Does EF Robotics work with other robotics brands?",
+          "answer": "Yes. The EF Robotics portfolio contains robots from multiple technology providers rather than relying on a single manufacturer."
+        }
+      ]
+    },
+    {
+      "title": "Industries and applications",
+      "category": "industries logistics warehousing gastronomy hospitality healthcare retail airports industrial cleaning restaurants hotels hospitals warehouses",
+      "faqs": [
+        {
+          "question": "Which industries does EF Robotics serve?",
+          "answer": "EF Robotics works with applications in logistics and warehousing, gastronomy, hospitality, healthcare, retail, airports, industrial environments, and other commercial facilities."
+        },
+        {
+          "question": "How can robots help in logistics?",
+          "answer": "Robots can automate repetitive internal transportation, move materials between departments, reduce walking distances, and allow employees to focus on higher-value activities."
+        },
+        {
+          "question": "How can robots help in restaurants?",
+          "answer": "Delivery and service robots can transport food, beverages, dishes, or other items between service areas while reducing repetitive walking for employees."
+        },
+        {
+          "question": "How can robots help in hotels?",
+          "answer": "Robots can assist with internal delivery, guest service, cleaning, and repetitive transport tasks."
+        },
+        {
+          "question": "How can robots help in hospitals?",
+          "answer": "Robots can support internal transport, material movement, cleaning, and other repetitive workflows. The exact robot and deployment must be selected according to the hospital's environment, hygiene requirements, routes, and operational processes."
+        },
+        {
+          "question": "How can robots help in warehouses?",
+          "answer": "Autonomous robots can transport parts, containers, materials, or goods between defined destinations and reduce repetitive manual transport routes."
+        },
+        {
+          "question": "How can robots help cleaning companies?",
+          "answer": "Autonomous cleaning robots can perform repetitive floor-cleaning tasks while staff focus on areas requiring manual work, detail cleaning, supervision, or other services."
+        }
+      ]
+    },
+    {
+      "title": "Deployment philosophy, mapping, and navigation",
+      "category": "deployment site survey suitability validation documentation mapping localization maps charging docking navigation handover commissioning",
+      "faqs": [
+        {
+          "question": "How does EF Robotics determine whether a robot is suitable for a site?",
+          "answer": "Suitability is evaluated through the intended use case and operating environment. Factors can include floor conditions, passage widths, ramps, stairs, glass, reflective surfaces, pedestrian traffic, obstacles, route complexity, charging location, network requirements, and customer processes."
+        },
+        {
+          "question": "What is a site survey?",
+          "answer": "A site survey is an assessment of the customer's operating environment before deployment. It determines whether the selected robot can operate safely and reliably and identifies any environmental or configuration requirements."
+        },
+        {
+          "question": "Why is a site survey important?",
+          "answer": "A robot's performance depends heavily on its environment. A proper site survey helps identify obstacles, unsafe areas, unsuitable surfaces, navigation challenges, infrastructure requirements, and process constraints before deployment."
+        },
+        {
+          "question": "Does EF Robotics simply install the robot and leave?",
+          "answer": "No. A proper deployment includes validation. The robot should be tested in the actual operating environment before the installation is considered complete."
+        },
+        {
+          "question": "What should be tested before a customer handover?",
+          "answer": "Depending on the robot, testing can include mapping, localization, routes, zones or destinations, task execution, charging or docking, cloud assignment, audio functions, cleaning functions, obstacle handling, and return-to-station behavior."
+        },
+        {
+          "question": "Why does EF Robotics document deployments?",
+          "answer": "Documentation makes the configuration reproducible, supports future maintenance, and gives technical support enough context to diagnose problems."
+        },
+        {
+          "question": "What should be documented during commissioning?",
+          "answer": "Typical documentation can include robot model and serial number, customer site, map and map version, configured routes or zones, charging station position, software context, test results, known limitations, and unresolved issues."
+        },
+        {
+          "question": "What is robot mapping?",
+          "answer": "Mapping is the process of creating a digital representation of the robot's operating environment so that the robot can localize itself and navigate between destinations or working areas."
+        },
+        {
+          "question": "Does EF Robotics configure robot maps?",
+          "answer": "Yes. Mapping and map configuration are important parts of deployments for supported autonomous robots."
+        },
+        {
+          "question": "Why does a robot need the correct map?",
+          "answer": "The robot uses the map to determine where it is. Selecting an incorrect map can cause localization problems, initialization failures, or incorrect task execution."
+        },
+        {
+          "question": "What is localization?",
+          "answer": "Localization is the robot's ability to determine its current position and orientation within a map."
+        },
+        {
+          "question": "Why can a robot lose its position?",
+          "answer": "Possible reasons include an incorrect map, major environmental changes, the robot being moved outside the mapped area, crowded initialization areas, reflective surfaces, dirty sensors, or changes to mapped landmarks."
+        },
+        {
+          "question": "What should be checked when localization fails?",
+          "answer": "Check the selected map, the robot's physical position, environmental changes, nearby crowds or obstacles, and sensor cleanliness before escalating the problem."
+        },
+        {
+          "question": "Can charging stations be moved after mapping?",
+          "answer": "The charging or docking position is normally an important reference for the robot. Moving a station after mapping can cause docking or localization problems and may require map or configuration changes."
+        }
+      ]
+    },
+    {
+      "title": "Cloud and software configuration",
+      "category": "cloud platform robot binding assignment customer account maps synchronization roles access rights permissions",
+      "faqs": [
+        {
+          "question": "Do EF Robotics robots use cloud platforms?",
+          "answer": "Many supported robot platforms include manufacturer cloud or service platforms for robot management, map synchronization, device assignment, configuration, or monitoring."
+        },
+        {
+          "question": "Does every robot use the same cloud platform?",
+          "answer": "No. Cloud tools and workflows depend on the manufacturer and robot platform."
+        },
+        {
+          "question": "What is robot binding?",
+          "answer": "Robot binding is the process of assigning a specific robot, typically identified by serial number, to the correct customer, business, building, account, or cloud environment."
+        },
+        {
+          "question": "Why is correct robot-to-customer assignment important?",
+          "answer": "Incorrect assignments can lead to missing robots, incorrect maps, inappropriate access rights, or configuration changes being applied to the wrong customer environment."
+        },
+        {
+          "question": "Does EF Robotics manage user roles in robot platforms?",
+          "answer": "Where supported, EF Robotics can configure or advise on user roles and access rights. Permissions should follow the principle of granting only the access required for the user's role."
+        }
+      ]
+    },
+    {
+      "title": "Support and troubleshooting",
+      "category": "support troubleshooting systematic symptom error serial number screenshot timestamp escalation maintenance repair authorization",
+      "faqs": [
+        {
+          "question": "What is EF Robotics' general troubleshooting approach?",
+          "answer": "The preferred approach is symptom-first and systematic: observe the problem, read the alert or error message, check basic causes, perform an approved recovery step, verify the result, document the outcome, and escalate if required."
+        },
+        {
+          "question": "Why does EF Robotics use a systematic troubleshooting process?",
+          "answer": "A structured process avoids unnecessary part replacement or guessing and makes technical problems easier to reproduce and resolve."
+        },
+        {
+          "question": "What information should be provided in an EF Robotics support request?",
+          "answer": "A useful support case should include the robot model, serial number, customer and location, error code or message, screenshot, time of the incident, current task, map or route context, environment photos where relevant, and all troubleshooting actions already attempted."
+        },
+        {
+          "question": "Why is the serial number important for support?",
+          "answer": "The serial number identifies the specific robot and helps technical support determine the relevant hardware, software, warranty, configuration, and service history."
+        },
+        {
+          "question": "Why should an error screenshot be included?",
+          "answer": "A screenshot preserves the exact error code and message and reduces ambiguity when the incident is reviewed later."
+        },
+        {
+          "question": "Why should the time of an error be documented?",
+          "answer": "A timestamp can help correlate the customer report with robot logs, cloud records, task history, or other diagnostic information."
+        },
+        {
+          "question": "Why should attempted fixes be documented?",
+          "answer": "Knowing what has already been tried prevents duplicate work and helps support determine whether the issue is reproducible or needs escalation."
+        },
+        {
+          "question": "When should a problem be escalated to EF Robotics?",
+          "answer": "Problems should be escalated when approved basic troubleshooting does not resolve the issue, when the fault repeats, when internal components may be affected, when hardware or battery faults are suspected, or when the action would exceed the technician or dealer's authorization."
+        }
+      ]
+    },
+    {
+      "title": "Maintenance philosophy",
+      "category": "maintenance preventive inspection cleaning sensors charging contacts operator maintenance internal repairs authorization",
+      "faqs": [
+        {
+          "question": "What is EF Robotics' approach to robot maintenance?",
+          "answer": "Maintenance should be preventive and structured. Regular inspection and cleaning help maintain navigation accuracy, cleaning quality, docking reliability, and robot availability."
+        },
+        {
+          "question": "Can customers maintain robots themselves?",
+          "answer": "Customers can normally perform approved operator-level maintenance. More advanced work depends on the robot, training level, service agreement, and authorization."
+        },
+        {
+          "question": "Can a user open a robot and repair internal components?",
+          "answer": "Not unless specifically authorized and trained. Internal electronics, batteries, control units, motors, wiring, and other protected components should be handled only within the applicable service authorization."
+        },
+        {
+          "question": "Why should robot sensors be kept clean?",
+          "answer": "LiDARs, cameras, depth sensors, and other perception systems rely on clear sensor surfaces. Dust, fingerprints, water, or dirt can negatively affect localization and obstacle detection."
+        },
+        {
+          "question": "Why should charging contacts be kept clean?",
+          "answer": "Dirty or oxidized contacts can reduce charging reliability or prevent the robot from charging correctly."
+        }
+      ]
+    },
+    {
+      "title": "Dealer training",
+      "category": "dealer training level 1 level 2 technician onboarding support boundaries escalation authorized repair",
+      "faqs": [
+        {
+          "question": "Does EF Robotics train dealers and service partners?",
+          "answer": "Yes. Internal EF Robotics material defines structured dealer onboarding and technical training for supported robot systems."
+        },
+        {
+          "question": "What is EF Robotics Level 1 dealer training?",
+          "answer": "Level 1 focuses on safe operation, basic setup, simple deployments, routine maintenance, basic troubleshooting, documentation, and knowing when to escalate."
+        },
+        {
+          "question": "What should a Level 1 technician be able to do?",
+          "answer": "A Level 1 technician should be able to operate the robot safely, perform a basic site check, carry out standard setup, start and stop tasks, perform approved maintenance, resolve simple environmental or map issues, and create a complete support case."
+        },
+        {
+          "question": "What is EF Robotics Level 2 technical training?",
+          "answer": "Level 2 develops deeper technical skills such as systematic diagnosis, more advanced mapping and configuration, cloud administration, maintenance analysis, and technical commissioning while maintaining clear limits around unauthorized internal repairs."
+        },
+        {
+          "question": "What should a Level 2 technician be able to do?",
+          "answer": "A Level 2 technician should be able to diagnose reproducible faults, inspect relevant robot subsystems, manage advanced map and route configuration, validate deployments, document technical changes, and identify when manufacturer or EF Robotics escalation is required."
+        },
+        {
+          "question": "Does Level 2 mean a technician may perform any repair?",
+          "answer": "No. Training level does not automatically authorize unrestricted internal hardware repair. Control units, batteries, internal electronics, protected components, factory tools, and unapproved repairs can remain outside the authorized scope."
+        },
+        {
+          "question": "Why does EF Robotics define support boundaries?",
+          "answer": "Clear support boundaries reduce safety risks, prevent unauthorized changes, protect warranty conditions, and ensure complex failures reach the appropriate technical level."
+        }
+      ]
+    },
+    {
+      "title": "AutoXing, CenoBots, and Unitree G1 relationships",
+      "category": "AutoXing exclusive distributor CenoBots Unitree G1 humanoid robotics embodied AI portfolio support cloud mapping deployment",
+      "faqs": [
+        {
+          "question": "What is the relationship between EF Robotics and AutoXing?",
+          "answer": "EF Robotics states that it is an exclusive distributor of AutoXing and has direct communication with the manufacturer for product-related questions and support coordination."
+        },
+        {
+          "question": "What does the AutoXing relationship mean for customers?",
+          "answer": "It allows EF Robotics to combine local sales, deployment, training, and support with direct manufacturer coordination for product-specific issues."
+        },
+        {
+          "question": "Does EF Robotics configure AutoXing robots?",
+          "answer": "Yes. EF Robotics training material covers AutoXing robot setup, mapping, destinations, cloud configuration, voice or media features, testing, maintenance, and troubleshooting."
+        },
+        {
+          "question": "Does EF Robotics support AutoXing cloud configuration?",
+          "answer": "Yes. Supported workflows include assigning robots to customer environments, synchronizing maps, configuring destinations or routes, and validating robot-cloud configuration."
+        },
+        {
+          "question": "What is the relationship between EF Robotics and CenoBots?",
+          "answer": "EF Robotics deploys and supports CenoBots commercial cleaning robots and maintains training material for dealer operation, setup, maintenance, diagnosis, and support."
+        },
+        {
+          "question": "What kinds of CenoBots tasks does EF Robotics support?",
+          "answer": "Supported workflows include site preparation, mapping, cleaning-zone configuration, station setup, temporary and scheduled cleaning tasks, maintenance, navigation troubleshooting, charging diagnosis, and support escalation."
+        },
+        {
+          "question": "How does EF Robotics train CenoBots dealers?",
+          "answer": "Training is divided into competency levels. Level 1 focuses on safe operation and first-line support, while Level 2 includes maintenance, systematic diagnosis, and more advanced map editing."
+        },
+        {
+          "question": "Why does EF Robotics offer the Unitree G1?",
+          "answer": "The G1 gives EF Robotics a platform for humanoid robotics and embodied-AI applications in addition to conventional service, transport, and cleaning robots."
+        },
+        {
+          "question": "Is the Unitree G1 the same type of robot as an AutoXing delivery robot?",
+          "answer": "No. AutoXing delivery robots are primarily autonomous mobile robots designed for transport and service workflows. The Unitree G1 is a bipedal humanoid robotics platform designed for humanoid locomotion, manipulation, research, development, and embodied-AI applications."
+        },
+        {
+          "question": "Can EF Robotics help with G1 projects?",
+          "answer": "EF Robotics includes the G1 in its portfolio. The exact scope of integration, development, programming, support, and custom project services should be confirmed for the individual project rather than assumed."
+        }
+      ]
+    },
+    {
+      "title": "Customer expectations and complementary knowledge files",
+      "category": "customer expectations use case suitability automation poor use case cheapest robot total cost complementary knowledge files",
+      "faqs": [
+        {
+          "question": "Does buying a robot automatically solve a customer's process problem?",
+          "answer": "No. Successful automation requires a suitable use case, appropriate operating environment, correct setup, realistic expectations, employee adoption, and ongoing maintenance."
+        },
+        {
+          "question": "Does EF Robotics promise that every process can be automated?",
+          "answer": "No. A robot should only be recommended when the use case and environment are suitable."
+        },
+        {
+          "question": "What makes a good robotics use case?",
+          "answer": "Good use cases typically involve repetitive, predictable, time-consuming, or physically demanding tasks that can be clearly defined and performed in an environment suitable for autonomous operation."
+        },
+        {
+          "question": "What makes a poor robotics use case?",
+          "answer": "A use case may be unsuitable when the environment changes constantly, routes cannot be made safe, human interaction is too unpredictable, the task cannot be standardized, or the robot's technical limits conflict with customer expectations."
+        },
+        {
+          "question": "Is the cheapest robot always the best choice?",
+          "answer": "No. Robot selection should consider the entire operational requirement, including task, payload, environment, reliability, integration, support, maintenance, and total cost of operation."
+        },
+        {
+          "question": "What knowledge files should complement this EF Robotics FAQ?",
+          "answer": "Useful separate knowledge collections include Unitree G1 knowledge, AutoXing product knowledge, CenoBots product knowledge, EF Robotics support procedures, dealer Level 1 and Level 2 knowledge, site survey procedures, commissioning and handover procedures, product-specific error-code databases, and warranty or service-package knowledge."
+        }
+      ]
+    }
+  ]
+}

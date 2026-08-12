@@ -20,12 +20,12 @@ from typing import Any
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Listen to a local headset mic, transcribe locally, and POST text to chatbot.py /asr."
+        description="Listen to a local headset mic, transcribe locally, and POST text to nav_bot.py /asr."
     )
-    parser.add_argument("--url", default="http://127.0.0.1:8095/asr")
+    parser.add_argument("--url", default="http://127.0.0.1:8096/asr")
     parser.add_argument("--token", default="")
     parser.add_argument("--backend", choices=("auto", "faster-whisper", "whisper", "vosk"), default="auto")
-    parser.add_argument("--model", default=os.environ.get("LOCAL_ASR_MODEL", "small.en"),
+    parser.add_argument("--model", default=os.environ.get("LOCAL_ASR_MODEL", "small"),
                         help="faster-whisper/openai-whisper model name, or Vosk model directory.")
     parser.add_argument("--device", default=os.environ.get("LOCAL_ASR_DEVICE", "20" if os.name == "nt" else None),
                         help="sounddevice input device id/name. Use --list-devices to inspect.")
@@ -52,7 +52,8 @@ def parse_args() -> argparse.Namespace:
                         help="Multiply recorded audio before transcription. Useful for very quiet Windows inputs.")
     parser.add_argument("--normalize-rms", type=float, default=0.06,
                         help="Normalize non-quiet chunks to this RMS before writing WAV; use 0 to disable.")
-    parser.add_argument("--language", default="en")
+    parser.add_argument("--language", "--lang", dest="language", default=os.environ.get("LOCAL_ASR_LANGUAGE", "de"),
+                        help="ASR language code, for example de or en.")
     parser.add_argument("--beam-size", type=int, default=5,
                         help="Beam size for faster-whisper decoding; higher is slower but usually more accurate.")
     parser.add_argument("--once", action="store_true", help="Transcribe one chunk and exit.")

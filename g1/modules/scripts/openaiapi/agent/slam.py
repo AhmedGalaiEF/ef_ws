@@ -43,10 +43,11 @@ class SlamBackend:
         if str(scripts_dir) not in sys.path:
             sys.path.insert(0, str(scripts_dir))
         try:
-            from slam_web_app import DEFAULT_TOPICS, PoseTarget, SlamWebState
+            from slam_web_app import DEFAULT_TOPICS, PoseTarget, SlamWebState, response_dict
         except Exception as exc:
             raise SlamBackendError(f"slam_web_app backend unavailable: {exc}") from exc
         self._pose_cls = PoseTarget
+        self._response_dict = response_dict
         self._state = SlamWebState(self.iface, self.domain_id, DEFAULT_TOPICS, self.map_path)
         return self._state
 
@@ -55,6 +56,7 @@ class SlamBackend:
         result = self._ensure_state().start_mapping(slam_type)
         message = self._format(result)
         if not bool(result.get("ok")):
+            message = self._append_slam_data_hint(message, result)
             message += f"; preflight={json.dumps(before, ensure_ascii=False, sort_keys=True)}"
         return message
 
@@ -62,7 +64,61 @@ class SlamBackend:
         return self._format(self._ensure_state().save_map(path or self.map_path))
 
     def start_relocation(self, path: str | None = None) -> str:
-        return self._format(self._ensure_state().relocate(path or self.map_path))
+        state = self._ensure_state()
+        selected_path = path or self.map_path
+        result = state.relocate(selected_path)
+        used_origin_fallback = False
+        raw = str(result.get("raw", ""))
+        if not bool(result.get("ok")) and "no valid non-zero slam pose" in raw.lower():
+            used_origin_fallback = True
+            qx, qy, qz, qw = 0.0, 0.0, 0.0, 1.0
+            result = self._response_dict(state.client.init_pose(0.0, 0.0, 0.0, qx, qy, qz, qw, selected_path))
+            state.relocation_ready = bool(result.get("ok"))
+            result = state._record("init_pose", result)
+        message = self._format(result)
+        if used_origin_fallback:
+            message += (
+                "; fallback=used explicit map-origin pose because no non-zero /slam_info pose was available. "
+                "If this fails, move the robot near the saved map origin or a distinctive mapped area and retry."
+            )
+        message = self._append_slam_data_hint(message, result)
+        if not bool(result.get("ok")) and self._error_code(result) == 509:
+            message += (
+                "; hint=relocation scan matching confidence is low. Move the robot to a distinctive area "
+                "already present in the saved map, verify /utlidar/cloud_livox_mid360 and "
+                "/utlidar/imu_livox_mid360 are fresh, confirm the selected map path is correct, then retry relocation."
+            )
+        return message
+
+    @staticmethod
+    def _error_code(result: dict[str, Any]) -> int:
+        raw = result.get("raw")
+        if isinstance(raw, dict):
+            try:
+                value = raw.get("errorCode")
+                if value is not None:
+                    return int(value)
+            except Exception:
+                pass
+        for key in ("errorCode", "code"):
+            try:
+                value = result.get(key)
+                if value is not None:
+                    return int(value)
+            except Exception:
+                pass
+        return -1
+
+    def _append_slam_data_hint(self, message: str, result: dict[str, Any]) -> str:
+        if bool(result.get("ok")) or self._error_code(result) != 501:
+            return message
+        return (
+            message
+            + "; hint=Unitree SLAM returned 501 Lack of lidar or imu data. "
+            "The API call reached the SLAM service, but the service is not receiving accepted lidar+IMU data. "
+            "Check the robot-side lidar driver and SLAM prerequisites, especially DDS topics "
+            "rt/utlidar/cloud_livox_mid360 and rt/utlidar/imu_livox_mid360, plus matching --iface/--domain-id."
+        )
 
     def save_current_point(self, name: str) -> str:
         clean = self._clean_point_name(name)
@@ -278,6 +334,37 @@ class SlamBackend:
             ]
         except Exception as exc:
             diagnostics["web_status_error"] = str(exc)
+        fresh_cloud = bool(diagnostics.get("fresh_lidar_cloud")) or any(
+            name in set(diagnostics.get("web_fresh_topics") or [])
+            for name in ("livox", "deskewed", "slam_mapping", "slam_relocation")
+        )
+        fresh_imu = bool(diagnostics.get("fresh_lidar_imu"))
+        slam_status = diagnostics.get("unitree_slam_service_status")
+        if slam_status == 0 and not fresh_cloud and not fresh_imu:
+            diagnostics["root_cause"] = (
+                "unitree_slam is running, but neither the required lidar point cloud nor lidar IMU has produced "
+                "fresh samples for this process. Unitree SLAM API 1801 will return errorCode=501 until both are live."
+            )
+        elif slam_status == 0 and not fresh_cloud:
+            diagnostics["root_cause"] = (
+                "unitree_slam is running, but no fresh lidar point-cloud samples are visible to the SLAM client."
+            )
+        elif slam_status == 0 and not fresh_imu:
+            diagnostics["root_cause"] = (
+                "unitree_slam is running, but no fresh lidar IMU samples are visible to the SLAM client."
+            )
+        elif slam_status not in (None, 0):
+            diagnostics["root_cause"] = "unitree_slam service is not ON/healthy according to robot_state service status."
+        else:
+            diagnostics["root_cause"] = "SLAM prerequisites look partially available; if 501 persists, inspect lidar_driver logs."
+        diagnostics["next_checks"] = [
+            "ros2 topic hz /utlidar/cloud_livox_mid360",
+            "ros2 topic hz /utlidar/imu_livox_mid360",
+            "ros2 topic hz /utlidar/cloud_deskewed",
+            "ros2 topic echo /utlidar/range_info --once",
+            "restart/check lidar_driver if all lidar topics are discovered but publish no samples",
+            "keep unitree_slam ON after lidar/IMU samples are fresh, then retry /navigation start_mapping",
+        ]
         diagnostics["hint"] = (
             "SLAM API 1801 needs the robot-side unitree_slam service plus lidar cloud and lidar IMU. "
             "A ROS2 /utlidar/cloud_livox_mid360 echo alone does not prove the DDS rt/utlidar/imu_livox_mid360 "

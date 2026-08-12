@@ -1,0 +1,351 @@
+{
+  "metadata": {
+    "title": "Unitree G1 FAQ Knowledge Base",
+    "purpose": "FAQ knowledge for nav_bot.py RAG answers. Edit or extend the faq arrays to add local robot-specific information.",
+    "language": "en",
+    "answering_rules": [
+      "Specifications can differ between G1, G1 EDU, optional configurations, hardware revisions, and software versions.",
+      "Prefer information for the exact robot model and configuration.",
+      "Prefer current official Unitree documentation over older documentation or third-party sources.",
+      "If the exact robot variant is unknown, state that the capability depends on configuration instead of assuming EDU-only features.",
+      "Treat optional hardware as optional unless this robot's configuration confirms it.",
+      "Do not promise that a demonstrated behavior is SDK-accessible or production-ready just because it appeared in a video."
+    ]
+  },
+  "knowledge": [
+    {
+      "title": "General G1 facts",
+      "category": "general unitree g1 humanoid dimensions weight folded",
+      "faqs": [
+        {
+          "question": "What is the Unitree G1?",
+          "answer": "The Unitree G1 is a compact humanoid robot developed by Unitree Robotics. It is designed as a humanoid robotics platform for mobility, manipulation, AI research, embodied AI, and robotics development. The G1 family includes the standard G1 and development-oriented G1 EDU configurations."
+        },
+        {
+          "question": "Who manufactures the G1?",
+          "answer": "The G1 is manufactured by Unitree Robotics."
+        },
+        {
+          "question": "Is the G1 a humanoid robot?",
+          "answer": "Yes. The G1 is a bipedal humanoid robot with two legs, two arms, a torso, and a sensor-equipped upper body."
+        },
+        {
+          "question": "How tall is the G1?",
+          "answer": "The G1 is approximately 1.32 meters tall when standing."
+        },
+        {
+          "question": "What are the dimensions of the G1?",
+          "answer": "When standing, the G1 is approximately 1320 x 450 x 200 mm. When folded, it is approximately 690 x 450 x 300 mm."
+        },
+        {
+          "question": "How much does the G1 weigh?",
+          "answer": "The G1 weighs approximately 35 kg including the battery. Exact weight can vary depending on configuration and installed options."
+        },
+        {
+          "question": "Can the G1 be folded?",
+          "answer": "Yes. The G1 has a compact folded configuration of approximately 690 x 450 x 300 mm, which makes storage and transportation easier compared with a full-size humanoid."
+        }
+      ]
+    },
+    {
+      "title": "Versions and configurations",
+      "category": "g1 edu configuration degrees of freedom dof waist secondary development",
+      "faqs": [
+        {
+          "question": "What is the difference between the G1 and G1 EDU?",
+          "answer": "The standard G1 is the base commercial configuration, while the G1 EDU is intended for research, education, AI development, and secondary development. The EDU platform supports additional development capabilities and can be configured with additional joints, computing hardware, and dexterous hands."
+        },
+        {
+          "question": "Does the standard G1 support secondary development?",
+          "answer": "Unitree currently lists secondary development for the G1 EDU, while the standard G1 is not listed as supporting the same secondary-development functionality. For software development projects, the exact robot configuration should therefore be verified before deployment."
+        },
+        {
+          "question": "How many degrees of freedom does the G1 have?",
+          "answer": "The standard G1 has 23 joint degrees of freedom. G1 EDU configurations can range from approximately 23 to 43 degrees of freedom depending on installed options such as additional waist, wrist, and dexterous-hand joints."
+        },
+        {
+          "question": "How many degrees of freedom does each G1 leg have?",
+          "answer": "Each leg has 6 degrees of freedom."
+        },
+        {
+          "question": "How many degrees of freedom does each G1 arm have?",
+          "answer": "The base arm has 5 degrees of freedom. Additional wrist and hand degrees of freedom can be available depending on the G1 EDU configuration."
+        },
+        {
+          "question": "Does the G1 have waist movement?",
+          "answer": "Yes. The standard G1 has one waist degree of freedom. G1 EDU can optionally add two additional waist degrees of freedom."
+        }
+      ]
+    },
+    {
+      "title": "Mobility",
+      "category": "mobility walking running stairs autonomous navigation falling recovery",
+      "faqs": [
+        {
+          "question": "Can the G1 walk?",
+          "answer": "Yes. The G1 is a dynamically balancing bipedal robot capable of humanoid locomotion."
+        },
+        {
+          "question": "Can the G1 run?",
+          "answer": "The G1 platform is capable of dynamic locomotion, and Unitree has demonstrated running and other dynamic movements. Actual capabilities depend on the installed software, control mode, environment, and robot configuration."
+        },
+        {
+          "question": "Can the G1 stand up after falling?",
+          "answer": "Unitree has demonstrated dynamic recovery and standing-up behaviors on the G1. Availability and behavior can depend on the installed software version and control mode."
+        },
+        {
+          "question": "Can the G1 climb stairs?",
+          "answer": "The hardware platform has the mobility and joint range required for advanced locomotion research, but stair climbing should not automatically be assumed to be a production-ready autonomous capability. Performance depends on the locomotion software, perception, environment, and configuration."
+        },
+        {
+          "question": "Can the G1 walk autonomously?",
+          "answer": "The G1 provides the hardware and sensing required for autonomous robotics development, but autonomous navigation is not equivalent to a guaranteed out-of-the-box capability for every application. The autonomy stack, configuration, and application software determine what the robot can perform independently."
+        }
+      ]
+    },
+    {
+      "title": "Manipulation",
+      "category": "manipulation hands dex3 payload grasp force controlled objects",
+      "faqs": [
+        {
+          "question": "Can the G1 pick up objects?",
+          "answer": "G1 EDU configurations can be equipped with dexterous hands for object manipulation. What objects can be picked up depends on the hand, grasping software, object geometry, weight, and arm posture."
+        },
+        {
+          "question": "What is the G1 arm payload?",
+          "answer": "Unitree specifies approximately 2 kg maximum arm load for the standard G1 and approximately 3 kg for G1 EDU. Actual usable payload varies significantly depending on arm extension and posture."
+        },
+        {
+          "question": "Does the G1 have hands?",
+          "answer": "Hand configuration depends on the model. G1 EDU can be configured with Unitree dexterous hands such as the three-finger Dex3-1."
+        },
+        {
+          "question": "What is the Dex3-1?",
+          "answer": "Dex3-1 is an optional three-finger dexterous hand for the G1 EDU. It provides 7 active degrees of freedom: three for the thumb, two for the index finger, and two for the middle finger. Configurations with tactile sensing are also available."
+        },
+        {
+          "question": "Does the G1 have force-controlled hands?",
+          "answer": "Compatible G1 EDU configurations can use force-controlled dexterous hands. These support more sophisticated manipulation than simple fixed end effectors."
+        }
+      ]
+    },
+    {
+      "title": "Sensors and perception",
+      "category": "sensors perception lidar depth camera microphone speaker asr tts rgb light",
+      "faqs": [
+        {
+          "question": "What sensors does the G1 use for perception?",
+          "answer": "The G1 includes a depth camera and 3D LiDAR as its primary environmental perception sensors."
+        },
+        {
+          "question": "Does the G1 have LiDAR?",
+          "answer": "Yes. The G1 includes a 3D LiDAR sensor."
+        },
+        {
+          "question": "Does the G1 have a camera?",
+          "answer": "Yes. The G1 includes a depth camera for visual and spatial perception."
+        },
+        {
+          "question": "Does the G1 have microphones?",
+          "answer": "Yes. The G1 has a four-microphone array."
+        },
+        {
+          "question": "Does the G1 have a speaker?",
+          "answer": "Yes. The G1 has an integrated speaker. Unitree documentation describes the upper-body audio system as including a speaker and four-microphone array."
+        },
+        {
+          "question": "Can the G1 recognize speech?",
+          "answer": "The G1 audio software provides an ASR, or Automatic Speech Recognition, capability. Unitree documentation describes the default ASR model as running locally and offline. ASR messages can contain additional information such as direction, emotion, and speaker role depending on the software version and configuration."
+        },
+        {
+          "question": "Can the G1 speak?",
+          "answer": "Yes. The G1 software provides text-to-speech and audio playback functionality. Language and voice support depend on the installed software version."
+        },
+        {
+          "question": "Does the G1 have lights that can be controlled?",
+          "answer": "Yes. The G1 has an RGB light strip. The SDK exposes RGB control values from 0 to 255 for red, green, and blue."
+        }
+      ]
+    },
+    {
+      "title": "Computing and connectivity",
+      "category": "computing connectivity cpu jetson wifi bluetooth external computer sdk network",
+      "faqs": [
+        {
+          "question": "What computer is inside the G1?",
+          "answer": "The G1 includes an onboard high-performance 8-core CPU for basic robot functionality."
+        },
+        {
+          "question": "Can the G1 have an NVIDIA Jetson?",
+          "answer": "G1 EDU can be configured with additional high-performance computing modules. Unitree lists modules such as NVIDIA Jetson Orin as possible options."
+        },
+        {
+          "question": "Does the G1 support Wi-Fi?",
+          "answer": "Yes. The G1 supports Wi-Fi 6."
+        },
+        {
+          "question": "Does the G1 support Bluetooth?",
+          "answer": "Yes. The G1 supports Bluetooth 5.2."
+        },
+        {
+          "question": "Can an external computer communicate with the G1?",
+          "answer": "Development configurations of the G1 can communicate with external development computers through the robot's network and SDK interfaces. Network configuration is therefore an important part of G1 development."
+        }
+      ]
+    },
+    {
+      "title": "SDK and development",
+      "category": "sdk development programming audio rgb led speech recognition wav microphone volume",
+      "faqs": [
+        {
+          "question": "Can I program the G1?",
+          "answer": "Yes, provided the robot is a configuration that supports secondary development, such as G1 EDU. Unitree provides development interfaces and SDK documentation for the G1."
+        },
+        {
+          "question": "Is there an SDK for the G1?",
+          "answer": "Yes. Unitree provides an SDK and secondary-development documentation for supported G1 configurations."
+        },
+        {
+          "question": "What can developers control on the G1?",
+          "answer": "Depending on the interface, robot configuration, and software version, developers can work with robot motion, joint information, sensors, audio, speech, lighting, and other robot services."
+        },
+        {
+          "question": "Can developers control the G1 speaker?",
+          "answer": "Yes. The G1 AudioClient interface supports functionality including text-to-speech, audio playback, stopping playback, and volume control."
+        },
+        {
+          "question": "Can developers control G1 volume?",
+          "answer": "Yes. The AudioClient API provides functions for getting and setting system volume. The documented volume range is 0 to 100."
+        },
+        {
+          "question": "Can developers control the G1 RGB light?",
+          "answer": "Yes. The AudioClient API exposes RGB light-strip control. Each red, green, and blue value can range from 0 to 255. Unitree documentation states that calls to the LED control interface should be spaced by more than 200 ms."
+        },
+        {
+          "question": "Can developers access speech recognition results?",
+          "answer": "Yes. G1 ASR results can be received through the robot's audio messaging interface. Unitree's example SDK code subscribes to the rt/audio_msg topic."
+        },
+        {
+          "question": "Can the G1 play custom audio?",
+          "answer": "Yes. The AudioClient provides audio-stream playback functionality. Unitree's SDK example demonstrates playback of WAV audio and audio-stream control."
+        },
+        {
+          "question": "Can the G1 record microphone audio?",
+          "answer": "The G1's microphone audio stream can be accessed by supported development interfaces. Unitree's SDK example demonstrates receiving microphone audio over the network and saving it as a WAV file."
+        }
+      ]
+    },
+    {
+      "title": "Battery and charging",
+      "category": "battery charging removable quick release charger runtime 9000 mah",
+      "faqs": [
+        {
+          "question": "What battery does the G1 use?",
+          "answer": "The G1 uses a quick-release smart lithium battery with a capacity of 9000 mAh."
+        },
+        {
+          "question": "Is the G1 battery removable?",
+          "answer": "Yes. The G1 uses a quick-release battery design."
+        },
+        {
+          "question": "What charger does the G1 use?",
+          "answer": "Unitree specifies a 54 V, 5 A charger for the G1."
+        },
+        {
+          "question": "How long does the G1 battery last?",
+          "answer": "Unitree specifies approximately 2 hours of battery life. Actual operating time depends on robot movement, computational load, payload, accessories, temperature, battery condition, and application."
+        },
+        {
+          "question": "Can I swap G1 batteries?",
+          "answer": "Yes. The battery is designed to be quick-release, allowing batteries to be exchanged rather than waiting for the installed battery to recharge."
+        }
+      ]
+    },
+    {
+      "title": "Control and operation",
+      "category": "remote controller app explore calibration imu motor joint fine tuning ota update",
+      "faqs": [
+        {
+          "question": "Does the G1 come with a remote controller?",
+          "answer": "Yes. Unitree lists a handheld controller as part of the G1 platform."
+        },
+        {
+          "question": "Is there an app for the G1?",
+          "answer": "Yes. Unitree provides the Unitree Explore app for G1 operation, status monitoring, calibration, documentation, and related maintenance functions."
+        },
+        {
+          "question": "What information can I see in the Unitree Explore app?",
+          "answer": "The app can display robot information such as operating status, temperature, alarms, and other diagnostic data."
+        },
+        {
+          "question": "Can the G1 be calibrated?",
+          "answer": "Yes. The Unitree Explore app provides calibration functionality for motor joints and the IMU."
+        },
+        {
+          "question": "Why does the G1 need calibration?",
+          "answer": "Calibration can correct accumulated sensor or joint errors and can be required after hardware replacement or changes to the robot."
+        },
+        {
+          "question": "Can individual G1 joints be fine-tuned?",
+          "answer": "Yes. Unitree's app provides motor-joint fine tuning. This can compensate for deviations caused by mechanical wear over time."
+        },
+        {
+          "question": "Does the G1 receive software updates?",
+          "answer": "Yes. Unitree lists intelligent OTA software updates as a supported feature."
+        }
+      ]
+    },
+    {
+      "title": "Safety",
+      "category": "safety distance people motion testing demonstration videos hazards",
+      "faqs": [
+        {
+          "question": "Is the G1 safe to operate around people?",
+          "answer": "The G1 is a powerful electromechanical humanoid robot and should be treated as industrial or research robotics equipment rather than as an inherently safe consumer appliance. Unitree explicitly recommends maintaining sufficient distance between the robot and people during operation."
+        },
+        {
+          "question": "Why should people keep their distance from the G1?",
+          "answer": "The robot contains powerful motorized joints and can move dynamically. Unexpected movement, software errors, balance loss, falls, or incorrect commands can create collision, crushing, pinching, or impact hazards."
+        },
+        {
+          "question": "Can I stand next to the G1 while testing new motion software?",
+          "answer": "A safe testing area and sufficient separation from people should be maintained when testing robot motions, especially new or unverified software. Appropriate risk assessment and operating procedures should be used."
+        },
+        {
+          "question": "Is every movement shown in Unitree demonstration videos available through the SDK?",
+          "answer": "No. Demonstration videos should not be interpreted as a list of guaranteed SDK functions. Some behaviors may use internal software, trained policies, experimental software, or functionality that is not exposed to users."
+        },
+        {
+          "question": "Can I assume a demonstrated G1 capability will work in my application?",
+          "answer": "No. A demonstration shows that a capability has been achieved under particular conditions. Production performance depends on hardware configuration, software version, environment, training, perception, integration, and application requirements."
+        }
+      ]
+    },
+    {
+      "title": "Troubleshooting and diagnostics",
+      "category": "troubleshooting diagnostics health alarms battery network calibration sdk firmware services",
+      "faqs": [
+        {
+          "question": "How can I check the health of a G1?",
+          "answer": "The Unitree Explore app can display real-time machine information including status, temperature, alarms, and other diagnostic data."
+        },
+        {
+          "question": "What should I check if the G1 is behaving unexpectedly?",
+          "answer": "Check the robot's alarms and status information, verify battery state, confirm network connectivity, verify the current software and firmware configuration, and determine whether calibration is required. If the problem persists, consult the applicable Unitree documentation or technical support."
+        },
+        {
+          "question": "What should I check if a G1 joint position appears inaccurate?",
+          "answer": "Joint or IMU calibration may be required. The Unitree Explore app provides calibration and motor-joint fine-tuning functions intended to correct accumulated errors and hardware deviations."
+        },
+        {
+          "question": "What should I check if my development computer cannot communicate with the G1?",
+          "answer": "Verify the physical/network connection, network interface configuration, IP configuration, SDK setup, and that the computer is using the interface expected by the G1 software. Also verify that the robot services required by the application are running."
+        },
+        {
+          "question": "Why might an SDK example not work on my G1?",
+          "answer": "Possible causes include differences in robot configuration, firmware or service versions, SDK versions, network configuration, optional hardware, or API changes. Always match the SDK documentation to the software version installed on the robot."
+        }
+      ]
+    }
+  ]
+}

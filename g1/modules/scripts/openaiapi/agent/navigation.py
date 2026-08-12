@@ -91,7 +91,7 @@ class NavigationAdapter:
                         snap.topics[topic]["age_s"] = max(0.0, now - float(timestamps[key]))
             except Exception as exc:
                 self._last_error = str(exc)
-        if self.slam_backend is not None:
+        if self.slam_backend is not None and hasattr(self.slam_backend, "status"):
             try:
                 status = json.loads(self.slam_backend.status())
                 snap.slam = "running" if status.get("slam_running") else "stopped"
@@ -108,7 +108,8 @@ class NavigationAdapter:
                     if canonical in snap.topics:
                         snap.topics[canonical]["alive"] = True
             except Exception as exc:
-                self._last_error = str(exc)
+                if not self._last_error:
+                    self._last_error = str(exc)
         snap.last_error = self._last_error
         return snap
 
@@ -116,22 +117,30 @@ class NavigationAdapter:
         if self.slam_backend is None:
             return "navigation backend unavailable"
         try:
+            result = ""
             if name == "start_mapping":
-                return self.slam_backend.start_mapping(str(kwargs.get("slam_type") or "indoor"))
-            if name == "stop_slam":
-                return self.slam_backend.stop_slam()
-            if name == "save_map":
-                return self.slam_backend.save_map(kwargs.get("path"))
-            if name == "start_relocation":
-                return self.slam_backend.start_relocation(kwargs.get("path"))
-            if name == "status":
-                return self.slam_backend.status()
-            if name == "preflight":
-                return json.dumps(self.slam_backend.preflight(), ensure_ascii=False, sort_keys=True)
+                result = self.slam_backend.start_mapping(str(kwargs.get("slam_type") or "indoor"))
+            elif name == "stop_slam":
+                result = self.slam_backend.stop_slam()
+            elif name == "save_map":
+                result = self.slam_backend.save_map(kwargs.get("path"))
+            elif name == "start_relocation":
+                result = self.slam_backend.start_relocation(kwargs.get("path"))
+            elif name == "status":
+                result = self.slam_backend.status()
+            elif name == "preflight":
+                result = json.dumps(self.slam_backend.preflight(), ensure_ascii=False, sort_keys=True)
+            else:
+                return f"unsupported navigation action: {name}"
+            lowered = str(result).lower()
+            if "failed" in lowered or "succeed': false" in lowered or '"succeed": false' in lowered or "ok=False" in str(result):
+                self._last_error = str(result)
+            elif name in {"start_mapping", "stop_slam", "save_map", "start_relocation"}:
+                self._last_error = ""
+            return result
         except Exception as exc:
             self._last_error = str(exc)
             return f"{name} failed: {exc}"
-        return f"unsupported navigation action: {name}"
 
     @staticmethod
     def _format_pose(pose: Any) -> str:

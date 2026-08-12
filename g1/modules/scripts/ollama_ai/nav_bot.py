@@ -32,6 +32,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 G1_DIR = SCRIPT_DIR.parents[2] if SCRIPT_DIR.name == "ollama_ai" else SCRIPT_DIR.parent
 MODULES_DIR = G1_DIR / "modules"
 SCRIPTS_DIR = MODULES_DIR / "scripts"
+WBC_DIR = G1_DIR / "WBC"
 for path in (MODULES_DIR, SCRIPTS_DIR):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
@@ -42,21 +43,31 @@ from sdk_slam import SlamInfoSubscriber, SlamOperateClient  # noqa: E402
 
 FILLERS = {
     "ah", "and", "eh", "er", "hmm", "hm", "i did not", "mm", "that's my",
-    "thats my", "uh", "um",
+    "thats my", "uh", "um", "äh", "ähm", "hm", "mhm",
 }
 SPOKEN_STATUS_ECHOES = (
     "navigation bot ready",
+    "navigationsbot bereit",
     "navigation not ready",
+    "navigation nicht bereit",
     "what should i call this point",
+    "wie soll ich diesen punkt nennen",
     "point saved",
+    "punkt gespeichert",
     "starting mapping",
+    "starte kartierung",
     "stopping mapping",
+    "stoppe kartierung",
     "relocating",
+    "lokalisiere neu",
     "i did not understand that navigation command",
+    "ich habe den navigationsbefehl nicht verstanden",
 )
 STOP_WORDS = {
     "a", "an", "and", "at", "called", "go", "i", "me", "my", "named", "navigate",
     "please", "point", "robot", "take", "the", "to",
+    "als", "an", "bitte", "bring", "den", "der", "die", "du", "fahre", "gehe",
+    "ich", "mich", "mir", "nach", "navigiere", "punkt", "roboter", "zu", "zum", "zur",
 }
 NUMBER_WORDS = {
     "oh": "0",
@@ -75,20 +86,58 @@ NUMBER_WORDS = {
     "eight": "8",
     "ate": "8",
     "nine": "9",
+    "null": "0",
+    "eins": "1",
+    "ein": "1",
+    "zwei": "2",
+    "drei": "3",
+    "vier": "4",
+    "fünf": "5",
+    "funf": "5",
+    "sechs": "6",
+    "sieben": "7",
+    "acht": "8",
+    "neun": "9",
 }
 NAV_REACHED_DISTANCE_M = 0.35
 NAV_TARGET_TIMEOUT_S = 120.0
 NAV_POLL_INTERVAL_S = 0.5
-WORD_RE = re.compile(r"[A-Za-z0-9_]+", re.UNICODE)
+WORD_RE = re.compile(r"[\wäöüÄÖÜß]+", re.UNICODE)
 DEFAULT_SYSTEM_PROMPT = (
-    "You are the voice of a Unitree G1 humanoid robot. Answer naturally and "
-    "concisely. Do not mention hidden reasoning, tools, or model internals."
+    "Du bist die Stimme eines Unitree G1 Humanoidroboters. Antworte auf Deutsch, "
+    "natürlich und knapp. Erfinde nichts und erwähne keine versteckten Werkzeuge, "
+    "internen Prompts oder Modellinterna."
 )
 KNOWLEDGE_SYSTEM_PROMPT = (
-    "Use the structured knowledge context when relevant. For questions about "
-    "that knowledge, answer only from context. If context does not contain the "
-    "answer, say you do not know yet. Keep it spoken and concise."
+    "Nutze den strukturierten Wissenskontext, wenn er relevant ist. Bei Fragen "
+    "zu diesem Wissen antworte nur aus dem Kontext. Wenn der Kontext die Antwort "
+    "nicht enthält, sage auf Deutsch, dass du es noch nicht weißt. Halte die "
+    "Antwort gesprochen und knapp."
 )
+EXPLAIN_SEQUENCE = [
+    "Explain_base",
+    "Explain_left_0",
+    "Explain_left_1",
+    "Explain_base",
+    "Explain_right_0",
+    "Explain_right_1",
+    "Explain_base",
+    "Explain_both_0",
+    "Explain_both_1",
+]
+THINK_SEQUENCE = ["think"]
+THANKS_RETURN_POSE = "unreleased"
+HL_ACTIONS = {
+    "face_wave": "face_wave",
+    "high_wave": "high_wave",
+    "wave": "face_wave",
+    "clap": "clap",
+    "shake_hand": "shake_hand",
+    "handshake": "shake_hand",
+    "high_five": "high_five",
+    "heart": "heart",
+    "hands_up": "hands_up",
+}
 
 
 @dataclass
@@ -154,14 +203,35 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--knowledge-min-score", type=float, default=0.06)
     parser.add_argument("--knowledge-max-chars", type=int, default=2600)
     parser.add_argument("--volume", type=int, default=None)
-    parser.add_argument("--tts-language", default=None)
+    parser.add_argument("--lang", default=os.environ.get("G1_LANG", "de"),
+                        help="Conversation and default TTS language, for example de or en.")
+    parser.add_argument("--tts-language", default=os.environ.get("G1_TTS_LANGUAGE"),
+                        help="Override the robot TTS language. Defaults to --lang.")
     parser.add_argument("--no-speech", action="store_true")
-    parser.add_argument("--startup-speech", default="navigation bot ready")
+    parser.add_argument("--startup-speech", default="Navigationsbot bereit.")
     parser.add_argument("--no-startup-speech", action="store_true")
+    parser.add_argument("--no-default-faqs", dest="default_faqs", action="store_false", default=True,
+                        help="Do not automatically load g1_faq_knowledge.json when no FAQ file is passed.")
+    parser.add_argument("--enable-motion", action="store_true",
+                        help="Enable the shared G1 motion worker for gestures.")
+    parser.add_argument("--pose-file", default=str(WBC_DIR / "saved_ik_pose_cli_v3_poses.json"))
+    parser.add_argument("--motion-speed", type=float, default=0.32)
+    parser.add_argument("--motion-kp", type=float, default=30.0)
+    parser.add_argument("--motion-kd", type=float, default=1.5)
+    parser.add_argument("--thinking-speed", type=float, default=0.23)
+    parser.add_argument("--explain-speed", type=float, default=0.36)
+    parser.add_argument("--sequence-gap", type=float, default=0.25)
+    parser.add_argument("--pose-timeout-s", type=float, default=11.0)
+    parser.add_argument("--post-sequence-hold-s", type=float, default=4.0)
+    parser.add_argument("--thanks-hold-s", type=float, default=7.0)
+    parser.add_argument("--release-after-sequence", action="store_true")
     parser.add_argument("--audit-log", default="/tmp/nav_bot.jsonl")
     parser.add_argument("--slam-worker", default="", help=argparse.SUPPRESS)
     parser.add_argument("--point-json", default="", help=argparse.SUPPRESS)
-    return parser.parse_args()
+    args = parser.parse_args()
+    if not args.tts_language:
+        args.tts_language = str(args.lang)
+    return args
 
 
 def compact_text(text: str) -> str:
@@ -343,8 +413,12 @@ def decode_payload(raw: str) -> dict[str, Any]:
 
 def clean_point_name(text: str) -> str:
     text = normalize_text(text)
-    text = re.sub(r"^(call it|name it|save it as|save as|called|named)\s+", "", text).strip()
-    text = re.sub(r"[^a-z0-9 _-]+", "", text)
+    text = re.sub(
+        r"^(call it|name it|save it as|save as|called|named|nenne ihn|nenn ihn|speichere ihn als|speichere als|genannt)\s+",
+        "",
+        text,
+    ).strip()
+    text = re.sub(r"[^\w äöüß-]+", "", text, flags=re.UNICODE)
     text = re.sub(r"\s+", " ", text).strip(" -_")
     tokens = [NUMBER_WORDS.get(token, token) for token in text.split()]
     text = " ".join(tokens)
@@ -377,6 +451,17 @@ def short_error(result: dict[str, Any], fallback: str) -> str:
         return fallback
     tail = text.splitlines()[-1] if "\n" in text else text
     return compact_text(tail)[:180]
+
+
+class PrintLogger:
+    def info(self, message: str) -> None:
+        print(message, flush=True)
+
+    def warning(self, message: str) -> None:
+        print(f"warning: {message}", file=sys.stderr, flush=True)
+
+    def error(self, message: str) -> None:
+        print(f"error: {message}", file=sys.stderr, flush=True)
 
 
 def similar_to_any(text: str, phrases: tuple[str, ...], threshold: float = 0.82) -> bool:
@@ -483,6 +568,109 @@ class Speaker:
             proc.kill()
         except Exception as exc:
             self.logger.warning(f"Could not stop speech process: {exc}")
+
+
+class MotionWorkerClient:
+    def __init__(self, args: argparse.Namespace, logger: Any) -> None:
+        self.args = args
+        self.logger = logger
+        self.enabled = bool(args.enable_motion)
+        self.proc: subprocess.Popen[str] | None = None
+        if self.enabled:
+            self._start_worker()
+
+    def _start_worker(self) -> None:
+        command = [
+            sys.executable,
+            str(SCRIPT_DIR / "chatbot_with_tactile_dex3.py"),
+            "--motion-worker",
+            "--enable-motion",
+            "--iface", str(self.args.iface),
+            "--domain-id", str(int(self.args.domain_id)),
+            "--pose-file", str(self.args.pose_file),
+            "--motion-speed", str(float(self.args.motion_speed)),
+            "--motion-kp", str(float(self.args.motion_kp)),
+            "--motion-kd", str(float(self.args.motion_kd)),
+            "--thinking-speed", str(float(self.args.thinking_speed)),
+            "--explain-speed", str(float(self.args.explain_speed)),
+            "--sequence-gap", str(float(self.args.sequence_gap)),
+            "--pose-timeout-s", str(float(self.args.pose_timeout_s)),
+            "--post-sequence-hold-s", str(float(self.args.post_sequence_hold_s)),
+            "--thanks-hold-s", str(float(self.args.thanks_hold_s)),
+            "--no-speech",
+            "--no-startup-speech",
+        ]
+        if bool(getattr(self.args, "release_after_sequence", False)):
+            command.append("--release-after-sequence")
+        env = os.environ.copy()
+        env.setdefault("CYCLONEDDS_HOME", "/home/unitree/cyclonedds_ws/install/cyclonedds")
+        env.setdefault("CYCLONEDDS_URI", "/home/unitree/cyclonedds_ws/cyclonedds.xml")
+        self.proc = subprocess.Popen(
+            command,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            env=env,
+        )
+        threading.Thread(target=self._log_worker_output, daemon=True).start()
+        self.logger.info(f"Started gesture worker pid={self.proc.pid}")
+
+    def _log_worker_output(self) -> None:
+        proc = self.proc
+        if proc is None or proc.stdout is None:
+            return
+        for line in proc.stdout:
+            text = line.strip()
+            if text:
+                self.logger.info(f"[gesture] {text}")
+
+    def play_pose(self, names: list[str], *, speed: float | None = None, loop: bool = False) -> None:
+        if not names:
+            return
+        if not self.enabled:
+            self.logger.info("[gestures disabled] would play: " + ", ".join(names))
+            return
+        self._send({"cmd": "play", "names": names, "speed": speed, "loop": bool(loop)})
+
+    def play_hl_action(self, action: str) -> None:
+        action_key = HL_ACTIONS.get(str(action).strip().lower(), str(action).strip().lower())
+        if not self.enabled:
+            self.logger.info(f"[gestures disabled] would run high-level action: {action_key}")
+            return
+        self._send({"cmd": "hl_action", "action": action_key})
+
+    def stop_sequence(self) -> None:
+        if self.enabled:
+            self._send({"cmd": "stop"})
+
+    def close(self) -> None:
+        if self.proc is None:
+            return
+        self._send({"cmd": "close"})
+        try:
+            self.proc.wait(timeout=2.0)
+        except subprocess.TimeoutExpired:
+            self.proc.terminate()
+            try:
+                self.proc.wait(timeout=1.0)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
+
+    def _send(self, payload: dict[str, Any]) -> None:
+        proc = self.proc
+        if proc is None or proc.stdin is None:
+            self.logger.warning("Gesture worker is not running.")
+            return
+        if proc.poll() is not None:
+            self.logger.warning(f"Gesture worker exited with code {proc.returncode}.")
+            return
+        try:
+            proc.stdin.write(json.dumps(payload, sort_keys=True) + "\n")
+            proc.stdin.flush()
+        except BrokenPipeError:
+            self.logger.warning("Gesture worker pipe is closed.")
 
 
 class NavState:
@@ -723,11 +911,15 @@ class NavState:
 
 
 class NavBotNode(Node):
-    def __init__(self, args: argparse.Namespace) -> None:
+    def __init__(self, args: argparse.Namespace, motion: MotionWorkerClient | None = None) -> None:
         super().__init__("g1_nav_bot")
         self.args = args
         self.nav = NavState(args)
         knowledge_paths = [Path(item).expanduser() for item in args.knowledge_file]
+        if bool(args.default_faqs):
+            for default_faq_path in sorted(SCRIPT_DIR.glob("*_faq_knowledge.json")):
+                if default_faq_path not in knowledge_paths:
+                    knowledge_paths.append(default_faq_path)
         missing = [str(path) for path in knowledge_paths if not path.exists()]
         if missing:
             self.get_logger().warning("Knowledge file(s) not found: " + ", ".join(missing))
@@ -735,6 +927,7 @@ class NavBotNode(Node):
         self.retriever = KnowledgeRetriever(existing_knowledge_paths) if existing_knowledge_paths else None
         self.ollama = OllamaClient(args) if self.retriever is not None else None
         self.speaker = Speaker(args, self.get_logger())
+        self.motion = motion
         self.response_pub = self.create_publisher(String, args.response_topic, 10)
         self.audit_path = Path(args.audit_log).expanduser()
         self.audit_path.parent.mkdir(parents=True, exist_ok=True)
@@ -826,42 +1019,59 @@ class NavBotNode(Node):
             self.pending_add_point = False
             result = self.nav.add_current_point(text)
             name = result.get("raw", {}).get("name") if isinstance(result.get("raw"), dict) else clean_point_name(text)
-            return {"intent": "name_point", **result, "answer": f"Point {name} saved." if result["ok"] else str(result["raw"])}
+            return {"intent": "name_point", **result, "answer": f"Punkt {name} gespeichert." if result["ok"] else str(result["raw"])}
 
         inline_name = self._extract_add_point_name(low)
         if inline_name is not None:
             result = self.nav.add_current_point(inline_name)
             name = result.get("raw", {}).get("name") if isinstance(result.get("raw"), dict) else inline_name
-            return {"intent": "add_current_point", **result, "answer": f"Point {name} saved." if result["ok"] else str(result["raw"])}
+            return {"intent": "add_current_point", **result, "answer": f"Punkt {name} gespeichert." if result["ok"] else str(result["raw"])}
 
         if self._wants_add_current_point(low):
             self.pending_add_point = True
-            return {"ok": True, "code": 0, "intent": "ask_point_name", "answer": "What should I call this point?"}
+            return {"ok": True, "code": 0, "intent": "ask_point_name", "answer": "Wie soll ich diesen Punkt nennen?"}
 
         if self._wants_start_mapping(low):
             result = self.nav.start_mapping()
-            return {"intent": "start_mapping", **result, "answer": "Starting mapping." if result["ok"] else f"I could not start mapping: {short_error(result, 'SLAM returned an error')}."}
+            return {"intent": "start_mapping", **result, "answer": "Ich starte die Kartierung." if result["ok"] else f"Ich konnte die Kartierung nicht starten: {short_error(result, 'SLAM returned an error')}."}
 
         if self._wants_stop_mapping(low):
             result = self.nav.stop_mapping()
-            return {"intent": "stop_mapping", **result, "answer": f"Mapping stopped and saved to {self.nav.map_path}." if result["ok"] else f"I could not stop mapping: {short_error(result, 'SLAM returned an error')}."}
+            return {"intent": "stop_mapping", **result, "answer": f"Kartierung gestoppt und unter {self.nav.map_path} gespeichert." if result["ok"] else f"Ich konnte die Kartierung nicht stoppen: {short_error(result, 'SLAM returned an error')}."}
 
         if self._wants_relocate(low):
             result = self.nav.relocate()
-            return {"intent": "relocate", **result, "answer": "Relocation started." if result["ok"] else f"I could not relocate: {short_error(result, 'SLAM returned an error')}."}
+            return {"intent": "relocate", **result, "answer": "Ich lokalisiere mich neu." if result["ok"] else f"Ich konnte mich nicht lokalisieren: {short_error(result, 'SLAM returned an error')}."}
 
         if self._wants_resume(low):
             result = self.nav.resume_nav()
-            return {"intent": "resume_navigation", **result, "answer": "Resuming navigation." if result["ok"] else "I could not resume navigation."}
+            return {"intent": "resume_navigation", **result, "answer": "Ich setze die Navigation fort." if result["ok"] else "Ich konnte die Navigation nicht fortsetzen."}
 
         if self._wants_pause_or_stop(low):
             self.speaker.stop_current()
+            if self.motion is not None:
+                self.motion.stop_sequence()
             result = self.nav.pause_nav()
-            return {"intent": "pause_navigation", **result, "answer": "Stopping navigation." if result["ok"] else "I could not stop navigation."}
+            return {"intent": "pause_navigation", **result, "answer": "Ich stoppe die Navigation." if result["ok"] else "Ich konnte die Navigation nicht stoppen."}
 
         if self._wants_close_slam(low):
             result = self.nav.close_slam()
-            return {"intent": "close_slam", **result, "answer": "SLAM stopped." if result["ok"] else "I could not stop SLAM."}
+            return {"intent": "close_slam", **result, "answer": "SLAM ist gestoppt." if result["ok"] else "Ich konnte SLAM nicht stoppen."}
+
+        gesture = self._extract_gesture(low)
+        if gesture is not None:
+            action, answer = gesture
+            if action == "thinking":
+                if self.motion is not None:
+                    self.motion.play_pose(THINK_SEQUENCE, speed=float(self.args.thinking_speed), loop=False)
+                return {"ok": True, "code": 0, "intent": "gesture", "motion": action, "answer": answer}
+            if action == "explain":
+                if self.motion is not None:
+                    self.motion.play_pose(EXPLAIN_SEQUENCE, speed=float(self.args.explain_speed), loop=False)
+                return {"ok": True, "code": 0, "intent": "gesture", "motion": action, "answer": answer}
+            if self.motion is not None:
+                self.motion.play_hl_action(action)
+            return {"ok": True, "code": 0, "intent": "gesture", "motion": action, "answer": answer}
 
         point_name = self._extract_go_to_name(low)
         if point_name:
@@ -878,22 +1088,22 @@ class NavBotNode(Node):
                     result["ok"] = False
                     result["code"] = 1
             point = str(result.get("point", point_name))
-            answer = f"Going to {point}." if result["ok"] else str(result.get("raw", "I could not navigate to that point."))
+            answer = f"Ich gehe zu {point}." if result["ok"] else str(result.get("raw", "Ich konnte diesen Punkt nicht anfahren."))
             return {"intent": "go_to_point", **result, "answer": answer}
 
-        if "list" in low and "point" in low:
+        if ("list" in low or "liste" in low or "zeig" in low) and ("point" in low or "punkt" in low):
             names = sorted(self.nav.points)
-            answer = "I do not have any saved points." if not names else "Saved points are " + ", ".join(names) + "."
+            answer = "Ich habe keine gespeicherten Punkte." if not names else "Gespeicherte Punkte sind " + ", ".join(names) + "."
             return {"ok": True, "code": 0, "intent": "list_points", "points": names, "answer": answer}
 
         if self._wants_clear_points(low):
             result = self.nav.clear_points()
             count = result.get("raw", {}).get("cleared", 0) if isinstance(result.get("raw"), dict) else 0
-            answer = f"Cleared {count} saved points." if result["ok"] else "I could not clear the saved points."
+            answer = f"Ich habe {count} gespeicherte Punkte gelöscht." if result["ok"] else "Ich konnte die gespeicherten Punkte nicht löschen."
             return {"intent": "clear_points", **result, "answer": answer}
 
-        if "status" in low:
-            return {"ok": True, "code": 0, "intent": "status", "status": self.nav.status(), "answer": "Navigation status is available."}
+        if "status" in low or "zustand" in low:
+            return {"ok": True, "code": 0, "intent": "status", "status": self.nav.status(), "answer": "Der Navigationsstatus ist verfügbar."}
 
         if self._is_knowledge_question(low):
             answer, used_knowledge = self._rag_answer(text)
@@ -926,7 +1136,7 @@ class NavBotNode(Node):
         except Exception as exc:
             self.get_logger().warning(f"Ollama RAG answer failed; using local knowledge fallback: {exc}")
             fallback = self._local_knowledge_answer(text)
-            return (fallback or "I do not know yet."), bool(fallback)
+            return (fallback or "Das weiß ich noch nicht."), bool(fallback)
 
     def _local_knowledge_answer(self, text: str) -> str:
         if self.retriever is None:
@@ -952,7 +1162,7 @@ class NavBotNode(Node):
             if len(summary) > 280:
                 summary = summary[:280].rsplit(" ", 1)[0].strip()
             parts.append(summary)
-        answer = "From my local knowledge: " + " ".join(parts)
+        answer = "Aus meinem lokalen Wissen: " + " ".join(parts)
         if len(answer) > 650:
             answer = answer[:650].rsplit(" ", 1)[0].strip()
         return answer
@@ -960,54 +1170,63 @@ class NavBotNode(Node):
     def _is_knowledge_question(self, low: str) -> bool:
         if self.retriever is None:
             return False
-        if any(phrase in low for phrase in ("from your knowledge", "local knowledge", "knowledge file", "tell me about", "what is", "what are")):
+        if any(phrase in low for phrase in (
+            "from your knowledge", "local knowledge", "knowledge file", "tell me about", "what is", "what are",
+            "aus deinem wissen", "lokales wissen", "wissensdatei", "erzähl mir", "erzaehl mir",
+            "was ist", "was sind", "weißt du", "weisst du",
+        )):
             return True
         first = low.split(" ", 1)[0] if low else ""
-        return first in {"what", "why", "how", "when", "where", "who", "which"} and bool(tokenize(low))
+        return first in {"what", "why", "how", "when", "where", "who", "which", "was", "warum", "wie", "wann", "wo", "wer", "welche", "welcher", "welches"} and bool(tokenize(low))
 
     @staticmethod
     def _wants_clear_points(low: str) -> bool:
-        if "point" not in low:
+        if "point" not in low and "punkt" not in low:
             return False
-        return any(phrase in low for phrase in ("clear", "erase", "reset", "delete all", "forget all", "remove all"))
+        return any(phrase in low for phrase in ("clear", "erase", "reset", "delete all", "forget all", "remove all", "lösche", "loesche", "vergiss", "entferne"))
 
     @staticmethod
     def _wants_start_mapping(low: str) -> bool:
-        phrases = ("start mapping", "begin mapping", "create map", "make a map")
+        phrases = ("start mapping", "begin mapping", "create map", "make a map", "starte kartierung", "kartierung starten", "karte erstellen", "erstelle eine karte")
         return any(phrase in low for phrase in phrases) or similar_to_any(low, phrases)
 
     @staticmethod
     def _wants_stop_mapping(low: str) -> bool:
-        phrases = ("stop mapping", "finish mapping", "end mapping", "save map", "save the map")
+        phrases = ("stop mapping", "finish mapping", "end mapping", "save map", "save the map", "stoppe kartierung", "kartierung stoppen", "karte speichern", "speichere die karte")
         return any(phrase in low for phrase in phrases) or similar_to_any(low, phrases)
 
     @staticmethod
     def _wants_relocate(low: str) -> bool:
-        phrases = ("relocate", "localize", "relocalize", "init pose")
+        phrases = ("relocate", "localize", "relocalize", "init pose", "lokalisieren", "lokalisiere", "neu lokalisieren", "position initialisieren")
         return any(word in low for word in phrases) or similar_to_any(low, phrases, threshold=0.68)
 
     @staticmethod
     def _wants_add_current_point(low: str) -> bool:
-        if "current" not in low or "point" not in low:
+        has_current = "current" in low or "aktuell" in low or "diesen" in low or "diese" in low
+        has_point = "point" in low or "punkt" in low
+        if not has_current or not has_point:
             return False
-        return any(word in low for word in ("add", "at", "save", "mark", "remember"))
+        return any(word in low for word in ("add", "at", "save", "mark", "remember", "speicher", "speichere", "markiere", "merke"))
 
     @staticmethod
     def _extract_add_point_name(low: str) -> str | None:
-        match = re.search(r"(?:add|save|mark|remember)\s+(?:the\s+)?current\s+point\s+(?:as|called|named)\s+(.+)$", low)
+        match = re.search(
+            r"(?:add|save|mark|remember|speichere|markiere|merke)\s+(?:the\s+|den\s+|diesen\s+)?(?:current\s+|aktuellen\s+)?(?:point|punkt)\s+(?:as|called|named|als|namens)\s+(.+)$",
+            low,
+        )
         return clean_point_name(match.group(1)) if match else None
 
     @staticmethod
     def _wants_pause_or_stop(low: str) -> bool:
-        return low in {"stop", "cancel", "halt"} or any(phrase in low for phrase in ("stop navigation", "pause navigation", "cancel navigation", "hold position"))
+        return low in {"stop", "cancel", "halt", "stopp", "abbrechen", "anhalten"} or any(phrase in low for phrase in ("stop navigation", "pause navigation", "cancel navigation", "hold position", "navigation stoppen", "navigation pausieren", "halte an", "bleib stehen"))
 
     @staticmethod
     def _wants_resume(low: str) -> bool:
-        return any(phrase in low for phrase in ("resume navigation", "continue navigation", "keep going"))
+        return any(phrase in low for phrase in ("resume navigation", "continue navigation", "keep going", "navigation fortsetzen", "weiter navigieren", "mach weiter"))
 
     @staticmethod
     def _wants_close_slam(low: str) -> bool:
-        return any(phrase in low for phrase in ("stop slam", "close slam", "shutdown slam", "shut down slam"))
+        return any(phrase in low for phrase in ("stop slam", "close slam", "shutdown slam", "shut down slam", "slam stoppen", "slam schließen", "slam schliessen"))
 
     @staticmethod
     def _extract_go_to_name(low: str) -> str | None:
@@ -1016,11 +1235,36 @@ class NavBotNode(Node):
             r"^take\s+me\s+to\s+(.+)$",
             r"^go\s+to\s+point\s+(.+)$",
             r"^navigate\s+to\s+point\s+(.+)$",
+            r"^(?:geh|gehe|fahr|fahre|navigiere|lauf|laufe)\s+(?:zu|zum|zur|nach)\s+(.+)$",
+            r"^bring\s+mich\s+(?:zu|zum|zur|nach)\s+(.+)$",
+            r"^(?:geh|gehe|fahr|fahre|navigiere)\s+(?:zu|zum)\s+punkt\s+(.+)$",
         )
         for pattern in patterns:
             match = re.search(pattern, low)
             if match:
                 return clean_point_name(match.group(1))
+        return None
+
+    @staticmethod
+    def _extract_gesture(low: str) -> tuple[str, str] | None:
+        if "denk geste" in low or "denkpose" in low or "thinking gesture" in low or "think gesture" in low or low in {"denk", "thinking", "think"}:
+            return "thinking", "Ich denke nach."
+        if "erklär geste" in low or "erklaer geste" in low or "erklärpose" in low or "erklaerpose" in low or "explain gesture" in low or low in {"erkläre", "erklaere", "explain"}:
+            return "explain", "Ich erkläre es."
+        if "klatsch" in low or "applaudier" in low or "clap" in low or "applaud" in low:
+            return "clap", "Ich klatsche."
+        if "high five" in low or "high-five" in low:
+            return "high_five", "High five."
+        if "handschlag" in low or "hand geben" in low or "shake hand" in low or "shake hands" in low or "handshake" in low:
+            return "shake_hand", "Freut mich."
+        if "hände hoch" in low or "haende hoch" in low or "hands up" in low or "raise your hands" in low:
+            return "hands_up", "Ich hebe die Hände."
+        if "herz" in low or "heart" in low:
+            return "heart", "Ich mache ein Herz."
+        if "hoch winken" in low or "high wave" in low or "big wave" in low:
+            return "high_wave", "Ich winke."
+        if "wink" in low or "winke" in low or "begrüß" in low or "begrues" in low or "grüß" in low or "gruess" in low or "wave" in low or "greet" in low:
+            return "face_wave", "Hallo."
         return None
 
     def _say(self, text: str) -> None:
@@ -1045,7 +1289,10 @@ class NavBotNode(Node):
         words = normalized.split()
         if not allow_name_fragment and len(words) <= 3 and not any(
             keyword in normalized
-            for keyword in ("add", "about", "close", "go", "how", "list", "map", "mapping", "navigate", "point", "relocate", "resume", "save", "slam", "start", "status", "stop", "tell", "what", "when", "where", "which", "who", "why")
+            for keyword in (
+                "add", "about", "close", "go", "how", "list", "map", "mapping", "navigate", "point", "relocate", "resume", "save", "slam", "start", "status", "stop", "tell", "what", "when", "where", "which", "who", "why",
+                "antwort", "erz", "fahr", "geh", "karte", "kartierung", "liste", "lokalis", "navig", "punkt", "slam", "speicher", "start", "status", "stopp", "was", "wann", "warum", "wer", "wie", "wo", "wink",
+            )
         ):
             return "short_non_command_fragment"
         if not any(char.isalnum() for char in text):
@@ -1163,6 +1410,9 @@ class NavBotNode(Node):
             self.external_asr_httpd = None
         if self.external_asr_thread is not None and self.external_asr_thread.is_alive():
             self.external_asr_thread.join(timeout=0.5)
+        if self.motion is not None:
+            self.motion.close()
+            self.motion = None
         return super().destroy_node()
 
 
@@ -1252,16 +1502,24 @@ def main() -> int:
     args = parse_args()
     if args.slam_worker:
         return run_slam_worker(args)
+    motion: MotionWorkerClient | None = None
     node: NavBotNode | None = None
     try:
         rclpy.init()
-        node = NavBotNode(args)
+        motion = MotionWorkerClient(args, PrintLogger()) if args.enable_motion else None
+        node = NavBotNode(args, motion=motion)
         rclpy.spin(node)
+    except Exception:
+        if motion is not None and node is None:
+            motion.close()
+        raise
     except KeyboardInterrupt:
         pass
     finally:
         if node is not None:
             node.destroy_node()
+        elif motion is not None:
+            motion.close()
         rclpy.shutdown()
     return 0
 

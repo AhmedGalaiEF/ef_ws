@@ -352,6 +352,14 @@ class G1Agent:
             )
             self._after_turn(planner_input, decision)
             return self._execute_decision(decision, planner_input)
+        learned_response = self._maybe_handle_learned_query(text)
+        if learned_response is not None:
+            decision = PlannerDecision(intent=IntentType.CONVERSATION, response_text=learned_response)
+            planner_input = self._build_planner_input(
+                event=event, timestamp=now, user_text=text, input_source=input_source, robot_state=robot_state
+            )
+            self._after_turn(planner_input, decision)
+            return self._execute_decision(decision, planner_input)
         memory_response = self._maybe_handle_memory_query(text, robot_state)
         if memory_response is not None:
             decision = PlannerDecision(intent=IntentType.CONVERSATION, response_text=memory_response)
@@ -434,6 +442,55 @@ class G1Agent:
             f"{bio}\n"
             f"Current state summary: posture={robot_state.posture}, stability={robot_state.stability}."
         )
+
+    def _maybe_handle_learned_query(self, text: str) -> Optional[str]:
+        lowered = text.strip().lower()
+        if not any(
+            phrase in lowered
+            for phrase in (
+                "what have you learned",
+                "what did you learn",
+                "what have u learned",
+                "was hast du gelernt",
+                "was hast du gelernt?",
+                "was hast du bisher gelernt",
+            )
+        ):
+            return None
+        reply_language = self._effective_reply_language(self.settings.effective())
+        learned = self.learning.learned.all()
+        procedures = self.memory.procedural.all()
+        episodes = self.memory.episodic.all()
+        self_records = self.self_model.model.skills.records
+        learned_skills = [
+            name for name, record in sorted(self_records.items())
+            if int(record.attempts) > 0
+        ]
+        if reply_language == "de":
+            lines = [
+                "Ich kann nur belegtes Lernen berichten:",
+                f"- Episoden: {len(episodes)}",
+                f"- Gelernte semantische Claims: {len(learned)}",
+                f"- Prozedurale/tazite Regeln: {len(procedures)}",
+                f"- Skill-Statistiken im Selbstmodell: {len(learned_skills)}",
+            ]
+            if learned_skills:
+                lines.append("- Beobachtete Skills: " + ", ".join(learned_skills[:8]))
+            if not learned and not procedures:
+                lines.append("Es gibt noch keine validierten semantischen oder prozeduralen Lernergebnisse.")
+            return "\n".join(lines)
+        lines = [
+            "I can report only grounded learned state:",
+            f"- Episodes: {len(episodes)}",
+            f"- Learned semantic claims: {len(learned)}",
+            f"- Procedural/tacit rules: {len(procedures)}",
+            f"- Skill statistics in self-model: {len(learned_skills)}",
+        ]
+        if learned_skills:
+            lines.append("- Observed skills: " + ", ".join(learned_skills[:8]))
+        if not learned and not procedures:
+            lines.append("There are no validated semantic or procedural learned items yet.")
+        return "\n".join(lines)
 
     @staticmethod
     def _is_thanks_intent(text: str) -> bool:
@@ -1048,9 +1105,18 @@ class G1Agent:
             or "extend left arm" in text
             or "extend the left arm" in text
             or "arm forward" in text
+            or "arm nach vorne" in text
+            or "hand nach vorne" in text
+            or "rechte hand nach vorne" in text
+            or "rechten arm nach vorne" in text
+            or "rechter arm nach vorne" in text
+            or "linke hand nach vorne" in text
+            or "linken arm nach vorne" in text
+            or "linker arm nach vorne" in text
+            or "nach vorne bringen" in text
         )
         if wants_extend_arm and "reach_forward" in self.skills.skills:
-            side = "left" if "left" in text else "right"
+            side = "left" if ("left" in text or "linke" in text or "linken" in text or "linker" in text) else "right"
             german = self._effective_reply_language(self.settings.effective()) == "de"
             return PlannerDecision(
                 intent=IntentType.EXECUTE_TASK,
@@ -1845,6 +1911,128 @@ class G1Agent:
         self.monitor_bus.emit("llctl", "llctl_session", result)
         return result
 
+    def llctl_command(self, args: list[str]) -> str:
+        if not args:
+            return (
+                "LLCTL commands:\n"
+                "/llctl enable | disable | status\n"
+                "/llctl select <joint_id|joint_name>\n"
+                "/llctl backend arm_sdk|lowcmd\n"
+                "/llctl joint <joint> q <rad> [dq <rad/s>] [kp <gain>] [kd|kq <gain>] [tau <Nm>] [ramp <s>] [backend arm_sdk|lowcmd]\n"
+                "/llctl ee left|right <x> <y> <z> <roll> <pitch> <yaw>\n"
+                "/llctl ee left|right [x <m> y <m> z <m> roll <rad> pitch <rad> yaw <rad>]\n"
+                "/llctl ee left|right [dx <m>] [dy <m>] [dz <m>] [droll <rad>] [dpitch <rad>] [dyaw <rad>]\n"
+                "/llctl release_arms"
+            )
+        cmd = args[0].strip().lower()
+        settings = self.settings.effective()
+        if cmd == "enable":
+            return self.llctl_enable()
+        if cmd in {"disable", "off"}:
+            return self.llctl_disable()
+        if cmd == "status":
+            return "\n".join(f"{key} = {value}" for key, value in sorted(self.llctl_snapshot().items()))
+        if cmd == "select" and len(args) >= 2:
+            result = self.llctl.select_joint(settings, joint=args[1])
+            self.monitor_bus.emit("llctl", "llctl_select_joint", result)
+            return result
+        if cmd == "backend" and len(args) >= 2:
+            result = self.llctl.set_backend(settings, backend=args[1])
+            self.monitor_bus.emit("llctl", "llctl_backend", result)
+            return result
+        if cmd == "release_arms":
+            result = self.llctl.release_arms(settings)
+            self.monitor_bus.emit("llctl", "llctl_release_arms", result)
+            return result
+        if cmd == "joint" and len(args) >= 2:
+            try:
+                params = self._parse_key_value_args(args[2:])
+                result = self.llctl.command_joint(
+                    settings,
+                    joint=args[1],
+                    q=float(params.get("q", params.get("target", 0.0))),
+                    dq=float(params.get("dq", 0.0)),
+                    kp=float(params.get("kp", 30.0)),
+                    kd=float(params.get("kd", params.get("kq", 1.5))),
+                    tau=float(params.get("tau", 0.0)),
+                    ramp_s=float(params.get("ramp", params.get("ramp_s", 0.6))),
+                    backend=str(params.get("backend", "arm_sdk")),
+                )
+            except Exception as exc:
+                result = f"invalid joint command: {exc}"
+            self.monitor_bus.emit("llctl", "llctl_joint_command", result)
+            return result
+        if cmd == "ee" and len(args) >= 2:
+            try:
+                tail = args[2:]
+                if len(tail) == 6 and all(self._looks_float(item) for item in tail):
+                    result = self.llctl.command_ee_target(
+                        settings,
+                        side=args[1],
+                        x=float(tail[0]),
+                        y=float(tail[1]),
+                        z=float(tail[2]),
+                        roll=float(tail[3]),
+                        pitch=float(tail[4]),
+                        yaw=float(tail[5]),
+                    )
+                else:
+                    params = self._parse_key_value_args(tail)
+                    if {"x", "y", "z"} <= set(params):
+                        result = self.llctl.command_ee_target(
+                            settings,
+                            side=args[1],
+                            x=float(params["x"]),
+                            y=float(params["y"]),
+                            z=float(params["z"]),
+                            roll=float(params.get("roll", params.get("r", 0.0))),
+                            pitch=float(params.get("pitch", params.get("p", 0.0))),
+                            yaw=float(params.get("yaw", params.get("yw", 0.0))),
+                        )
+                    else:
+                        result = self.llctl.command_ee_delta(
+                            settings,
+                            side=args[1],
+                            dx=float(params.get("dx", 0.0)),
+                            dy=float(params.get("dy", 0.0)),
+                            dz=float(params.get("dz", 0.0)),
+                            droll=float(params.get("droll", params.get("dr", 0.0))),
+                            dpitch=float(params.get("dpitch", params.get("dp", 0.0))),
+                            dyaw=float(params.get("dyaw", params.get("dyw", 0.0))),
+                        )
+            except Exception as exc:
+                result = f"invalid EE command: {exc}"
+            self.monitor_bus.emit("llctl", "llctl_ee_command", result)
+            return result
+        return (
+            "usage:\n"
+            "/llctl enable | disable | status\n"
+            "/llctl select <joint_id|joint_name>\n"
+            "/llctl backend arm_sdk|lowcmd\n"
+            "/llctl joint <joint> q <rad> [dq <rad/s>] [kp <gain>] [kd|kq <gain>] [tau <Nm>] [ramp <s>] [backend arm_sdk|lowcmd]\n"
+            "/llctl ee left|right <x> <y> <z> <roll> <pitch> <yaw>\n"
+            "/llctl ee left|right [x <m> y <m> z <m> roll <rad> pitch <rad> yaw <rad>]\n"
+            "/llctl ee left|right [dx <m>] [dy <m>] [dz <m>] [droll <rad>] [dpitch <rad>] [dyaw <rad>]\n"
+            "/llctl release_arms"
+        )
+
+    @staticmethod
+    def _parse_key_value_args(args: list[str]) -> dict[str, str]:
+        if len(args) % 2 != 0:
+            raise ValueError("expected key/value pairs")
+        out: dict[str, str] = {}
+        for idx in range(0, len(args), 2):
+            out[args[idx].strip().lower()] = args[idx + 1]
+        return out
+
+    @staticmethod
+    def _looks_float(value: str) -> bool:
+        try:
+            float(value)
+            return True
+        except Exception:
+            return False
+
     def tool_snapshot(self, *, profile: str = "social", include_unavailable: bool = True) -> dict[str, Any]:
         settings = self.settings.effective()
         context = self._make_tool_context(
@@ -2218,6 +2406,7 @@ class G1Agent:
             "/navigation [panel|action]   SLAM/navigation monitor and supported actions\n"
             "/asr                         microphone/ASR monitor\n"
             "/llctl [enable|disable]      operator low-level-control panel\n"
+            "/llctl-ui                    interactive low-level-control TUI\n"
             "/vision <question>          answer from RGB-D camera via OpenAI vision\n"
             "/status                     lifecycle + robot state snapshot\n"
             "/faults                     explain stale sensor topics and fixes\n"
@@ -2239,6 +2428,7 @@ class G1Agent:
             "/navigation                 SLAM-/Navigationsmonitor\n"
             "/asr                         Mikrofon-/ASR-Monitor\n"
             "/llctl [enable|disable]      Bediener-Panel für Low-Level-Control\n"
+            "/llctl-ui                    interaktive Low-Level-Control-TUI\n"
             "/sehen <frage>              Antwort von der RGB-D-Kamera über OpenAI Vision\n"
             "/status                     Lebenszyklus und Roboterzustand\n"
             "/fehler                     Sensor-/Topic-Diagnose und Hinweise\n"

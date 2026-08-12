@@ -10,10 +10,14 @@ from agent.asr import AsrRuntime
 from agent.capabilities import CapabilityResolver
 from agent.cli.router import G1Agent
 from agent.expressive_motion import ExpressiveMotionController
+from agent.llctl import LlctlAdapter
 from agent.models import IntentType, PlannerDecision
 from agent.navigation import EXPECTED_ROS_TOPICS, NavigationAdapter
+from agent.slam import SlamBackend
+from agent.checkpoint import CheckpointStore
+from agent.memory.manager import MemoryManager
 from agent.settings.manager import SettingsManager
-from agent.skills import SkillRegistry, build_offline_registry
+from agent.skills import Skill, SkillRegistry, SkillResult, build_offline_registry
 from agent.state import MockRobotStateSource
 from agent.visual_observation import VisualObservationTracker
 
@@ -30,6 +34,81 @@ class FakeRepeatRobot:
     def repeat(self, **kwargs):
         self.calls.append(kwargs)
         return {"ok": True, **kwargs}
+
+
+class FakeLlctlLink:
+    def __init__(self) -> None:
+        self.connected = False
+        self.dev_mode = False
+        self.arm_engaged = False
+        self.commands = []
+
+    def connect(self) -> None:
+        self.connected = True
+
+    def snapshot(self):
+        return {
+            "connected": self.connected,
+            "dev_mode": self.dev_mode,
+            "arm_engaged": self.arm_engaged,
+            "arm_weight": 1.0 if self.arm_engaged else 0.0,
+            "service_row": {"status": 1},
+        }
+
+    def joint_modal_defaults(self, joint_id):
+        class Spec:
+            id = int(joint_id)
+            name = "right_shoulder_pitch"
+            group = "right_arm"
+            q_min = -3.0
+            q_max = 3.0
+
+        return {"spec": Spec(), "sensed_q": 0.0, "q": 0.0, "dq": 0.0, "kp": 30.0, "kd": 1.5, "tau": 0.0, "ramp_s": 0.6, "locked": False}
+
+    def toggle_dev_mode(self):
+        self.dev_mode = not self.dev_mode
+        return True, "dev toggled"
+
+    def set_joint_target(self, joint_id, q, dq, kp, kd, tau, ramp_s):
+        self.commands.append(("joint", joint_id, q, dq, kp, kd, tau, ramp_s, self.dev_mode))
+        self.arm_engaged = not self.dev_mode
+        return True, f"joint {joint_id} set"
+
+    def ee_pose_snapshot(self, side):
+        return {"x": 0.2, "y": -0.2 if side == "right" else 0.2, "z": 0.4, "roll": 0.0, "pitch": 0.0, "yaw": 0.0}
+
+    def set_arm_ee_target(self, side, x, y, z, roll, pitch, yaw):
+        self.commands.append(("ee", side, x, y, z, roll, pitch, yaw))
+        return True, f"{side} ee moved", {"iterations": 1}
+
+    def release_arms(self):
+        self.arm_engaged = False
+        self.commands.append(("release_arms",))
+        return True, "released"
+
+
+class FakeSlamBackend:
+    def start_relocation(self, path=None):
+        return "init_pose failed: {'succeed': False, 'errorCode': 509, 'info': 'The current location matching degree is low.'}; hint=relocation scan matching confidence is low"
+
+
+class FakeSlamState:
+    def status(self):
+        return {"topics": []}
+
+
+class FakeSlamRobotNoLidar:
+    def start_sensors(self):
+        return None
+
+    def sensors_stale(self, max_age=2.0):
+        return {"lidar_cloud": True, "lidar_imu": True, "lowstate": False, "slam_odom": True}
+
+    def _service_status(self, name, timeout=1.0):
+        return 0
+
+    def get_slam_info(self):
+        return "zero-pose status only"
 
 
 class RobotSideIntegrationTests(unittest.TestCase):
@@ -98,6 +177,98 @@ class RobotSideIntegrationTests(unittest.TestCase):
         snap = NavigationAdapter().snapshot().as_dict()
         self.assertIn("/lowstate", snap["topics"])
         self.assertIn("/odommodestate", snap["topics"])
+
+    def test_navigation_relocation_failure_is_kept_as_last_error(self) -> None:
+        nav = NavigationAdapter(slam_backend=FakeSlamBackend())
+        result = nav.action("start_relocation")
+        self.assertIn("matching degree is low", result)
+        self.assertIn("matching degree is low", nav.snapshot().as_dict()["last_error"])
+
+    def test_slam_backend_reads_nested_error_code(self) -> None:
+        self.assertEqual(SlamBackend._error_code({"code": 0, "ok": False, "raw": {"errorCode": 509}}), 509)
+        hinted = SlamBackend()._append_slam_data_hint("start_mapping failed", {"code": 0, "ok": False, "raw": {"errorCode": 501}})
+        self.assertIn("Lack of lidar or imu data", hinted)
+
+    def test_slam_preflight_reports_root_cause_when_lidar_and_imu_are_stale(self) -> None:
+        backend = SlamBackend(robot=FakeSlamRobotNoLidar())
+        backend._state = FakeSlamState()
+        diagnostics = backend.preflight()
+        self.assertIn("neither the required lidar point cloud nor lidar IMU", diagnostics["root_cause"])
+        self.assertIn("ros2 topic hz /utlidar/cloud_livox_mid360", diagnostics["next_checks"])
+
+    def test_german_reach_hand_forward_routes_to_reach_forward(self) -> None:
+        calls = []
+        agent = G1Agent(
+            planner=NoopPlanner(),
+            skills=SkillRegistry(
+                skills={
+                    "reach_forward": Skill(
+                        "reach_forward",
+                        "test reach",
+                        lambda **kwargs: calls.append(kwargs) or SkillResult(ok=True, message="reached"),
+                        "test",
+                    )
+                },
+                backend_label="test",
+            ),
+            state_source=MockRobotStateSource(),
+            settings=SettingsManager(path=self.tmp / "settings.json"),
+            memory=MemoryManager(base_dir=self.tmp / "memory_reach"),
+            checkpoint_store=CheckpointStore(self.tmp / "checkpoint_reach.json"),
+            auto_confirm=True,
+        )
+        agent.settings.set("interface.command_language", "de", persist=False)
+        outcome = agent.handle_cli_text("kannst du die rechte Hand nach vorne bringen ?")
+        self.assertEqual(outcome.decision.intent, IntentType.EXECUTE_TASK)
+        self.assertEqual(outcome.skill_outcomes[0][0], "reach_forward")
+
+    def test_learned_question_reports_grounded_counts(self) -> None:
+        agent = G1Agent(
+            planner=NoopPlanner(),
+            skills=SkillRegistry(skills={}, backend_label="test"),
+            state_source=MockRobotStateSource(),
+            settings=SettingsManager(path=self.tmp / "settings.json"),
+            memory=MemoryManager(base_dir=self.tmp / "memory_learned"),
+            checkpoint_store=CheckpointStore(self.tmp / "checkpoint_learned.json"),
+            auto_confirm=True,
+        )
+        agent.settings.set("interface.command_language", "de", persist=False)
+        outcome = agent.handle_cli_text("Was hast du gelernt ?")
+        self.assertIn("Episoden:", outcome.grounded_response or "")
+        self.assertIn("Gelernte semantische Claims:", outcome.grounded_response or "")
+
+    def test_llctl_adapter_executes_dashboard_joint_ee_and_release(self) -> None:
+        settings = SettingsManager(path=self.tmp / "settings.json").effective()
+        adapter = LlctlAdapter()
+        adapter._dashboard_module = object()
+        adapter._robot_link = FakeLlctlLink()
+        self.assertEqual(adapter.enable_session(settings), "llctl session enabled")
+        joint_result = adapter.command_joint(settings, joint="22", q=0.1, dq=0.0, kp=30.0, kd=1.5, tau=0.0, ramp_s=0.6, backend="arm_sdk")
+        self.assertIn("ok:", joint_result)
+        ee_result = adapter.command_ee_delta(settings, side="right", dx=0.01, dz=0.02)
+        self.assertIn("ok:", ee_result)
+        release = adapter.release_arms(settings)
+        self.assertIn("ok:", release)
+        self.assertEqual(adapter._robot_link.commands[0][0], "joint")
+        self.assertEqual(adapter._robot_link.commands[1][0], "ee")
+        self.assertEqual(adapter._robot_link.commands[2][0], "release_arms")
+
+    def test_llctl_cli_parser_routes_joint_command(self) -> None:
+        agent = G1Agent(
+            planner=NoopPlanner(),
+            skills=SkillRegistry(skills={}, backend_label="test"),
+            state_source=MockRobotStateSource(),
+            settings=SettingsManager(path=self.tmp / "settings.json"),
+            auto_confirm=True,
+        )
+        agent.llctl._dashboard_module = object()
+        agent.llctl._robot_link = FakeLlctlLink()
+        self.assertIn("enabled", agent.llctl_command(["enable"]))
+        result = agent.llctl_command(["joint", "22", "q", "0.1", "dq", "0", "kp", "30", "kq", "1.5", "ramp", "0.6"])
+        self.assertIn("ok:", result)
+        ee_result = agent.llctl_command(["ee", "right", "0.2", "0", "0.3", "0", "0", "0"])
+        self.assertIn("ok:", ee_result)
+        self.assertEqual(agent.llctl._robot_link.commands[-1], ("ee", "right", 0.2, 0.0, 0.3, 0.0, 0.0, 0.0))
 
     def test_agent_monitor_has_robot_side_sections(self) -> None:
         agent = G1Agent(
