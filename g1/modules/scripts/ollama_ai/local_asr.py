@@ -28,6 +28,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--backend", choices=("auto", "faster-whisper", "whisper", "vosk"), default="auto")
     parser.add_argument("--model", default=os.environ.get("LOCAL_ASR_MODEL", "small"),
                         help="faster-whisper/openai-whisper model name, or Vosk model directory.")
+    parser.add_argument("--fast", action="store_true",
+                        help="Low-latency preset: tiny model, beam size 1, and shorter maximum recordings unless explicitly overridden.")
     parser.add_argument("--device", default=os.environ.get("LOCAL_ASR_DEVICE", "20" if os.name == "nt" else None),
                         help="sounddevice input device id/name. Use --list-devices to inspect.")
     parser.add_argument("--level-meter", action="store_true",
@@ -63,6 +65,8 @@ def parse_args() -> argparse.Namespace:
                         help="Disable local correction of common brand-name ASR mistakes.")
     parser.add_argument("--beam-size", type=int, default=5,
                         help="Beam size for faster-whisper decoding; higher is slower but usually more accurate.")
+    parser.add_argument("--max-record-seconds", type=float, default=0.0,
+                        help="Automatically stop and transcribe after this many seconds; 0 disables.")
     parser.add_argument("--once", action="store_true", help="Transcribe one chunk and exit.")
     parser.add_argument("--dry-run", action="store_true", help="Print transcripts but do not POST.")
     parser.add_argument("--toggle-key", default="space",
@@ -71,7 +75,17 @@ def parse_args() -> argparse.Namespace:
                         help="Start paused; press the toggle key to begin recording.")
     parser.add_argument("--slice-seconds", type=float, default=0.25,
                         help="Small recording slice used so the toggle key responds quickly.")
-    return parser.parse_args()
+    args = parser.parse_args()
+    if bool(args.fast):
+        if str(args.model) == str(os.environ.get("LOCAL_ASR_MODEL", "small")):
+            args.model = "tiny"
+        if int(args.beam_size) == 5:
+            args.beam_size = 1
+        if float(args.max_record_seconds) <= 0.0:
+            args.max_record_seconds = 4.0
+        if float(args.slice_seconds) == 0.25:
+            args.slice_seconds = 0.15
+    return args
 
 
 def normalize_post_url(url: str) -> str:
@@ -396,6 +410,7 @@ def post_text(args: argparse.Namespace, text: str) -> None:
 def apply_brand_corrections(text: str) -> str:
     corrected = str(text)
     replacements = (
+        (r"\bFahrer\s+(?=zu|zum|zur|nach)\b", "Fahre "),
         (r"\bD\s*F\s+Robotics\b", "EF Robotics"),
         (r"\bE\s*F\s+Robotics\b", "EF Robotics"),
         (r"\bF[\s-]?Botix\b", "EF Robotics"),
@@ -542,6 +557,7 @@ def main() -> int:
     toggles = start_toggle_listener(str(args.toggle_key))
     recording = not bool(args.start_paused)
     chunks: list[Any] = []
+    recording_started = time.time() if recording else 0.0
     print(
         f"{'Recording' if recording else 'Paused'}. Press {args.toggle_key!r} to "
         f"{'stop and transcribe' if recording else 'start recording'}; Ctrl-C exits.",
@@ -558,6 +574,7 @@ def main() -> int:
                 recording = not recording
                 if recording:
                     chunks = []
+                    recording_started = time.time()
                     print("recording...", flush=True)
                 else:
                     if chunks:
@@ -574,6 +591,16 @@ def main() -> int:
             if bool(args.level_meter):
                 print(f"rms={slice_rms:.6f} peak={slice_peak:.6f}", flush=True)
             chunks.append(audio)
+            max_record_s = float(args.max_record_seconds)
+            if max_record_s > 0.0 and chunks and time.time() - recording_started >= max_record_s:
+                audio = np.concatenate(chunks)
+                rms = float(np.sqrt(np.mean(audio * audio))) if audio.size else 0.0
+                print(f"auto-stopped; transcribing {audio.size / float(args.sample_rate):.1f}s rms={rms:.4f}", flush=True)
+                transcribe_and_post(args, backend, audio, rms)
+                chunks = []
+                recording = False
+                print("paused", flush=True)
+                continue
             if args.once:
                 audio = np.concatenate(chunks)
                 rms = float(np.sqrt(np.mean(audio * audio))) if audio.size else 0.0

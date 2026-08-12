@@ -135,8 +135,16 @@ HL_ACTIONS = {
     "shake_hand": "shake_hand",
     "handshake": "shake_hand",
     "high_five": "high_five",
+    "hug": "hug",
     "heart": "heart",
+    "right_heart": "right_heart",
     "hands_up": "hands_up",
+    "x_ray": "x_ray",
+    "right_hand_up": "right_hand_up",
+    "reject": "reject",
+    "left_kiss": "left_kiss",
+    "right_kiss": "right_kiss",
+    "two_hand_kiss": "two_hand_kiss",
 }
 
 
@@ -208,7 +216,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--tts-language", default=os.environ.get("G1_TTS_LANGUAGE"),
                         help="Override the robot TTS language. Defaults to --lang.")
     parser.add_argument("--no-speech", action="store_true")
-    parser.add_argument("--startup-speech", default="Navigationsbot bereit.")
+    parser.add_argument("--startup-speech", default="Chatmodus aktiviert.")
     parser.add_argument("--no-startup-speech", action="store_true")
     parser.add_argument("--no-default-faqs", dest="default_faqs", action="store_false", default=True,
                         help="Do not automatically load g1_faq_knowledge.json when no FAQ file is passed.")
@@ -239,7 +247,9 @@ def compact_text(text: str) -> str:
 
 
 def normalize_text(text: str) -> str:
-    return compact_text(text).lower().strip(string.punctuation + "，。！？、；：")
+    text = compact_text(text).lower().strip(string.punctuation + "，。！？、；：")
+    text = re.sub(r"[,;:，。！？、；：!?]+", " ", text)
+    return compact_text(text)
 
 
 def tokenize(text: str) -> tuple[str, ...]:
@@ -488,6 +498,7 @@ def clean_point_name(text: str) -> str:
         "",
         text,
     ).strip()
+    text = re.sub(r"^(?:point|punkt)\s+", "", text).strip()
     text = re.sub(r"[^\w äöüß-]+", "", text, flags=re.UNICODE)
     text = re.sub(r"\s+", " ", text).strip(" -_")
     tokens = [NUMBER_WORDS.get(token, token) for token in text.split()]
@@ -1188,7 +1199,7 @@ class NavBotNode(Node):
             "ok": False,
             "code": 1,
             "intent": "unknown",
-            "answer": "Das habe ich nicht als Navigationsbefehl verstanden. Du kannst zum Beispiel sagen: Was ist EF Robotics, winke, oder fahre zu Punkt Labor.",
+            "answer": "Das habe ich nicht verstanden. Du kannst mich etwas fragen, eine Geste verlangen, oder einen gespeicherten Punkt anfahren lassen.",
         }
 
     def _rag_answer(self, text: str) -> tuple[str, bool]:
@@ -1286,7 +1297,7 @@ class NavBotNode(Node):
             or "who are you" in low
         )
         if asks_name:
-            return "Ich bin der G1 Navigationsbot von EF Robotics. Ich kann navigieren, Gesten ausführen und Fragen aus meinem lokalen Wissen beantworten."
+            return "Ich bin der G1 von EF Robotics. Ich kann Fragen beantworten, Gesten ausführen und bei Bedarf navigieren."
         if words and words <= greeting_words:
             return "Hallo. Ich bin bereit."
         return ""
@@ -1299,34 +1310,65 @@ class NavBotNode(Node):
 
     @staticmethod
     def _wants_start_mapping(low: str) -> bool:
-        phrases = ("start mapping", "begin mapping", "create map", "make a map", "starte kartierung", "kartierung starten", "karte erstellen", "erstelle eine karte")
-        return any(phrase in low for phrase in phrases) or similar_to_any(low, phrases)
+        if any(word in low for word in ("stop", "stoppe", "stoppen", "beenden", "beende", "speichern", "speichere", "save", "finish", "end")):
+            return False
+        phrases = (
+            "start mapping", "begin mapping", "create map", "make a map",
+            "starte kartierung", "kartierung starten", "kartierung beginnen", "beginne kartierung",
+            "starte die kartierung", "beginne die kartierung", "karte erstellen", "erstelle eine karte",
+            "mapping starten", "mapping beginnen", "karte aufnehmen",
+        )
+        return any(phrase in low for phrase in phrases) or similar_to_any(low, phrases, threshold=0.9)
 
     @staticmethod
     def _wants_stop_mapping(low: str) -> bool:
-        phrases = ("stop mapping", "finish mapping", "end mapping", "save map", "save the map", "stoppe kartierung", "kartierung stoppen", "karte speichern", "speichere die karte")
-        return any(phrase in low for phrase in phrases) or similar_to_any(low, phrases)
+        if any(word in low for word in ("start", "starte", "starten", "beginnen", "beginne", "create", "make", "erstellen", "erstelle")):
+            return False
+        phrases = (
+            "stop mapping", "finish mapping", "end mapping", "save map", "save the map",
+            "stoppe kartierung", "kartierung stoppen", "kartierung beenden", "beende kartierung",
+            "beende die kartierung", "karte speichern", "speichere die karte", "mapping stoppen",
+            "mapping beenden", "speichere map", "map speichern",
+        )
+        return any(phrase in low for phrase in phrases) or similar_to_any(low, phrases, threshold=0.9)
 
     @staticmethod
     def _wants_relocate(low: str) -> bool:
-        phrases = ("relocate", "localize", "relocalize", "init pose", "lokalisieren", "lokalisiere", "neu lokalisieren", "position initialisieren")
+        phrases = (
+            "relocate", "localize", "relocalize", "init pose",
+            "lokalisieren", "lokalisiere", "lokalisiere dich", "neu lokalisieren",
+            "lokalisiere dich neu", "position initialisieren", "initialisiere position",
+            "relokalisieren", "relokalisiere",
+        )
         return any(word in low for word in phrases) or similar_to_any(low, phrases, threshold=0.68)
 
     @staticmethod
     def _wants_add_current_point(low: str) -> bool:
-        has_current = "current" in low or "aktuell" in low or "diesen" in low or "diese" in low
+        if any(phrase in low for phrase in (
+            "punkt speichern", "speichere punkt", "punkt benennen", "punkt merken",
+            "ort speichern", "speichere ort", "position speichern", "speichere position",
+            "stelle speichern", "diesen punkt speichern", "hier speichern",
+        )):
+            return True
+        has_current = "current" in low or "aktuell" in low or "diesen" in low or "diese" in low or "hier" in low
         has_point = "point" in low or "punkt" in low
         if not has_current or not has_point:
             return False
-        return any(word in low for word in ("add", "at", "save", "mark", "remember", "speicher", "speichere", "markiere", "merke"))
+        return any(word in low for word in ("add", "at", "save", "mark", "remember", "speicher", "speichere", "speichern", "markiere", "merke", "nenn", "nenne"))
 
     @staticmethod
     def _extract_add_point_name(low: str) -> str | None:
-        match = re.search(
-            r"(?:add|save|mark|remember|speichere|markiere|merke)\s+(?:the\s+|den\s+|diesen\s+)?(?:current\s+|aktuellen\s+)?(?:point|punkt)\s+(?:as|called|named|als|namens)\s+(.+)$",
-            low,
+        patterns = (
+            r"(?:add|save|mark|remember|speichere|markiere|merke)\s+(?:the\s+|den\s+|diesen\s+|diese\s+)?(?:current\s+|aktuellen\s+|aktueller\s+)?(?:point|punkt)\s+(?:as|called|named|als|namens)\s+(.+)$",
+            r"(?:speichere|markiere|merke)\s+(?:diesen\s+|diese\s+|den\s+)?(?:ort|stelle|position|punkt)\s+(?:als|namens)\s+(.+)$",
+            r"(?:nenn|nenne)\s+(?:diesen\s+|diese\s+|den\s+)?(?:ort|stelle|position|punkt)\s+(.+)$",
+            r"(?:das\s+ist|hier\s+ist|dies\s+ist)\s+(?:der\s+|die\s+|das\s+)?(?:punkt\s+)?(.+)$",
         )
-        return clean_point_name(match.group(1)) if match else None
+        for pattern in patterns:
+            match = re.search(pattern, low)
+            if match:
+                return clean_point_name(match.group(1))
+        return None
 
     @staticmethod
     def _wants_pause_or_stop(low: str) -> bool:
@@ -1343,13 +1385,15 @@ class NavBotNode(Node):
     @staticmethod
     def _extract_go_to_name(low: str) -> str | None:
         patterns = (
-            r"^(?:go|navigate|drive|walk)\s+to\s+(.+)$",
-            r"^take\s+me\s+to\s+(.+)$",
             r"^go\s+to\s+point\s+(.+)$",
             r"^navigate\s+to\s+point\s+(.+)$",
-            r"^(?:geh|gehe|fahr|fahre|navigiere|lauf|laufe)\s+(?:zu|zum|zur|nach)\s+(.+)$",
+            r"^(?:geh|gehe|fahr|fahre|fahrer|navigiere|lauf|laufe)\s+(?:zu|zum)\s+punkt\s+(.+)$",
+            r"^(?:geh|gehe|fahr|fahre|fahrer|navigiere)\s+(?:zum\s+)?(?:gespeicherten\s+)?punkt\s+(.+)$",
+            r"^(?:go|navigate|drive|walk)\s+to\s+(.+)$",
+            r"^take\s+me\s+to\s+(.+)$",
+            r"^(?:geh|gehe|fahr|fahre|fahrer|navigiere|lauf|laufe)\s+(?:zu|zum|zur|nach)\s+(.+)$",
             r"^bring\s+mich\s+(?:zu|zum|zur|nach)\s+(.+)$",
-            r"^(?:geh|gehe|fahr|fahre|navigiere)\s+(?:zu|zum)\s+punkt\s+(.+)$",
+            r"^(?:fahr|fahre|fahrer|geh|gehe)\s+(?:mich\s+)?(?:zum|zur|zu)\s+(.+)$",
         )
         for pattern in patterns:
             match = re.search(pattern, low)
@@ -1363,14 +1407,24 @@ class NavBotNode(Node):
             return "thinking", "Ich denke nach."
         if "erklär geste" in low or "erklaer geste" in low or "erklärpose" in low or "erklaerpose" in low or "explain gesture" in low or low in {"erkläre", "erklaere", "explain"}:
             return "explain", "Ich erkläre es."
-        if "klatsch" in low or "applaudier" in low or "clap" in low or "applaud" in low:
+        if "klatsch" in low or "klatschen" in low or "applaudier" in low or "clap" in low or "applaud" in low:
             return "clap", "Ich klatsche."
         if "high five" in low or "high-five" in low:
             return "high_five", "High five."
-        if "handschlag" in low or "hand geben" in low or "shake hand" in low or "shake hands" in low or "handshake" in low:
+        if "handschlag" in low or "hand geben" in low or "gib mir die hand" in low or "hand schütteln" in low or "hand schuetteln" in low or "schüttle die hand" in low or "schuettle die hand" in low or "shake hand" in low or "shake hands" in low or "handshake" in low:
             return "shake_hand", "Freut mich."
+        if "kuss geben" in low or "gib einen kuss" in low or "gib mir einen kuss" in low or "blow a kiss" in low or "kiss" in low:
+            return "left_kiss", "Ich gebe einen Kuss."
+        if "rechte hand hoch" in low or "heb die rechte hand" in low or "raise your right hand" in low:
+            return "right_hand_up", "Ich hebe die rechte Hand."
+        if "umarm" in low or "hug" in low:
+            return "hug", "Ich mache eine Umarmungsgeste."
         if "hände hoch" in low or "haende hoch" in low or "hands up" in low or "raise your hands" in low:
             return "hands_up", "Ich hebe die Hände."
+        if "ablehnen" in low or "verweigern" in low or "reject" in low or "refuse" in low:
+            return "reject", "Ich lehne ab."
+        if "x ray" in low or "x-ray" in low:
+            return "x_ray", "Ich mache die X-Ray-Geste."
         if re.search(r"\bherz\b", low) or re.search(r"\bheart\b", low):
             return "heart", "Ich mache ein Herz."
         if "hoch winken" in low or "high wave" in low or "big wave" in low:

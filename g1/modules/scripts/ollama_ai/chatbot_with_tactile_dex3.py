@@ -138,8 +138,16 @@ HL_ACTIONS = {
     "shake_hand": "shake_hand",
     "handshake": "shake_hand",
     "high_five": "high_five",
+    "hug": "hug",
     "heart": "heart",
+    "right_heart": "right_heart",
     "hands_up": "hands_up",
+    "x_ray": "x_ray",
+    "right_hand_up": "right_hand_up",
+    "reject": "reject",
+    "left_kiss": "left_kiss",
+    "right_kiss": "right_kiss",
+    "two_hand_kiss": "two_hand_kiss",
 }
 
 
