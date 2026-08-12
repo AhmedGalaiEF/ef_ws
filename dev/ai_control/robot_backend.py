@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from textwrap import dedent
 from typing import Protocol
 
 
@@ -130,24 +131,27 @@ text = sys.argv[2]
 
 rclpy.init(args=None)
 node = Node("ai_control_navbot_command_once")
-publisher = node.create_publisher(String, topic, 10)
-deadline = time.time() + 1.0
-subscribers = 0
-while time.time() < deadline:
-    rclpy.spin_once(node, timeout_sec=0.05)
-    subscribers = publisher.get_subscription_count()
-    if subscribers:
-        break
-msg = String()
-msg.data = text
-for _ in range(3):
-    publisher.publish(msg)
-    rclpy.spin_once(node, timeout_sec=0.05)
-    time.sleep(0.05)
-print(subscribers)
-node.destroy_node()
-rclpy.shutdown()
+try:
+    publisher = node.create_publisher(String, topic, 10)
+    deadline = time.monotonic() + 1.0
+    subscribers = 0
+    while time.monotonic() < deadline:
+        rclpy.spin_once(node, timeout_sec=0.05)
+        subscribers = publisher.get_subscription_count()
+        if subscribers:
+            break
+    msg = String()
+    msg.data = text
+    for _ in range(3):
+        publisher.publish(msg)
+        rclpy.spin_once(node, timeout_sec=0.05)
+        time.sleep(0.05)
+    print(subscribers)
+finally:
+    node.destroy_node()
+    rclpy.shutdown()
 """
+        code = dedent(code)
         env = os.environ.copy()
         env["ROS_DOMAIN_ID"] = str(int(self._domain_id))
         env.setdefault("ROS_LOG_DIR", "/tmp/ros_log")

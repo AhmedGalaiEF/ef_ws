@@ -82,12 +82,20 @@ def extract_json_object(text: str) -> dict[str, Any]:
     Models routinely wrap JSON in prose or ```json fences despite instructions
     not to -- this strips the outermost braces and parses that.
     """
-    start = text.find("{")
-    end = text.rfind("}")
-    if start == -1 or end == -1 or end < start:
+    decoder = json.JSONDecoder()
+    last_error: json.JSONDecodeError | None = None
+    for start, char in enumerate(text):
+        if char != "{":
+            continue
+        try:
+            candidate, end = decoder.raw_decode(text[start:])
+        except json.JSONDecodeError as exc:
+            last_error = exc
+            continue
+        if isinstance(candidate, dict):
+            return candidate
+        last_error = json.JSONDecodeError("JSON value is not an object", text, start + end)
+
+    if last_error is None:
         raise OllamaError(f"No JSON object found in model output: {text!r}")
-    candidate = text[start : end + 1]
-    try:
-        return json.loads(candidate)
-    except json.JSONDecodeError as exc:
-        raise OllamaError(f"Failed to parse JSON from model output: {candidate!r}") from exc
+    raise OllamaError(f"Failed to parse JSON object from model output: {text!r}") from last_error

@@ -452,7 +452,7 @@ def _semantic_robot_state(state: RobotStateSnapshot) -> Dict[str, Any]:
 
 def _read_source_excerpt(path: Path, *, start_line: int, line_count: int, allowed_roots: List[Path]) -> Dict[str, Any]:
     resolved = path.expanduser().resolve()
-    if not any(str(resolved).startswith(str(root.resolve())) for root in allowed_roots):
+    if not any(resolved == root.resolve() or root.resolve() in resolved.parents for root in allowed_roots):
         raise PermissionError(f"{resolved} is outside allowed source roots")
     if any(part in {".env", ".ssh"} for part in resolved.parts):
         raise PermissionError("refusing to read sensitive path")

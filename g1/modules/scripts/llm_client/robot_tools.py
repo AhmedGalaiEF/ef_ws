@@ -18,6 +18,7 @@ Build the (tools, tool_schemas) pair to pass into ``send_chat_with_tool_usage``:
 """
 from __future__ import annotations
 
+import math
 import time
 from typing import Any, Callable, Dict, List, Tuple
 
@@ -26,6 +27,15 @@ from typing import Any, Callable, Dict, List, Tuple
 # Approximate values; tune per-hand if a grab feels too loose/tight.
 _DEX3_OPEN = [0.0] * 7
 _DEX3_CLOSED = [1.0, 1.4, 1.4, 1.5, 1.4, 1.5, 1.4]
+
+
+def _finite_float(value: Any, name: str) -> float:
+    if isinstance(value, bool):
+        raise ValueError(f"{name} must be a finite number")
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError(f"{name} must be finite")
+    return number
 
 
 def build_robot_tools(robot: Any) -> Tuple[Dict[str, Callable[..., Any]], List[Dict[str, Any]]]:
@@ -50,8 +60,14 @@ def build_robot_tools(robot: Any) -> Tuple[Dict[str, Callable[..., Any]], List[D
             return "stopped"
         if d not in {"forward", "backward", "left", "right"}:
             return f"error: unknown direction '{direction}'"
-        speed = max(0.05, min(0.6, float(speed_mps)))
-        distance = max(0.0, float(distance_m))
+        try:
+            requested_speed = _finite_float(speed_mps, "speed_mps")
+            distance = _finite_float(distance_m, "distance_m")
+            yaw = _finite_float(yaw_rad, "yaw_rad")
+        except (TypeError, ValueError) as exc:
+            return f"error: {exc}"
+        speed = max(0.05, min(0.6, requested_speed))
+        distance = max(0.0, min(5.0, distance))
         duration = distance / speed if speed > 0 else 0.0
         vx = vy = 0.0
         if d == "forward":
@@ -62,10 +78,10 @@ def build_robot_tools(robot: Any) -> Tuple[Dict[str, Callable[..., Any]], List[D
             vy = speed
         elif d == "right":
             vy = -speed
-        vyaw = float(yaw_rad) / duration if duration > 0.05 else 0.0
+        vyaw = yaw / duration if duration > 0.05 else 0.0
         robot.move_for(duration, vx=vx, vy=vy, vyaw=vyaw)
         return (
-            f"moved {d} {distance:.2f} m at {speed:.2f} m/s with yaw {yaw_rad:+.2f} rad "
+            f"moved {d} {distance:.2f} m at {speed:.2f} m/s with yaw {yaw:+.2f} rad "
             f"over {duration:.2f} s"
         )
 
@@ -84,11 +100,17 @@ def build_robot_tools(robot: Any) -> Tuple[Dict[str, Callable[..., Any]], List[D
         side = str(arm).strip().lower()
         if side not in {"left", "right"}:
             return f"error: arm must be 'left' or 'right', got '{arm}'"
-        h = max(-0.30, min(0.30, float(height_m)))
-        reach = max(0.10, min(0.60, float(length_m)))
+        try:
+            h = max(-0.30, min(0.30, _finite_float(height_m, "height_m")))
+            reach = max(0.10, min(0.60, _finite_float(length_m, "length_m")))
+            duration = _finite_float(duration_s, "duration_s")
+        except (TypeError, ValueError) as exc:
+            return f"error: {exc}"
+        if duration <= 0 or duration > 30.0:
+            return "error: duration_s must be > 0 and <= 30 seconds"
         result = robot.extend_arm_forward(
             arm=side,
-            duration_s=float(duration_s),
+            duration_s=duration,
         )
         target = result.get("target_pose") if isinstance(result, dict) else None
         return (
@@ -112,9 +134,12 @@ def build_robot_tools(robot: Any) -> Tuple[Dict[str, Callable[..., Any]], List[D
         side = str(hand).strip().lower()
         if side not in {"left", "right"}:
             return f"error: hand must be 'left' or 'right', got '{hand}'"
-        n = max(1, int(n_steps))
-        dt = max(0.05, float(step_s))
-        thresh = max(0.0, float(resistance_threshold))
+        try:
+            n = max(1, int(n_steps))
+            dt = max(0.05, _finite_float(step_s, "step_s"))
+            thresh = max(0.0, _finite_float(resistance_threshold, "resistance_threshold"))
+        except (TypeError, ValueError) as exc:
+            return f"error: {exc}"
 
         robot.hand_open(side, hold_s=0.2)
         time.sleep(0.2)

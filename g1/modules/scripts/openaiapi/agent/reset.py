@@ -134,8 +134,13 @@ class ResetManager:
 
     def _create_backup(self, scope: str) -> Path:
         stamp = time.strftime("%Y-%m-%dT%H%M%S", time.localtime())
+        self.backup_root.mkdir(parents=True, exist_ok=True)
         destination = self.backup_root / f"{stamp}_{scope}"
-        destination.mkdir(parents=True, exist_ok=False)
+        suffix = 1
+        while destination.exists():
+            destination = self.backup_root / f"{stamp}_{scope}_{suffix}"
+            suffix += 1
+        destination.mkdir(parents=False, exist_ok=False)
         manifest = {"scope": scope, "created_at": time.time(), "files": {}}
         for label, path in self._owned_files().items():
             if not path.exists():
