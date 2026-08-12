@@ -89,6 +89,7 @@ NUMBER_WORDS = {
     "null": "0",
     "eins": "1",
     "ein": "1",
+    "heinz": "1",
     "zwei": "2",
     "drei": "3",
     "vier": "4",
@@ -1387,13 +1388,13 @@ class NavBotNode(Node):
         patterns = (
             r"^go\s+to\s+point\s+(.+)$",
             r"^navigate\s+to\s+point\s+(.+)$",
-            r"^(?:geh|gehe|fahr|fahre|fahrer|navigiere|lauf|laufe)\s+(?:zu|zum)\s+punkt\s+(.+)$",
-            r"^(?:geh|gehe|fahr|fahre|fahrer|navigiere)\s+(?:zum\s+)?(?:gespeicherten\s+)?punkt\s+(.+)$",
+            r"^(?:geh|gehe|fahr|fahre|fahrer|fehre|fähre|navigiere|lauf|laufe|laufen)\s+(?:zu|zum)\s+(?:point|punkt|pukt|pukts|punkts)\s+(.+)$",
+            r"^(?:geh|gehe|fahr|fahre|fahrer|fehre|fähre|navigiere|lauf|laufe|laufen)\s+(?:zum\s+)?(?:gespeicherten\s+)?(?:point|punkt|pukt|pukts|punkts)\s+(.+)$",
             r"^(?:go|navigate|drive|walk)\s+to\s+(.+)$",
             r"^take\s+me\s+to\s+(.+)$",
-            r"^(?:geh|gehe|fahr|fahre|fahrer|navigiere|lauf|laufe)\s+(?:zu|zum|zur|nach)\s+(.+)$",
+            r"^(?:geh|gehe|fahr|fahre|fahrer|fehre|fähre|navigiere|lauf|laufe|laufen)\s+(?:zu|zum|zur|nach)\s+(.+)$",
             r"^bring\s+mich\s+(?:zu|zum|zur|nach)\s+(.+)$",
-            r"^(?:fahr|fahre|fahrer|geh|gehe)\s+(?:mich\s+)?(?:zum|zur|zu)\s+(.+)$",
+            r"^(?:fahr|fahre|fahrer|fehre|fähre|geh|gehe|lauf|laufe|laufen)\s+(?:mich\s+)?(?:zum|zur|zu)\s+(.+)$",
         )
         for pattern in patterns:
             match = re.search(pattern, low)

@@ -51,22 +51,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--chunk-seconds", type=float, default=4.0)
     parser.add_argument("--min-rms", type=float, default=0.00005,
                         help="Skip chunks quieter than this RMS level.")
-    parser.add_argument("--gain", type=float, default=float(os.environ.get("LOCAL_ASR_GAIN", "20.0" if os.name == "nt" else "1.0")),
+    parser.add_argument("--gain", type=float, default=float(os.environ.get("LOCAL_ASR_GAIN", "8.0" if os.name == "nt" else "1.0")),
                         help="Multiply recorded audio before transcription. Useful for very quiet Windows inputs.")
-    parser.add_argument("--normalize-rms", type=float, default=0.06,
+    parser.add_argument("--normalize-rms", type=float, default=0.04,
                         help="Normalize non-quiet chunks to this RMS before writing WAV; use 0 to disable.")
     parser.add_argument("--language", "--lang", dest="language", default=os.environ.get("LOCAL_ASR_LANGUAGE", "de"),
                         help="ASR language code, for example de or en.")
     parser.add_argument("--asr-context", default=os.environ.get(
         "LOCAL_ASR_CONTEXT",
-        "EF Robotics, Unitree G1, AutoXing, CenoBots, Navigation, Kartierung, Lokalisierung, Gesten, winken, klatschen"
-    ), help="Words and names to bias ASR transcription toward.")
+        "EF Robotics, Unitree G1, AutoXing, CenoBots, Navigation, Kartierung, Lokalisierung, Gesten, winken, klatschen, Punkt eins, Punkt zwei"
+    ), help="Hotwords for ASR, used only when the backend supports hotwords.")
     parser.add_argument("--no-brand-corrections", dest="brand_corrections", action="store_false", default=True,
                         help="Disable local correction of common brand-name ASR mistakes.")
     parser.add_argument("--beam-size", type=int, default=5,
                         help="Beam size for faster-whisper decoding; higher is slower but usually more accurate.")
-    parser.add_argument("--max-record-seconds", type=float, default=0.0,
-                        help="Automatically stop and transcribe after this many seconds; 0 disables.")
+    parser.add_argument("--max-record-seconds", type=float, default=6.0,
+                        help="Automatically stop and transcribe after this many seconds; use 0 to disable.")
     parser.add_argument("--once", action="store_true", help="Transcribe one chunk and exit.")
     parser.add_argument("--dry-run", action="store_true", help="Print transcripts but do not POST.")
     parser.add_argument("--toggle-key", default="space",
@@ -81,7 +81,7 @@ def parse_args() -> argparse.Namespace:
             args.model = "tiny"
         if int(args.beam_size) == 5:
             args.beam_size = 1
-        if float(args.max_record_seconds) <= 0.0:
+        if float(args.max_record_seconds) == 6.0:
             args.max_record_seconds = 4.0
         if float(args.slice_seconds) == 0.25:
             args.slice_seconds = 0.15
@@ -330,9 +330,13 @@ class FasterWhisperBackend:
             "language": self.language,
             "vad_filter": True,
             "beam_size": self.beam_size,
+            "condition_on_previous_text": False,
+            "vad_parameters": {
+                "min_silence_duration_ms": 450,
+                "speech_pad_ms": 250,
+            },
         }
         if self.asr_context:
-            kwargs["initial_prompt"] = self.asr_context
             kwargs["hotwords"] = self.asr_context
         try:
             segments, _info = self.model.transcribe(str(wav_path), **kwargs)
@@ -410,7 +414,27 @@ def post_text(args: argparse.Namespace, text: str) -> None:
 def apply_brand_corrections(text: str) -> str:
     corrected = str(text)
     replacements = (
+        (r"\bVastion\s+Robotics\b", "EF Robotics"),
+        (r"^\s*NO\s*,?\s*AutoXing\s*$", "Was ist AutoXing?"),
+        (r"\bUnitree\s+1\b", "Unitree G1"),
+        (r".*\b(?:Kannst|Kamst)\s+du\s+das\s+Publikum\s*,?\s*begrüße\s+ich\.?\s*$", "winken"),
+        (r".*\bPublikum\b.*\bbegrüß.*$", "winken"),
+        (r"^\s*Lokalisierung\s*$", "Lokalisiere dich neu"),
+        (r"^\s*Punkt\s*,?\s*(?:Speichern|Spanchen)\s*$", "Punkt speichern"),
+        (r"^\s*Punktspeicher\s*$", "Punkt speichern"),
+        (r"^\s*Punkt\s+ins\s+Field\s*$", "Punkt eins"),
+        (r"^\s*und\s+geben\s*$", "Hand geben"),
+        (r"^\s*(?:Vater|Fahrer|Gear)\s*,?\s*(?:2\s*,?\s*0\s*,?\s*)?1\s*$", "Fahre zu Punkt 1"),
+        (r"^\s*Gear\s+2\s+und\s+1\s*$", "Fahre zu Punkt 1"),
         (r"\bFahrer\s+(?=zu|zum|zur|nach)\b", "Fahre "),
+        (r"\bFehre\s+(?=zu|zum|zur|nach)\b", "Fahre "),
+        (r"\bFähre\s+(?=zu|zum|zur|nach)\b", "Fahre "),
+        (r"\bLaufen\s+(?=zu|zum|zur|nach)\b", "Laufe "),
+        (r"\b(?:Pukt|Pukts|Punks|Punkts)\b", "Punkt"),
+        (r"\bHeinz\b", "eins"),
+        (r"\beinfather\b", "eins"),
+        (r"\bein\s+father\b", "eins"),
+        (r"\b2002\.1\b", "zu Punkt 1"),
         (r"\bD\s*F\s+Robotics\b", "EF Robotics"),
         (r"\bE\s*F\s+Robotics\b", "EF Robotics"),
         (r"\bF[\s-]?Botix\b", "EF Robotics"),
