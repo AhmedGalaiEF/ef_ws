@@ -25,6 +25,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--url", default="http://127.0.0.1:8096/asr")
     parser.add_argument("--token", default="")
+    parser.add_argument("--text-input", action="store_true",
+                        help="Disable microphone/ASR and send typed console lines to the POST target.")
     parser.add_argument("--backend", choices=("auto", "faster-whisper", "whisper", "vosk"), default="auto")
     parser.add_argument("--model", default=os.environ.get("LOCAL_ASR_MODEL", "small"),
                         help="faster-whisper/openai-whisper model name, or Vosk model directory.")
@@ -411,6 +413,28 @@ def post_text(args: argparse.Namespace, text: str) -> None:
         print(f"POST failed: {exc}", file=sys.stderr, flush=True)
 
 
+def run_text_input(args: argparse.Namespace) -> int:
+    print("Text input mode. Type a prompt and press Enter; Ctrl-C or an empty line exits.", flush=True)
+    try:
+        while True:
+            try:
+                text = input("> ")
+            except EOFError:
+                break
+            text = text.strip()
+            if not text:
+                break
+            if bool(args.brand_corrections):
+                corrected = apply_brand_corrections(text)
+                if corrected != text:
+                    print(f"corrected: {text} -> {corrected}", flush=True)
+                text = corrected
+            post_text(args, text)
+    except KeyboardInterrupt:
+        print("\nexiting", flush=True)
+    return 0
+
+
 def apply_brand_corrections(text: str) -> str:
     corrected = str(text)
     replacements = (
@@ -426,6 +450,8 @@ def apply_brand_corrections(text: str) -> str:
         (r"^\s*und\s+geben\s*$", "Hand geben"),
         (r"^\s*(?:Vater|Fahrer|Gear)\s*,?\s*(?:2\s*,?\s*0\s*,?\s*)?1\s*$", "Fahre zu Punkt 1"),
         (r"^\s*Gear\s+2\s+und\s+1\s*$", "Fahre zu Punkt 1"),
+        (r"^\s*Fahrer\s+Zoom\s+0\.?1\s*$", "Fahre zu Punkt 1"),
+        (r"^\s*Nach\s+uns\s*,?\s*eins\s*,?\s*gehen\.?!?\s*$", "nach Punkt eins gehen"),
         (r"\bFahrer\s+(?=zu|zum|zur|nach)\b", "Fahre "),
         (r"\bFehre\s+(?=zu|zum|zur|nach)\b", "Fahre "),
         (r"\bFähre\s+(?=zu|zum|zur|nach)\b", "Fahre "),
@@ -558,6 +584,8 @@ def main() -> int:
     args = parse_args()
     args.url = normalize_post_url(str(args.url))
     print(describe_post_url(str(args.url)), flush=True)
+    if bool(args.text_input):
+        return run_text_input(args)
     if args.list_devices:
         list_devices()
         return 0
