@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import queue
 import re
@@ -87,7 +88,41 @@ def parse_args() -> argparse.Namespace:
             args.max_record_seconds = 4.0
         if float(args.slice_seconds) == 0.25:
             args.slice_seconds = 0.15
+    _validate_args(args)
     return args
+
+
+def _validate_args(args: argparse.Namespace) -> None:
+    """Reject bad capture settings before importing audio/model backends."""
+    positive = (
+        ("chunk-seconds", args.chunk_seconds),
+        ("slice-seconds", args.slice_seconds),
+    )
+    non_negative = (
+        ("sample-rate", args.sample_rate),
+        ("min-rms", args.min_rms),
+        ("normalize-rms", args.normalize_rms),
+        ("max-record-seconds", args.max_record_seconds),
+    )
+    for label, raw in positive:
+        value = float(raw)
+        if not math.isfinite(value) or value <= 0.0:
+            raise SystemExit(f"--{label} must be a positive finite number")
+    for label, raw in non_negative:
+        value = float(raw)
+        if not math.isfinite(value) or value < 0.0:
+            raise SystemExit(f"--{label} must be a non-negative finite number")
+    if int(args.sample_rate) != float(args.sample_rate):
+        raise SystemExit("--sample-rate must be an integer")
+    gain = float(args.gain)
+    if not math.isfinite(gain) or gain <= 0.0:
+        raise SystemExit("--gain must be a positive finite number")
+    if int(args.beam_size) < 1:
+        raise SystemExit("--beam-size must be at least 1")
+    if not str(args.model).strip():
+        raise SystemExit("--model must not be empty")
+    if not str(args.language).strip():
+        raise SystemExit("--language must not be empty")
 
 
 def normalize_post_url(url: str) -> str:
@@ -109,8 +144,12 @@ def normalize_post_url(url: str) -> str:
             flush=True,
         )
     netloc = parsed.netloc
-    if parsed.port is None:
-        default_port = 8097 if path in {"/asr", "/command"} else 80
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise SystemExit(f"Invalid --url port: {url!r}") from exc
+    if port is None:
+        default_port = 8096 if path in {"/asr", "/command"} else 80
         netloc = f"{parsed.hostname}:{default_port}"
     normalized = urllib.parse.urlunparse((
         parsed.scheme or "http",
@@ -369,8 +408,11 @@ class VoskBackend:
         self.model = vosk.Model(str(model_dir))
 
     def transcribe(self, wav_path: Path) -> str:
-        rec = self.vosk.KaldiRecognizer(self.model, 16000)
         with wave.open(str(wav_path), "rb") as wf:
+            sample_rate = wf.getframerate()
+            if sample_rate <= 0:
+                raise RuntimeError(f"WAV file has invalid sample rate: {sample_rate}")
+            rec = self.vosk.KaldiRecognizer(self.model, sample_rate)
             while True:
                 data = wf.readframes(4000)
                 if not data:

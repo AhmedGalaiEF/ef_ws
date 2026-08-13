@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hmac
 import http.server
 import json
 import math
@@ -10,6 +11,7 @@ import re
 import string
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.error
@@ -103,6 +105,7 @@ NUMBER_WORDS = {
 NAV_REACHED_DISTANCE_M = 0.35
 NAV_TARGET_TIMEOUT_S = 120.0
 NAV_POLL_INTERVAL_S = 0.5
+MAX_EXTERNAL_ASR_BODY_BYTES = 64_000
 WORD_RE = re.compile(r"[\wäöüÄÖÜß]+", re.UNICODE)
 DEFAULT_SYSTEM_PROMPT = (
     "Du bist die Stimme eines Unitree G1 Humanoidroboters. Antworte auf Deutsch, "
@@ -817,12 +820,15 @@ class NavState:
                     try:
                         clean = clean_point_name(str(name))
                         if clean:
-                            points[clean] = PoseTarget(
+                            pose = PoseTarget(
                                 x=float(raw["x"]),
                                 y=float(raw["y"]),
                                 z=float(raw.get("z", 0.0)),
                                 yaw=float(raw.get("yaw", 0.0)),
                             )
+                            if not all(math.isfinite(value) for value in (pose.x, pose.y, pose.z, pose.yaw)):
+                                continue
+                            points[clean] = pose
                     except Exception:
                         continue
         return points
@@ -834,7 +840,29 @@ class NavState:
             "points": {name: pose.as_dict() for name, pose in sorted(self.points.items())},
         }
         self.points_file.parent.mkdir(parents=True, exist_ok=True)
-        self.points_file.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        data = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+        temporary: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=str(self.points_file.parent),
+                prefix=f".{self.points_file.name}.",
+                suffix=".tmp",
+                delete=False,
+            ) as handle:
+                temporary = Path(handle.name)
+                handle.write(data)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, self.points_file)
+            temporary = None
+        finally:
+            if temporary is not None:
+                try:
+                    temporary.unlink()
+                except OSError:
+                    pass
 
     def current_pose(self) -> PoseTarget | None:
         result = self._run_worker("pose")
@@ -1518,12 +1546,12 @@ class NavBotNode(Node):
                 if not token:
                     return True
                 auth = str(self.headers.get("Authorization", ""))
-                if auth == f"Bearer {token}":
+                if hmac.compare_digest(auth, f"Bearer {token}"):
                     return True
-                query = self.path.split("?", 1)[1] if "?" in self.path else ""
-                if f"token={token}" in query:
-                    return True
-                return bool(isinstance(payload, dict) and str(payload.get("token", "")) == token)
+                return bool(
+                    isinstance(payload, dict)
+                    and hmac.compare_digest(str(payload.get("token", "")), token)
+                )
 
             def do_OPTIONS(self) -> None:
                 self._send_json(200, {"ok": True})
@@ -1539,8 +1567,23 @@ class NavBotNode(Node):
                 if path not in {"/asr", "/command"}:
                     self._send_json(404, {"ok": False, "error": "not_found"})
                     return
-                length = int(self.headers.get("Content-Length", "0") or "0")
-                raw = self.rfile.read(min(length, 64_000)).decode("utf-8", errors="replace")
+                raw_length = self.headers.get("Content-Length")
+                try:
+                    length = int(raw_length) if raw_length is not None else -1
+                except ValueError:
+                    self._send_json(400, {"ok": False, "error": "invalid_content_length"})
+                    return
+                if length < 0:
+                    self._send_json(411, {"ok": False, "error": "content_length_required"})
+                    return
+                if length > MAX_EXTERNAL_ASR_BODY_BYTES:
+                    self._send_json(413, {"ok": False, "error": "request_too_large"})
+                    return
+                raw_bytes = self.rfile.read(length)
+                if len(raw_bytes) != length:
+                    self._send_json(400, {"ok": False, "error": "incomplete_request"})
+                    return
+                raw = raw_bytes.decode("utf-8", errors="replace")
                 payload: dict[str, Any] | None = None
                 text = raw
                 try:
