@@ -112,7 +112,8 @@ def _validate_args(args: argparse.Namespace) -> None:
         value = float(raw)
         if not math.isfinite(value) or value < 0.0:
             raise SystemExit(f"--{label} must be a non-negative finite number")
-    if int(args.sample_rate) != float(args.sample_rate):
+    sample_rate = float(args.sample_rate)
+    if not math.isfinite(sample_rate) or sample_rate < 0.0 or int(sample_rate) != sample_rate:
         raise SystemExit("--sample-rate must be an integer")
     gain = float(args.gain)
     if not math.isfinite(gain) or gain <= 0.0:
@@ -134,6 +135,8 @@ def normalize_post_url(url: str) -> str:
     parsed = urllib.parse.urlparse(text)
     if not parsed.hostname:
         raise SystemExit(f"Invalid --url: {url!r}")
+    if parsed.scheme.lower() not in {"http", "https"}:
+        raise SystemExit(f"--url must use http or https: {url!r}")
     path = parsed.path.rstrip("/")
     if not path:
         path = "/asr"

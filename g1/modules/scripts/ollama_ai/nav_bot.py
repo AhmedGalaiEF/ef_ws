@@ -878,6 +878,8 @@ class NavState:
                 )
             except Exception:
                 pose = None
+            if pose is not None and not all(math.isfinite(value) for value in (pose.x, pose.y, pose.z, pose.yaw)):
+                pose = None
         if pose is not None:
             self.last_valid_pose = pose
         return pose
@@ -1067,7 +1069,10 @@ class NavBotNode(Node):
     def on_audio(self, msg: String) -> None:
         payload = decode_payload(str(msg.data))
         text = compact_text(str(payload.get("text", payload.get("raw", ""))))
-        confidence = float(payload.get("confidence", 0.0) or 0.0)
+        try:
+            confidence = float(payload.get("confidence", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            confidence = float("nan")
         index = self._payload_index(payload)
         now = time.time()
         self.get_logger().info(f"audio heard text={text!r} confidence={confidence:.3f} index={index}")
@@ -1479,7 +1484,7 @@ class NavBotNode(Node):
         *,
         allow_name_fragment: bool = False,
     ) -> str | None:
-        if not text or confidence < float(self.args.min_confidence):
+        if not text or not math.isfinite(confidence) or confidence < float(self.args.min_confidence):
             return f"empty_or_low_confidence confidence={confidence:.3f}"
         normalized = normalize_text(text)
         if normalized in FILLERS and not allow_name_fragment:

@@ -20,6 +20,11 @@ def test_host_only_asr_url_uses_navbot_default_port() -> None:
     assert local_asr.normalize_post_url("http://robot:9000/command") == "http://robot:9000/command"
 
 
+def test_asr_url_rejects_non_http_schemes() -> None:
+    with pytest.raises(SystemExit, match="http or https"):
+        local_asr.normalize_post_url("ftp://robot/asr")
+
+
 def test_invalid_url_port_is_reported_as_system_exit() -> None:
     with pytest.raises(SystemExit, match="Invalid --url port"):
         local_asr.normalize_post_url("http://robot:99999/asr")
