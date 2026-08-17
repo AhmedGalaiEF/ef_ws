@@ -36,22 +36,36 @@ def _nonnegative_int(value: str) -> int:
     return parsed
 
 
+def _finite_float(value: Any) -> float | None:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if math.isfinite(parsed) else None
+
+
 def _yaw_cb(msg: Any) -> None:
     global last_imu_yaw
-    last_imu_yaw = float(msg.imu_state.rpy[2])
+    yaw = _finite_float(msg.imu_state.rpy[2])
+    if yaw is not None:
+        last_imu_yaw = yaw
 
 
 def _sport_cb(msg: Any) -> None:
     global last_sport_pos
-    last_sport_pos = [float(v) for v in msg.position]
+    position = [_finite_float(v) for v in msg.position]
+    if position and all(v is not None for v in position):
+        last_sport_pos = [float(v) for v in position]
 
 
 def _odom_cb(msg: Any) -> None:
     global last_odom_pos
-    last_odom_pos = [
-        float(msg.pose.pose.position.x),
-        float(msg.pose.pose.position.y),
+    position = [
+        _finite_float(msg.pose.pose.position.x),
+        _finite_float(msg.pose.pose.position.y),
     ]
+    if all(v is not None for v in position):
+        last_odom_pos = [float(v) for v in position]
 
 
 def _get_pose_xy() -> tuple[float, float] | None:

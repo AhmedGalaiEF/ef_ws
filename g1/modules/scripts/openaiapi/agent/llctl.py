@@ -263,6 +263,17 @@ class LlctlAdapter:
             return reason
         if not settings.llctl.allow_joint_control:
             return "llctl.allow_joint_control=false"
+        valid, validation = self.validate_joint_command(settings, joint=joint, q=q)
+        if not valid:
+            return validation
+        try:
+            drive_values = tuple(float(value) for value in (q, dq, kp, kd, tau, ramp_s))
+        except (TypeError, ValueError):
+            return "joint command values must be finite numbers"
+        if not all(math.isfinite(value) for value in drive_values):
+            return "joint command values must be finite numbers"
+        if not 0.0 <= drive_values[-1] <= 30.0:
+            return "joint ramp_s outside conservative [0, 30] second range"
         if not self.ensure_backend() or self._robot_link is None:
             return self.state.backend_error or "llctl backend unavailable"
         try:

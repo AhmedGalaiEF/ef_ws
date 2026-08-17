@@ -42,6 +42,18 @@ def test_llctl_rejects_non_finite_targets_without_raising(monkeypatch: pytest.Mo
     assert not ok and "finite" in reason
 
 
+def test_llctl_command_path_cannot_bypass_joint_validation(monkeypatch: pytest.MonkeyPatch) -> None:
+    adapter = LlctlAdapter()
+    adapter.state.session_enabled = True
+    adapter.state.last_activity_at = time.time()
+    monkeypatch.setattr(adapter, "ensure_backend", lambda: True)
+    adapter._robot_link = object()
+
+    result = adapter.command_joint(_settings(), joint="waist", q=math.nan)
+
+    assert "finite" in result
+
+
 def test_navigation_snapshot_marks_fresh_canonical_topics() -> None:
     class Backend:
         def status(self) -> str:

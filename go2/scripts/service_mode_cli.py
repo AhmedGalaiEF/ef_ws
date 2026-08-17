@@ -1,4 +1,5 @@
 import argparse
+import math
 import sys
 import time
 
@@ -14,6 +15,33 @@ DEFAULT_TOGGLE_DELAY = 0.5
 DEFAULT_RESTART_WAIT = 2.0
 TOPIC_LOWSTATE = "rt/lowstate"
 TOPIC_ODOM = "rt/odom"
+
+
+def _nonnegative_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be an integer") from exc
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("must be >= 0")
+    return parsed
+
+
+def _nonnegative_float(value: str) -> float:
+    try:
+        parsed = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a number") from exc
+    if not math.isfinite(parsed) or parsed < 0.0:
+        raise argparse.ArgumentTypeError("must be a finite value >= 0")
+    return parsed
+
+
+def _positive_float(value: str) -> float:
+    parsed = _nonnegative_float(value)
+    if parsed <= 0.0:
+        raise argparse.ArgumentTypeError("must be > 0")
+    return parsed
 
 
 def print_jsonish(label: str, value):
@@ -254,8 +282,8 @@ def build_parser():
         description="Inspect and control Unitree services and motion modes."
     )
     parser.add_argument("iface", nargs="?", default="enp1s0", help="Robot network interface")
-    parser.add_argument("--domain-id", type=int, default=0)
-    parser.add_argument("--settle", type=float, default=0.5, help="Seconds to wait for DDS state before printing")
+    parser.add_argument("--domain-id", type=_nonnegative_int, default=0)
+    parser.add_argument("--settle", type=_nonnegative_float, default=0.5, help="Seconds to wait for DDS state before printing")
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -265,14 +293,14 @@ def build_parser():
     p_service = subparsers.add_parser("service", help="Control a service")
     p_service.add_argument("action", choices=["list", "on", "off", "toggle", "restart"])
     p_service.add_argument("name", nargs="?", help="Service name")
-    p_service.add_argument("--toggle-delay", type=float, default=DEFAULT_TOGGLE_DELAY)
-    p_service.add_argument("--restart-wait", type=float, default=DEFAULT_RESTART_WAIT)
+    p_service.add_argument("--toggle-delay", type=_nonnegative_float, default=DEFAULT_TOGGLE_DELAY)
+    p_service.add_argument("--restart-wait", type=_nonnegative_float, default=DEFAULT_RESTART_WAIT)
     p_service.set_defaults(func=cmd_service)
 
     p_mode = subparsers.add_parser("mode", help="Control motion mode ownership")
     p_mode.add_argument("action", choices=["check", "release", "select"])
     p_mode.add_argument("name", nargs="?", help="Mode name for select")
-    p_mode.add_argument("--settle", type=float, default=1.0, help="Seconds to wait before re-checking mode")
+    p_mode.add_argument("--settle", type=_nonnegative_float, default=1.0, help="Seconds to wait before re-checking mode")
     p_mode.set_defaults(func=cmd_mode)
 
     p_avoid = subparsers.add_parser("avoid", help="Control obstacle avoidance")
@@ -280,7 +308,7 @@ def build_parser():
     p_avoid.set_defaults(func=cmd_avoid)
 
     p_watch = subparsers.add_parser("watch", help="Continuously print mode and service status")
-    p_watch.add_argument("--interval", type=float, default=1.0)
+    p_watch.add_argument("--interval", type=_positive_float, default=1.0)
     p_watch.set_defaults(func=cmd_watch)
 
     return parser

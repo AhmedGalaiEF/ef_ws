@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hmac
 import http.server
 import json
 import math
@@ -16,6 +17,8 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any, Optional
+
+MAX_EXTERNAL_ASR_BODY_BYTES = 64_000
 
 if "--dash-worker" not in sys.argv:
     import rclpy
@@ -1996,9 +1999,12 @@ class VoiceBridgeNode(Node):
                 if not token:
                     return True
                 auth = str(self.headers.get("Authorization", ""))
-                if auth == f"Bearer {token}":
-                    return True
-                return bool(isinstance(payload, dict) and str(payload.get("token", "")) == token)
+                candidates = []
+                if auth.startswith("Bearer "):
+                    candidates.append(auth[7:])
+                if isinstance(payload, dict):
+                    candidates.append(str(payload.get("token", "")))
+                return any(hmac.compare_digest(candidate, token) for candidate in candidates)
 
             def do_GET(self) -> None:
                 if self.path.split("?", 1)[0] == "/health":
@@ -2010,8 +2016,26 @@ class VoiceBridgeNode(Node):
                 if self.path.split("?", 1)[0] not in {"/asr", "/command"}:
                     self._send_json(404, {"ok": False, "error": "not_found"})
                     return
-                length = int(self.headers.get("Content-Length", "0") or "0")
-                raw = self.rfile.read(min(length, 64_000)).decode("utf-8", errors="replace")
+                length_header = self.headers.get("Content-Length")
+                if length_header is None:
+                    self._send_json(411, {"ok": False, "error": "content_length_required"})
+                    return
+                try:
+                    length = int(length_header)
+                except ValueError:
+                    self._send_json(400, {"ok": False, "error": "invalid_content_length"})
+                    return
+                if length < 0:
+                    self._send_json(400, {"ok": False, "error": "invalid_content_length"})
+                    return
+                if length > MAX_EXTERNAL_ASR_BODY_BYTES:
+                    self._send_json(413, {"ok": False, "error": "request_too_large"})
+                    return
+                body = self.rfile.read(length)
+                if len(body) != length:
+                    self._send_json(400, {"ok": False, "error": "incomplete_request"})
+                    return
+                raw = body.decode("utf-8", errors="replace")
                 payload: dict[str, Any] | None = None
                 text = raw
                 try:
