@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import time
 from typing import Any
 from dataclasses import dataclass
@@ -39,6 +40,26 @@ LOWER_BODY_HEIGHT = 0.16  # meters; adjust if too low for your robot
 BODYHEIGHT_API_ID = 1013
 
 
+def nonnegative_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be an integer") from exc
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("must be >= 0")
+    return parsed
+
+
+def positive_finite_float(value: str) -> float:
+    try:
+        parsed = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a number") from exc
+    if not math.isfinite(parsed) or parsed <= 0.0:
+        raise argparse.ArgumentTypeError("must be a finite value > 0")
+    return parsed
+
+
 def try_set_body_height(sport_client: Any, height: float) -> bool:
     # BodyHeight is not registered in the Go2 client, so register and call it.
     sport_client._RegistApi(BODYHEIGHT_API_ID, 0)
@@ -49,16 +70,16 @@ def try_set_body_height(sport_client: Any, height: float) -> bool:
     return True
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Interactive Go2 SportClient command runner.")
     parser.add_argument("legacy_iface", nargs="?", help=argparse.SUPPRESS)
     parser.add_argument("--iface", help="Robot network interface. Defaults to SDK auto-detect.")
-    parser.add_argument("--domain-id", type=int, default=0)
-    parser.add_argument("--timeout", type=float, default=10.0)
+    parser.add_argument("--domain-id", type=nonnegative_int, default=0)
+    parser.add_argument("--timeout", type=positive_finite_float, default=10.0)
     parser.add_argument("--yes", action="store_true", help="Confirm commands that can move the robot.")
     parser.add_argument("--list", action="store_true", help="List available commands and exit.")
     parser.add_argument("--once", help="Run one command by id or exact name, then exit.")
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def print_options() -> None:

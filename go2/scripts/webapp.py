@@ -1,3 +1,4 @@
+import math
 import json
 import threading
 import time
@@ -64,6 +65,16 @@ low_kd = [0.0] * 20
 low_gpio = 0x00
 bms_off = False
 crc = CRC()
+
+
+def _finite_float(value, default=0.0):
+    """Parse a command value without allowing NaN or infinity into DDS."""
+    if value is None or value == "":
+        return float(default)
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        raise ValueError("value must be finite")
+    return parsed
 
 
 def lowstate_cb(msg: LowState_):
@@ -484,17 +495,28 @@ class UiServer(BaseHTTPRequestHandler):
             return
         if path == "/api/low/set":
             params = urllib.parse.parse_qs(parsed.query)
-            idx = int(params.get("idx", ["-1"])[0])
+            try:
+                idx = int(params.get("idx", ["-1"])[0])
+            except (TypeError, ValueError):
+                self._send_json({"ok": False, "error": "bad idx"}, status=400)
+                return
             q = params.get("q", [None])[0]
             kp = params.get("kp", [None])[0]
             kd = params.get("kd", [None])[0]
             if 0 <= idx < 20:
-                if q is not None:
-                    low_q[idx] = float(q)
-                if kp is not None:
-                    low_kp[idx] = float(kp)
-                if kd is not None:
-                    low_kd[idx] = float(kd)
+                try:
+                    parsed_q = _finite_float(q) if q is not None else None
+                    parsed_kp = _finite_float(kp) if kp is not None else None
+                    parsed_kd = _finite_float(kd) if kd is not None else None
+                except (TypeError, ValueError) as exc:
+                    self._send_json({"ok": False, "error": str(exc)}, status=400)
+                    return
+                if parsed_q is not None:
+                    low_q[idx] = parsed_q
+                if parsed_kp is not None:
+                    low_kp[idx] = parsed_kp
+                if parsed_kd is not None:
+                    low_kd[idx] = parsed_kd
                 self._send_json({"ok": True})
             else:
                 self._send_json({"ok": False, "error": "bad idx"}, status=400)
@@ -503,11 +525,17 @@ class UiServer(BaseHTTPRequestHandler):
             params = urllib.parse.parse_qs(parsed.query)
             kp = params.get("kp", [None])[0]
             kd = params.get("kd", [None])[0]
+            try:
+                parsed_kp = _finite_float(kp) if kp is not None else None
+                parsed_kd = _finite_float(kd) if kd is not None else None
+            except (TypeError, ValueError) as exc:
+                self._send_json({"ok": False, "error": str(exc)}, status=400)
+                return
             for i in range(20):
-                if kp is not None:
-                    low_kp[i] = float(kp)
-                if kd is not None:
-                    low_kd[i] = float(kd)
+                if parsed_kp is not None:
+                    low_kp[i] = parsed_kp
+                if parsed_kd is not None:
+                    low_kd[i] = parsed_kd
             self._send_json({"ok": True})
             return
         if path == "/api/low/auto_charge":
@@ -583,14 +611,14 @@ def handle_command(name, height, vx, vy, vyaw):
         if name == "free_jump":
             return {"code": _toggle_action(sport_client.FreeJump, 4.0)}
         if name == "move":
-            fx = float(vx or 0.0)
-            fy = float(vy or 0.0)
-            fz = float(vyaw or 0.0)
+            fx = _finite_float(vx)
+            fy = _finite_float(vy)
+            fz = _finite_float(vyaw)
             return {"code": sport_client.Move(fx, fy, fz)}
         if name == "euler":
-            roll = float(vx or 0.0)
-            pitch = float(vy or 0.0)
-            yaw = float(vyaw or 0.0)
+            roll = _finite_float(vx)
+            pitch = _finite_float(vy)
+            yaw = _finite_float(vyaw)
             return {"code": sport_client.Euler(roll, pitch, yaw)}
         if name == "move_forward":
             return {"code": sport_client.Move(0.3, 0.0, 0.0)}
@@ -604,6 +632,8 @@ def handle_command(name, height, vx, vy, vyaw):
             return {"code": sport_client.RiseSit()}
         if name == "speed_level":
             level = int(vx)
+            if level not in {-1, 0, 1}:
+                raise ValueError("speed level must be -1, 0, or 1")
             return {"code": sport_client.SpeedLevel(level)}
         if name == "hello":
             return {"code": sport_client.Hello()}

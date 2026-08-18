@@ -289,6 +289,16 @@ def _normalize_angle(angle: float) -> float:
     return float(math.atan2(math.sin(float(angle)), math.cos(float(angle))))
 
 
+def _finite_number(value: Any, name: str) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a finite number") from exc
+    if not math.isfinite(parsed):
+        raise ValueError(f"{name} must be a finite number")
+    return parsed
+
+
 def _extract_imu_values(msg: Any) -> dict[str, Any]:
     if msg is None:
         return {"rpy": None, "gyro": None, "acc": None, "quat": None, "temp": None}
@@ -643,8 +653,15 @@ class SlamInfoSubscriber:
 class G1:
     def __init__(self, iface: str = "eth0", domain_id: int = 0, timeout: float = 10.0) -> None:
         self.iface = str(iface)
-        self.domain_id = int(domain_id)
-        self.timeout = float(timeout)
+        try:
+            self.domain_id = int(domain_id)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("domain_id must be an integer") from exc
+        if self.domain_id < 0:
+            raise ValueError("domain_id must be >= 0")
+        self.timeout = _finite_number(timeout, "timeout")
+        if self.timeout <= 0.0:
+            raise ValueError("timeout must be > 0")
 
         ChannelFactoryInitialize(self.domain_id, self.iface)
 
@@ -966,7 +983,11 @@ class G1:
         return self._status_code(self.loco_client.Sit()) if hasattr(self.loco_client, "Sit") else self.switch_fsm(2)
 
     def loco_move(self, vx: float, vy: float, vyaw: float) -> Any:
-        return self.loco_client.Move(float(vx), float(vy), float(vyaw), continous_move=True)
+        values = tuple(
+            _finite_number(value, name)
+            for value, name in ((vx, "vx"), (vy, "vy"), (vyaw, "vyaw"))
+        )
+        return self.loco_client.Move(*values, continous_move=True)
 
     def move_with_odom(
         self,
@@ -984,20 +1005,34 @@ class G1:
         timeout_s: float = 10.0,
         settle_s: float = 0.1,
     ) -> dict[str, Any]:
+        target_x = _finite_number(x, "x")
+        target_y = _finite_number(y, "y")
+        target_yaw = _finite_number(yaw, "yaw")
+        kp_xy = _finite_number(kp_xy, "kp_xy")
+        kp_yaw = _finite_number(kp_yaw, "kp_yaw")
+        max_vx = _finite_number(max_vx, "max_vx")
+        max_vy = _finite_number(max_vy, "max_vy")
+        max_vyaw = _finite_number(max_vyaw, "max_vyaw")
+        pos_tolerance = _finite_number(pos_tolerance, "pos_tolerance")
+        yaw_tolerance = _finite_number(yaw_tolerance, "yaw_tolerance")
+        timeout_s = _finite_number(timeout_s, "timeout_s")
+        settle_s = _finite_number(settle_s, "settle_s")
+        if any(value < 0.0 for value in (max_vx, max_vy, max_vyaw, pos_tolerance, yaw_tolerance, settle_s)):
+            raise ValueError("motion limits, tolerances, and settle_s must be >= 0")
+        if timeout_s <= 0.0:
+            raise ValueError("timeout_s must be > 0")
+
         start_pose = self.get_odomstate()
         if start_pose is None:
             raise RuntimeError("odommodestate/odom pose is unavailable.")
 
-        target_x = float(x)
-        target_y = float(y)
-        target_yaw = float(yaw)
         start_yaw = float(start_pose[2])
         start_cos = math.cos(start_yaw)
         start_sin = math.sin(start_yaw)
         target_world_x = float(start_pose[0]) + start_cos * target_x - start_sin * target_y
         target_world_y = float(start_pose[1]) + start_sin * target_x + start_cos * target_y
         target_world_yaw = _normalize_angle(start_yaw + target_yaw)
-        deadline = time.time() + max(0.1, float(timeout_s))
+        deadline = time.time() + max(0.1, timeout_s)
         final_error = {"x": None, "y": None, "yaw": None}
 
         try:
@@ -1066,9 +1101,12 @@ class G1:
         }
 
     def move_for(self, duration: float, vx: float = 0.0, vy: float = 0.0, vyaw: float = 0.0) -> Any:
+        duration = _finite_number(duration, "duration")
+        if duration < 0.0:
+            raise ValueError("duration must be >= 0")
         result = self.loco_move(vx, vy, vyaw)
         try:
-            time.sleep(float(duration))
+            time.sleep(duration)
         finally:
             self.stop()
         return result
