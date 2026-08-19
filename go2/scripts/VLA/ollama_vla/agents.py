@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import json
+import math
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional
 
-from .config import RuntimeConfig
+from .config import CONSERVATIVE_MOVE_LIMITS, RuntimeConfig
 from .ollama_client import OllamaChatClient, OllamaError
-from .video_source import Go2VideoSource, VideoFrame
+
+if TYPE_CHECKING:
+    from .video_source import Go2VideoSource, VideoFrame
 
 
 @dataclass
@@ -152,7 +155,7 @@ class PlannerAgent:
         raw["suggested_actions"] = [
             {
                 "name": "move",
-                "args": {"vx": 0.0, "vy": 0.0, "vyaw": 1.0},
+                "args": {"vx": 0.0, "vy": 0.0, "vyaw": 0.35},
                 "duration_sec": 1.0,
             }
         ]
@@ -177,10 +180,21 @@ class ActorAgent:
             return {"commands": [{"name": "stop_move", "args": {}, "duration_sec": 0.0}]}
 
         cleaned: List[Dict[str, Any]] = []
-        max_vx = float(self._runtime.allowed_actions["max_vx"])
-        max_vy = float(self._runtime.allowed_actions["max_vy"])
-        max_vyaw = float(self._runtime.allowed_actions["max_vyaw"])
-        max_duration = float(self._runtime.allowed_actions["max_duration_sec"])
+        max_vx = min(
+            _positive_limit(self._runtime.allowed_actions["max_vx"], "max_vx"),
+            CONSERVATIVE_MOVE_LIMITS[0],
+        )
+        max_vy = min(
+            _positive_limit(self._runtime.allowed_actions["max_vy"], "max_vy"),
+            CONSERVATIVE_MOVE_LIMITS[1],
+        )
+        max_vyaw = min(
+            _positive_limit(self._runtime.allowed_actions["max_vyaw"], "max_vyaw"),
+            CONSERVATIVE_MOVE_LIMITS[2],
+        )
+        max_duration = _positive_limit(
+            self._runtime.allowed_actions["max_duration_sec"], "max_duration_sec"
+        )
         planner_actions = planner_output.get("suggested_actions", [])
         allowed = {
             "damp",
@@ -211,24 +225,30 @@ class ActorAgent:
         }
 
         for command in commands[:2]:
+            if not isinstance(command, Mapping):
+                continue
             name = str(command.get("name", "stop_move"))
             if name not in allowed:
                 continue
             planner_command: Dict[str, Any] = {}
             if isinstance(planner_actions, list) and len(planner_actions) > len(cleaned):
                 maybe_command = planner_actions[len(cleaned)]
-                if isinstance(maybe_command, dict):
+                if isinstance(maybe_command, Mapping):
                     planner_command = maybe_command
-            args = dict(command.get("args", {}) or {})
-            duration_sec = max(0.0, min(float(command.get("duration_sec", 0.0) or 0.0), max_duration))
+            raw_args = command.get("args", {}) or {}
+            args = dict(raw_args) if isinstance(raw_args, Mapping) else {}
+            duration_sec = _clamp(command.get("duration_sec", 0.0), 0.0, max_duration)
             if name == "move":
-                planner_args = dict(planner_command.get("args", {}) or {})
+                raw_planner_args = planner_command.get("args", {}) or {}
+                planner_args = dict(raw_planner_args) if isinstance(raw_planner_args, Mapping) else {}
                 if str(planner_command.get("name", "")) == "move":
                     if planner_args:
                         args = planner_args
-                    planner_duration = float(planner_command.get("duration_sec", 0.0) or 0.0)
+                    planner_duration = _clamp(
+                        planner_command.get("duration_sec", 0.0), 0.0, max_duration
+                    )
                     if planner_duration > 0.0:
-                        duration_sec = min(planner_duration, max_duration)
+                        duration_sec = planner_duration
                 args = {
                     "vx": _clamp(args.get("vx", 0.0), -max_vx, max_vx),
                     "vy": _clamp(args.get("vy", 0.0), -max_vy, max_vy),
@@ -237,11 +257,11 @@ class ActorAgent:
                 if abs(args["vx"]) < 0.05 and abs(args["vy"]) < 0.05 and abs(args["vyaw"]) > 0.0:
                     args["vx"] = 0.0
                     args["vy"] = 0.0
-                    args["vyaw"] = 1.0 if args["vyaw"] > 0.0 else -1.0
+                    args["vyaw"] = min(0.35, max_vyaw) if args["vyaw"] > 0.0 else -min(0.35, max_vyaw)
                     if duration_sec < 1.0:
                         duration_sec = 1.0
                 elif abs(args["vx"]) < 0.05 and abs(args["vy"]) < 0.05 and abs(args["vyaw"]) < 0.05:
-                    args["vx"] = 0.5
+                    args["vx"] = min(0.2, max_vx)
                     args["vy"] = 0.0
                     args["vyaw"] = 0.0
                     if duration_sec < 1.0:
@@ -250,8 +270,13 @@ class ActorAgent:
                     duration_sec = 1.0
             else:
                 if name == "speed_level":
-                    level = int(command.get("args", {}).get("level", 1) or 1)
-                    args = {"level": max(0, min(level, 2))}
+                    raw_level = args.get("level", 1)
+                    try:
+                        numeric_level = float(raw_level)
+                    except (TypeError, ValueError):
+                        numeric_level = 1.0
+                    level = int(numeric_level) if math.isfinite(numeric_level) else 1
+                    args = {"level": max(-1, min(level, 1))}
                 else:
                     args = {}
                 duration_sec = 0.0
@@ -263,12 +288,27 @@ class ActorAgent:
 
 
 def _clamp(value: Any, low: float, high: float) -> float:
-    value = float(value)
-    if value < low:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    if not math.isfinite(parsed):
+        return 0.0
+    if parsed < low:
         return low
-    if value > high:
+    if parsed > high:
         return high
-    return value
+    return parsed
+
+
+def _positive_limit(value: Any, name: str) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a finite value > 0") from exc
+    if not math.isfinite(parsed) or parsed <= 0.0:
+        raise ValueError(f"{name} must be a finite value > 0")
+    return parsed
 
 
 @dataclass

@@ -4,7 +4,7 @@ import argparse
 import json
 import math
 import time
-from typing import Any
+from typing import Any, Callable
 from dataclasses import dataclass
 
 
@@ -38,6 +38,7 @@ option_list = [
 
 LOWER_BODY_HEIGHT = 0.16  # meters; adjust if too low for your robot
 BODYHEIGHT_API_ID = 1013
+DEFAULT_MOVE_DURATION_SEC = 1.0
 
 
 def nonnegative_int(value: str) -> int:
@@ -68,6 +69,30 @@ def try_set_body_height(sport_client: Any, height: float) -> bool:
         print(f"BodyHeight failed with code {code}; using normal height.")
         return False
     return True
+
+
+def run_timed_toggle(action: Callable[[bool], Any], duration: float) -> Any:
+    """Enable a mode briefly and always disable it, including on Ctrl-C."""
+    parsed_duration = positive_finite_float(str(duration))
+    try:
+        result = action(True)
+        print("ret:", result)
+        time.sleep(parsed_duration)
+        return result
+    finally:
+        print("ret:", action(False))
+
+
+def run_timed_move(sport_client: Any, vx: float, vy: float, vyaw: float, duration: float) -> Any:
+    """Run a bounded move and always send StopMove before returning."""
+    parsed_duration = positive_finite_float(str(duration))
+    try:
+        result = sport_client.Move(vx, vy, vyaw)
+        print("ret:", result)
+        time.sleep(parsed_duration)
+        return result
+    finally:
+        print("stop ret:", sport_client.StopMove())
 
 
 def parse_args(argv=None) -> argparse.Namespace:
@@ -104,17 +129,15 @@ def run_option(sport_client: Any, option: TestOption) -> None:
     elif option.id == 2:
         print("ret:", sport_client.StandDown())
     elif option.id == 3:
-        print("ret:", sport_client.Move(0.3, 0, 0))
+        run_timed_move(sport_client, 0.3, 0.0, 0.0, DEFAULT_MOVE_DURATION_SEC)
     elif option.id == 4:
-        print("ret:", sport_client.Move(0, 0.3, 0))
+        run_timed_move(sport_client, 0.0, 0.3, 0.0, DEFAULT_MOVE_DURATION_SEC)
     elif option.id == 5:
-        print("ret:", sport_client.Move(0, 0, 0.5))
+        run_timed_move(sport_client, 0.0, 0.0, 0.5, DEFAULT_MOVE_DURATION_SEC)
     elif option.id == 6:
         print("ret:", sport_client.StopMove())
     elif option.id == 7:
-        print("ret:", sport_client.HandStand(True))
-        time.sleep(4)
-        print("ret:", sport_client.HandStand(False))
+        run_timed_toggle(sport_client.HandStand, 4.0)
     elif option.id == 9:
         print("ret:", sport_client.BalanceStand())
     elif option.id == 10:
@@ -126,31 +149,21 @@ def run_option(sport_client: Any, option: TestOption) -> None:
     elif option.id == 13:
         print("ret:", sport_client.FreeWalk())
     elif option.id == 14:
-        print("ret:", sport_client.FreeBound(True))
-        time.sleep(2)
-        print("ret:", sport_client.FreeBound(False))
+        run_timed_toggle(sport_client.FreeBound, 2.0)
     elif option.id == 15:
-        print("ret:", sport_client.FreeAvoid(True))
-        time.sleep(2)
-        print("ret:", sport_client.FreeAvoid(False))
+        run_timed_toggle(sport_client.FreeAvoid, 2.0)
     elif option.id == 17:
-        print("ret:", sport_client.WalkUpright(True))
-        time.sleep(4)
-        print("ret:", sport_client.WalkUpright(False))
+        run_timed_toggle(sport_client.WalkUpright, 4.0)
     elif option.id == 18:
-        print("ret:", sport_client.CrossStep(True))
-        time.sleep(4)
-        print("ret:", sport_client.CrossStep(False))
+        run_timed_toggle(sport_client.CrossStep, 4.0)
     elif option.id == 19:
-        print("ret:", sport_client.FreeJump(True))
-        time.sleep(4)
-        print("ret:", sport_client.FreeJump(False))
+        run_timed_toggle(sport_client.FreeJump, 4.0)
     elif option.id == 20:
         try_set_body_height(sport_client, LOWER_BODY_HEIGHT)
         print("ret:", sport_client.BalanceStand())
     elif option.id == 21:
         try_set_body_height(sport_client, LOWER_BODY_HEIGHT)
-        print("ret:", sport_client.Move(0.3, 0, 0))
+        run_timed_move(sport_client, 0.3, 0.0, 0.0, DEFAULT_MOVE_DURATION_SEC)
 
 
 def main() -> int:

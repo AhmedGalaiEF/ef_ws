@@ -4,6 +4,9 @@ from dataclasses import dataclass, field
 from typing import Dict
 
 
+CONSERVATIVE_MOVE_LIMITS = (0.35, 0.20, 0.60)
+
+
 DEFAULT_PERCEPTION_SYSTEM_PROMPT = """
 You are the perception agent for a quadruped robot.
 You receive one RGB image and a task-specific prompt from the planner.
@@ -47,7 +50,7 @@ Planning rules:
 - Before a stop sign is detected, do not command forward or lateral translation. Use only:
   - `move` with `vx=0`, `vy=0`, non-zero `vyaw`, or
   - `stop_move`
-- For the default search turn, use `vyaw` around 1 degree per second and `duration_sec` around 1.0 second.
+- For the default search turn, use `vyaw` around 0.35 rad/s and `duration_sec` around 1.0 second.
 - After each search turn, ask the perception agent to look specifically for a stop sign and describe where it appears relative to the robot.
 - Keep issuing rotational scan moves until one of these becomes true:
   - a stop sign is detected
@@ -55,7 +58,7 @@ Planning rules:
   - perception is too uncertain to continue
 - If a stop sign is detected, prefer `stop_move`.
 - Only consider forward motion after a stop sign has already been found and the scene is clearly safe.
-- If forward motion is truly needed and clearly safe, prefer deliberate motion such as `vx` near 0.5 m/s for about 1.0 second instead of tiny nudges.
+- If forward motion is truly needed and clearly safe, prefer deliberate motion such as `vx` near 0.3 m/s for about 1.0 second instead of tiny nudges.
 - Do not invent goals other than finding and stopping at the stop sign.
 
 Allowed action names:
@@ -95,7 +98,7 @@ For move, use:
 For speed_level, use:
 {
   "name": "speed_level",
-  "args": {"level": 0 | 1 | 2},
+  "args": {"level": -1 | 0 | 1},
   "duration_sec": 0.0
 }
 
@@ -179,9 +182,9 @@ class RuntimeConfig:
     )
     allowed_actions: Dict[str, float] = field(
         default_factory=lambda: {
-            "max_vx": 0.5,
-            "max_vy": 0.3,
-            "max_vyaw": 10.0,
+            "max_vx": CONSERVATIVE_MOVE_LIMITS[0],
+            "max_vy": CONSERVATIVE_MOVE_LIMITS[1],
+            "max_vyaw": CONSERVATIVE_MOVE_LIMITS[2],
             "max_duration_sec": 4.0,
         }
     )
