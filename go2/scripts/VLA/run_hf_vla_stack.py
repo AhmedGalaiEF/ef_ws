@@ -8,6 +8,7 @@ import threading
 import time
 
 from hf_vla.config import RuntimeConfig
+from cli_validation import positive_finite_float
 from hf_vla.hf_client import (
     DryRunHuggingFaceChatClient,
     FallbackHuggingFaceChatClient,
@@ -35,8 +36,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--hf-api-url", default="https://router.huggingface.co/v1/chat/completions")
     parser.add_argument("--hf-token", default="")
     parser.add_argument("--model", default="Qwen/Qwen2.5-VL-3B-Instruct")
-    parser.add_argument("--perception-period", type=float, default=3.0)
-    parser.add_argument("--planner-period", type=float, default=4.0)
+    parser.add_argument("--perception-period", type=positive_finite_float, default=3.0)
+    parser.add_argument("--planner-period", type=positive_finite_float, default=4.0)
     parser.add_argument("--dry-run", action="store_true", default=False)
     parser.add_argument(
         "--mock-hf",

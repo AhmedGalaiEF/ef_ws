@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import math
 
 import pytest
@@ -7,6 +8,8 @@ import pytest
 from go2.scripts.VLA.ollama_vla import sport_actor
 from go2.scripts.VLA.ollama_vla.agents import ActorAgent
 from go2.scripts.VLA.ollama_vla.config import RuntimeConfig
+from go2.scripts.VLA.cli_validation import positive_finite_float, positive_int
+from go2.scripts.VLA.intent_summary import summarize_commands
 
 
 def _dry_executor(monkeypatch: pytest.MonkeyPatch) -> sport_actor.SportCommandExecutor:
@@ -116,6 +119,25 @@ def test_command_batch_is_validated_before_execution(monkeypatch: pytest.MonkeyP
             ]
         )
     assert calls == []
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "nan", "inf", "-inf"])
+def test_vla_cli_float_validator_rejects_invalid_periods(value: str) -> None:
+    with pytest.raises(argparse.ArgumentTypeError):
+        positive_finite_float(value)
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "nan"])
+def test_vla_cli_int_validator_rejects_invalid_prediction_counts(value: str) -> None:
+    with pytest.raises(argparse.ArgumentTypeError):
+        positive_int(value)
+
+
+def test_intent_summary_survives_malformed_model_numbers() -> None:
+    summary = summarize_commands(
+        [{"name": "move", "args": {"vx": "nan", "vy": "not-a-number", "vyaw": "inf"}}]
+    )
+    assert summary == "make a small adjustment in place"
 
 
 def test_actor_output_matches_executor_motion_limits(monkeypatch: pytest.MonkeyPatch) -> None:

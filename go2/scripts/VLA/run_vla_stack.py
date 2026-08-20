@@ -8,6 +8,7 @@ import threading
 import time
 
 from intent_summary import build_intent_statement
+from cli_validation import positive_finite_float, positive_int
 from local_speech import LocalSpeechAnnouncer
 from ollama_vla.agents import (
     ActorAgent,
@@ -38,12 +39,12 @@ def parse_args() -> argparse.Namespace:
         default="",
         help="Optional vision-capable Ollama model for perception. Defaults to --model.",
     )
-    parser.add_argument("--request-timeout-sec", type=float, default=90.0)
-    parser.add_argument("--text-num-predict", type=int, default=96)
-    parser.add_argument("--vision-num-predict", type=int, default=160)
+    parser.add_argument("--request-timeout-sec", type=positive_finite_float, default=90.0)
+    parser.add_argument("--text-num-predict", type=positive_int, default=96)
+    parser.add_argument("--vision-num-predict", type=positive_int, default=160)
     parser.add_argument("--keep-alive", default="10m")
-    parser.add_argument("--perception-period", type=float, default=3.0)
-    parser.add_argument("--planner-period", type=float, default=4.0)
+    parser.add_argument("--perception-period", type=positive_finite_float, default=3.0)
+    parser.add_argument("--planner-period", type=positive_finite_float, default=4.0)
     parser.add_argument("--dry-run", action="store_true", default=False)
     parser.add_argument(
         "--mock-ollama",

@@ -1,6 +1,22 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List
+import math
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if math.isfinite(parsed) else default
+
+
+def _safe_int(value: Any, default: int = 1) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def build_intent_statement(
@@ -69,7 +85,7 @@ def summarize_commands(commands: List[Dict[str, Any]]) -> str:
         elif name == "switch_avoid_mode":
             phrases.append("switch avoid mode")
         elif name == "speed_level":
-            phrases.append(f"set speed level to {int(args.get('level', 1) or 1)}")
+            phrases.append(f"set speed level to {_safe_int(args.get('level', 1) or 1)}")
         elif name == "damp":
             phrases.append("enter damp mode")
         elif name == "free_walk":
@@ -87,9 +103,9 @@ def summarize_commands(commands: List[Dict[str, Any]]) -> str:
 
 
 def _summarize_move(args: Dict[str, Any]) -> str:
-    vx = float(args.get("vx", 0.0) or 0.0)
-    vy = float(args.get("vy", 0.0) or 0.0)
-    vyaw = float(args.get("vyaw", 0.0) or 0.0)
+    vx = _safe_float(args.get("vx", 0.0) or 0.0)
+    vy = _safe_float(args.get("vy", 0.0) or 0.0)
+    vyaw = _safe_float(args.get("vyaw", 0.0) or 0.0)
 
     parts = []
     if abs(vx) >= 0.05:
