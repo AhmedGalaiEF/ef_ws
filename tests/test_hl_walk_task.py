@@ -7,6 +7,7 @@ import pytest
 
 import go2.scripts.hl_walk_task as hl_walk_task
 import go2.scripts.hl_walk_wave_task as hl_walk_wave_task
+from go2.scripts import hl_motion_helpers
 
 
 class FakeClient:
@@ -66,3 +67,10 @@ def test_wave_sensor_callbacks_ignore_non_finite_samples(monkeypatch: pytest.Mon
     monkeypatch.setattr(hl_walk_wave_task, "last_sport_pos", [1.0, 2.0])
     hl_walk_wave_task._sport_cb(SimpleNamespace(position=[1.0, float("nan")]))
     assert hl_walk_wave_task.last_sport_pos == [1.0, 2.0]
+
+
+def test_motion_helpers_reject_non_finite_timing_and_targets() -> None:
+    with pytest.raises(ValueError, match="finite"):
+        hl_motion_helpers.wrap_angle(float("nan"))
+    with pytest.raises(ValueError, match="finite"):
+        hl_motion_helpers.wait_for_pose(lambda: False, float("inf"))

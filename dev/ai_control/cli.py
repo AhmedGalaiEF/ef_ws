@@ -27,11 +27,21 @@ Type 'scenario' to paste a multi-step scenario; finish with 'end scenario' or '.
 """
 
 
+def _domain_id(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("domain id must be an integer") from exc
+    if not 0 <= parsed <= 232:
+        raise argparse.ArgumentTypeError("domain id must be between 0 and 232")
+    return parsed
+
+
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--robot", action="store_true", help="Connect to a real G1 via sdk_lib instead of the mock backend.")
     parser.add_argument("--iface", default=AIConfig.iface, help="Network interface for the real robot connection.")
-    parser.add_argument("--domain-id", type=int, default=AIConfig.domain_id, help="DDS domain id for the real robot connection.")
+    parser.add_argument("--domain-id", type=_domain_id, default=AIConfig.domain_id, help="DDS domain id for the real robot connection.")
     parser.add_argument("--host", default=AIConfig.ollama_host, help="Ollama server base URL.")
     parser.add_argument("--router-model", default=AIConfig.router_model)
     parser.add_argument("--thinker-model", default=AIConfig.thinker_model)

@@ -1541,6 +1541,7 @@ document.getElementById('b-auto').addEventListener('click', function() {
 # ── HTTP handler ──────────────────────────────────────────────────────────────
 
 _app = AppState()
+MAX_REQUEST_BODY_BYTES = 64 * 1024
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -1569,8 +1570,33 @@ class _Handler(BaseHTTPRequestHandler):
             self.send_error(404)
 
     def do_POST(self):
-        n    = int(self.headers.get('Content-Length', 0))
-        body = json.loads(self.rfile.read(n)) if n else {}
+        length_header = self.headers.get('Content-Length')
+        if length_header is None:
+            self.send_error(411, 'Content-Length is required')
+            return
+        try:
+            n = int(length_header)
+        except ValueError:
+            self.send_error(400, 'Invalid Content-Length')
+            return
+        if n < 0:
+            self.send_error(400, 'Invalid Content-Length')
+            return
+        if n > MAX_REQUEST_BODY_BYTES:
+            self.send_error(413, 'Request body too large')
+            return
+        raw = self.rfile.read(n)
+        if len(raw) != n:
+            self.send_error(400, 'Incomplete request body')
+            return
+        try:
+            body = json.loads(raw) if raw else {}
+        except (TypeError, ValueError):
+            self.send_error(400, 'Request body must be valid JSON')
+            return
+        if not isinstance(body, dict):
+            self.send_error(400, 'Request body must be a JSON object')
+            return
         if self.path == '/set_pose':
             _app.set_pose(body.get('pos', [0, 0, 0.28]),
                           body.get('rpy', [0, 0, 0]))

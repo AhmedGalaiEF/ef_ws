@@ -15,6 +15,7 @@ if str(OPENAIAPI_ROOT) not in sys.path:
 
 from agent.llctl import LlctlAdapter  # noqa: E402
 from agent.navigation import NavigationAdapter  # noqa: E402
+from agent.slam import SlamBackend  # noqa: E402
 
 
 def _settings(*, joint: bool = True, ik: bool = True) -> SimpleNamespace:
@@ -67,3 +68,19 @@ def test_navigation_snapshot_marks_fresh_canonical_topics() -> None:
     assert snapshot["navigation"] == "active"
     assert snapshot["topics"]["/lowstate"]["alive"] is True
     assert snapshot["current_pose"] == "x=1.00 y=2.00 yaw=0.50"
+
+
+def test_slam_points_ignore_non_finite_values_and_save_atomically(tmp_path) -> None:
+    backend = SlamBackend(points_file=str(tmp_path / "points.json"))
+    backend._save_points(
+        {
+            "dock": {"x": 1.0, "y": 2.0, "z": 0.0, "yaw": 0.5},
+        }
+    )
+    assert backend._load_points()["dock"]["x"] == 1.0
+
+    backend.points_file.write_text(
+        '{"points":{"bad":{"x": "nan", "y": 0, "z": 0, "yaw": 0}}}',
+        encoding="utf-8",
+    )
+    assert backend._load_points() == {}

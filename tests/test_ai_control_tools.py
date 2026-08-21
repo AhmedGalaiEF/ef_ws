@@ -12,6 +12,7 @@ if str(DEV_DIR) not in sys.path:
     sys.path.insert(0, str(DEV_DIR))
 
 from ai_control import ollama_client, tools  # noqa: E402
+from ai_control.cli import _parse_args  # noqa: E402
 from ai_control.config import AIConfig  # noqa: E402
 
 
@@ -89,6 +90,12 @@ def test_config_rejects_invalid_runtime_values() -> None:
 def test_config_strips_host_trailing_slash() -> None:
     config = AIConfig(ollama_host="http://localhost:11434/")
     assert config.ollama_host == "http://localhost:11434"
+
+
+def test_cli_rejects_invalid_dds_domain_ids() -> None:
+    assert _parse_args(["--domain-id", "232"]).domain_id == 232
+    with pytest.raises(SystemExit):
+        _parse_args(["--domain-id", "233"])
 
 
 def test_json_extraction_handles_prose_and_nested_braces() -> None:

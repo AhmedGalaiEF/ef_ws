@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import sys
+import tempfile
 import time
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -217,12 +219,14 @@ class SlamBackend:
                 try:
                     clean = self._clean_point_name(str(name))
                     if clean:
-                        points[clean] = {
+                        point = {
                             "x": float(raw["x"]),
                             "y": float(raw["y"]),
                             "z": float(raw.get("z", 0.0)),
                             "yaw": float(raw.get("yaw", 0.0)),
                         }
+                        if all(math.isfinite(value) for value in point.values()):
+                            points[clean] = point
                 except Exception:
                     continue
         return points
@@ -234,10 +238,24 @@ class SlamBackend:
             "points": dict(sorted(points.items())),
         }
         self.points_file.parent.mkdir(parents=True, exist_ok=True)
-        self.points_file.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
+        fd, temporary_name = tempfile.mkstemp(
+            prefix=f".{self.points_file.name}.",
+            suffix=".tmp",
+            dir=str(self.points_file.parent),
         )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(payload, handle, ensure_ascii=False, indent=2, sort_keys=True)
+                handle.write("\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary_name, self.points_file)
+        except Exception:
+            try:
+                os.unlink(temporary_name)
+            except FileNotFoundError:
+                pass
+            raise
 
     def _find_point(self, requested_name: str) -> tuple[str | None, dict[str, float] | None, float]:
         wanted = self._clean_point_name(requested_name)
