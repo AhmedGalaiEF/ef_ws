@@ -1,3 +1,4 @@
+import argparse
 import json
 import math
 import os
@@ -27,6 +28,40 @@ TOPIC_SPORTSTATE = "rt/sportmodestate"
 HOST = "0.0.0.0"
 PORT = 8020
 INTERFACE = "enp2s0"
+
+
+def _finite_float(value: str) -> float:
+    try:
+        parsed = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a number") from exc
+    if not math.isfinite(parsed):
+        raise argparse.ArgumentTypeError("must be finite")
+    return parsed
+
+
+def _positive_float(value: str) -> float:
+    parsed = _finite_float(value)
+    if parsed <= 0.0:
+        raise argparse.ArgumentTypeError("must be > 0")
+    return parsed
+
+
+def _positive_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be an integer") from exc
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be > 0")
+    return parsed
+
+
+def _port(value: str) -> int:
+    parsed = _positive_int(value)
+    if parsed > 65_535:
+        raise argparse.ArgumentTypeError("must be between 1 and 65535")
+    return parsed
 
 state_lock = threading.Lock()
 last_lidar_state = None
@@ -866,31 +901,34 @@ def slam_loop():
 
 
 if __name__ == "__main__":
-    import argparse
-
     parser = argparse.ArgumentParser()
     parser.add_argument("--iface", default=INTERFACE)
-    parser.add_argument("--port", type=int, default=PORT)
+    parser.add_argument("--port", type=_port, default=PORT)
     parser.add_argument("--lidar-state-topic", default=TOPIC_LIDAR_STATE)
     parser.add_argument("--lidar-points-topic", default=TOPIC_LIDAR_POINTS)
     parser.add_argument("--odom-topic", default=TOPIC_ODOM)
     parser.add_argument("--sportstate-topic", default=TOPIC_SPORTSTATE)
-    parser.add_argument("--map-resolution", type=float, default=0.05)
-    parser.add_argument("--map-width-m", type=float, default=12.0)
-    parser.add_argument("--map-height-m", type=float, default=12.0)
-    parser.add_argument("--map-max-range", type=float, default=8.0)
-    parser.add_argument("--map-min-range", type=float, default=0.6)
-    parser.add_argument("--map-z-min", type=float, default=-0.2)
-    parser.add_argument("--map-z-max", type=float, default=0.7)
-    parser.add_argument("--map-max-points", type=int, default=1200)
-    parser.add_argument("--map-voxel-size", type=float, default=0.08)
-    parser.add_argument("--map-decay-sec", type=float, default=8.0)
-    parser.add_argument("--icp-max-error", type=float, default=0.6)
-    parser.add_argument("--loop-dist", type=float, default=1.0)
-    parser.add_argument("--loop-max-error", type=float, default=0.5)
-    parser.add_argument("--max-keyframes", type=int, default=20)
-    parser.add_argument("--keyframe-dist", type=float, default=0.6)
+    parser.add_argument("--map-resolution", type=_positive_float, default=0.05)
+    parser.add_argument("--map-width-m", type=_positive_float, default=12.0)
+    parser.add_argument("--map-height-m", type=_positive_float, default=12.0)
+    parser.add_argument("--map-max-range", type=_positive_float, default=8.0)
+    parser.add_argument("--map-min-range", type=_positive_float, default=0.6)
+    parser.add_argument("--map-z-min", type=_finite_float, default=-0.2)
+    parser.add_argument("--map-z-max", type=_finite_float, default=0.7)
+    parser.add_argument("--map-max-points", type=_positive_int, default=1200)
+    parser.add_argument("--map-voxel-size", type=_positive_float, default=0.08)
+    parser.add_argument("--map-decay-sec", type=_positive_float, default=8.0)
+    parser.add_argument("--icp-max-error", type=_positive_float, default=0.6)
+    parser.add_argument("--loop-dist", type=_positive_float, default=1.0)
+    parser.add_argument("--loop-max-error", type=_positive_float, default=0.5)
+    parser.add_argument("--max-keyframes", type=_positive_int, default=20)
+    parser.add_argument("--keyframe-dist", type=_positive_float, default=0.6)
     args = parser.parse_args()
+
+    if args.map_min_range >= args.map_max_range:
+        parser.error("--map-min-range must be smaller than --map-max-range")
+    if args.map_z_min >= args.map_z_max:
+        parser.error("--map-z-min must be smaller than --map-z-max")
 
     INTERFACE = args.iface
     TOPIC_LIDAR_STATE = args.lidar_state_topic

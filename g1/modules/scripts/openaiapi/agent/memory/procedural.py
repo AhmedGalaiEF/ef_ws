@@ -18,6 +18,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from . import atomic_write_json
+
 DEFAULT_PROCEDURAL_PATH = Path(
     os.environ.get("G1_AGENT_PROCEDURAL", "~/.g1_agent/procedural.json")
 ).expanduser()
@@ -45,8 +47,7 @@ class ProceduralStore:
             return []
 
     def _save_raw(self, items: list[dict[str, Any]]) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps(items, indent=2, sort_keys=True), encoding="utf-8")
+        atomic_write_json(self.path, items)
 
     def all(self) -> list[ProceduralAdaptation]:
         return [ProceduralAdaptation(**item) for item in self._load_raw()]

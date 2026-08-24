@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import atexit
 import curses
+import math
 import os
 import sys
 import threading
@@ -278,7 +279,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="G1 persistent cognitive agent CLI (Phase 1).")
     parser.add_argument("--robot", action="store_true", help="connect to a live robot (requires the Unitree SDK2 stack + DDS)")
     parser.add_argument("--iface", default="eth0")
-    parser.add_argument("--domain-id", type=int, default=0)
+    parser.add_argument("--domain-id", type=_domain_id, default=0)
     parser.add_argument("--openai", action="store_true", help="use OpenAIPlanner (requires OPENAI_API_KEY)")
     parser.add_argument("--model", default=OpenAIPlanner.DEFAULT_MODEL)
     parser.add_argument(
@@ -289,7 +290,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--tick-interval",
-        type=float,
+        type=_positive_finite_float,
         default=30.0,
         help="seconds between periodic cognitive ticks while the REPL is idle",
     )
@@ -299,6 +300,26 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="disable background periodic cognition",
     )
     return parser
+
+
+def _domain_id(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("domain id must be an integer") from exc
+    if not 0 <= parsed <= 232:
+        raise argparse.ArgumentTypeError("domain id must be between 0 and 232")
+    return parsed
+
+
+def _positive_finite_float(value: str) -> float:
+    try:
+        parsed = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a number") from exc
+    if not math.isfinite(parsed) or parsed <= 0.0:
+        raise argparse.ArgumentTypeError("must be a finite value > 0")
+    return parsed
 
 
 def build_agent(args: argparse.Namespace) -> G1Agent:

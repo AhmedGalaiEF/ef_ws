@@ -15,6 +15,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from . import atomic_write_json
+
 DEFAULT_SEMANTIC_PATH = Path(
     os.environ.get("G1_AGENT_SEMANTIC", "~/.g1_agent/semantic.json")
 ).expanduser()
@@ -40,8 +42,7 @@ class SemanticStore:
             return []
 
     def _save_raw(self, items: list[dict[str, Any]]) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps(items, indent=2, sort_keys=True), encoding="utf-8")
+        atomic_write_json(self.path, items)
 
     def all(self) -> list[SemanticClaim]:
         return [SemanticClaim(**item) for item in self._load_raw()]
