@@ -1,0 +1,38 @@
+# Academy Notebook Coverage TODOs
+
+The course now has five participant notebooks and five solution notebooks. They teach native Unitree SDK clients, DDS publishers/subscribers, message types, callbacks, service calls, and ROS 2 nodes directly. util.py is intentionally limited to Piper boilerplate, documented mappings, and supplied perception/IK integration points.
+
+## Remaining direct-SDK learning material
+
+- Add a complete direct example for the lowcmd publisher lifecycle: message construction, CRC, state freshness, controller ownership, ramping, and safe release.
+- Add a direct occupancy-grid subscriber once the deployed topic and message type are confirmed.
+- Add a reusable, taught freshness policy for every subscriber callback, including what each operation must do with stale data.
+- Add a direct RobotStateClient service-list/service-switch exercise that is tested against the target SDK version.
+- Add a documented, vendor-supported squat operation only if the deployed SDK exposes one. Do not map an undocumented FSM ID.
+- Improve the native non-continuous locomotion example with closed-loop arrival/error monitoring.
+
+## Remaining SLAM material
+
+- Confirm the deployed native complete-path SLAM API and replace the current deliberate navigate_path limitation with that verified method.
+- Add a complete direct relocate/save-map/named-point example using the exact sdk_slam version installed on the robot.
+- Implement a real external map-artifact capture and view_map workflow.
+
+## Remaining manipulation material
+
+- Add an approved direct lowcmd arm lesson that uses a named exercise configuration rather than an instructor-filled joint/gain placeholder.
+- Add a direct graceful hand-open implementation alongside the completed gradual close example.
+- Record unloaded tactile baselines and approved grasp thresholds for each installed Dex3 hand and object class.
+- Add teach/repeat only when the selected arm backend exposes it.
+
+## Remaining provided-pipeline integration
+
+- Document the exact import/function contracts for the academy-provided OpenAI perception, ArUco, wrist-palm offset, pose-estimation, and IK modules.
+- Connect those modules to a hardware-tested delivery demonstration.
+- Add a concrete rt/audio_msg-to-ASR adapter and a configured OpenAI chat client.
+
+## Remaining deployment/ROS material
+
+- Test the CycloneDDS, Unitree SDK, Wi-Fi, dashboard, and RealSense scripts on the intended Jetson image; they remain examples, not a verified deployment runbook.
+- Add dashboard_service and rgbd_server_service systemd units, status checks, recovery guidance, and Jetson ROS 2 Foxy compatibility notes.
+- Add a completed academy_topic_demo ROS 2 package with setup.py entry point, launch/test instructions, and a dedicated non-safety-critical topic.
+- Keep publisher-ownership rules documented: demos must never publish to rt/lowcmd or Dex3 command topics.
