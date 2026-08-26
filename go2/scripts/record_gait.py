@@ -1,6 +1,7 @@
 import argparse
 import curses
 import json
+import math
 import os
 import struct
 import sys
@@ -30,6 +31,8 @@ def age_text(ts: float) -> str:
 
 
 def decode_buttons(data):
+    if len(data) < 4:
+        raise ValueError("wireless remote payload must contain at least 4 bytes")
     data1 = int(data[2])
     data2 = int(data[3])
     return {
@@ -54,6 +57,8 @@ def decode_buttons(data):
 
 def decode_remote(data):
     raw = bytes(data)
+    if len(raw) < 24:
+        raise ValueError("wireless remote payload must contain at least 24 bytes")
     return {
         "lx": struct.unpack("<f", raw[4:8])[0],
         "rx": struct.unpack("<f", raw[8:12])[0],
@@ -68,6 +73,8 @@ def derive_command_features(remote):
     forward = float(remote["ly"])
     lateral = float(remote["lx"])
     turn = float(remote["rx"])
+    if not all(math.isfinite(value) for value in (forward, lateral, turn)):
+        raise ValueError("wireless remote axes must be finite")
 
     abs_values = {
         "forward": abs(forward),
@@ -136,6 +143,7 @@ class RecorderState:
     last_sample_time: float = 0.0
     recorded_samples: int = 0
     dropped_writes: int = 0
+    invalid_samples: int = 0
     recording: bool = False
     output_path: str = ""
     capture_filter: str = "all"
@@ -182,13 +190,19 @@ class GaitRecorder:
                 "recording": self.state.recording,
                 "recorded_samples": self.state.recorded_samples,
                 "dropped_writes": self.state.dropped_writes,
+                "invalid_samples": self.state.invalid_samples,
                 "output_path": self.state.output_path,
                 "capture_filter": self.state.capture_filter,
             }
 
     def _low_state_handler(self, msg: LowState_):
-        sample = build_sample(msg)
-        line = json.dumps(sample, separators=(",", ":"))
+        try:
+            sample = build_sample(msg)
+            line = json.dumps(sample, separators=(",", ":"), allow_nan=False)
+        except (AttributeError, IndexError, OverflowError, TypeError, ValueError, struct.error):
+            with self.lock:
+                self.state.invalid_samples += 1
+            return
         with self.lock:
             self.state.last_sample = sample
             self.state.last_sample_time = time.time()
@@ -224,6 +238,7 @@ def draw(stdscr, recorder: GaitRecorder):
         f"Capture filter: {snap['capture_filter']}",
         f"Output: {snap['output_path']}",
         f"Samples written: {snap['recorded_samples']}  dropped writes: {snap['dropped_writes']}",
+        f"Invalid telemetry samples: {snap['invalid_samples']}",
         f"Last sample age: {age_text(snap['last_sample_time'])}",
         "",
     ]
@@ -278,7 +293,7 @@ def tui_main(stdscr, recorder: GaitRecorder):
             break
 
 
-def parse_args():
+def parse_args(argv=None):
     parser = argparse.ArgumentParser(
         description="Monitor Go2 low-level joint state and record joint/remote-controller data."
     )
@@ -294,7 +309,7 @@ def parse_args():
         choices=["all", "forward", "backward", "left", "right", "turn_left", "turn_right"],
         help="Only save samples for one detected joystick motion label, or save all",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def main():

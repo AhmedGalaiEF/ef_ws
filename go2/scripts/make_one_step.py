@@ -81,6 +81,22 @@ HIP_LATERAL_OFFSET = 0.0955
 THIGH_LENGTH = 0.213
 CALF_LENGTH = 0.213
 
+
+def bounded_finite_float(minimum: float, maximum: float):
+    def parse(value: str) -> float:
+        try:
+            parsed = float(value)
+        except ValueError as exc:
+            raise argparse.ArgumentTypeError("must be a number") from exc
+        if not math.isfinite(parsed) or not minimum <= parsed <= maximum:
+            raise argparse.ArgumentTypeError(
+                f"must be finite and between {minimum:g} and {maximum:g}"
+            )
+        return parsed
+
+    return parse
+
+
 STEP_ACTIONS = [
     "forward",
     "backward",
@@ -844,24 +860,44 @@ def tui_main(stdscr, controller: OneStepController):
             break
 
 
-def parse_args():
+def parse_args(argv=None):
     parser = argparse.ArgumentParser(
         description="Interactive Go2 low-level single-step controller."
     )
     parser.add_argument("iface", nargs="?", default=None, help="Robot network interface")
-    parser.add_argument("--step-x", type=float, default=DEFAULT_STEP_X, help="Forward/back foot step in meters")
-    parser.add_argument("--step-y", type=float, default=DEFAULT_STEP_Y, help="Left/right foot step in meters")
-    parser.add_argument("--turn-step", type=float, default=DEFAULT_TURN_STEP, help="Per-foot turn step in meters")
-    parser.add_argument("--lift-z", type=float, default=DEFAULT_LIFT_FOOT_Z, help="Swing foot lift in meters")
+    parser.add_argument(
+        "--step-x",
+        type=bounded_finite_float(0.005, MAX_FOOT_OFFSET_X),
+        default=DEFAULT_STEP_X,
+        help="Forward/back foot step in meters",
+    )
+    parser.add_argument(
+        "--step-y",
+        type=bounded_finite_float(0.005, MAX_FOOT_OFFSET_Y),
+        default=DEFAULT_STEP_Y,
+        help="Left/right foot step in meters",
+    )
+    parser.add_argument(
+        "--turn-step",
+        type=bounded_finite_float(0.005, max(MAX_FOOT_OFFSET_X, MAX_FOOT_OFFSET_Y)),
+        default=DEFAULT_TURN_STEP,
+        help="Per-foot turn step in meters",
+    )
+    parser.add_argument(
+        "--lift-z",
+        type=bounded_finite_float(MIN_SWING_CLEARANCE, 0.10),
+        default=DEFAULT_LIFT_FOOT_Z,
+        help="Swing foot lift in meters",
+    )
     parser.add_argument(
         "--shift-scale",
-        type=float,
+        type=bounded_finite_float(0.0, 1.0),
         default=1.0,
         help="Support-centroid body shift scale from 0.0 to 1.0",
     )
     parser.add_argument(
         "--stance-fraction",
-        type=float,
+        type=bounded_finite_float(0.0, 0.8),
         default=DEFAULT_STANCE_FRACTION,
         help="Fraction of selected-foot step applied oppositely to support feet",
     )
@@ -870,7 +906,7 @@ def parse_args():
         action="store_true",
         help="Do not require foot-force confirmation before lifting/finishing a step",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def main():

@@ -30,6 +30,7 @@ Author: OpenAI Codex-CLI helper
 
 from __future__ import annotations
 
+import argparse
 import os
 import sys
 import time
@@ -49,6 +50,40 @@ except ImportError:  # pragma: no cover - depends on the host environment
 # ---------------------------------------------------------------------------
 
 
+def positive_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be an integer") from exc
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be > 0")
+    return parsed
+
+
+def validate_run_config(
+    rgb_width: int,
+    rgb_height: int,
+    fps: int,
+    timeout_ms: int,
+    display: str,
+    serial: Optional[str],
+) -> None:
+    """Validate values for both CLI and programmatic callers."""
+
+    for name, value in (
+        ("rgb_width", rgb_width),
+        ("rgb_height", rgb_height),
+        ("fps", fps),
+        ("timeout_ms", timeout_ms),
+    ):
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise ValueError(f"{name} must be a positive integer")
+    if display not in {"auto", "on", "off"}:
+        raise ValueError("display must be one of: auto, on, off")
+    if serial is not None and not serial.strip():
+        raise ValueError("serial must not be empty")
+
+
 def colourise_depth(depth_frame: rs.depth_frame) -> cv2.Mat:
     """Converts a depth frame (16-bit, in millimetres) into an 8-bit BGR image.
 
@@ -61,13 +96,40 @@ def colourise_depth(depth_frame: rs.depth_frame) -> cv2.Mat:
     return cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_JET)
 
 
-def get_first_device(context: rs.context) -> Optional[rs.device]:
-    """Return the first RealSense device if any, otherwise *None*."""
+def select_device(context: rs.context, serial: Optional[str] = None) -> Optional[rs.device]:
+    """Return the requested RealSense device, or the first device when unspecified."""
 
     devices = context.query_devices()
     if len(devices) == 0:
         return None
-    return devices[0]
+    if serial is None:
+        return devices[0]
+    for device in devices:
+        if device.get_info(rs.camera_info.serial_number) == serial:
+            return device
+    return None
+
+
+def wait_for_device(serial: str, timeout_s: float) -> tuple[Any, Optional[rs.device]]:
+    """Poll for a camera after hardware reset while its USB device reconnects."""
+
+    deadline = time.monotonic() + timeout_s
+    while True:
+        context = None
+        device = None
+        try:
+            context = rs.context()
+            device = select_device(context, serial)
+        except RuntimeError:
+            # librealsense may briefly fail to create/query a context while USB
+            # enumeration is in progress.
+            pass
+        if device is not None:
+            return context, device
+        remaining = deadline - time.monotonic()
+        if remaining <= 0.0:
+            return context, None
+        time.sleep(min(0.25, remaining))
 
 
 def has_display() -> bool:
@@ -94,19 +156,24 @@ def run(
 ):
     """Open a pipeline, start streaming, and display frames."""
 
+    validate_run_config(rgb_width, rgb_height, fps, timeout_ms, display, serial)
+
     if rs is None:
         raise RuntimeError(
             "pyrealsense2 is not installed. Install it with 'pip install pyrealsense2'."
         )
 
     ctx = rs.context()
-    device = get_first_device(ctx)
+    device = select_device(ctx, serial)
 
     if device is None:
+        if serial is not None:
+            raise RuntimeError(f"No RealSense device with serial {serial!r} was found.")
         raise RuntimeError("No RealSense device found. Plug in a camera and try again.")
 
     print("Found device:", device.get_info(rs.camera_info.name))
-    print("  Serial number:", device.get_info(rs.camera_info.serial_number))
+    selected_serial = device.get_info(rs.camera_info.serial_number)
+    print("  Serial number:", selected_serial)
     print("  Firmware ver.:", device.get_info(rs.camera_info.firmware_version))
     if device.supports(rs.camera_info.usb_type_descriptor):
         print("  USB type    :", device.get_info(rs.camera_info.usb_type_descriptor))
@@ -114,7 +181,14 @@ def run(
     if reset:
         print("Resetting camera hardware; waiting for USB reconnect ...")
         device.hardware_reset()
-        time.sleep(5.0)
+        ctx, device = wait_for_device(
+            selected_serial,
+            timeout_s=max(5.0, timeout_ms / 1000.0),
+        )
+        if device is None:
+            raise RuntimeError(
+                f"RealSense device {selected_serial!r} did not reconnect after reset."
+            )
 
     show_windows = display == "on" or (display == "auto" and has_display())
     if not show_windows:
@@ -287,23 +361,21 @@ def run(
 # ---------------------------------------------------------------------------
 
 
-if __name__ == "__main__":
-    import argparse
-
+def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Simple RealSense viewer (colour + depth) written in Python",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
-    parser.add_argument("--width", type=int, default=640, help="Width of the RGB/depth stream")
-    parser.add_argument("--height", type=int, default=480, help="Height of the RGB/depth stream")
-    parser.add_argument("--fps", type=int, default=30, help="Frame rate")
+    parser.add_argument("--width", type=positive_int, default=640, help="Width of the RGB/depth stream")
+    parser.add_argument("--height", type=positive_int, default=480, help="Height of the RGB/depth stream")
+    parser.add_argument("--fps", type=positive_int, default=30, help="Frame rate")
     parser.add_argument("--infra", action="store_true", help="Also display the two IR streams")
     parser.add_argument("--imu", action="store_true", help="Print IMU (gyro + accel) readings")
     parser.add_argument("--serial", type=str, default=None, help="Camera serial number to open")
     parser.add_argument(
         "--timeout-ms",
-        type=int,
+        type=positive_int,
         default=15000,
         help="How long to wait for each RealSense frameset",
     )
@@ -318,6 +390,11 @@ if __name__ == "__main__":
         default="auto",
         help="Open OpenCV windows, disable them, or auto-detect GUI availability",
     )
+    return parser
+
+
+if __name__ == "__main__":
+    parser = build_arg_parser()
 
     args = parser.parse_args()
 

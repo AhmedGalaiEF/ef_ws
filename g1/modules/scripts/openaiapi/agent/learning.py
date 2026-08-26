@@ -12,6 +12,7 @@ import uuid
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .memory import atomic_write_json, atomic_write_text
 from .memory.episodic import Episode, new_episode
 from .memory.manager import MemoryManager
 from .memory.procedural import ProceduralAdaptation
@@ -56,13 +57,7 @@ class LearnedMemoryStore:
         return claims
 
     def save_all(self, claims: List[LearnedClaim]) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_suffix(self.path.suffix + ".tmp")
-        tmp.write_text(
-            json.dumps([claim.model_dump() for claim in claims], ensure_ascii=False, indent=2, sort_keys=True),
-            encoding="utf-8",
-        )
-        tmp.replace(self.path)
+        atomic_write_json(self.path, [claim.model_dump() for claim in claims])
 
     def upsert(self, claim: LearnedClaim) -> LearnedClaim:
         claims = self.all()
@@ -95,10 +90,7 @@ class SkillStatisticsStore:
             return {}
 
     def save(self, data: Dict[str, Any]) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_suffix(self.path.suffix + ".tmp")
-        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
-        tmp.replace(self.path)
+        atomic_write_json(self.path, data)
 
 
 class LearningManager:
@@ -252,15 +244,13 @@ class LearningManager:
     def pin(self, memory_id: str) -> None:
         pins = self.pinned_ids()
         pins.add(str(memory_id))
-        self.pins_path.parent.mkdir(parents=True, exist_ok=True)
-        self.pins_path.write_text(json.dumps(sorted(pins), indent=2), encoding="utf-8")
+        atomic_write_json(self.pins_path, sorted(pins))
         self._emit("memory", "memory_pinned", str(memory_id), references=[str(memory_id)])
 
     def unpin(self, memory_id: str) -> None:
         pins = self.pinned_ids()
         pins.discard(str(memory_id))
-        self.pins_path.parent.mkdir(parents=True, exist_ok=True)
-        self.pins_path.write_text(json.dumps(sorted(pins), indent=2), encoding="utf-8")
+        atomic_write_json(self.pins_path, sorted(pins))
         self._emit("memory", "memory_unpinned", str(memory_id), references=[str(memory_id)])
 
     def consolidate(self, *, settings: Any) -> Dict[str, Any]:
@@ -393,9 +383,9 @@ class LearningManager:
             with archive_path.open("a", encoding="utf-8") as handle:
                 for episode in archive:
                     handle.write(episode.to_json() + "\n")
-            self.memory.episodic.path.write_text(
+            atomic_write_text(
+                self.memory.episodic.path,
                 "".join(episode.to_json() + "\n" for episode in sorted(keep, key=lambda ep: ep.timestamp)),
-                encoding="utf-8",
             )
         return len(archive)
 
