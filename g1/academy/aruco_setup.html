@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ArUco Marker Setup</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#f6f7f9; --panel:#ffffff; --ink:#1b1f27; --muted:#5b6472; --border:#dfe3ea;
+    --accent:#2454ff; --code-bg:#eef1f6;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#14171c; --panel:#1b1f27; --ink:#e7e9ee; --muted:#9aa3b2; --border:#2c313b;
+      --accent:#6f92ff; --code-bg:#232833;
+    }
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  .page{max-width:820px; margin:0 auto; padding:36px 20px 80px;}
+  .kicker{color:var(--muted); font-size:13px; text-transform:uppercase; letter-spacing:.06em; margin:0 0 6px;}
+  h1{font-size:1.7rem; margin:0 0 22px; padding-bottom:16px; border-bottom:1px solid var(--border);}
+  h2{font-size:1.2rem; margin:34px 0 10px; padding-top:14px; border-top:3px solid var(--accent);}
+  p{margin:10px 0; max-width:74ch;}
+  ul, ol{margin:8px 0; padding-left:26px; max-width:74ch;}
+  ul ul, ol ul{margin:4px 0;}
+  li{margin:4px 0;}
+  code{
+    font:.88em ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+    background:var(--code-bg); padding:.1em .35em; border-radius:4px;
+  }
+  pre{
+    background:var(--code-bg); border:1px solid var(--border); border-radius:8px;
+    padding:12px 14px; overflow-x:auto; margin:12px 0;
+  }
+  pre code{background:none; padding:0; font-size:.85em; line-height:1.5;}
+  a{color:var(--accent);}
+  strong{color:var(--ink);}
+  footer{margin-top:44px; padding-top:14px; border-top:1px solid var(--border); color:var(--muted); font-size:12.5px;}
+</style>
+</head>
+<body>
+<div class="page">
+<p class="kicker">G1 Academy &middot; 🏷️ converted from <code>aruco_setup.txt</code></p>
+<h1>ArUco Marker Setup: Pickup and Dropdown</h1>
+<p>Instructions for generating, printing, and mounting the two physical ArUco markers used by Task 12 (<code>task12_perception_and_pose_estimation_pipeline.ipynb</code>) and Task 13 (<code>task13_final_task.ipynb</code>) via <code>util.DeliveryPipeline.aruco_pose</code>.</p>
+<h2>1. Read this first: the pipeline does not filter by marker ID</h2>
+<p><code>DeliveryPipeline.aruco_pose()</code> in <code>util.py</code> calls <code>cv2.aruco.detectMarkers(...)</code> and always uses the <strong>first</strong> entry in <code>corners</code>/<code>ids</code> - it does not check which ID was found:</p>
+<pre><code>corners, ids, _ = aruco.detectMarkers(bgr_image, dictionary)
+if ids is None or not len(corners):
+    raise RuntimeError(&quot;No ArUco marker detected.&quot;)
+rvecs, tvecs, _ = aruco.estimatePoseSingleMarkers(corners, float(marker_length_m), ...)
+rvec, tvec = rvecs[0].reshape(3), tvecs[0].reshape(3)</code></pre>
+<p>Consequence: the pickup marker and the dropdown marker must <strong>never both be visible in the same frame</strong> at the moment <code>aruco_pose()</code> is called. If both are in view, you get whichever one OpenCV happened to list first - not necessarily the one you meant. Physically separate the two stations so the camera&#x27;s field of view only ever contains one marker at detection time (see Section 5), or keep the other one covered/turned away while you work the first.</p>
+<h2>2. Pick two distinct marker IDs and a dictionary</h2>
+<ul><li>Dictionary: <code>cv2.aruco.DICT_4X4_50</code> (the default <code>dictionary_name</code> in <code>aruco_pose</code>). 4x4-bit interior grid, 50 possible IDs (0-49). Do not mix dictionaries between the two markers - both must be generated from the same <code>DICT_4X4_50</code> table so the same <code>aruco_pose(..., dictionary_name=&quot;DICT_4X4_50&quot;)</code> call detects either one.</li><li>Recommended IDs: <code>0</code> for pickup, <code>1</code> for dropdown. Any two distinct IDs in range work; low IDs just make the printed pattern easier to eyeball-identify. Record whichever IDs you actually use in the calibration notes next to <code>camera_to_base</code>/<code>wrist_to_palm</code>, so a future participant knows which physical sheet is which station.</li></ul>
+<h2>3. Generate the printable images</h2>
+<p>Run this once (OpenCV &gt;= 4.7; <code>cv2.aruco.generateImageMarker</code> replaced the older <code>drawMarker</code>):</p>
+<pre><code>import cv2
+aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
+for marker_id, name in ((0, &quot;pickup&quot;), (1, &quot;dropdown&quot;)):
+    marker_px = 800  # high resolution -&gt; crisp edges when printed
+    img = cv2.aruco.generateImageMarker(aruco_dict, marker_id, marker_px, borderBits=1)
+    cv2.imwrite(f&quot;aruco_{name}_id{marker_id}.png&quot;, img)</code></pre>
+<p>If your OpenCV build predates 4.7, use <code>cv2.aruco.drawMarker(aruco_dict, marker_id, marker_px)</code> instead - same output.</p>
+<p>Add a white quiet-zone margin before printing: paste each generated image onto a larger plain white canvas so there is a blank white border around the black/white pattern at least ~20% of the marker&#x27;s own width on every side. <code>detectMarkers</code> relies on strong contrast at the marker&#x27;s edge; a marker printed edge-to-edge with the paper (no margin) detects less reliably under real lighting.</p>
+<h2>4. Print at exact physical scale</h2>
+<ul><li>In the print dialog, disable &quot;fit to page&quot; / &quot;scale to fit&quot; / &quot;shrink to fit&quot; - print at <strong>100% / actual size</strong>. Any auto-scaling changes the physical marker size without changing the file, and <code>aruco_pose</code>&#x27;s translation output is computed directly from the <code>marker_length_m</code> you tell it, not from anything measured in the image - a silently rescaled printout produces a systematically wrong distance estimate.</li><li>Use matte (non-glossy) paper or cardstock. Glossy paper glares under the RealSense&#x27;s IR/RGB illumination and can wash out corners the detector needs.</li><li>After printing, <strong>measure the actual printed black square with a ruler or calipers</strong> (edge to edge of the black-bordered square, not the whole page) and use that measured value - not the nominal one you designed for - as <code>marker_length_m</code>. Printers and paper feed commonly introduce a percent or two of scale error, and IK end-effector targets are directly proportional to this number.</li><li>Mount the printout on a rigid flat backing (foam board, thin acrylic, stiff cardboard). A curled or bent sheet distorts the corner geometry <code>estimatePoseSingleMarkers</code> solves against and biases the pose, especially rotation.</li></ul>
+<h2>5. Sizing and placement per station</h2>
+<ul><li><strong>Pickup marker</strong>: sized and placed for the close range the arm operates at during grasp approach (roughly the reach used by <code>extend_arm_forward</code>/<code>ik_move_ee</code> in Tasks 8/10 - typically well under 0.5 m from the camera). A 4-6 cm edge length is a reasonable starting point; verify the marker is still comfortably resolvable (not blurry, not clipped) in a captured <code>get_rgbd()</code> frame at that distance before relying on it. Fix the marker rigidly to (or immediately behind, at a known fixed offset from) the object to be picked up, facing the camera as close to head-on as practical - keep the marker&#x27;s tilt away from the camera axis under ~30 degrees, and make sure the gripper does not occlude it until the final grasp step.</li><li><strong>Dropdown marker</strong>: mounted at the fixed drop location (table edge, bin, tray), sized for whatever distance the robot approaches that station from - use a larger edge length than the pickup marker if the drop point is farther from the camera, so it still fills enough pixels to detect reliably. Keep it unobstructed and facing the direction the robot approaches from.</li><li>Light both stations evenly; avoid direct backlighting (a bright window or lamp directly behind the marker) and hard shadows falling across the marker face.</li></ul>
+<h2>6. Update the notebooks with your measured values</h2>
+<p>In <code>task12_perception_and_pose_estimation_pipeline.ipynb</code> and <code>task13_final_task.ipynb</code>, set <code>marker_length_m</code> to your Section 4 measured value (in meters, e.g. <code>0.045</code> for a 45 mm square) before calling <code>pipeline.aruco_pose(...)</code>. If you used marker IDs other than the pickup/dropdown convention above, note that <code>aruco_pose</code> still does not filter by ID (Section 1) - correctness depends entirely on keeping the two markers out of the same frame, not on the ID values themselves.</p>
+<h2>7. Validate before trusting it in the capstone</h2>
+<ul><li>Run Task 12&#x27;s detection/pose cells with only the pickup marker in frame; confirm exactly one detection and a translation that roughly matches a tape-measured ground-truth distance from camera to marker (within a few centimeters). Repeat with only the dropdown marker in frame.</li><li>Re-check both after any reprint, remount, or camera/calibration change - a new printout is a new physical object and needs its edge length re-measured (Section 4), not assumed identical to the last one.</li></ul>
+<footer>Converted verbatim from <code>academy/aruco_setup.txt</code> (no content added or removed) so it renders in a
+browser instead of a plain-text viewer. Printing and mounting instructions for the Task 12/13 pickup and dropdown ArUco markers.</footer>
+</div>
+</body>
+</html>

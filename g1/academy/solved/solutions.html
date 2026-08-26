@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>G1 Academy — Solutions Reference</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#f6f7f9; --panel:#ffffff; --ink:#1b1f27; --muted:#5b6472; --border:#dfe3ea;
+    --accent:#2454ff; --code-bg:#eef1f6; --zebra:#f9fafc;
+    --wrapper:#0f7a3d; --wrapper-bg:#e6f6ec;
+    --repo:#1b5fd6; --repo-bg:#e8f0fe;
+    --caution:#c1272d; --caution-bg:#fdeaea;
+    --add-bg:rgba(15,122,61,.13); --add-fg:#0b6b36;
+    --del-bg:rgba(193,39,45,.10); --del-fg:#a4262c;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#14171c; --panel:#1b1f27; --ink:#e7e9ee; --muted:#9aa3b2; --border:#2c313b;
+      --accent:#6f92ff; --code-bg:#232833; --zebra:#1f242e;
+      --wrapper:#5fd38a; --wrapper-bg:#123a24;
+      --repo:#8fb0ff; --repo-bg:#152548;
+      --caution:#ff8b8f; --caution-bg:#3a1616;
+      --add-bg:rgba(95,211,138,.16); --add-fg:#7fe3a6;
+      --del-bg:rgba(255,139,143,.14); --del-fg:#ff9a9e;
+    }
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  code, .mono{font:13px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;}
+  a{color:var(--accent);}
+  header.top{
+    padding:28px clamp(16px,4vw,48px) 20px; border-bottom:1px solid var(--border);
+    background:var(--panel);
+  }
+  header.top h1{margin:0 0 6px; font-size:1.65rem;}
+  header.top p{margin:4px 0; color:var(--muted); max-width:920px;}
+  .layout{display:flex; align-items:flex-start; max-width:1400px; margin:0 auto;}
+  nav.toc{
+    position:sticky; top:0; align-self:flex-start; width:250px; flex:0 0 250px;
+    max-height:100vh; overflow-y:auto; padding:24px 14px 40px 20px; font-size:13px;
+  }
+  nav.toc a{display:block; color:var(--muted); text-decoration:none; padding:3px 0;}
+  nav.toc a:hover{color:var(--accent);}
+  nav.toc .grp{margin-top:14px; font-weight:700; color:var(--ink); text-transform:uppercase; font-size:11px; letter-spacing:.04em;}
+  nav.toc .sub{padding-left:12px; font-size:12px;}
+  main{flex:1 1 auto; min-width:0; padding:24px clamp(16px,4vw,48px) 80px;}
+  section.notebook{margin-bottom:50px;}
+  section.notebook > h2{
+    font-size:1.3rem; margin:0 0 4px; padding-top:10px; border-top:3px solid var(--accent);
+  }
+  section.notebook > .file-row{color:var(--muted); font-size:12.5px; margin:2px 0 8px;}
+  section.notebook > .intro{color:var(--muted); margin:6px 0 20px; max-width:920px;}
+  .task{
+    border:1px solid var(--border); border-radius:12px; background:var(--panel);
+    margin:16px 0; overflow:hidden;
+  }
+  .task > .task-head{padding:14px 18px 10px;}
+  .task h3{margin:0 0 4px; font-size:1.05rem; display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;}
+  .task h3 .stat{font-size:11.5px; font-weight:700; font-family:ui-monospace,monospace;}
+  .stat .add{color:var(--add-fg);}
+  .stat .del{color:var(--del-fg);}
+  .task p.desc{margin:4px 0 0; color:var(--muted); font-size:13.5px; max-width:880px;}
+  .diff-wrap{overflow-x:auto; border-top:1px solid var(--border); background:var(--code-bg);}
+  pre.diff{margin:0; padding:10px 0; font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; min-width:max-content;}
+  .dl{display:block; padding:0 16px; white-space:pre;}
+  .dl-mark{display:inline-block; width:1.4em; opacity:.55; user-select:none;}
+  .dl-ctx{color:var(--ink); opacity:.68;}
+  .dl-add{background:var(--add-bg); color:var(--add-fg);}
+  .dl-del{background:var(--del-bg); color:var(--del-fg); text-decoration:line-through; text-decoration-color:currentColor; text-decoration-thickness:1px; opacity:.85;}
+  .legend{display:flex; flex-wrap:wrap; gap:8px 18px; margin:10px 0 20px; font-size:12.5px; color:var(--muted); align-items:center;}
+  .legend .sw{display:inline-block; width:14px; height:14px; border-radius:3px; vertical-align:-2px; margin-right:5px;}
+  .sw-add{background:var(--add-bg); border:1px solid var(--add-fg);}
+  .sw-del{background:var(--del-bg); border:1px solid var(--del-fg);}
+  .sw-ctx{background:var(--code-bg); border:1px solid var(--border);}
+  .note{
+    background:var(--code-bg); border:1px solid var(--border); border-radius:8px;
+    padding:10px 14px; margin:10px 0; font-size:13.5px; color:var(--muted);
+  }
+  .note b{color:var(--ink);}
+  .badge{
+    display:inline-block; font-size:10.5px; font-weight:700; letter-spacing:.02em;
+    padding:1px 7px; border-radius:99px; white-space:nowrap;
+  }
+  .b-repo{color:var(--repo); background:var(--repo-bg);}
+  .b-caution{color:var(--caution); background:var(--caution-bg);}
+  section.appendix{margin-top:56px;}
+  section.appendix > h2{
+    font-size:1.3rem; margin:0 0 6px; padding-top:10px; border-top:3px solid var(--caution);
+  }
+  .bonus-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(360px,1fr)); gap:14px; margin-top:16px;}
+  .bonus-card{border:1px solid var(--border); border-radius:10px; background:var(--panel); padding:14px 16px;}
+  .bonus-card h4{margin:0 0 4px; font-size:.95rem;}
+  .bonus-card .file{color:var(--muted); font-size:11.5px; font-family:ui-monospace,monospace; margin-bottom:6px;}
+  .bonus-card p{margin:6px 0; color:var(--muted); font-size:13px;}
+  .bonus-card ol{margin:6px 0 0; padding-left:18px; font-size:12.5px; color:var(--ink);}
+  .bonus-card ol li{margin:2px 0;}
+  footer{
+    padding:26px clamp(16px,4vw,48px) 60px; color:var(--muted); font-size:12.5px;
+    border-top:1px solid var(--border);
+  }
+  ul.compact{margin:6px 0; padding-left:20px;}
+  ul.compact li{margin:2px 0;}
+  @media (max-width:900px){
+    nav.toc{display:none;}
+    .layout{display:block;}
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <h1>G1 Academy &mdash; Solutions Reference</h1>
+  <p>For each of the five paired notebooks, every <code>## Task N</code> section is diffed
+  <code>*_participant.ipynb</code> &rarr; <code>solved/*_solution.ipynb</code>, cell for cell, to show exactly
+  which lines a participant must add or edit &mdash; usually replacing a <code># TODO</code> comment and a
+  <code>pass</code> statement with working code. Diffs are computed line-by-line with Python's
+  <code>difflib.SequenceMatcher</code> directly from the two notebook files, so every line shown is the real
+  file content, not a paraphrase.</p>
+  <div class="legend">
+    <span><span class="sw sw-add"></span>added / final line (write this)</span>
+    <span><span class="sw sw-del"></span>removed placeholder (<code># TODO</code> / <code>pass</code> / stub import)</span>
+    <span><span class="sw sw-ctx"></span>unchanged context (already given to participants)</span>
+  </div>
+</header>
+
+<div class="layout">
+<nav class="toc">
+<div class="grp">Contents</div>
+<a href="#g1-academy-1">G1 Academy 1</a>
+<a class="sub" href="#g1-academy-1-task-1">Task 1</a>
+<a class="sub" href="#g1-academy-1-task-2">Task 2</a>
+<a class="sub" href="#g1-academy-1-task-3">Task 3</a>
+<a href="#g1-academy-2">G1 Academy 2</a>
+<a class="sub" href="#g1-academy-2-task-1">Task 1</a>
+<a class="sub" href="#g1-academy-2-task-2">Task 2</a>
+<a class="sub" href="#g1-academy-2-task-3">Task 3</a>
+<a href="#g1-academy-3">G1 Academy 3</a>
+<a class="sub" href="#g1-academy-3-task-1">Task 1</a>
+<a class="sub" href="#g1-academy-3-task-2">Task 2</a>
+<a class="sub" href="#g1-academy-3-task-3">Task 3</a>
+<a href="#g1-academy-4">G1 Academy 4</a>
+<a class="sub" href="#g1-academy-4-task-1">Task 1</a>
+<a class="sub" href="#g1-academy-4-task-2">Task 2</a>
+<a class="sub" href="#g1-academy-4-task-3">Task 3</a>
+<a href="#g1-academy-5">G1 Academy 5</a>
+<a class="sub" href="#g1-academy-5-task-1">Task 1</a>
+<a class="sub" href="#g1-academy-5-task-2">Task 2</a>
+<a class="sub" href="#g1-academy-5-task-3">Task 3</a>
+<a href="#appendix">Appendix: bonus tasks 1-13</a>
+<a href="#sources">Sources</a>
+</nav>
+
+<main>
+
+<section class="notebook" id="g1-academy-1">
+<h2>G1 Academy 1 &mdash; DDS, speech, and lights</h2>
+<div class="file-row"><code>01_jupyter_dds_speech_headlights_participant.ipynb</code> &rarr; <code>solved/01_jupyter_dds_speech_headlights_solution.ipynb</code></div>
+<p class="intro">This module teaches the DDS building blocks used everywhere else. Low state, odom, and SLAM use subscribers. Lowcmd and Dex3 use exclusive publishers. Loco, ModeSwitcher, Audio, and SLAM are SDK clients. Only the Piper WAV conversion/playback helper remains in util.py.</p>
+<div class="task" id="g1-academy-1-task-1">
+<div class="task-head">
+<h3>Task 1 - Build a globally safe latest-message subscriber <span class="stat"><span class="add">+8</span> <span class="del">-7</span></span></h3>
+<p class="desc">ChannelFactoryInitialize creates global DDS process state. Implement the guard below, call it before constructing any subscriber, then implement Latest to cache a message and its receipt time. This pattern is reused for lowstate, odometry, SLAM state, and hand state.</p>
+</div>
+<div class="diff-wrap"><pre class="diff"><span class="dl dl-ctx"><span class="dl-mark"> </span>import time</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelSubscriber</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>&nbsp;</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>_factory_config = None</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>def ensure_channel_factory(domain_id, interface):</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>    global _factory_config</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>    config = (int(domain_id), str(interface))</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>    # TODO: initialize once, reject a conflicting config, and return config.</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>    pass</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    config=(int(domain_id), str(interface))</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    if _factory_config is None:</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>        ChannelFactoryInitialize(*config); _factory_config=config</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    elif _factory_config != config:</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>        raise RuntimeError(f&quot;ChannelFactory already initialized as {_factory_config}; restart kernel for {config}.&quot;)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    return _factory_config</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>&nbsp;</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>ensure_channel_factory(0, &quot;eth0&quot;)</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>class Latest:</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>    def __init__(self, topic, message_type):</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>        self.message=None; self.timestamp=0.0</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>        self.subscriber=ChannelSubscriber(topic, message_type)</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>        self.subscriber.Init(self.callback, 10)</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>    def callback(self, message):</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>        # TODO: cache message and time.time().</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>        pass</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>        self.message=message; self.timestamp=time.time()</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>    def fresh(self, max_age_s=0.5):</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>        # TODO: return whether message exists and age is within max_age_s.</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>        pass</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>        return self.message is not None and time.time()-self.timestamp &lt;= max_age_s</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>lowstate_sub=Latest(&quot;rt/lowstate&quot;, LowState_)</span></pre></div>
+</div>
+<div class="task" id="g1-academy-1-task-2">
+<div class="task-head">
+<h3>Task 2 - Use the native AudioClient with Piper <span class="stat"><span class="add">+2</span> <span class="del">-2</span></span></h3>
+<p class="desc">AudioClient is the SDK request client. util.play_piper_text does only Piper synthesis, WAV conversion, and PlayStream formatting; you initialize and own the client.</p>
+</div>
+<div class="diff-wrap"><pre class="diff"><span class="dl dl-ctx"><span class="dl-mark"> </span>from unitree_sdk2py.g1.audio.g1_audio_client import AudioClient</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>from util import play_piper_text</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>audio_client = AudioClient(); audio_client.SetTimeout(5.0); audio_client.Init()</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>def say(text, language=&quot;en&quot;):</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>    # TODO: call play_piper_text(audio_client, text, language=language).</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>    pass</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    return play_piper_text(audio_client, text, language=language)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span># print(say(&quot;G1 academy ready&quot;))</span></pre></div>
+</div>
+<div class="task" id="g1-academy-1-task-3">
+<div class="task-head">
+<h3>Task 3 - Publish/refresh headlights safely <span class="stat"><span class="add">+10</span> <span class="del">-6</span></span></h3>
+<p class="desc">LedControl belongs to AudioClient. Create a thread that refreshes the selected RGB color, then terminate/join it before a mode/controller transition.</p>
+</div>
+<div class="diff-wrap"><pre class="diff"><span class="dl dl-ctx"><span class="dl-mark"> </span>import threading</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>_light_stop = threading.Event(); _light_thread = None</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>def set_headlight(rgb):</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>    # TODO: return audio_client.LedControl(*rgb).</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>    pass</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    return audio_client.LedControl(*rgb)</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>def start_headlight(rgb=(0, 0, 255), interval_s=0.2):</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>    # TODO: create one cancellable refresh thread.</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>    pass</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    global _light_thread</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    stop_headlight(); _light_stop.clear()</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    def worker():</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>        while not _light_stop.is_set():</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>            set_headlight(rgb); _light_stop.wait(interval_s)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    _light_thread = threading.Thread(target=worker, daemon=True); _light_thread.start()</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>def stop_headlight():</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>    # TODO: signal and join the thread.</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>    pass</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    _light_stop.set()</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    if _light_thread and _light_thread.is_alive(): _light_thread.join(timeout=1.0)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span># start_headlight(); stop_headlight()</span></pre></div>
+</div>
+</section>
+<section class="notebook" id="g1-academy-2">
+<h2>G1 Academy 2 &mdash; State, modes, and locomotion</h2>
+<div class="file-row"><code>02_state_modes_locomotion_participant.ipynb</code> &rarr; <code>solved/02_state_modes_locomotion_solution.ipynb</code></div>
+<p class="intro">Use native subscribers to observe state and native LocoClient, MotionSwitcherClient, and RobotStateClient for modes/services. util.FSM_IDS provides documented mapping data only; participants make the client calls.</p>
+<div class="task" id="g1-academy-2-task-1">
+<div class="task-head">
+<h3>Task 1 - Subscribe and normalize state <span class="stat"><span class="add">+8</span> <span class="del">-2</span></span></h3>
+<p class="desc">Imports: SportModeState_ is odom-mode state; String_ carries SLAM text. Build callback caches and return simple dictionaries, checking timestamps.</p>
+</div>
+<div class="diff-wrap"><pre class="diff"><span class="dl dl-ctx"><span class="dl-mark"> </span>import time</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelSubscriber</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>from unitree_sdk2py.idl.unitree_go.msg.dds_ import SportModeState_</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>from unitree_sdk2py.idl.std_msgs.msg.dds_ import String_</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>ChannelFactoryInitialize(0, &quot;eth0&quot;)</span>
+<span class="dl dl-del"><span class="dl-mark">-</span># TODO: implement Latest callback cache for rt/odommodestate and rt/slam_info.</span>
+<span class="dl dl-del"><span class="dl-mark">-</span># TODO: write observe_state() with messages and receive ages.</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>class Latest:</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    def __init__(self, topic, typ):</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>        self.msg=None; self.ts=0.0; self.sub=ChannelSubscriber(topic, typ); self.sub.Init(self.cb, 10)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    def cb(self, msg): self.msg=msg; self.ts=time.time()</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>odom_sub=Latest(&quot;rt/odommodestate&quot;, SportModeState_); slam_sub=Latest(&quot;rt/slam_info&quot;, String_)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>def observe_state():</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    return {&quot;odom&quot;: odom_sub.msg, &quot;odom_age_s&quot;: time.time()-odom_sub.ts, &quot;slam&quot;: None if slam_sub.msg is None else slam_sub.msg.data}</span>
+<span class="dl dl-add"><span class="dl-mark">+</span># print(observe_state())</span></pre></div>
+</div>
+<div class="task" id="g1-academy-2-task-2">
+<div class="task-head">
+<h3>Task 2 - Use native mode/service clients <span class="stat"><span class="add">+13</span> <span class="del">-3</span></span></h3>
+<p class="desc">LocoClient changes locomotion state; MotionSwitcherClient checks/releases the higher-level motion owner; RobotStateClient lists/switches services. Do not invent FSM IDs: use util.FSM_IDS.</p>
+</div>
+<div class="diff-wrap"><pre class="diff"><span class="dl dl-ctx"><span class="dl-mark"> </span>from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>from unitree_sdk2py.comm.motion_switcher.motion_switcher_client import MotionSwitcherClient</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>try:</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    from unitree_sdk2py.b2.robot_state.robot_state_client import RobotStateClient</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>except ImportError:</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    from unitree_sdk2py.go2.robot_state.robot_state_client import RobotStateClient</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>from util import FSM_IDS</span>
+<span class="dl dl-del"><span class="dl-mark">-</span># TODO: initialize loco and switcher once; import RobotStateClient with the SDK-compatible fallback.</span>
+<span class="dl dl-del"><span class="dl-mark">-</span># TODO: implement set_mode(name) using loco.SetFsmId(FSM_IDS[name]).</span>
+<span class="dl dl-del"><span class="dl-mark">-</span># TODO: list services then toggle one through RobotStateClient.ServiceSwitch.</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>loco=LocoClient(); loco.SetTimeout(5.0); loco.Init()</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>switcher=MotionSwitcherClient(); switcher.SetTimeout(5.0); switcher.Init()</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>services=RobotStateClient(); services.SetTimeout(5.0); services.Init()</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>def set_mode(name): return loco.SetFsmId(FSM_IDS[name])</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>def toggle_service(name):</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    code, rows = services.ServiceList()</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    row = next(item for item in rows if item.name == name)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    return services.ServiceSwitch(row.name, not bool(row.status))</span>
+<span class="dl dl-add"><span class="dl-mark">+</span># set_mode(&quot;damp&quot;)</span></pre></div>
+</div>
+<div class="task" id="g1-academy-2-task-3">
+<div class="task-head">
+<h3>Task 3 - Issue bounded locomotion <span class="stat"><span class="add">+6</span> <span class="del">-4</span></span></h3>
+<p class="desc">LocoClient.Move accepts velocity commands. Stop with StopMove in finally. Non-continuous Move is an SDK request; observe odometry before/after and do not treat its return code as arrival proof.</p>
+</div>
+<div class="diff-wrap"><pre class="diff"><span class="dl dl-ctx"><span class="dl-mark"> </span>import time</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>def loco_move(vx, vy, yaw_rate, duration_s=0.5):</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>    # TODO: call loco.Move(... continous_move=True), sleep, always StopMove.</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>    pass</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    loco.Move(vx, vy, yaw_rate, continous_move=True)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    try: time.sleep(duration_s)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    finally: loco.StopMove()</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>def odom_move(dx, dy, dyaw):</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>    # TODO: record observe_state before/after native non-continuous Move.</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>    pass</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    before=observe_state(); code=loco.Move(dx, dy, dyaw, continous_move=False)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    return {&quot;before&quot;: before, &quot;code&quot;: code, &quot;after&quot;: observe_state()}</span>
+<span class="dl dl-add"><span class="dl-mark">+</span># loco_move(0.03, 0, 0)</span></pre></div>
+</div>
+</section>
+<section class="notebook" id="g1-academy-3">
+<h2>G1 Academy 3 &mdash; Direct Dex3 and arm control</h2>
+<div class="file-row"><code>03_arm_and_dex3_control_participant.ipynb</code> &rarr; <code>solved/03_arm_and_dex3_control_solution.ipynb</code></div>
+<p class="intro">ChannelPublisher writes typed HandCmd messages to a Dex3 command topic; ChannelSubscriber reads HandState tactile data. G1ArmActionClient triggers named high-level actions. util provides only hand target arrays and joint-group mapping, not a hidden hand client.</p>
+<div class="task" id="g1-academy-3-task-1">
+<div class="task-head">
+<h3>Task 1 - Create direct tactile subscriber and hand publisher <span class="stat"><span class="add">+9</span> <span class="del">-2</span></span></h3>
+<p class="desc">HandState_ exposes motor and press_sensor_state fields. HandCmd_ defines the topic type; the native HandCmd message is filled for every finger joint. Keep ownership of one hand command publisher.</p>
+</div>
+<div class="diff-wrap"><pre class="diff"><span class="dl dl-add"><span class="dl-mark">+</span>import time</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>from unitree_sdk2py.core.channel import ChannelPublisher, ChannelSubscriber</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>from unitree_sdk2py.idl.default import unitree_hg_msg_dds__HandCmd_</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>from unitree_sdk2py.idl.unitree_hg.msg.dds_ import HandCmd_, HandState_</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>from util import HAND_JOINT_NAMES, HAND_OPEN, HAND_CLOSED</span>
+<span class="dl dl-del"><span class="dl-mark">-</span># TODO: initialize one right-hand publisher and one HandState subscriber.</span>
+<span class="dl dl-del"><span class="dl-mark">-</span># TODO: cache the latest state and flatten press_sensor_state pressure values.</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>hand_state=None</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>def on_hand_state(msg):</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    global hand_state; hand_state=msg</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>right_pub=ChannelPublisher(&quot;rt/dex3/right/cmd&quot;, HandCmd_); right_pub.Init()</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>right_sub=ChannelSubscriber(&quot;rt/dex3/right/state&quot;, HandState_); right_sub.Init(on_hand_state, 20)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>def tactile_samples():</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    return [float(v) for sensor in getattr(hand_state, &quot;press_sensor_state&quot;, []) for v in sensor.pressure] if hand_state else []</span>
+<span class="dl dl-add"><span class="dl-mark">+</span># print(tactile_samples())</span></pre></div>
+</div>
+<div class="task" id="g1-academy-3-task-2">
+<div class="task-head">
+<h3>Task 2 - Implement gradual tactile-aware close <span class="stat"><span class="add">+10</span> <span class="del">-5</span></span></h3>
+<p class="desc">Use HAND_OPEN/CLOSED target maps from util, but construct/write every native command frame yourself. Establish a no-object baseline and calibrated threshold; stop early when tactile pressure reaches it.</p>
+</div>
+<div class="diff-wrap"><pre class="diff"><span class="dl dl-del"><span class="dl-mark">-</span>def write_hand(targets, publisher):</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>    # TODO: create unitree_hg_msg_dds__HandCmd_ and fill mode,q,dq,tau,kp,kd.</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>    pass</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>def write_hand(targets, publisher=right_pub, kp=0.8, kd=0.05):</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    msg=unitree_hg_msg_dds__HandCmd_()</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    for i, q in enumerate(targets):</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>        cmd=msg.motor_cmd[i]; cmd.mode=(i &amp; 15) | 16; cmd.q=float(q); cmd.dq=0.0; cmd.tau=0.02; cmd.kp=kp; cmd.kd=kd</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    publisher.Write(msg)</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>def gradual_close(threshold, steps=40, delay_s=0.05):</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>    # TODO: interpolate HAND_OPEN right to HAND_CLOSED right; publish; stop at threshold.</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>    pass</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    for step in range(1, steps+1):</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>        a=step/steps; frame=[x+(y-x)*a for x,y in zip(HAND_OPEN[&quot;right&quot;], HAND_CLOSED[&quot;right&quot;])]</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>        write_hand(frame); time.sleep(delay_s)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>        if tactile_samples() and max(tactile_samples()) &gt;= threshold: return {&quot;contact&quot;:True,&quot;step&quot;:step}</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    return {&quot;contact&quot;:False,&quot;step&quot;:steps}</span></pre></div>
+</div>
+<div class="task" id="g1-academy-3-task-3">
+<div class="task-head">
+<h3>Task 3 - Use direct high-level arm client <span class="stat"><span class="add">+27</span> <span class="del">-6</span></span></h3>
+<p class="desc">G1ArmActionClient invokes documented action IDs. util may provide a mapping during the lesson; do not combine high-level and low-level command ownership without an explicit handoff.
+
+Task 3 now covers all requested arm concepts. High-level gestures use G1ArmActionClient action IDs for clap, face wave, and release. Teach captures the current direct lowstate arm-joint pose; repeat interpolates that saved pose through the direct rt/arm_sdk publisher; extend replays a separately saved forward/extended pose slowly. This is joint-pose interpolation, not a replacement for the supplied end-effector IK pipeline. Keep one arm command owner at a time.</p>
+</div>
+<div class="diff-wrap"><pre class="diff"><span class="dl dl-ctx"><span class="dl-mark"> </span>import time</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>from unitree_sdk2py.core.channel import ChannelPublisher, ChannelSubscriber</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>from unitree_sdk2py.g1.arm.g1_arm_action_client import G1ArmActionClient</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_, LowState_</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>from unitree_sdk2py.utils.crc import CRC</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>from util import JOINT_GROUPS</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>&nbsp;</span>
+<span class="dl dl-del"><span class="dl-mark">-</span># TODO: create a lowstate subscriber callback and an rt/arm_sdk publisher.</span>
+<span class="dl dl-del"><span class="dl-mark">-</span># TODO: implement teach_pose() by recording JOINT_GROUPS[&quot;right_arm&quot;] from lowstate.</span>
+<span class="dl dl-del"><span class="dl-mark">-</span># TODO: implement repeat_pose(saved_pose) with smooth frames/CRC.</span>
+<span class="dl dl-del"><span class="dl-mark">-</span># TODO: make extend_arm_forward() replay an instructor-approved saved extended pose.</span>
+<span class="dl dl-del"><span class="dl-mark">-</span># TODO: initialize G1ArmActionClient and use documented clap, face-wave, and release actions.</span>
+<span class="dl dl-del"><span class="dl-mark">-</span># Do not run a high-level action while your arm_sdk publisher owns the arm.</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>_latest_lowstate = None</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>def on_lowstate(message):</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    global _latest_lowstate</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    _latest_lowstate = message</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>lowstate_sub = ChannelSubscriber(&quot;rt/lowstate&quot;, LowState_); lowstate_sub.Init(on_lowstate, 10)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>arm_pub = ChannelPublisher(&quot;rt/arm_sdk&quot;, LowCmd_); arm_pub.Init()</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>_arm_crc = CRC()</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>def teach_pose(side=&quot;right&quot;):</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    if _latest_lowstate is None: raise RuntimeError(&quot;Wait for fresh rt/lowstate.&quot;)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    return {joint: float(_latest_lowstate.motor_state[joint].q) for joint in JOINT_GROUPS[side + &quot;_arm&quot;]}</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>def write_arm_pose(targets, weight=1.0):</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    message = unitree_hg_msg_dds__LowCmd_(); message.mode_pr = 0; message.mode_machine = 0</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    message.motor_cmd[29].q = float(weight)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    for joint, q in targets.items():</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>        cmd=message.motor_cmd[joint]; cmd.mode=1; cmd.q=float(q); cmd.dq=0.0; cmd.tau=0.0; cmd.kp=30.0; cmd.kd=1.5</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    message.crc = _arm_crc.Crc(message); arm_pub.Write(message)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>def repeat_pose(saved_pose, duration_s=4.0, steps=100):</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    start=teach_pose(&quot;right&quot;)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    for step in range(1, steps+1):</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>        alpha=step/steps</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>        write_arm_pose({j:start[j]+(saved_pose[j]-start[j])*alpha for j in saved_pose})</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>        time.sleep(duration_s/steps)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>def extend_arm_forward(extended_pose):</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    return repeat_pose(extended_pose, duration_s=8.0, steps=200)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>arm=G1ArmActionClient(); arm.SetTimeout(10.0); arm.Init()</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>def gesture(name):</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    return arm.ExecuteAction({&quot;clap&quot;:17, &quot;face_wave&quot;:25, &quot;release&quot;:99}[name])</span></pre></div>
+</div>
+</section>
+<section class="notebook" id="g1-academy-4">
+<h2>G1 Academy 4 &mdash; SLAM, perception, and delivery</h2>
+<div class="file-row"><code>04_perception_delivery_capstone_participant.ipynb</code> &rarr; <code>solved/04_perception_delivery_capstone_solution.ipynb</code></div>
+<p class="intro">SLAM lifecycle: start mapping, capture external visualization, stop/save, relocate, save named poses, then navigate only with valid localization. The instructor-supplied SLAM adapter exposes the deployed native operations. The academy supplies perception, pose estimation, wrist-palm calibration, and IK solvers; util.load_provided_pipeline loads those heavy components.</p>
+<div class="task" id="g1-academy-4-task-1">
+<div class="task-head">
+<h3>Task 1 - Use native SLAM client/subscriber <span class="stat"><span class="add">+9</span> <span class="del">-3</span></span></h3>
+<p class="desc">SlamInfoSubscriber observes status. SlamOperateClient performs RPC operations. Follow the nav_bot reference sequencing; do not publish raw SLAM control messages.</p>
+</div>
+<div class="diff-wrap"><pre class="diff"><span class="dl dl-ctx"><span class="dl-mark"> </span>from slam_util import SlamUtility</span>
+<span class="dl dl-del"><span class="dl-mark">-</span># Create once after choosing the correct interface/domain/map paths.</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>slam = SlamUtility(interface=&quot;eth0&quot;, domain_id=0, map_path=&quot;/home/unitree/test.pcd&quot;)</span>
+<span class="dl dl-del"><span class="dl-mark">-</span># TODO: inspect slam.status(), then run approved start_mapping/stop_mapping/relocate flow.</span>
+<span class="dl dl-del"><span class="dl-mark">-</span># TODO: capture a map visualization externally and call slam.set_visualization_path(path).</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>def mapping_status():</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    return slam.status()</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>def start_mapping():</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    return slam.start_mapping(&quot;indoor&quot;)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>def stop_mapping():</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    return slam.stop_mapping()</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>def relocate():</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    return slam.relocate()</span>
+<span class="dl dl-add"><span class="dl-mark">+</span># print(mapping_status())</span></pre></div>
+</div>
+<div class="task" id="g1-academy-4-task-2">
+<div class="task-head">
+<h3>Task 2 - Build named-point navigation <span class="stat"><span class="add">+10</span> <span class="del">-6</span></span></h3>
+<p class="desc">Keep named points in an application dictionary/file. Add only after valid localization. Confirm the deployed client supports native complete-path navigation before implementing navigate_path; otherwise document the limitation rather than pretending sequential calls are a path API.</p>
+</div>
+<div class="diff-wrap"><pre class="diff"><span class="dl dl-del"><span class="dl-mark">-</span># TODO: after successful relocation:</span>
+<span class="dl dl-del"><span class="dl-mark">-</span># pickup_pose = slam.save_named_pose(&quot;pickup&quot;)</span>
+<span class="dl dl-del"><span class="dl-mark">-</span># dropdown_pose = slam.save_named_pose(&quot;dropdown&quot;)</span>
+<span class="dl dl-del"><span class="dl-mark">-</span># print(slam.navigate_to(&quot;pickup&quot;))</span>
+<span class="dl dl-del"><span class="dl-mark">-</span># print(slam.wait_for_arrival(&quot;pickup&quot;))</span>
+<span class="dl dl-del"><span class="dl-mark">-</span># TODO: use slam.navigate_path only with an instructor-verified native_path_callback.</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>def add_point(name):</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    return slam.save_named_pose(name)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>def remove_point(name):</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    return slam.remove_named_pose(name)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>def navigate_to_point(name):</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    return slam.navigate_to(name)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>def view_map():</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    return slam.view_map()</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>def navigate_path(names, native_path_callback):</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    return slam.navigate_path(names, native_path_callback)</span></pre></div>
+</div>
+<div class="task" id="g1-academy-4-task-3">
+<div class="task-head">
+<h3>Task 3 - Use the local DeliveryPipeline <span class="stat"><span class="add">+9</span> <span class="del">-7</span></span></h3>
+<p class="desc">DeliveryPipeline in util.py contains the tedious OpenAI image request, ArUco pose estimation, camera/base and wrist/palm transforms, and small-step IK orchestration. Supply calibration matrices from the academy calibration file and a bounded direct IK increment function from the arm-control lesson. Validate perception confidence and frame freshness before calling the motion portion.</p>
+</div>
+<div class="diff-wrap"><pre class="diff"><span class="dl dl-ctx"><span class="dl-mark"> </span>from util import DeliveryPipeline, make_recognition_ik_increment</span>
+<span class="dl dl-del"><span class="dl-mark">-</span># from sdk_client import Robot  # recognition stack robot/adapter with joint state + arm command methods</span>
+<span class="dl dl-del"><span class="dl-mark">-</span># robot = Robot(iface=&quot;eth0&quot;, domain_id=0, auto_start_sensors=True)</span>
+<span class="dl dl-del"><span class="dl-mark">-</span># ik_increment = make_recognition_ik_increment(robot, arm=&quot;right&quot;)</span>
+<span class="dl dl-del"><span class="dl-mark">-</span># pipeline = DeliveryPipeline(camera_matrix, distortion, camera_to_base, wrist_to_palm)</span>
+<span class="dl dl-del"><span class="dl-mark">-</span># current = ik_increment.current_palm_xyz()</span>
+<span class="dl dl-del"><span class="dl-mark">-</span># TODO: target = pipeline.marker_to_palm_target(pipeline.aruco_pose(bgr, marker_length_m))</span>
+<span class="dl dl-del"><span class="dl-mark">-</span># TODO: pipeline.execute_incremental_ik(ik_increment, current, target, side=&quot;right&quot;)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>def make_delivery_motion(robot, camera_matrix, distortion, camera_to_base, wrist_to_palm, arm=&quot;right&quot;):</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    pipeline = DeliveryPipeline(camera_matrix, distortion, camera_to_base, wrist_to_palm)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    ik_increment = make_recognition_ik_increment(robot, arm=arm)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    return pipeline, ik_increment</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>def approach_marker(robot, bgr_frame, marker_length_m, calibration, arm=&quot;right&quot;):</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    pipeline, increment = make_delivery_motion(robot, *calibration, arm=arm)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    target = pipeline.marker_to_palm_target(pipeline.aruco_pose(bgr_frame, marker_length_m))</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    return pipeline.execute_incremental_ik(increment, increment.current_palm_xyz(), target, side=arm)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span># robot is the recognition stack sdk_client.Robot or a compatible direct-SDK adapter.</span></pre></div>
+</div>
+</section>
+<section class="notebook" id="g1-academy-5">
+<h2>G1 Academy 5 &mdash; Services, ROS 2, audio, and chatbot</h2>
+<div class="file-row"><code>05_bonus_services_audio_chatbot_participant.ipynb</code> &rarr; <code>solved/05_bonus_services_audio_chatbot_solution.ipynb</code></div>
+<p class="intro">Use the setup scripts for CycloneDDS/Unitree SDK, Wi-Fi, and RealSense ZMQ streaming. This notebook uses native rclpy for a dedicated demo ROS 2 topic, native DDS subscribers for robot audio, and supplied ASR/OpenAI modules for the heavy integrations. Never publish a demo node to lowcmd/Dex3 command topics.</p>
+<div class="task" id="g1-academy-5-task-1">
+<div class="task-head">
+<h3>Task 1 - Create a ROS 2 package demo <span class="stat"><span class="add">+10</span> <span class="del">-2</span></span></h3>
+<p class="desc">Imports: rclpy provides node lifecycle; Node creates publishers/subscribers/timers; String is a typed ROS message. Build ament_python package academy_topic_demo, add this node as console script, then use only /academy/demo_status.</p>
+</div>
+<div class="diff-wrap"><pre class="diff"><span class="dl dl-ctx"><span class="dl-mark"> </span>import rclpy</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>from rclpy.node import Node</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>from std_msgs.msg import String</span>
+<span class="dl dl-del"><span class="dl-mark">-</span># TODO: create academy_topic_demo with a timer publisher and subscriber on /academy/demo_status.</span>
+<span class="dl dl-del"><span class="dl-mark">-</span># TODO: add a console script; colcon build; source install/setup.bash; ros2 run academy_topic_demo demo_node.</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>class DemoNode(Node):</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    def __init__(self):</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>        super().__init__(&quot;academy_demo&quot;)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>        self.pub=self.create_publisher(String, &quot;/academy/demo_status&quot;, 10)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>        self.sub=self.create_subscription(String, &quot;/academy/demo_status&quot;, self.on_status, 10)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>        self.timer=self.create_timer(1.0, self.publish_status)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    def publish_status(self):</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>        msg=String(); msg.data=&quot;academy demo alive&quot;; self.pub.publish(msg)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    def on_status(self, msg): self.get_logger().info(msg.data)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span># ros2 pkg create --build-type ament_python academy_topic_demo --dependencies rclpy std_msgs</span></pre></div>
+</div>
+<div class="task" id="g1-academy-5-task-2">
+<div class="task-head">
+<h3>Task 2 - Build a minimal direct-SDK Robot class <span class="stat"><span class="add">+14</span> <span class="del">-6</span></span></h3>
+<p class="desc">Create a small Robot class similar in shape to sdk_wrapper, but keep native clients visible. It should own one ChannelFactory configuration, initialize LocoClient, MotionSwitcherClient, and AudioClient once, and expose a conservative state/stop method. This class is the bridge from the notebook helpers to the final participant-built wrapper.</p>
+</div>
+<div class="diff-wrap"><pre class="diff"><span class="dl dl-ctx"><span class="dl-mark"> </span>from unitree_sdk2py.core.channel import ChannelFactoryInitialize</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>from unitree_sdk2py.comm.motion_switcher.motion_switcher_client import MotionSwitcherClient</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>from unitree_sdk2py.g1.audio.g1_audio_client import AudioClient</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>&nbsp;</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>class Robot:</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    _factory_config = None</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>    def __init__(self, interface=&quot;eth0&quot;, domain_id=0):</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>        # TODO: initialize ChannelFactory once, then initialize each native client.</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>        pass</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>        config=(int(domain_id), str(interface))</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>        if Robot._factory_config is None:</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>            ChannelFactoryInitialize(*config); Robot._factory_config=config</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>        elif Robot._factory_config != config:</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>            raise RuntimeError(&quot;Restart kernel before changing DDS interface/domain.&quot;)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>        self.loco=LocoClient(); self.loco.SetTimeout(5.0); self.loco.Init()</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>        self.switcher=MotionSwitcherClient(); self.switcher.SetTimeout(5.0); self.switcher.Init()</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>        self.audio=AudioClient(); self.audio.SetTimeout(5.0); self.audio.Init()</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>    def stop(self):</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>        # TODO: call the native locomotion stop operation.</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>        pass</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>        return self.loco.StopMove()</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>    def state_summary(self):</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>        # TODO: return checked mode/client state without commanding motion.</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>        pass</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>        code, mode = self.switcher.CheckMode()</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>        return {&quot;motion_code&quot;: int(code), &quot;motion_mode&quot;: mode}</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>&nbsp;</span>
+<span class="dl dl-add"><span class="dl-mark">+</span># robot = Robot(); print(robot.state_summary())</span></pre></div>
+</div>
+<div class="task" id="g1-academy-5-task-3">
+<div class="task-head">
+<h3>Task 3 - Observe audio, then call supplied ASR/OpenAI integration <span class="stat"><span class="add">+10</span> <span class="del">-6</span></span></h3>
+<p class="desc">First create a native DDS subscriber for rt/audio_msg after wake-up mode is enabled through the app/remote. Cache the newest payload. Then pass it to the provided ASR/OpenAI integration and use the Robot.audio client with util.play_piper_text to speak a short reply.</p>
+</div>
+<div class="diff-wrap"><pre class="diff"><span class="dl dl-add"><span class="dl-mark">+</span>import time</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>from unitree_sdk2py.core.channel import ChannelSubscriber</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>from unitree_sdk2py.idl.std_msgs.msg.dds_ import String_</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>from util import load_provided_pipeline, play_piper_text</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>latest_audio = None</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>latest_audio = {&quot;text&quot;: None, &quot;timestamp&quot;: 0.0}</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>def on_audio(message):</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>    global latest_audio</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>    # TODO: cache message.data and a timestamp.</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    latest_audio[&quot;text&quot;] = message.data; latest_audio[&quot;timestamp&quot;] = time.time()</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>audio_sub = ChannelSubscriber(&quot;rt/audio_msg&quot;, String_); audio_sub.Init(on_audio, 20)</span>
+<span class="dl dl-del"><span class="dl-mark">-</span># TODO: integration=load_provided_pipeline(&quot;academy_asr_openai&quot;).</span>
+<span class="dl dl-del"><span class="dl-mark">-</span># TODO: transcript=integration.transcribe(latest_audio); reply=integration.chat(transcript).</span>
+<span class="dl dl-del"><span class="dl-mark">-</span># TODO: play_piper_text(robot.audio, reply, language=&quot;en&quot;).</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>def voice_chat_turn(robot, integration_module=&quot;academy_asr_openai&quot;, language=&quot;en&quot;):</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    if not latest_audio[&quot;text&quot;] or time.time()-latest_audio[&quot;timestamp&quot;] &gt; 3.0:</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>        raise RuntimeError(&quot;No fresh wake-up audio message.&quot;)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    integration=load_provided_pipeline(integration_module)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    reply=integration.chat(integration.transcribe(latest_audio[&quot;text&quot;]))</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    play_piper_text(robot.audio, reply, language=language)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    return reply</span></pre></div>
+</div>
+</section>
+
+<section class="appendix" id="appendix">
+  <h2>Appendix &mdash; bonus tasks 1&ndash;13 <span class="badge b-caution">NOT DIFFABLE</span></h2>
+  <p class="intro">
+  <code>solved/task1_sdkwrapper_usage.ipynb</code> through <code>solved/task13_final_task.ipynb</code> are a
+  separate, more granular 13-part curriculum ("G1 Academy Bonus") that rebuilds every piece of
+  <code>sdk_wrapper.G1</code> natively, one method at a time, ending in the same perception-based delivery
+  capstone as notebook 04. <b>No participant/blank counterpart for these 13 notebooks exists anywhere in the
+  repository</b> &mdash; every code cell in <code>solved/taskN_*.ipynb</code> is already the finished answer
+  (several are even pre-commented-out so nothing runs by accident), so there is no "before" version to diff
+  against and no line-level added/edited breakdown to show. Each card below lists the file, what it builds, and
+  its internal task breakdown for reference &mdash; treat the notebook itself as the definitive listing of its
+  code.</p>
+  <div class="bonus-grid">
+<div class="bonus-card">
+  <div class="file">task1_sdkwrapper_usage.ipynb</div>
+  <h4>Task 1: Using sdk_wrapper.G1 (say / set_headlight)</h4>
+  <p>This is the only notebook in this bonus series that imports directly from `sdk_wrapper.py`. Every later task notebook rebuilds its own slice of the wrapper from native Unitree SDK / DDS calls, the same way `sdk_wrapper.G1` itself was built. Here you instead treat `G1` as a finished component and learn its *usage* surface: construct one `G1` instance per kernel, then call `g1.say(...)` and `g1.set_headlight(...)`.</p>
+  <ol><li>Task 1 - Construct the wrapper once per kernel</li><li>Task 2 - `g1.say(text, language=&quot;EN&quot;, volume=100)`</li><li>Task 3 - `g1.set_headlight(color=&quot;green&quot;, intensity=100, duration_s=3)`</li></ol>
+</div>
+<div class="bonus-card">
+  <div class="file">task2_necessary_dds_init_pubsub.ipynb</div>
+  <h4>Task 2: necessary DDS init + pub/sub helpers</h4>
+  <p>From this notebook onward, every task rebuilds its own slice of `sdk_wrapper` natively - no more importing from `sdk_wrapper.py`. This task builds the two foundational helpers every later task depends on: a kernel-wide `ChannelFactory` guard, and a generic &quot;latest message&quot; subscriber cache. We also build a tiny publisher-construction helper, since `sdk_wrapper` wraps every publisher the same two-line way (`ChannelPublisher(topic, type); .Init()`).</p>
+  <ol><li>Task 1 - `ensure_channel_factory`: one global DDS factory per kernel</li><li>Task 2 - `Latest`: a generic subscriber cache</li><li>Task 3 - `make_publisher`: a generic publisher constructor</li></ol>
+</div>
+<div class="bonus-card">
+  <div class="file">task3_say_and_headlight_helpers.ipynb</div>
+  <h4>Task 3: developing say() and set_headlight() from scratch</h4>
+  <p>Building on Task 2&#x27;s DDS/pub-sub helpers, this task develops full native versions of `say` and `set_headlight`, matching the behavior of `sdk_wrapper.G1.say`/`set_headlight` (not just the shortcut used in the intro academy notebook). We still reuse `util.py`&#x27;s Piper subprocess/WAV-conversion boilerplate - that part is intentionally not something to retype - but we build the `AudioClient` plumbing, color parsing, and the cancellable background headlight thread ourselves.</p>
+  <ol><li>Task 1 - `AudioClient` + `say()`</li><li>Task 2 - Named/hex/rgb color parsing + intensity scaling</li><li>Task 3 - Cancellable background headlight thread + `set_headlight()`</li></ol>
+</div>
+<div class="bonus-card">
+  <div class="file">task4_robot_state_observation.ipynb</div>
+  <h4>Task 4: robot-state observation (dictionary-based get_* interface)</h4>
+  <p>This task builds the dictionary-based state readers described in `notes.txt` section 2: `get_lowstate`, `get_odommodestate`, `get_battery`, `get_slam_info`, `get_occupancygrid`, `get_rgbd`, and `get_services`. Each one wraps a native subscriber or SDK client and normalizes the result into a plain dictionary, so higher-level tasks never touch raw DDS message layouts directly. This notebook is self-contained: it repeats the `ensure_channel_factory`/`Latest` helpers from Task 2 so it can run on its own.</p>
+  <ol><li>Task 1 - `get_lowstate()`</li><li>Task 2 - `get_odommodestate()`</li><li>Task 3 - `get_battery()`</li><li>Task 4 - `get_slam_info()`</li><li>Task 5 - `get_occupancygrid()`: a documented limitation</li><li>Task 6 - `get_rgbd()`</li><li>Task 7 - `get_services()`</li></ol>
+</div>
+<div class="bonus-card">
+  <div class="file">task5_services_and_mode_switching.ipynb</div>
+  <h4>Task 5: services and mode switching</h4>
+  <p>This task builds `notes.txt` section 3 end to end: a safe `damp_mode`, `toggle_service`/`toggle_gait`, and a composite `toggle_custom_mode(mode_name, language, voice, headlight_color)` that announces the mode with Piper, keeps the headlight refreshed for as long as the mode is active, switches the FSM, and cleanly unwinds - thread joined and a safe fallback mode - on exit.</p>
+  <ol><li>Task 1 - Native mode/service clients + `damp_mode()`</li><li>Task 2 - `toggle_service(name)` and `toggle_gait()`</li><li>Task 3 - `say`/`set_headlight` (compact reuse)</li><li>Task 4 - `toggle_custom_mode(mode_name, language, voice, headlight_color)`</li></ol>
+</div>
+<div class="bonus-card">
+  <div class="file">task6_basic_locomotion.ipynb</div>
+  <h4>Task 6: basic locomotion helpers</h4>
+  <p>Two locomotion helpers, both built on the native `LocoClient`: `loco_move` runs a bounded-duration continuous velocity command and always stops in `finally`; `odom_move` issues a single non-continuous relative move and closes the loop on odometry to confirm arrival, instead of treating the RPC return code alone as proof of motion. A simple lock prevents two locomotion commands from running concurrently.</p>
+  <ol><li>Task 1 - Odometry subscriber + native `LocoClient`</li><li>Task 2 - `loco_move(vx, vy, vyaw, duration_s)`</li><li>Task 3 - `odom_move(target_dx, target_dy, target_dyaw)` with closed-loop arrival monitoring</li></ol>
+</div>
+<div class="bonus-card">
+  <div class="file">task7_slam_operation_and_map_visualization.ipynb</div>
+  <h4>Task 7: SLAM operation and map visualization</h4>
+  <p>This task rebuilds the operational SLAM surface described in `notes.txt` section 5, natively: `start_mapping`/`stop_mapping`, `relocate`, `add_point`/`remove_point`, `navigate_to_point`, `navigate_path`, and `view_map`. The deployed RPC operations this academy has verified are mapping start/stop, relocate (`init_pose`), and single-pose navigation - the same IDs `sdk_wrapper._SlamClient` and `slam_util.SlamRpc` use. Native complete-path navigation is version-dependent, so `navigate_path` refuses a silent point-by-point fallback rather than mislabeling it. Once a map is saved on the mainboard it may no longer be accessible for visualization, so `view_map` reads from *snapshots captured while mapping is running*, not from the saved map file afterward.</p>
+  <ol><li>Task 1 - Native `SlamRpc` client + pose parsing</li><li>Task 2 - Mapping lifecycle: `start_mapping` / `stop_mapping` / `relocate`</li><li>Task 3 - `add_point(point_name)` / `remove_point(point_name)`</li><li>Task 4 - `navigate_to_point` / `navigate_path`</li><li>Task 5 - `view_map()`: capture visualization *while mapping is running*</li></ol>
+</div>
+<div class="bonus-card">
+  <div class="file">task8_hl_arm_gestures.ipynb</div>
+  <h4>Task 8: high-level arm gestures, teach/repeat, and low-level pose interpolation</h4>
+  <p>This task covers `notes.txt` section 6 in full: native high-level arm gestures through `G1ArmActionClient`, then a controller-ownership-safe path onto `rt/arm_sdk` (`release_arms`/`engage_arms`), and finally two general-purpose low-level pose helpers - `save_current_ll_pose` / `interpolate_to_ll_pose` - built up into `teach`/`repeat` for recording and replaying new multi-waypoint arm sequences.</p>
+  <ol><li>Task 1 - High-level gestures via `G1ArmActionClient`</li><li>Task 2 - Upper-body pose read + `rt/arm_sdk` writer</li><li>Task 3 - `release_arms` / `engage_arms`: safe controller handoff</li><li>Task 4 - `save_current_ll_pose(name)` / `interpolate_to_ll_pose(name_or_pose, ...)`</li><li>Task 5 - `teach(sequence_name)` / `repeat(sequence_name)`: recording new sequences</li></ol>
+</div>
+<div class="bonus-card">
+  <div class="file">task9_ll_control.ipynb</div>
+  <h4>Task 9: low-level joint control + q/dq/kp/kd/tau visualizer</h4>
+  <p>This task rebuilds the `rt/lowcmd` publisher lifecycle - message construction, CRC, freshness checking, and a single-joint `move_ll_joint` helper - then provides a small Jupyter UI (built with `ipywidgets` + `matplotlib`) so you can *feel* what `q`, `dq`, `kp`, `kd`, and `tau` each do: stream a commanded target continuously and plot commanded-vs-measured traces on demand.</p>
+  <ol><li>Task 1 - Native `rt/lowcmd` publisher: message construction, CRC, and defaults</li><li>Task 2 - `move_ll_joint(joint_id, q, dq, kp, kd, tau)`</li><li>Task 3 - Jupyter UI: visualize q/dq/kp/kd/tau live</li></ol>
+</div>
+<div class="bonus-card">
+  <div class="file">task10_ik_control.ipynb</div>
+  <h4>Task 10: end-effector IK control + teleoperation UI</h4>
+  <p>This task builds a native, position-only `ik_move_ee(hand, dx, dy, dz)` step function using the academy-supplied `hand_pose_navigation` forward/inverse-kinematics solvers, then wraps it in a small Jupyter UI to intuitively teleoperate the end effector - jog buttons for +/-X/Y/Z, plus the essential FSM mode buttons, release/re-engage buttons, and open/close-hand buttons, all in one panel, mirroring `mode_control.py`&#x27;s Dash button layout but native to the notebook.</p>
+  <ol><li>Task 1 - Reuse Task 8&#x27;s upper-body pose/`arm_sdk` helpers, and Dex3 basics</li><li>Task 2 - `ik_move_ee(hand, dx, dy, dz)`: position-only DLS IK step</li><li>Task 3 - FSM mode helper (for the panel below)</li><li>Task 4 - Teleoperation panel: jog buttons + FSM + release/re-engage + open/close hand</li></ol>
+</div>
+<div class="bonus-card">
+  <div class="file">task11_dex3_gradual_gripping.ipynb</div>
+  <h4>Task 11: Dex3 gradual gripping (baseline, close, and open)</h4>
+  <p>A Dex3 `HandCmd` message carries one motor command per hand joint; every commanded joint needs control mode, target position, and conservative `dq`/`tau`/`kp`/`kd`. This task measures an unloaded tactile noise baseline (per `academy/todo.txt`: thresholds must be calibrated per installation, never hardcoded), then implements both directions of gradual motion - `gradual_close` (stopping early on tactile contact) and `gradual_open` (a graceful, symmetric release, filling the gap `academy/todo.txt` flags: *&quot;Add a direct graceful hand-open implementation alongside the completed gradual close example.&quot;*)</p>
+  <ol><li>Task 1 - Tactile subscriber + hand publisher</li><li>Task 2 - `measure_baseline()`: unloaded tactile noise floor</li><li>Task 3 - `gradual_close(threshold, ...)`</li><li>Task 4 - `gradual_open(...)`: the graceful release</li></ol>
+</div>
+<div class="bonus-card">
+  <div class="file">task12_perception_and_pose_estimation_pipeline.ipynb</div>
+  <h4>Task 12: usage of the perception and pose-estimation pipeline</h4>
+  <p>`util.DeliveryPipeline` is the one piece of academy infrastructure this track does not ask you to rebuild - OpenAI vision object detection, ArUco marker pose estimation, camera-to-base and wrist-to-palm transforms - because it is supplied, calibrated infrastructure, not a DDS/SDK concept. This task is about *using* it correctly: constructing it with the academy calibration values, running detection and pose estimation, validating confidence/freshness before acting, and understanding where it hands off to the IK helpers from Task 10. The full pick-and-place sequence built from these pieces is Task 13.</p>
+  <ol><li>Task 1 - Construct the pipeline with calibration + get a frame</li><li>Task 2 - ArUco pose estimation + transform to the base/palm frame</li><li>Task 3 - Validate confidence and freshness before acting</li></ol>
+</div>
+<div class="bonus-card">
+  <div class="file">task13_final_task.ipynb</div>
+  <h4>Task 13: final task - perception-based delivery</h4>
+  <p>The capstone from `notes.txt` section 11: combine perception, grasping, arm control, and SLAM navigation into one pickup -&gt; carry -&gt; drop-off pipeline. Every building block below was developed natively in an earlier task; this notebook assembles them one more time into a single consolidated `AcademyRobot` class - proof that, piece by piece, you could have written `sdk_wrapper.py` yourself - and then defines the end-to-end `deliver(...)` sequence:</p>
+  <ol><li>Task 1 - `AcademyRobot`: one consolidated class over everything built in Tasks 2-12</li><li>Task 2 - `deliver(pickup_point, dropdown_point, ...)`: the end-to-end sequence</li></ol>
+</div>
+  </div>
+</section>
+
+<footer>
+  <div id="sources"><b>Source of truth:</b> this page is generated by diffing the five
+  <code>*_participant.ipynb</code> files in <code>academy/</code> against their five
+  <code>*_solution.ipynb</code> counterparts in <code>academy/solved/</code>, matching code cells 1:1 in
+  document order (both sides always contain exactly 3 code cells per notebook, one per <code>## Task N</code>
+  markdown header). Task descriptions are copied verbatim from each participant notebook's task markdown cell.
+  The appendix summarizes <code>academy/solved/task1_sdkwrapper_usage.ipynb</code> through
+  <code>task13_final_task.ipynb</code>, whose titles, intro paragraphs, and internal task headers are read
+  directly from each notebook's own markdown cells.</div>
+  <p>Regenerate this page by re-diffing the notebook pairs any time a participant or solution notebook
+  changes &mdash; the diff is mechanical (line-level <code>difflib</code> comparison of matching code cells)
+  and will otherwise silently go stale.</p>
+</footer>
+
+</main>
+</div>
+</body>
+</html>

@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>G1 Academy — Mappings &amp; Constraints Reference</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#f6f7f9; --panel:#ffffff; --ink:#1b1f27; --muted:#5b6472; --border:#dfe3ea;
+    --accent:#2454ff; --code-bg:#eef1f6; --zebra:#f9fafc;
+    --wrapper:#0f7a3d; --wrapper-bg:#e6f6ec;
+    --repo:#1b5fd6; --repo-bg:#e8f0fe;
+    --probe:#7a3dc9; --probe-bg:#f2e9fc;
+    --soft:#b5650a; --soft-bg:#fdf0dd;
+    --caution:#c1272d; --caution-bg:#fdeaea;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#14171c; --panel:#1b1f27; --ink:#e7e9ee; --muted:#9aa3b2; --border:#2c313b;
+      --accent:#6f92ff; --code-bg:#232833; --zebra:#1f242e;
+      --wrapper:#5fd38a; --wrapper-bg:#123a24;
+      --repo:#8fb0ff; --repo-bg:#152548;
+      --probe:#c79dff; --probe-bg:#2c1f45;
+      --soft:#f0a94e; --soft-bg:#3a2a10;
+      --caution:#ff8b8f; --caution-bg:#3a1616;
+    }
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  code, .mono{font:13px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;}
+  a{color:var(--accent);}
+  header.top{
+    padding:28px clamp(16px,4vw,48px) 20px; border-bottom:1px solid var(--border);
+    background:var(--panel);
+  }
+  header.top h1{margin:0 0 6px; font-size:1.65rem;}
+  header.top p{margin:4px 0; color:var(--muted); max-width:900px;}
+  .layout{display:flex; align-items:flex-start; max-width:1400px; margin:0 auto;}
+  nav.toc{
+    position:sticky; top:0; align-self:flex-start; width:250px; flex:0 0 250px;
+    max-height:100vh; overflow-y:auto; padding:24px 14px 40px 20px; font-size:13px;
+  }
+  nav.toc a{display:block; color:var(--muted); text-decoration:none; padding:3px 0;}
+  nav.toc a:hover{color:var(--accent);}
+  nav.toc .grp{margin-top:14px; font-weight:700; color:var(--ink); text-transform:uppercase; font-size:11px; letter-spacing:.04em;}
+  main{flex:1 1 auto; min-width:0; padding:24px clamp(16px,4vw,48px) 80px;}
+  section{margin-bottom:44px;}
+  section h2{
+    font-size:1.25rem; margin:0 0 6px; padding-top:6px; border-top:3px solid var(--accent);
+    padding-top:10px;
+  }
+  section h3{font-size:1.02rem; margin:22px 0 8px;}
+  .lede{color:var(--muted); margin:4px 0 16px; max-width:900px;}
+  .note{
+    background:var(--code-bg); border:1px solid var(--border); border-radius:8px;
+    padding:10px 14px; margin:10px 0; font-size:13.5px; color:var(--muted);
+  }
+  .note b{color:var(--ink);}
+  .table-wrap{overflow-x:auto; border:1px solid var(--border); border-radius:10px; background:var(--panel);}
+  table{border-collapse:collapse; width:100%; min-width:560px; font-size:13.5px;}
+  th, td{padding:7px 10px; border-bottom:1px solid var(--border); text-align:left; vertical-align:top;}
+  th{
+    background:var(--code-bg); position:sticky; top:0; font-size:12px; text-transform:uppercase;
+    letter-spacing:.03em; color:var(--muted);
+  }
+  tbody tr:nth-child(even){background:var(--zebra);}
+  tbody tr:hover{background:var(--repo-bg);}
+  td.num, th.num{text-align:right; font-variant-numeric:tabular-nums;}
+  .badge{
+    display:inline-block; font-size:10.5px; font-weight:700; letter-spacing:.02em;
+    padding:1px 7px; border-radius:99px; white-space:nowrap;
+  }
+  .b-wrapper{color:var(--wrapper); background:var(--wrapper-bg);}
+  .b-repo{color:var(--repo); background:var(--repo-bg);}
+  .b-probe{color:var(--probe); background:var(--probe-bg);}
+  .b-soft{color:var(--soft); background:var(--soft-bg);}
+  .b-caution{color:var(--caution); background:var(--caution-bg);}
+  .legend{display:flex; flex-wrap:wrap; gap:8px 18px; margin:10px 0 20px; font-size:12.5px; color:var(--muted);}
+  .legend span.badge{margin-right:5px;}
+  ul.compact{margin:6px 0; padding-left:20px;}
+  ul.compact li{margin:2px 0;}
+  .grid2{display:grid; grid-template-columns:repeat(auto-fit,minmax(360px,1fr)); gap:16px;}
+  .card{border:1px solid var(--border); border-radius:10px; background:var(--panel); padding:14px 16px;}
+  .card h4{margin:0 0 8px; font-size:.92rem;}
+  footer{
+    padding:26px clamp(16px,4vw,48px) 60px; color:var(--muted); font-size:12.5px;
+    border-top:1px solid var(--border);
+  }
+  @media (max-width:900px){
+    nav.toc{display:none;}
+    .layout{display:block;}
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <h1>G1 Academy — Mappings &amp; Constraints Reference</h1>
+  <p>FSM states, joint/ID mappings, value constraints, service names, and DDS/ROS 2 message shapes for the
+  Unitree G1 as used by the academy code in <code>academy/sdk_wrapper.py</code> (primary reference) and
+  cross-checked against the rest of the <code>ef_ws/g1</code> repository, including a live
+  <code>ros2 topic list</code> probe recorded in <code>Inspire_hands/topics.md</code>.</p>
+  <div class="legend">
+    <span><span class="badge b-wrapper">WRAPPER</span> defined/used directly in <code>academy/sdk_wrapper.py</code></span>
+    <span><span class="badge b-repo">REPO</span> found elsewhere in the repo, consistent with the wrapper</span>
+    <span><span class="badge b-probe">LIVE PROBE</span> observed on real hardware via <code>ros2 topic list</code>/echo</span>
+    <span><span class="badge b-soft">SOFT LIMIT</span> a script-level clamp, not a vendor-published spec</span>
+    <span><span class="badge b-caution">UNVERIFIED</span> present in repo but not confirmed against real hardware/SDK</span>
+  </div>
+</header>
+
+<div class="layout">
+<nav class="toc">
+  <div class="grp">Contents</div>
+  <a href="#fsm">1. FSM states</a>
+  <a href="#joints">2. Joint ID mapping</a>
+  <a href="#constraints">3. Joint &amp; value constraints</a>
+  <a href="#gains">4. Default PD gains</a>
+  <a href="#actions">5. High-level arm actions</a>
+  <a href="#hands">6. Dex3 / Inspire hands</a>
+  <a href="#services">7. Services</a>
+  <a href="#audio">8. Audio (audio_msg, TTS, LEDs)</a>
+  <a href="#odom">9. odommodestate / SportModeState</a>
+  <a href="#bms">10. BMS / battery</a>
+  <a href="#lowstate">11. lowstate (LowState)</a>
+  <a href="#slam">12. SLAM data &amp; RPC</a>
+  <a href="#topics">13. ROS 2 / DDS topics</a>
+  <a href="#sources">Sources</a>
+</nav>
+
+<main>
+
+<section id="fsm">
+<h2>1. FSM states (<code>LocoClient.SetFsmId</code>)</h2>
+<p class="lede">The G1 locomotion controller is a finite-state machine selected by an integer FSM id. Academy
+code only exercises a safe subset; the wider repo shows a few additional ids seen on real
+firmware/dashboards. <code>get_state()</code> in <code>sdk_wrapper.py</code> reads the current id/mode via
+the raw RPC ids <code>ROBOT_API_ID_LOCO_GET_FSM_ID</code> / <code>ROBOT_API_ID_LOCO_GET_FSM_MODE</code>
+(numeric values are internal to <code>unitree_sdk2py.g1.loco.g1_loco_api</code> and not re-declared anywhere
+in this repo).</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th class="num">FSM id</th><th>Name</th><th>Trigger in <code>sdk_wrapper.py</code></th><th>Notes</th><th>Source</th></tr></thead>
+<tbody>
+<tr><td class="num">0</td><td><code>zero_torque</code></td><td><code>G1.zero_torque_mode()</code></td><td>All motors torque-off / limp. Entry point after boot or emergency recovery.</td><td><span class="badge b-wrapper">WRAPPER</span></td></tr>
+<tr><td class="num">1</td><td><code>damp</code> / <code>damping</code></td><td><code>G1.damp_mode()</code></td><td>kd-only damping, kp=0 — robot goes limp but resists fast motion. Safe intermediate state.</td><td><span class="badge b-wrapper">WRAPPER</span></td></tr>
+<tr><td class="num">2</td><td><i>airborne</i> (unlabeled)</td><td>not used by the wrapper</td><td>Referenced as <code>fsm_2_airborne</code>/<code>fsm_2_squat_placeholder</code> in <code>dev/modules/sdk_client.py</code> — explicitly a placeholder, not a documented squat mode. <code>todo.txt</code>: “do not map an undocumented FSM ID.”</td><td><span class="badge b-caution">UNVERIFIED</span></td></tr>
+<tr><td class="num">3</td><td><code>sit</code></td><td>not in <code>sdk_wrapper.py</code>; present in <code>mode_control.py</code>/<code>dev_stand.py</code> as <code>Sit()</code></td><td>Dedicated sit-down FSM.</td><td><span class="badge b-repo">REPO</span></td></tr>
+<tr><td class="num">4</td><td><code>prepare</code></td><td><code>G1.prepare_mode()</code></td><td>Stand-up sequencing state between damp and walk.</td><td><span class="badge b-wrapper">WRAPPER</span></td></tr>
+<tr><td class="num">500</td><td><i>balanced stand (fallback)</i></td><td>not used by the wrapper</td><td><code>BalanceStand(0)</code> fallback / dev-mode <code>Start()</code> fallback path in <code>dev/modules/sdk_client.py</code> when those higher-level methods aren't available on the loaded SDK.</td><td><span class="badge b-repo">REPO</span></td></tr>
+<tr><td class="num">501</td><td><code>walk</code></td><td><code>G1.walk_mode()</code>, also the reported "balanced stand" state</td><td>Balanced-stand / locomotion-ready state; <code>toggle_gait()</code> continuous-move flag flips gait on top of this state.</td><td><span class="badge b-wrapper">WRAPPER</span></td></tr>
+<tr><td class="num">802</td><td><code>run</code></td><td><code>G1.run_mode()</code></td><td>Running gait FSM.</td><td><span class="badge b-wrapper">WRAPPER</span></td></tr>
+<tr><td class="num">812<span class="mono">*</span></td><td><code>climb</code></td><td>not in <code>sdk_wrapper.py</code>; <code>mode_control.py --climb-fsm-id</code> (default 812)</td><td>*Configurable, defaults to 812 / <code>G1_CLIMB_FSM_ID</code> — treat as a site-specific guess, not a documented id.</td><td><span class="badge b-caution">UNVERIFIED</span></td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>Motion-switcher modes (separate from the loco FSM)</h3>
+<p class="lede"><code>MotionSwitcherClient</code> is a second, independent state machine that arbitrates which
+high-level service owns the robot's motors. <code>ai_sport</code> is the normal locomotion-service mode; when a
+non-<code>ai_sport</code> name is selected (or the mode is released), the loco FSM RPCs described above stop
+being meaningful and the robot is in "dev" mode — <code>get_state()</code>/<code>mode_control.py</code> both check
+this first and skip the FSM RPC while <code>motion_mode != "ai_sport"</code>.</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Name</th><th>Meaning</th><th>Source</th></tr></thead>
+<tbody>
+<tr><td><code>ai_sport</code></td><td>Normal mode — the <code>ai_sport</code> service owns locomotion/loco FSM. <code>toggle_dev_mode()</code> == <code>toggle_service("ai_sport")</code>.</td><td><span class="badge b-wrapper">WRAPPER</span></td></tr>
+<tr><td><code>normal</code>, <code>advanced</code>, <code>stand</code></td><td>Other motion-switcher mode names accepted by <code>MotionSwitcherClient.SelectMode()</code> — passed through unchanged by <code>Inspire_hands/service_toggle.py</code>; semantics not otherwise documented in the repo.</td><td><span class="badge b-caution">UNVERIFIED</span></td></tr>
+<tr><td><code>ai</code></td><td>Alias for <code>ai_sport</code> (<code>MODE_ALIASES</code>).</td><td><span class="badge b-repo">REPO</span></td></tr>
+<tr><td><i>released / empty</i></td><td>No mode selected — motors free for direct <code>rt/lowcmd</code> control ("dev mode").</td><td><span class="badge b-repo">REPO</span></td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>Motion-switcher / service RPC error codes</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th class="num">Code</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td class="num">0</td><td>success</td></tr>
+<tr><td class="num">7001</td><td>request parameter error</td></tr>
+<tr><td class="num">7002</td><td>service busy; retry</td></tr>
+<tr><td class="num">7004</td><td>unsupported mode name</td></tr>
+<tr><td class="num">7005</td><td>internal command execute error</td></tr>
+<tr><td class="num">7006</td><td>check command execute error</td></tr>
+<tr><td class="num">7007</td><td>switch command execute error</td></tr>
+<tr><td class="num">7008</td><td>release command execute error</td></tr>
+<tr><td class="num">7009</td><td>custom config set error</td></tr>
+</tbody>
+</table>
+</div>
+<p class="lede">Table duplicated verbatim in <code>academy/mode_control.py</code> and
+<code>Inspire_hands/service_toggle.py</code> (<code>ERROR_HINTS</code>). <span class="badge b-repo">REPO</span></p>
+</section>
+
+<section id="joints">
+<h2>2. Joint ID mapping (29-DOF low-level joint array)</h2>
+<p class="lede"><code>sdk_wrapper.py</code> only defines the joint <b>groups</b>
+(<code>LEFT_LEG_JOINTS</code>, <code>RIGHT_LEG_JOINTS</code>, <code>WAIST_JOINTS</code>,
+<code>LEFT_ARM_JOINTS</code>, <code>RIGHT_ARM_JOINTS</code> → <code>LOWCMD_JOINTS</code> = indices 0–28) and the
+7-joint arm order used by FK/IK (<code>hand_pose_navigation/arm_fk.py</code>: shoulder pitch, roll, yaw, elbow,
+wrist roll, pitch, yaw). The full per-joint <b>name</b> table below is reconstructed from the
+<code>G1JointIndex</code> enum vendored in <code>dev/old_scripts/arm_motion/g1_arm7_sdk_dds_example.py</code> /
+<code>sdk_details.md</code> (an official Unitree SDK example kept in-repo) and cross-checked against the URDF
+joint names loaded by <code>sim/.../rviz_joint_all_body.py</code>. Index order, group boundaries, and default
+gains all match <code>sdk_wrapper.py</code> exactly.</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th class="num">idx</th><th>SDK enum name</th><th>URDF joint name</th><th>Group</th></tr></thead>
+<tbody>
+<tr><td class="num">0</td><td><code>LeftHipPitch</code></td><td><code>left_hip_pitch_joint</code></td><td rowspan="6">left_leg</td></tr>
+<tr><td class="num">1</td><td><code>LeftHipRoll</code></td><td><code>left_hip_roll_joint</code></td></tr>
+<tr><td class="num">2</td><td><code>LeftHipYaw</code></td><td><code>left_hip_yaw_joint</code></td></tr>
+<tr><td class="num">3</td><td><code>LeftKnee</code></td><td><code>left_knee_joint</code></td></tr>
+<tr><td class="num">4</td><td><code>LeftAnklePitch</code> (alias <code>LeftAnkleB</code>)</td><td><code>left_ankle_pitch_joint</code></td></tr>
+<tr><td class="num">5</td><td><code>LeftAnkleRoll</code> (alias <code>LeftAnkleA</code>)</td><td><code>left_ankle_roll_joint</code></td></tr>
+<tr><td class="num">6</td><td><code>RightHipPitch</code></td><td><code>right_hip_pitch_joint</code></td><td rowspan="6">right_leg</td></tr>
+<tr><td class="num">7</td><td><code>RightHipRoll</code></td><td><code>right_hip_roll_joint</code></td></tr>
+<tr><td class="num">8</td><td><code>RightHipYaw</code></td><td><code>right_hip_yaw_joint</code></td></tr>
+<tr><td class="num">9</td><td><code>RightKnee</code></td><td><code>right_knee_joint</code></td></tr>
+<tr><td class="num">10</td><td><code>RightAnklePitch</code> (alias <code>RightAnkleB</code>)</td><td><code>right_ankle_pitch_joint</code></td></tr>
+<tr><td class="num">11</td><td><code>RightAnkleRoll</code> (alias <code>RightAnkleA</code>)</td><td><code>right_ankle_roll_joint</code></td></tr>
+<tr><td class="num">12</td><td><code>WaistYaw</code></td><td><code>waist_yaw_joint</code></td><td rowspan="3">waist</td></tr>
+<tr><td class="num">13</td><td><code>WaistRoll</code> (alias <code>WaistA</code>) — invalid on waist-locked variants</td><td><code>waist_roll_joint</code></td></tr>
+<tr><td class="num">14</td><td><code>WaistPitch</code> (alias <code>WaistB</code>) — invalid on waist-locked variants</td><td><code>waist_pitch_joint</code></td></tr>
+<tr><td class="num">15</td><td><code>LeftShoulderPitch</code></td><td><code>left_shoulder_pitch_joint</code></td><td rowspan="7">left_arm</td></tr>
+<tr><td class="num">16</td><td><code>LeftShoulderRoll</code></td><td><code>left_shoulder_roll_joint</code></td></tr>
+<tr><td class="num">17</td><td><code>LeftShoulderYaw</code></td><td><code>left_shoulder_yaw_joint</code></td></tr>
+<tr><td class="num">18</td><td><code>LeftElbow</code></td><td><code>left_elbow_joint</code></td></tr>
+<tr><td class="num">19</td><td><code>LeftWristRoll</code></td><td><code>left_wrist_roll_joint</code></td></tr>
+<tr><td class="num">20</td><td><code>LeftWristPitch</code> — invalid on G1 23-DOF</td><td><code>left_wrist_pitch_joint</code></td></tr>
+<tr><td class="num">21</td><td><code>LeftWristYaw</code> — invalid on G1 23-DOF</td><td><code>left_wrist_yaw_joint</code></td></tr>
+<tr><td class="num">22</td><td><code>RightShoulderPitch</code></td><td><code>right_shoulder_pitch_joint</code></td><td rowspan="7">right_arm</td></tr>
+<tr><td class="num">23</td><td><code>RightShoulderRoll</code></td><td><code>right_shoulder_roll_joint</code></td></tr>
+<tr><td class="num">24</td><td><code>RightShoulderYaw</code></td><td><code>right_shoulder_yaw_joint</code></td></tr>
+<tr><td class="num">25</td><td><code>RightElbow</code></td><td><code>right_elbow_joint</code></td></tr>
+<tr><td class="num">26</td><td><code>RightWristRoll</code></td><td><code>right_wrist_roll_joint</code></td></tr>
+<tr><td class="num">27</td><td><code>RightWristPitch</code> — invalid on G1 23-DOF</td><td><code>right_wrist_pitch_joint</code></td></tr>
+<tr><td class="num">28</td><td><code>RightWristYaw</code> — invalid on G1 23-DOF</td><td><code>right_wrist_yaw_joint</code></td></tr>
+<tr><td class="num">29</td><td><code>kNotUsedJoint</code></td><td><i>n/a — not a real joint</i></td><td><code>rt/arm_sdk</code> enable weight, see §3</td></tr>
+<tr><td class="num">30–34</td><td><i>reserved</i></td><td><i>n/a</i></td><td>Unused slots — <code>motor_cmd</code>/<code>motor_state</code> arrays are size 35 (<code>MotorCmd[35]</code>/<code>MotorState[35]</code>) per the live <code>/lowstate</code>·<code>/lowcmd</code> probe, even though only indices 0–29 are meaningful.</td></tr>
+</tbody>
+</table>
+</div>
+<p class="lede"><code>UPPER_BODY_JOINTS</code> = waist ∪ left_arm ∪ right_arm (indices 12–28) — the set <code>rt/arm_sdk</code>
+helpers (<code>release_arms</code>, <code>engage_arms</code>, <code>move_ll_joint(arm_sdk=True)</code>) are allowed to
+touch. <span class="badge b-wrapper">WRAPPER</span></p>
+</section>
+
+<section id="constraints">
+<h2>3. Joint &amp; value constraints (min/max)</h2>
+
+<h3>Arm joint limits — radians (used live by <code>sdk_wrapper.py</code> IK)</h3>
+<p class="lede">Sourced from <code>hand_pose_navigation/arm_fk.py</code> <code>JOINT_LIMITS</code> ("from URDF"),
+imported directly by <code>sdk_wrapper.py</code> and enforced by <code>_clamp_arm_q()</code> on every
+<code>ik_move_ee</code>/<code>extend_arm</code> call. This is the authoritative arm limit set for academy code.</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Joint (arm-local index)</th><th class="num">Left min</th><th class="num">Left max</th><th class="num">Right min</th><th class="num">Right max</th></tr></thead>
+<tbody>
+<tr><td>0 — shoulder pitch</td><td class="num">-3.0890</td><td class="num">2.6700</td><td class="num">-2.6700</td><td class="num">3.0890</td></tr>
+<tr><td>1 — shoulder roll</td><td class="num">-1.5708</td><td class="num">2.2000</td><td class="num">-2.2000</td><td class="num">1.5708</td></tr>
+<tr><td>2 — shoulder yaw</td><td class="num">-2.1817</td><td class="num">2.1817</td><td class="num">-2.1817</td><td class="num">2.1817</td></tr>
+<tr><td>3 — elbow</td><td class="num">-1.0472</td><td class="num">2.0944</td><td class="num">-1.0472</td><td class="num">2.0944</td></tr>
+<tr><td>4 — wrist roll</td><td class="num">-1.9722</td><td class="num">1.9722</td><td class="num">-1.9722</td><td class="num">1.9722</td></tr>
+<tr><td>5 — wrist pitch</td><td class="num">-1.6580</td><td class="num">1.6580</td><td class="num">-1.6580</td><td class="num">1.6580</td></tr>
+<tr><td>6 — wrist yaw</td><td class="num">-1.6580</td><td class="num">1.6580</td><td class="num">-1.6580</td><td class="num">1.6580</td></tr>
+</tbody>
+</table>
+</div>
+<p class="note"><b>Left/right are mirrored, not identical</b> — e.g. left shoulder-roll max (2.20) ≠ right
+shoulder-roll max (1.57 in magnitude on the opposite sign), because the arms are physically mirrored about
+the sagittal plane. Always index into the table with the correct side.</p>
+
+<h3>Leg &amp; waist joint limits — radians <span class="badge b-soft">SOFT LIMIT</span></h3>
+<p class="lede">No URDF or vendor joint-limit table for the legs/waist is checked into this repo (the
+real URDF is loaded at runtime from the robot's <code>g1_description</code> ROS package share directory, e.g.
+<code>/home/unitree/EF/ef_ws/g1/install/g1_description/...</code>, referenced by
+<code>hand_pose_navigation/arm_fk.py</code> but not vendored). <code>sdk_wrapper.py</code> itself never clamps
+leg/waist joints. The table below is the most complete leg/waist limit set found in the repo — explicitly
+labeled <i>“conservative safe ranges”</i> in <code>dev/old_scripts/dev/imitation/stack_1/mapper.py</code>, used
+to clamp motion-capture-derived poses, not a hardware spec sheet. Treat it as a safety ceiling for scripted
+motion, not ground truth.</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th class="num">idx</th><th>Joint</th><th class="num">Min (rad)</th><th class="num">Max (rad)</th></tr></thead>
+<tbody>
+<tr><td class="num">0/6</td><td>Hip pitch (L/R)</td><td class="num">-1.57</td><td class="num">1.57</td></tr>
+<tr><td class="num">1/7</td><td>Hip roll (L/R)</td><td class="num">-0.52</td><td class="num">0.52</td></tr>
+<tr><td class="num">2/8</td><td>Hip yaw (L/R)</td><td class="num">-0.52</td><td class="num">0.52</td></tr>
+<tr><td class="num">3/9</td><td>Knee (L/R)</td><td class="num">0.00</td><td class="num">2.30</td></tr>
+<tr><td class="num">4/10</td><td>Ankle pitch (L/R)</td><td class="num">-0.52</td><td class="num">0.52</td></tr>
+<tr><td class="num">5/11</td><td>Ankle roll (L/R)</td><td class="num">-0.30</td><td class="num">0.30</td></tr>
+<tr><td class="num">12</td><td>Waist yaw</td><td class="num">-1.00</td><td class="num">1.00</td></tr>
+<tr><td class="num">13</td><td>Waist roll</td><td class="num">-0.35</td><td class="num">0.35</td></tr>
+<tr><td class="num">14</td><td>Waist pitch</td><td class="num">-0.52</td><td class="num">0.52</td></tr>
+</tbody>
+</table>
+</div>
+<p class="lede">A second, slightly tighter subset appears in <code>dev/old_scripts/balance_1_leg.py</code>
+(hip pitch ±1.50, hip roll/yaw ±0.50, knee 0–2.20, ankle pitch ±0.50, ankle roll ±0.28, waist yaw ±1.00) —
+"same source" per its own comment, kept separately because that script only actuates the legs and waist yaw.
+<span class="badge b-soft">SOFT LIMIT</span></p>
+<p class="note"><b>Arm limits differ between two repo sources.</b> The same
+<code>dev/old_scripts/.../mapper.py</code> file also carries its own arm limit table (e.g. shoulder pitch
+-1.57…2.40 rad, elbow 0…2.40 rad) for clamping motion-capture retargeting output. It disagrees with the
+URDF-sourced <code>arm_fk.py</code> table above. <b><code>sdk_wrapper.py</code> uses <code>arm_fk.JOINT_LIMITS</code>
+exclusively</b> — the mapper.py numbers are a separate, more conservative, imitation-learning-specific clamp
+and are not used by any academy notebook.</p>
+
+<h3>Dex3 hand joint limits — radians</h3>
+<p class="lede">7 joints per hand: <code>thumb_0, thumb_1, thumb_2, middle_0, middle_1, index_0, index_1</code>
+(3-DOF thumb + 2-DOF "middle" finger + 2-DOF "index" finger). Clamped on every write by
+<code>_clamp_hand()</code>. <span class="badge b-wrapper">WRAPPER</span></p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Joint</th><th class="num">Left min</th><th class="num">Left max</th><th class="num">Right min</th><th class="num">Right max</th></tr></thead>
+<tbody>
+<tr><td><code>thumb_0</code></td><td class="num">-1.05</td><td class="num">1.05</td><td class="num">-1.05</td><td class="num">1.05</td></tr>
+<tr><td><code>thumb_1</code></td><td class="num">-0.724</td><td class="num">1.05</td><td class="num">-1.05</td><td class="num">0.742</td></tr>
+<tr><td><code>thumb_2</code></td><td class="num">0.0</td><td class="num">1.75</td><td class="num">-1.75</td><td class="num">0.0</td></tr>
+<tr><td><code>middle_0</code></td><td class="num">-1.57</td><td class="num">0.0</td><td class="num">0.0</td><td class="num">1.57</td></tr>
+<tr><td><code>middle_1</code></td><td class="num">-1.75</td><td class="num">0.0</td><td class="num">0.0</td><td class="num">1.75</td></tr>
+<tr><td><code>index_0</code></td><td class="num">-1.57</td><td class="num">0.0</td><td class="num">0.0</td><td class="num">1.57</td></tr>
+<tr><td><code>index_1</code></td><td class="num">-1.75</td><td class="num">0.0</td><td class="num">0.0</td><td class="num">1.75</td></tr>
+</tbody>
+</table>
+</div>
+<p class="lede"><code>HAND_THUMB0</code> resting/neutral value: left = <code>-0.09927542507648468</code>,
+right = <code>-0.03510913997888565</code> — used as the fixed <code>thumb_0</code> value in both
+<code>HAND_OPEN</code> and <code>HAND_CLOSED</code> presets (thumb rotation is not driven open/closed, only
+flexed). <code>HAND_OPEN</code>/<code>HAND_CLOSED</code> otherwise sit at whichever bound
+(<code>HAND_MIN</code>/<code>HAND_MAX</code>) is farther from the closed pose per joint. <span class="badge b-wrapper">WRAPPER</span></p>
+
+<h3>Other numeric constraints used by <code>sdk_wrapper.py</code></h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Value</th><th>Range / default</th><th>Where</th></tr></thead>
+<tbody>
+<tr><td><code>rt/arm_sdk</code> enable weight (<code>motor_cmd[29].q</code>)</td><td class="num">0.0 – 1.0</td><td><code>_ArmSdk.write(weight=...)</code>, clamped with <code>max(0.0, min(1.0, ...))</code>. 1.0 = full arm_sdk authority, 0.0 = released back to whichever controller normally owns the joint.</td></tr>
+<tr><td>Headlight intensity</td><td class="num">0 – 100 (%)</td><td><code>set_headlight(intensity=...)</code> → <code>_scale_color()</code></td></tr>
+<tr><td>Headlight/LED RGB channel</td><td class="num">0 – 255</td><td><code>_parse_color()</code>, sent to <code>AudioClient.LedControl(r,g,b)</code></td></tr>
+<tr><td>TTS volume</td><td class="num">0 – 100</td><td><code>say(volume=...)</code> → <code>AudioClient.SetVolume()</code></td></tr>
+<tr><td>IK position tolerance</td><td class="num">0.005 m</td><td><code>_arm_ik_solver()</code> (<code>ArmIK(..., tol_pos_m=0.005)</code>) and <code>_solve_position_shoulder_elbow</code> (<code>tol=0.005</code>)</td></tr>
+<tr><td>IK rotation tolerance</td><td class="num">0.02 rad</td><td><code>_arm_ik_solver()</code> (<code>tol_rot_rad=0.02</code>)</td></tr>
+<tr><td>IK max iterations</td><td class="num">24 (DLS solver) / 64 (position-only solver)</td><td><code>_arm_ik_solver</code> / <code>_solve_position_shoulder_elbow</code></td></tr>
+<tr><td>IK per-iteration joint-delta clamp</td><td class="num">0.3 rad (Euclidean norm)</td><td><code>_solve_position_shoulder_elbow</code></td></tr>
+<tr><td><code>ik_move_ee</code> default max Cartesian speed</td><td class="num">0.35 m/s</td><td><code>ik_move_ee(max_speed=0.35)</code></td></tr>
+<tr><td><code>ik_move_ee</code> default max per-step joint delta</td><td class="num">0.2 rad</td><td><code>ik_move_ee(max_dq=0.2)</code></td></tr>
+<tr><td><code>extend_arm</code> default reach / steps</td><td class="mono">dx=0.08, dy=0.08, dz=0.04 m, steps=3, max_speed=0.25 m/s, max_dq=0.15 rad</td><td><code>extend_arm(...)</code></td></tr>
+<tr><td><code>release_arms</code> / <code>engage_arms</code> ramp</td><td class="mono">151 / 51 steps @ 50 Hz (~3.0 s / ~1.0 s), smoothstep easing</td><td><code>release_arms()</code>, <code>engage_arms()</code></td></tr>
+<tr><td>Battery-sample freshness window</td><td class="num">3.0 s</td><td><code>get_battery()</code> — a BMS topic sample older than 3 s is skipped in favor of the next source</td></tr>
+<tr><td><code>_lowstate_msg</code> wait timeout</td><td class="num">3.0 s (default)</td><td><code>_current_q_mode(timeout=3.0)</code>, raises <code>TimeoutError</code> past this</td></tr>
+<tr><td>RGB-D ZMQ receive timeout</td><td class="num">3000 ms</td><td><code>get_rgbd()</code></td></tr>
+<tr><td>Point-cloud decimation</td><td class="num">≤ 20000 points returned</td><td><code>get_point_cloud()</code> strides through the raw buffer if larger</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<section id="gains">
+<h2>4. Default PD gains</h2>
+<p class="lede">Full <code>rt/lowcmd</code> path (<code>_LowCmd.write</code>, 500 Hz-class use) vs. the
+<code>rt/arm_sdk</code> path (<code>_ArmSdk.write</code>, 50 Hz-class use per <code>sdk_details.md</code>) use
+different default gain sets — arm_sdk gains are intentionally softer because the weight blend
+(§3) already ramps authority in/out.</p>
+<div class="grid2">
+<div class="card">
+<h4><code>rt/lowcmd</code> full-body defaults (<code>_LowCmd.write</code>)</h4>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Group</th><th class="num">kp</th><th class="num">kd</th></tr></thead>
+<tbody>
+<tr><td>Hip pitch/roll/yaw</td><td class="num">60</td><td class="num">1</td></tr>
+<tr><td>Knee</td><td class="num">100</td><td class="num">2</td></tr>
+<tr><td>Ankle pitch/roll</td><td class="num">40</td><td class="num">1</td></tr>
+<tr><td>Waist yaw</td><td class="num">60</td><td class="num">1</td></tr>
+<tr><td>Waist roll/pitch</td><td class="num">40</td><td class="num">1</td></tr>
+<tr><td>All arm joints (×14)</td><td class="num">40</td><td class="num">1</td></tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="card">
+<h4><code>rt/arm_sdk</code> defaults (<code>_ArmSdk.write</code>)</h4>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Context</th><th class="num">kp</th><th class="num">kd</th></tr></thead>
+<tbody>
+<tr><td>Generic default</td><td class="num">30.0</td><td class="num">1.5</td></tr>
+<tr><td><code>release_arms</code>/<code>engage_arms</code> waist (all 3 joints)</td><td class="num">480.0</td><td class="num">12.0</td></tr>
+<tr><td><code>ik_move_ee</code> waist yaw (idx 14)</td><td class="num">480.0</td><td class="num">12.0</td></tr>
+<tr><td><code>ik_move_ee</code> waist roll/pitch (idx 12, 13)</td><td class="num">200.0</td><td class="num">12.0</td></tr>
+<tr><td><code>sdk_details.md</code> quick-start example</td><td class="num">60.0</td><td class="num">1.5</td></tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="card">
+<h4>Dex3 hand command defaults (<code>_Dex3._write</code>)</h4>
+<div class="table-wrap">
+<table>
+<tbody>
+<tr><td>kp</td><td class="num">0.8</td></tr>
+<tr><td>kd</td><td class="num">0.05</td></tr>
+<tr><td>tau (feed-forward)</td><td class="num">0.02</td></tr>
+<tr><td><code>motor_cmd.mode</code> packing</td><td class="mono">(motor_idx &amp; 0x0F) | (1 &lt;&lt; 4)</td></tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="card">
+<h4>Control rates (<code>sdk_details.md</code>)</h4>
+<div class="table-wrap">
+<table>
+<tbody>
+<tr><td><code>rt/arm_sdk</code> loop</td><td class="num">50 Hz (dt = 0.02 s)</td></tr>
+<tr><td>Full <code>rt/lowcmd</code> loop</td><td class="num">500 Hz (dt = 0.002 s)</td></tr>
+<tr><td>Dex3 hand write loop (<code>_Dex3.move</code> default)</td><td class="num">50 Hz</td></tr>
+<tr><td>Headlight re-assert interval</td><td class="num">0.2 s</td></tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</section>
+
+<section id="actions">
+<h2>5. High-level arm gesture actions (<code>G1ArmActionClient</code>)</h2>
+<p class="lede"><code>HL_ARM_ACTIONS</code> — canned upper-body gestures executed as a single opaque action id
+via <code>ExecuteAction(id)</code>, separate from joint-level control. Some gestures
+(<code>shake_hand</code>, <code>hug</code>) auto-release after a delay by calling <code>release arm</code>
+(id 99) again. <span class="badge b-wrapper">WRAPPER</span></p>
+<div class="table-wrap">
+<table>
+<thead><tr><th class="num">Action id</th><th>Name</th><th>Aliases (<code>HL_ARM_ACTION_ALIASES</code>)</th><th>Wrapper method</th></tr></thead>
+<tbody>
+<tr><td class="num">99</td><td>release arm</td><td><code>release</code></td><td>auto-called after timed gestures</td></tr>
+<tr><td class="num">11</td><td>two-hand kiss</td><td><code>two hand kiss</code></td><td>—</td></tr>
+<tr><td class="num">12</td><td>left kiss</td><td><code>lefthand kiss</code>, <code>left hand kiss</code></td><td><code>left_kiss()</code></td></tr>
+<tr><td class="num">13</td><td>right kiss</td><td><code>righthand kiss</code>, <code>right hand kiss</code></td><td>—</td></tr>
+<tr><td class="num">15</td><td>hands up</td><td>—</td><td>—</td></tr>
+<tr><td class="num">17</td><td>clap</td><td>—</td><td><code>clap()</code></td></tr>
+<tr><td class="num">18</td><td>high five</td><td>—</td><td>—</td></tr>
+<tr><td class="num">19</td><td>hug</td><td>—</td><td><code>hug()</code> (2 s release delay)</td></tr>
+<tr><td class="num">20</td><td>heart</td><td>—</td><td>—</td></tr>
+<tr><td class="num">21</td><td>right heart</td><td>—</td><td>—</td></tr>
+<tr><td class="num">22</td><td>reject</td><td>—</td><td>—</td></tr>
+<tr><td class="num">23</td><td>right hand up</td><td>—</td><td>—</td></tr>
+<tr><td class="num">24</td><td>x-ray</td><td><code>xray</code>, <code>x ray</code></td><td>—</td></tr>
+<tr><td class="num">25</td><td>face wave</td><td>—</td><td><code>face_wave()</code></td></tr>
+<tr><td class="num">26</td><td>high wave</td><td>—</td><td><code>high_wave()</code></td></tr>
+<tr><td class="num">27</td><td>shake hand</td><td>—</td><td><code>shake_hand()</code> (2 s release delay)</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<section id="hands">
+<h2>6. Dex3 / Inspire hand topics &amp; addressing</h2>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Hand type</th><th>Side</th><th>Transport</th><th>Address / topic</th></tr></thead>
+<tbody>
+<tr><td rowspan="4">Dex3 (DDS)</td><td>left cmd</td><td>DDS</td><td><code>rt/dex3/left/cmd</code> (<code>unitree_hg/msg/HandCmd</code>)</td></tr>
+<tr><td>left state</td><td>DDS</td><td><code>rt/dex3/left/state</code> (<code>unitree_hg/msg/HandState</code>)</td></tr>
+<tr><td>right cmd</td><td>DDS</td><td><code>rt/dex3/right/cmd</code></td></tr>
+<tr><td>right state</td><td>DDS</td><td><code>rt/dex3/right/state</code></td></tr>
+<tr><td rowspan="2">Inspire (Modbus TCP)</td><td>right</td><td>Modbus/TCP</td><td><code>192.168.123.210:6000</code>, unit id 1</td></tr>
+<tr><td>left</td><td>Modbus/TCP</td><td><code>192.168.123.211:6000</code>, unit id 1</td></tr>
+</tbody>
+</table>
+</div>
+<p class="lede"><code>_modbus_move()</code> writes holding registers <code>1004</code> (enable, value 1), then
+<code>1522</code> and <code>1498</code> (6× value 200 each — speed/force preload, meaning not documented in
+repo), then the 6 target registers at <code>1486</code>. <code>INSPIRE_OPEN = [1000,1000,1000,1000,1000,250]</code>,
+<code>INSPIRE_CLOSE = [500,500,500,500,500,250]</code> — raw actuator units (0–1000 range inferred from the
+open/close deltas; exact per-register semantics beyond "5 finger channels + 1 extra" are not documented in
+this repo). <span class="badge b-caution">UNVERIFIED</span></p>
+<p class="note">Dex3 tactile sensor data (<code>press_sensor_state[]</code>) exposes per-sensor
+<code>pressure[]</code>, <code>temperature[]</code> arrays and a <code>lost</code> flag, read by
+<code>get_dex3_hand_sensors()</code>. <code>get_inspire_hand_sensors()</code> is a stub in
+<code>sdk_wrapper.py</code> — it always reports "hand not detected" (no tactile read-back is implemented for
+the Modbus Inspire hands).</p>
+</section>
+
+<section id="services">
+<h2>7. Services (<code>RobotStateClient</code>)</h2>
+<p class="lede"><code>SERVICE_CATALOG</code> is the small, human-labeled subset of services academy code
+knows how to describe; <code>get_service()</code> always returns at least these five rows (with
+<code>status=None</code>) even if <code>RobotStateClient.ServiceList()</code> is unavailable on the installed SDK.
+<span class="badge b-wrapper">WRAPPER</span></p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Service name</th><th>Academy label</th></tr></thead>
+<tbody>
+<tr><td><code>ai_sport</code></td><td>Main Motion Control Service</td></tr>
+<tr><td><code>basic_service</code></td><td>Basic Service</td></tr>
+<tr><td><code>g1_arm_example</code></td><td>Upper Limb Motion Service</td></tr>
+<tr><td><code>vui_service</code></td><td>Audio and Lighting Control Service</td></tr>
+<tr><td><code>unitree_slam</code></td><td>Navigation Service</td></tr>
+</tbody>
+</table>
+</div>
+<p class="lede">A live <code>/api/robot_state/response</code> sample recorded in
+<code>Inspire_hands/topics.md</code> shows additional services present on real hardware that are not in the
+academy catalog (the sample was truncated, so this list is a lower bound):
+<code>audio_player_service</code>, <code>auto_test_arm</code>, <code>auto_test_low</code>,
+<code>bashrunner</code>, <code>battery_guard</code>, <code>dex3_service_l</code>, <code>dex3_service_r</code>.
+<span class="badge b-probe">LIVE PROBE</span></p>
+<p class="lede"><code>toggle_service(name)</code> flips a service's enabled state via
+<code>ServiceSwitch(name, enabled)</code>; <code>toggle_dev_mode()</code> is exactly
+<code>toggle_service("ai_sport")</code>. <span class="badge b-wrapper">WRAPPER</span></p>
+</section>
+
+<section id="audio">
+<h2>8. Audio: <code>audio_msg</code> (mic/ASR) &amp; TTS/LED output</h2>
+
+<h3>Microphone input — <code>rt/audio_msg</code> / <code>/audio_msg</code></h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Field</th><th>Type</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>topic type</td><td><code>std_msgs/msg/String</code></td><td>DDS name <code>rt/audio_msg</code> = ROS 2 name <code>/audio_msg</code>. <span class="badge b-probe">LIVE PROBE</span></td></tr>
+<tr><td><code>data</code></td><td><code>string</code></td><td>Raw ASR payload — JSON object in practice (parsed with <code>json.loads</code> by the wrapper) but code paths also accept plain text as a fallback.</td></tr>
+<tr><td><code>data.text</code> (JSON case)</td><td><code>string</code></td><td>Recognized transcript text. Read by <code>get_mic_input()</code> via <code>payload.get("text","")</code>.</td></tr>
+</tbody>
+</table>
+</div>
+<p class="note"><b>Wake-up gating</b> (from <code>notes.txt</code>): the robot must be in wake-up mode before
+<code>rt/audio_msg</code> carries anything; wake-up can currently only be toggled through the Unitree app or
+the physical remote — there is no SDK call for it in this repo.
+A filtered variant <code>/audio_msg/filter</code> (also <code>std_msgs/String</code>) exists on real hardware
+but is not read by <code>sdk_wrapper.py</code>. <span class="badge b-probe">LIVE PROBE</span></p>
+<p class="lede"><code>get_mic_input(duration_s, poll_s)</code> polls for up to <code>duration_s</code> seconds
+(0 = single immediate check), de-duplicating on <code>(timestamp, raw_text)</code>, polling at
+<code>max(0.01, poll_s)</code> intervals (default 0.05 s). <span class="badge b-wrapper">WRAPPER</span></p>
+
+<h3>Text-to-speech (Piper → <code>AudioClient.PlayStream</code>)</h3>
+<p class="lede"><code>say(text, language, volume)</code> synthesizes with Piper, then resamples/repacks to the
+format the robot's audio pipeline expects before calling <code>AudioClient.PlayStream(app_id, app_name, pcm)</code>.
+<span class="badge b-wrapper">WRAPPER</span></p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Constraint</th><th>Value</th></tr></thead>
+<tbody>
+<tr><td>Required PCM format for <code>PlayStream</code></td><td class="mono">mono, 16-bit signed, 16000 Hz</td></tr>
+<tr><td>Volume</td><td class="num">0 – 100 (int)</td></tr>
+<tr><td>Supported language codes</td><td class="mono">en / en_us / english → en_US-lessac-medium<br>de / de_de / german → de_DE-thorsten-medium<br>fr / fr_fr / french → fr_FR-siwis-medium<br>es / es_es / spanish → es_ES-davefx-medium<br>ar / ar_jo / arabic → ar_JO-kareem-medium</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>Headlight / status LED (<code>AudioClient.LedControl</code>)</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Parameter</th><th>Range</th></tr></thead>
+<tbody>
+<tr><td>Color</td><td>Named color (10 presets: white, red, green, blue, yellow, cyan, magenta, orange, purple, pink), <code>#RRGGBB</code> hex, or <code>"R,G,B"</code> — each channel clamped 0–255</td></tr>
+<tr><td>Intensity</td><td class="num">0 – 100 (%), scales RGB before sending</td></tr>
+<tr><td>Duration</td><td>seconds; ≤ 0 sends one <code>LedControl</code> call and returns; &gt; 0 spawns a background thread that re-asserts the color every 0.2 s until the duration elapses or a nonzero return code is seen, then turns the LED off (<code>LedControl(0,0,0)</code>)</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<section id="odom">
+<h2>9. <code>odommodestate</code> / <code>SportModeState</code></h2>
+<p class="lede"><code>get_odom()</code> prefers <code>rt/odommodestate</code> (falling back to the alternate
+<code>rt/sportmodestate</code> topic if it has a newer timestamp), then <code>rt/odom</code>, then
+<code>rt/unitree/slam_mapping/odom</code>. <span class="badge b-wrapper">WRAPPER</span> Field layout below is
+the live-probed <code>unitree_go/msg/SportModeState</code> struct. <span class="badge b-probe">LIVE PROBE</span></p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Field</th><th>Type</th><th>Read by <code>sdk_wrapper.py</code>?</th></tr></thead>
+<tbody>
+<tr><td><code>stamp</code></td><td>time</td><td>no</td></tr>
+<tr><td><code>error_code</code></td><td>uint32</td><td>no</td></tr>
+<tr><td><code>imu_state</code></td><td><code>IMUState</code> (nested)</td><td>yes — via <code>get_imus()</code> as a fallback when <code>rt/lowstate</code> is stale</td></tr>
+<tr><td><code>mode</code></td><td>uint8</td><td>yes (<code>get_odom()["mode"]</code>) — semantics undocumented in-repo; distinct from the top-level loco FSM id in §1</td></tr>
+<tr><td><code>progress</code></td><td>float32</td><td>no</td></tr>
+<tr><td><code>gait_type</code></td><td>uint8</td><td>yes — <code>get_gait()</code> reads <code>gait_type</code>/<code>gaitType</code>/<code>gait</code> (first attribute name that exists on the loaded IDL)</td></tr>
+<tr><td><code>foot_raise_height</code></td><td>float32</td><td>no</td></tr>
+<tr><td><code>position[3]</code></td><td>float32[3]</td><td>yes — also tries <code>pos</code>/<code>position_w</code> aliases</td></tr>
+<tr><td><code>body_height</code></td><td>float32</td><td>no</td></tr>
+<tr><td><code>velocity[3]</code></td><td>float32[3]</td><td>yes — also tries <code>vel</code> alias</td></tr>
+<tr><td><code>yaw_speed</code></td><td>float32</td><td>no</td></tr>
+<tr><td><code>range_obstacle[4]</code></td><td>float32[4]</td><td>no</td></tr>
+<tr><td><code>foot_force[4]</code></td><td>int16[4]</td><td>no</td></tr>
+<tr><td><code>foot_position_body[12]</code></td><td>float32[12]</td><td>no</td></tr>
+<tr><td><code>foot_speed_body[12]</code></td><td>float32[12]</td><td>no</td></tr>
+</tbody>
+</table>
+</div>
+<p class="note"><code>rt/sportmodestate</code> is ambiguous on real hardware — the probe recorded it
+advertising both <code>unitree_go/msg/SportModeState</code> and <code>unitree_hg/msg/SportModeState</code>
+type names simultaneously and could not get a live sample subscribing as the go-variant. Treat
+<code>rt/odommodestate</code> as the reliable source and <code>rt/sportmodestate</code> as a secondary/legacy
+alias, which is exactly how <code>_sport_msg()</code> in <code>sdk_wrapper.py</code> treats it (only used if its
+timestamp is newer). <span class="badge b-probe">LIVE PROBE</span></p>
+</section>
+
+<section id="bms">
+<h2>10. BMS / battery</h2>
+<p class="lede"><code>get_battery()</code> checks four standalone BMS topics in order, each within a 3 s
+freshness window, before falling back to <code>lowstate.bms_state</code> (which is <code>None</code> on the
+G1's <code>unitree_hg</code> lowstate schema — see §11 note). <span class="badge b-wrapper">WRAPPER</span></p>
+<div class="table-wrap">
+<table>
+<thead><tr><th class="num">Order</th><th>Topic</th><th>IDL type</th><th>Live on probe?</th></tr></thead>
+<tbody>
+<tr><td class="num">1</td><td><code>rt/lf/bmsstate</code></td><td><code>unitree_hg/msg/BmsState</code></td><td>yes</td></tr>
+<tr><td class="num">2</td><td><code>rt/lf/agvbmsstate</code></td><td><code>unitree_hg/msg/AgvBmsState</code></td><td>listed, but type import failed on the probing host (<code>unitree_hg.msg</code> has no <code>AgvBmsState</code> in that SDK build) — likely an AGV/dock-cart battery, not applicable to bipedal G1</td></tr>
+<tr><td class="num">3</td><td><code>rt/bmsstate</code></td><td><code>unitree_hg/msg/BmsState</code></td><td>not sampled during probe (idle)</td></tr>
+<tr><td class="num">4</td><td><code>rt/agvbmsstate</code></td><td>as above</td><td>not sampled</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3><code>BmsState</code> fields</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Field</th><th>Type</th><th>Read by <code>sdk_wrapper.py</code>?</th></tr></thead>
+<tbody>
+<tr><td><code>version_high</code></td><td>uint8</td><td>yes</td></tr>
+<tr><td><code>version_low</code></td><td>uint8</td><td>yes</td></tr>
+<tr><td><code>fn</code></td><td>uint8</td><td>no</td></tr>
+<tr><td><code>cell_vol[40]</code></td><td>uint16[40]</td><td>yes</td></tr>
+<tr><td><code>bmsvoltage[3]</code></td><td>uint32[3]</td><td>yes (only on the dedicated BMS-topic path, not the lowstate fallback)</td></tr>
+<tr><td><code>current</code></td><td>int32</td><td>yes</td></tr>
+<tr><td><code>soc</code></td><td>uint8</td><td>yes — state of charge, %</td></tr>
+<tr><td><code>soh</code></td><td>uint8</td><td>yes (dedicated BMS-topic path only) — state of health, %</td></tr>
+<tr><td><code>temperature[12]</code></td><td>int8[12]</td><td>yes, as <code>temperature</code> on the dedicated-topic path (the lowstate-embedded path instead reads separate <code>bq_ntc</code>/<code>mcu_ntc</code> arrays — see note)</td></tr>
+<tr><td><code>cycle</code></td><td>uint16</td><td>yes — charge cycle count</td></tr>
+<tr><td><code>manufacturer_date</code></td><td>uint16</td><td>no</td></tr>
+<tr><td><code>bmsstate[5]</code></td><td>uint8[5]</td><td>yes (dedicated BMS-topic path only)</td></tr>
+<tr><td><code>reserve[3]</code></td><td>uint32[3]</td><td>no</td></tr>
+<tr><td><code>status</code></td><td>—</td><td>read defensively via <code>getattr(msg,"status",None)</code> on the dedicated-topic path only — not present in the live-probed <code>BmsState</code> field list, may be SDK-version dependent</td></tr>
+<tr><td><code>bq_ntc[]</code>, <code>mcu_ntc[]</code></td><td>—</td><td>read defensively on both paths — NTC thermistor arrays, not in the live-probed field list; likely an older/alternate IDL revision</td></tr>
+</tbody>
+</table>
+</div>
+<p class="note">Because every field access in <code>get_battery()</code> is <code>getattr(msg, name, None)</code>-guarded,
+a field missing on the installed SDK build simply comes back as <code>None</code> rather than raising —
+the discrepancies above are expected, not bugs.</p>
+</section>
+
+<section id="lowstate">
+<h2>11. <code>lowstate</code> (<code>LowState</code>)</h2>
+<p class="lede"><code>get_lowstate()</code> reads <code>rt/lowstate</code>, preferring the
+<code>unitree_hg</code> IDL (humanoid) and falling back to <code>unitree_go</code> (quadruped) only if the
+installed SDK lacks the hg variant. <span class="badge b-wrapper">WRAPPER</span> Struct fields below are from
+the live <code>unitree_hg/msg/LowState</code> probe on <code>/lowstate</code> and <code>/lf/lowstate</code>.
+<span class="badge b-probe">LIVE PROBE</span></p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Field</th><th>Type</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>version[2]</code></td><td>uint32[2]</td><td>—</td></tr>
+<tr><td><code>mode_pr</code></td><td>uint8</td><td>Pitch/roll control-mode flag for the arm_sdk path; <code>_LowCmd</code>/<code>_ArmSdk</code> both initialize their outgoing <code>mode_pr = 0</code>.</td></tr>
+<tr><td><code>mode_machine</code></td><td>uint8</td><td>Read back by <code>_current_q_mode()</code> and echoed into every outgoing <code>LowCmd.mode_machine</code> — the firmware rejects commands whose <code>mode_machine</code> doesn't match its current value.</td></tr>
+<tr><td><code>tick</code></td><td>uint32</td><td>—</td></tr>
+<tr><td><code>imu_state</code></td><td><code>IMUState</code></td><td>Read into <code>get_lowstate()["imu"]</code> and <code>get_imus()</code>: <code>rpy[3]</code>, <code>gyroscope[3]</code>, <code>accelerometer[3]</code>, <code>quaternion[4]</code>, <code>temperature</code>.</td></tr>
+<tr><td><code>motor_state[35]</code></td><td><code>MotorState[35]</code></td><td>Only indices 0–28 are real joints (§2); <code>joint_positions</code>/<code>joint_velocities</code>/<code>joint_torques</code> in <code>get_lowstate()</code> are built from <code>q</code>/<code>dq</code>/<code>tau_est</code> across whatever length the loaded IDL reports.</td></tr>
+<tr><td><code>wireless_remote[40]</code></td><td>uint8[40]</td><td>Not read by the wrapper.</td></tr>
+<tr><td><code>reserve[4]</code></td><td>uint32[4]</td><td>—</td></tr>
+<tr><td><code>crc</code></td><td>uint32</td><td>Incoming state CRC (outgoing commands compute their own via <code>unitree_sdk2py.utils.crc.CRC</code>).</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3><code>MotorState</code> fields (per <code>motor_state[i]</code>)</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Field</th><th>Type</th><th>Read by <code>sdk_wrapper.py</code>?</th></tr></thead>
+<tbody>
+<tr><td><code>mode</code></td><td>uint8</td><td>no</td></tr>
+<tr><td><code>q</code></td><td>float32</td><td>yes — joint position, rad</td></tr>
+<tr><td><code>dq</code></td><td>float32</td><td>yes — joint velocity, rad/s</td></tr>
+<tr><td><code>ddq</code></td><td>float32</td><td>no — joint acceleration</td></tr>
+<tr><td><code>tau_est</code></td><td>float32</td><td>yes — estimated joint torque, N·m</td></tr>
+<tr><td><code>temperature[2]</code></td><td>int16[2]</td><td>no</td></tr>
+<tr><td><code>vol</code></td><td>float32</td><td>no</td></tr>
+<tr><td><code>sensor[2]</code></td><td>—</td><td>no</td></tr>
+<tr><td><code>motorstate</code></td><td>uint32</td><td>no — motor fault/status word</td></tr>
+<tr><td><code>reserve[4]</code></td><td>uint32[4]</td><td>no</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3><code>MotorCmd</code> fields (outgoing, per <code>motor_cmd[i]</code>)</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Field</th><th>Type</th><th>Set by</th></tr></thead>
+<tbody>
+<tr><td><code>mode</code></td><td>uint8</td><td><code>_LowCmd</code>/<code>_ArmSdk</code>: <code>1</code> (position/PD mode) for real joints. Dex3 hand: <code>(idx &amp; 0x0F) | (1&lt;&lt;4)</code>.</td></tr>
+<tr><td><code>q</code></td><td>float32</td><td>Target position, rad. Index 29's <code>q</code> is repurposed as the <code>rt/arm_sdk</code> enable weight (§3), not a joint angle.</td></tr>
+<tr><td><code>dq</code></td><td>float32</td><td>Target velocity feed-forward — defaults to 0.0 everywhere in the wrapper.</td></tr>
+<tr><td><code>tau</code></td><td>float32</td><td>Target torque feed-forward — 0.0 by default, 0.02 for Dex3 hands.</td></tr>
+<tr><td><code>kp</code></td><td>float32</td><td>Position gain — see §4.</td></tr>
+<tr><td><code>kd</code></td><td>float32</td><td>Velocity/damping gain — see §4.</td></tr>
+<tr><td><code>reserve</code></td><td>uint32</td><td>not set by the wrapper</td></tr>
+</tbody>
+</table>
+</div>
+<p class="note">On G1's <code>unitree_hg</code> lowstate schema the top-level battery fields
+(<code>power_v</code>, <code>power_a</code>, <code>bit_flag</code>, <code>bms_state</code>) that
+<code>get_battery()</code>'s fallback path reads are <b>not present</b> in the live-probed struct — those
+fields belong to the quadruped (<code>unitree_go</code>) <code>LowState</code> schema that
+<code>_load_type()</code> can fall back to on other robots. On real G1 hardware this fallback branch will
+return a dict of all <code>None</code>s; battery data comes from the dedicated BMS topics (§10) instead.</p>
+</section>
+
+<section id="slam">
+<h2>12. SLAM data &amp; RPC</h2>
+
+<h3>SLAM RPC API (service name <code>slam_operate</code>)</h3>
+<p class="lede"><code>_SlamClient</code> registers 5 API ids and calls them with a JSON string payload over
+the generic <code>Client._Call(api_id, json)</code> RPC mechanism (same transport as
+<code>/api/slam_operate/request</code>·<code>response</code> on the ROS 2 side).
+<span class="badge b-wrapper">WRAPPER</span></p>
+<div class="table-wrap">
+<table>
+<thead><tr><th class="num">API id</th><th>Operation</th><th>Payload shape</th></tr></thead>
+<tbody>
+<tr><td class="num">1801</td><td>start mapping</td><td><code>{"data": {"slam_type": "indoor"}}</code></td></tr>
+<tr><td class="num">1802</td><td>stop mapping + save</td><td><code>{"data": {"address": "&lt;save path&gt;"}}</code></td></tr>
+<tr><td class="num">1804</td><td>init/relocate pose</td><td><code>{"data": {"x","y","z","q_x","q_y","q_z","q_w","address"}}</code></td></tr>
+<tr><td class="num">1102</td><td>pose navigation</td><td><code>{"data": {"targetPose": {x,y,z,q_x,q_y,q_z,q_w}, "mode": 1}}</code></td></tr>
+<tr><td class="num">1901</td><td>stop mapping (no save)</td><td><code>{"data": {}}</code></td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>SLAM RPC error codes (<code>errorCode</code> in the JSON response)</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th class="num">Code</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td class="num">0</td><td>success</td></tr>
+<tr><td class="num">501</td><td>"Lack of lidar or imu data" — the call reached the SLAM service but it isn't receiving accepted <code>rt/utlidar/cloud_livox_mid360</code> / <code>rt/utlidar/imu_livox_mid360</code> data.</td></tr>
+<tr><td class="num">509</td><td>Relocation scan-matching confidence too low — move to a distinctive, already-mapped area and retry.</td></tr>
+</tbody>
+</table>
+</div>
+<p class="lede">Source: <code>modules/scripts/openaiapi/agent/slam.py</code>. <span class="badge b-repo">REPO</span></p>
+
+<h3><code>get_slam_info()</code> output — <code>rt/slam_info</code> / <code>rt/slam_key_info</code></h3>
+<p class="lede">Both are <code>std_msgs/msg/String</code> carrying a JSON payload;
+<code>get_slam_info()</code> returns the raw string, and <code>_parse_slam_pose()</code> extracts a pose from
+it. <span class="badge b-wrapper">WRAPPER</span> / <span class="badge b-probe">LIVE PROBE</span></p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>JSON field</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>errorCode</code></td><td>Top-level status; <code>_parse_slam_pose()</code> discards the message unless this is <code>0</code>.</td></tr>
+<tr><td><code>data.currentPose.{x,y,z}</code></td><td>Position, metres.</td></tr>
+<tr><td><code>data.currentPose.{q_x,q_y,q_z,q_w}</code></td><td>Orientation quaternion; wrapper derives yaw with <code>atan2(2(q_w q_z + q_x q_y), 1-2(q_y²+q_z²))</code> when present, else falls back to a raw <code>yaw</code> field.</td></tr>
+<tr><td><code>data.startPose</code>, <code>data.targetPose</code></td><td>Present in a live sample (per <code>Inspire_hands/topics.md</code>); not read by the wrapper.</td></tr>
+<tr><td><code>data.is_arrived</code></td><td>Present in a live sample; not read by the wrapper (the wrapper's own arrival check, where implemented, polls <code>current_pose()</code> distance in <code>slam_util.py</code> instead).</td></tr>
+<tr><td><code>data.obsInfo</code>, <code>data.progress</code></td><td>Present in a live sample; not read by the wrapper.</td></tr>
+</tbody>
+</table>
+</div>
+<p class="note">A message whose parsed pose is exactly <code>(0, 0, 0)</code> (position and yaw all below
+<code>1e-5</code>) is treated as "no pose yet" and discarded by <code>_parse_slam_pose()</code> — the wrapper
+keeps returning the last known good pose (<code>_last_slam_pose</code>) instead.</p>
+
+<h3>SLAM point-cloud topics (<code>get_point_cloud()</code>)</h3>
+<p class="lede">Reads whichever of these 4 <code>sensor_msgs/msg/PointCloud2</code> topics has the newest
+timestamp, extracts <code>x</code>/<code>y</code>/<code>z</code> float32 offsets from the message's
+<code>fields[]</code> descriptor, and decimates to ≤ 20000 points. <span class="badge b-wrapper">WRAPPER</span></p>
+<ul class="compact">
+<li><code>rt/unitree/slam_mapping/points</code></li>
+<li><code>rt/unitree/slam_relocation/points</code></li>
+<li><code>rt/unitree/slam_relocation/global_map</code></li>
+<li><code>rt/unitree/slam_relocation/web_points</code></li>
+</ul>
+<p class="lede">Live probe additionally lists <code>/global_map</code> (<code>nav_msgs/msg/OccupancyGrid</code>,
+header + <code>info:MapMetaData</code> + <code>data:int8[]</code>) and <code>/gridmap</code>,
+<code>/planner_map</code> (<code>grid_map_msgs/msg/GridMap</code>, type support missing on the probing host) —
+none of these are read by <code>sdk_wrapper.py</code>; <code>todo.txt</code> flags a native occupancy-grid
+subscriber as still outstanding. <span class="badge b-probe">LIVE PROBE</span></p>
+</section>
+
+<section id="topics">
+<h2>13. ROS 2 / DDS topics</h2>
+<p class="lede">Unitree's DDS layer publishes under an <code>rt/&lt;name&gt;</code> prefix; the ROS 2 graph
+presents the identical topic as <code>/&lt;name&gt;</code> (confirmed by the live probe — no topic ever needed
+"normalizing" beyond that prefix swap). Rows marked <span class="badge b-wrapper">WRAPPER</span> are
+subscribed/published directly by <code>academy/sdk_wrapper.py</code>; the rest are additional topics found
+elsewhere in the repo or on the live probe, included for completeness.</p>
+
+<h3>Topics used directly by <code>sdk_wrapper.py</code></h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>DDS / ROS 2 topic</th><th>Type</th><th>Direction</th><th>Purpose</th></tr></thead>
+<tbody>
+<tr><td><code>rt/lowstate</code></td><td><code>unitree_hg/msg/LowState</code> (fallback <code>unitree_go</code>)</td><td>sub</td><td>Joint state, IMU, mode_machine — §11</td></tr>
+<tr><td><code>rt/lowcmd</code></td><td><code>unitree_hg/msg/LowCmd</code></td><td>pub</td><td>Full-body low-level joint commands</td></tr>
+<tr><td><code>rt/arm_sdk</code></td><td><code>unitree_hg/msg/LowCmd</code></td><td>pub</td><td>Arm/waist-only low-level commands with the index-29 weight enable</td></tr>
+<tr><td><code>rt/odommodestate</code></td><td><code>unitree_go/msg/SportModeState</code></td><td>sub</td><td>Primary odometry/gait source — §9</td></tr>
+<tr><td><code>rt/sportmodestate</code></td><td>ambiguous — see §9 note</td><td>sub</td><td>Secondary odometry source, used only if newer than <code>rt/odommodestate</code></td></tr>
+<tr><td><code>rt/odom</code></td><td><code>nav_msgs/msg/Odometry</code></td><td>sub</td><td>Fallback odometry if no sport-mode state is available</td></tr>
+<tr><td><code>rt/unitree/slam_mapping/odom</code></td><td><code>nav_msgs/msg/Odometry</code></td><td>sub</td><td>Last-resort odometry fallback (during SLAM mapping)</td></tr>
+<tr><td><code>rt/unitree/slam_mapping/points</code></td><td><code>sensor_msgs/msg/PointCloud2</code></td><td>sub</td><td>SLAM point cloud — §12</td></tr>
+<tr><td><code>rt/unitree/slam_relocation/points</code></td><td><code>sensor_msgs/msg/PointCloud2</code></td><td>sub</td><td>SLAM point cloud — §12</td></tr>
+<tr><td><code>rt/unitree/slam_relocation/global_map</code></td><td><code>sensor_msgs/msg/PointCloud2</code></td><td>sub</td><td>SLAM point cloud — §12</td></tr>
+<tr><td><code>rt/unitree/slam_relocation/web_points</code></td><td><code>sensor_msgs/msg/PointCloud2</code></td><td>sub</td><td>SLAM point cloud — §12</td></tr>
+<tr><td><code>rt/slam_info</code></td><td><code>std_msgs/msg/String</code> (JSON)</td><td>sub</td><td>Primary SLAM pose/status source — §12</td></tr>
+<tr><td><code>rt/slam_key_info</code></td><td><code>std_msgs/msg/String</code></td><td>sub</td><td>Fallback SLAM pose/status source</td></tr>
+<tr><td><code>rt/audio_msg</code></td><td><code>std_msgs/msg/String</code></td><td>sub</td><td>ASR mic transcript — §8</td></tr>
+<tr><td><code>rt/lf/bmsstate</code></td><td><code>unitree_hg/msg/BmsState</code></td><td>sub</td><td>Battery — §10</td></tr>
+<tr><td><code>rt/lf/agvbmsstate</code></td><td><code>unitree_hg/msg/AgvBmsState</code></td><td>sub</td><td>Battery (AGV variant) — §10</td></tr>
+<tr><td><code>rt/bmsstate</code></td><td><code>unitree_hg/msg/BmsState</code></td><td>sub</td><td>Battery — §10</td></tr>
+<tr><td><code>rt/agvbmsstate</code></td><td><code>unitree_hg/msg/AgvBmsState</code></td><td>sub</td><td>Battery (AGV variant) — §10</td></tr>
+<tr><td><code>rt/dex3/left/cmd</code>, <code>rt/dex3/right/cmd</code></td><td><code>unitree_hg/msg/HandCmd</code></td><td>pub</td><td>Dex3 hand joint commands — §6</td></tr>
+<tr><td><code>rt/dex3/left/state</code>, <code>rt/dex3/right/state</code></td><td><code>unitree_hg/msg/HandState</code></td><td>sub</td><td>Dex3 hand joint + tactile feedback — §6</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>Additional topics seen elsewhere in the repo / on the live probe</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Topic</th><th>Type</th><th>Where seen</th></tr></thead>
+<tbody>
+<tr><td><code>/lf/odommodestate</code>, <code>/lf/dex3/left/state</code>, <code>/lf/dex3/right/state</code></td><td>same types as the unprefixed topics</td><td><code>/lf/…</code> mirrors of several state topics — <span class="badge b-probe">LIVE PROBE</span>/repo grep</td></tr>
+<tr><td><code>rt/collision_clouds</code>, <code>rt/pre_collision_clouds</code>, <code>rt/safe_clouds</code>, <code>rt/pre_safe_clouds</code>, <code>rt/warning_clouds</code>, <code>rt/no_warning_clouds</code>, <code>rt/grid_clouds</code></td><td><code>sensor_msgs/msg/PointCloud2</code></td><td>Obstacle-avoidance point clouds, repo grep + probe</td></tr>
+<tr><td><code>rt/utlidar/cloud_livox_mid360</code></td><td><code>sensor_msgs/msg/PointCloud2</code></td><td>Raw Livox Mid-360 lidar cloud — live, ~20k points/frame</td></tr>
+<tr><td><code>rt/utlidar/cloud_deskewed</code>, <code>rt/utlidar/cloud</code></td><td><code>sensor_msgs/msg/PointCloud2</code></td><td>repo grep; idle on probe</td></tr>
+<tr><td><code>rt/utlidar/imu_livox_mid360</code></td><td><code>sensor_msgs/msg/Imu</code></td><td>Live — lidar-integrated IMU</td></tr>
+<tr><td><code>rt/utlidar/map_state</code></td><td><code>unitree_go/msg/HeightMap</code></td><td>repo grep; idle on probe</td></tr>
+<tr><td><code>rt/utlidar/range_info</code></td><td><code>geometry_msgs/msg/PointStamped</code></td><td>idle on probe</td></tr>
+<tr><td><code>rt/utlidar/switch</code></td><td>—</td><td>repo grep only, type unconfirmed</td></tr>
+<tr><td><code>rt/secondary_imu</code>, <code>rt/lf/secondary_imu</code></td><td><code>unitree_hg/msg/IMUState</code></td><td>Live secondary IMU — quaternion[4], gyroscope[3], accelerometer[3], rpy[3], temperature</td></tr>
+<tr><td><code>rt/frontvideostream</code></td><td><code>unitree_go/msg/Go2FrontVideoData</code></td><td>Live — <code>video720p</code>/<code>video360p</code>/<code>video180p</code> JPEG byte arrays (no standard RGBD image topics exist on this robot — <code>get_rgbd()</code> instead uses a separate ZMQ stream, see §3)</td></tr>
+<tr><td><code>rt/wirelesscontroller</code></td><td><code>unitree_go/msg/WirelessController</code></td><td><code>lx</code>, <code>ly</code>, <code>rx</code>, <code>ry</code>, <code>keys</code> — idle on probe</td></tr>
+<tr><td><code>/audio_msg/filter</code></td><td><code>std_msgs/msg/String</code></td><td>Filtered ASR text used by several <code>modules/scripts</code> chat/ollama bots — not read by <code>sdk_wrapper.py</code></td></tr>
+<tr><td><code>/api/*/request</code>, <code>/api/*/response</code> (≈20 pairs, e.g. <code>sport</code>, <code>robot_state</code>, <code>slam_operate</code>, <code>vui</code>, <code>gpt</code>, <code>videohub</code>)</td><td><code>unitree_api/msg/Request</code> / <code>Response</code></td><td>The generic RPC transport underlying every <code>Client._Call()</code> in the SDK (§7, §12) — <code>Request</code>: <code>header</code>, <code>parameter:string</code>, <code>binary:uint8[]</code>; <code>Response</code>: <code>header</code>, <code>data:string</code>, <code>binary:int8[]</code></td></tr>
+<tr><td><code>/arm/action/state</code></td><td><code>std_msgs/msg/String</code> (JSON)</td><td>Live — sample <code>{"holding": false, "id": 0, "name": ""}</code>; status feedback for §5 gestures, not read by the wrapper</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>Academy bonus ROS 2 package topics (<code>modules/g1_approval_ros</code>, unrelated to robot control)</h3>
+<p class="lede">A separate example package demonstrating a human-approval gateway pattern for ROS 2 —
+its topics are process-internal, not robot state/command topics.</p>
+<ul class="compact">
+<li><code>/g1/command_request</code>, <code>/g1/approval_request</code>, <code>/g1/approval_response</code>, <code>/g1/command_result</code>, <code>/g1/gateway_status</code> — all <code>std_msgs/msg/String</code> (JSON dataclasses in <code>messages.py</code>)</li>
+<li><code>cmd_vel</code> (<code>geometry_msgs/msg/Twist</code>) — subscribed by <code>dev/g1_sport_mode_ros/src/g1_sport_ros.py</code>, mapped to <code>LocoClient.Move(vx, vy, omega)</code> with a 0.2 minimum-velocity threshold applied per axis</li>
+</ul>
+
+<h3>Common message-type structures</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Type</th><th>Structure</th></tr></thead>
+<tbody>
+<tr><td><code>std_msgs/msg/String</code></td><td><code>data:string</code></td></tr>
+<tr><td><code>sensor_msgs/msg/Imu</code></td><td><code>header</code>, <code>orientation</code> (+covariance[9]), <code>angular_velocity</code> (+covariance[9]), <code>linear_acceleration</code> (+covariance[9])</td></tr>
+<tr><td><code>nav_msgs/msg/Odometry</code></td><td><code>header</code>, <code>child_frame_id</code>, <code>pose:PoseWithCovariance</code>, <code>twist:TwistWithCovariance</code></td></tr>
+<tr><td><code>sensor_msgs/msg/PointCloud2</code></td><td><code>header</code>, <code>height</code>, <code>width</code>, <code>fields[]</code>, <code>is_bigendian</code>, <code>point_step</code>, <code>row_step</code>, <code>data:uint8[]</code>, <code>is_dense</code></td></tr>
+<tr><td><code>nav_msgs/msg/OccupancyGrid</code></td><td><code>header</code>, <code>info:MapMetaData</code>, <code>data:int8[]</code></td></tr>
+<tr><td><code>unitree_go/msg/WirelessController</code></td><td><code>lx</code>, <code>ly</code>, <code>rx</code>, <code>ry</code>, <code>keys</code></td></tr>
+<tr><td><code>unitree_go/msg/Go2FrontVideoData</code></td><td><code>time_frame</code>, <code>video720p:uint8[]</code>, <code>video360p:uint8[]</code>, <code>video180p:uint8[]</code></td></tr>
+<tr><td><code>unitree_go/msg/HeightMap</code></td><td><code>stamp</code>, <code>frame_id</code>, <code>resolution</code>, <code>width</code>, <code>height</code>, <code>origin[2]</code>, <code>data:float32[]</code></td></tr>
+<tr><td><code>unitree_go/msg/Error</code></td><td><code>source</code>, <code>state</code></td></tr>
+<tr><td><code>unitree_hg/msg/MainBoardState</code></td><td><code>fan_state[6]</code>, <code>temperature[6]</code>, <code>value[6]</code>, <code>state[6]</code></td></tr>
+</tbody>
+</table>
+</div>
+<p class="lede">All rows in this subsection: <span class="badge b-probe">LIVE PROBE</span> (<code>Inspire_hands/topics.md</code>, generated by a 20 s all-topic ROS 2 subscriber plus <code>ros2 topic list -t</code> against a live G1 on <code>eth0</code>).</p>
+</section>
+
+<footer>
+  <div id="sources"><b>Primary source:</b> <code>academy/sdk_wrapper.py</code> (all rows tagged
+  <span class="badge b-wrapper">WRAPPER</span>).</div>
+  <p><b>Other sources consulted in <code>ef_ws/g1</code>:</b></p>
+  <ul class="compact">
+    <li><code>academy/mode_control.py</code>, <code>academy/util.py</code>, <code>academy/slam_util.py</code>, <code>academy/notes.txt</code>, <code>academy/todo.txt</code>, <code>academy/aruco_setup.txt</code></li>
+    <li><code>hand_pose_navigation/arm_fk.py</code>, <code>arm_ik.py</code>, <code>arm_executor.py</code> (arm joint limits, IK, execution gains)</li>
+    <li><code>dev/sdk_wrapper_v3.py</code>, <code>dev/modules/sdk_client.py</code>, <code>dev/modules/sdk_boot.py</code>, <code>dev/old_scripts/arm_motion/g1_arm7_sdk_dds_example.py</code> + <code>sdk_details.md</code> (official Unitree example, joint index enum, arm_sdk protocol)</li>
+    <li><code>dev/old_scripts/dev/imitation/stack_1/mapper.py</code>, <code>dev/old_scripts/balance_1_leg.py</code> (leg/waist soft joint limits)</li>
+    <li><code>modules/scripts/mode_control.py</code>, <code>modules/scripts/service_view.py</code>, <code>modules/scripts/dev_stand.py</code>, <code>modules/sdk_client.py</code> (FSM ids, service catalog, gains cross-check)</li>
+    <li><code>modules/scripts/openaiapi/agent/slam.py</code>, <code>knowledge/default_sdk_knowledge.md</code> (SLAM RPC error codes)</li>
+    <li><code>Inspire_hands/topics.md</code>, <code>Inspire_hands/ros_debug.md</code>, <code>Inspire_hands/service_toggle.py</code> (live <code>ros2 topic list</code>/echo probe of a running G1 — the only empirically-verified source in this document, marked <span class="badge b-probe">LIVE PROBE</span>)</li>
+    <li><code>modules/g1_approval_ros/</code>, <code>dev/g1_sport_mode_ros/src/g1_sport_ros.py</code> (bonus ROS 2 package topics)</li>
+    <li><code>dashboards/systemd/</code>, <code>jetson_wifi/</code> (deployment services, out of scope for this page beyond passing mention)</li>
+  </ul>
+  <p>Generated for the <code>ef_ws/g1</code> academy repository. Where the repo itself disagreed or a value
+  couldn't be confirmed against real hardware, that is called out explicitly next to the value rather than
+  silently picking one source — see the badge legend at the top of the page.</p>
+</footer>
+
+</main>
+</div>
+</body>
+</html>

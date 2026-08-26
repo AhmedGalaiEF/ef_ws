@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>G1 Academy Notes</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#f6f7f9; --panel:#ffffff; --ink:#1b1f27; --muted:#5b6472; --border:#dfe3ea;
+    --accent:#2454ff; --code-bg:#eef1f6;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#14171c; --panel:#1b1f27; --ink:#e7e9ee; --muted:#9aa3b2; --border:#2c313b;
+      --accent:#6f92ff; --code-bg:#232833;
+    }
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  .page{max-width:820px; margin:0 auto; padding:36px 20px 80px;}
+  .kicker{color:var(--muted); font-size:13px; text-transform:uppercase; letter-spacing:.06em; margin:0 0 6px;}
+  h1{font-size:1.7rem; margin:0 0 22px; padding-bottom:16px; border-bottom:1px solid var(--border);}
+  h2{font-size:1.2rem; margin:34px 0 10px; padding-top:14px; border-top:3px solid var(--accent);}
+  p{margin:10px 0; max-width:74ch;}
+  ul, ol{margin:8px 0; padding-left:26px; max-width:74ch;}
+  ul ul, ol ul{margin:4px 0;}
+  li{margin:4px 0;}
+  code{
+    font:.88em ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+    background:var(--code-bg); padding:.1em .35em; border-radius:4px;
+  }
+  pre{
+    background:var(--code-bg); border:1px solid var(--border); border-radius:8px;
+    padding:12px 14px; overflow-x:auto; margin:12px 0;
+  }
+  pre code{background:none; padding:0; font-size:.85em; line-height:1.5;}
+  a{color:var(--accent);}
+  strong{color:var(--ink);}
+  footer{margin-top:44px; padding-top:14px; border-top:1px solid var(--border); color:var(--muted); font-size:12.5px;}
+</style>
+</head>
+<body>
+<div class="page">
+<p class="kicker">G1 Academy &middot; 📘 converted from <code>notes.txt</code></p>
+<h1>G1 Academy: Crucial Developer Skills</h1>
+<h2>1. Core DDS and communication helpers</h2>
+<ul><li>Set up and validate the DDS environment reliably.</li><li>Provide a global channel-initializer guard so DDS channels are initialized once, predictably, and before helpers use them.</li><li>Build reusable topic/client subscriber and publisher helpers.</li><li>Understand topic types, client/service calls, publisher lifecycles, and how to diagnose unavailable or stale signals.</li></ul>
+<h2>2. Robot-state reading helpers</h2>
+<p>Create a consistent, dictionary-based interface for robot state, including:</p>
+<ul><li><code>get_lowstate()</code> — joint poses and velocities, IMU/state fields, battery information, and other relevant low-level state.</li><li><code>get_odommodestate()</code></li><li><code>get_battery()</code></li><li><code>get_slam_info()</code></li><li><code>get_occupancygrid()</code></li><li><code>get_rgbd()</code></li><li><code>get_services()</code></li></ul>
+<p>The aim is to make higher-level tasks independent of raw DDS message layouts.</p>
+<h2>3. Mode-switching helpers</h2>
+<ul><li>Implement <code>damp_mode</code> safely.</li><li>Implement <code>toggle_service</code> and <code>toggle_gait</code>.</li><li>Implement reusable helpers such as <code>set_headlight(color)</code> and <code>say(language, text)</code>.</li><li>Implement <code>toggle_custom_mode(mode_name, language, voice, headlight_color)</code>.<ul><li>Announce the selected mode using Piper text-to-speech in the requested language and voice.</li><li>Run a thread that continuously displays the selected headlight colour until the mode is exited.</li><li>Ensure clean mode exit, thread shutdown, and safe state transitions.</li></ul></li></ul>
+<h2>4. Basic locomotion helpers</h2>
+<ul><li>Implement <code>loco_move</code> for a specified duration.</li><li>Use odom-mode state and non-continuous <code>locoClient</code> motion to implement <code>odom_move(target_dx, target_dy, target_dyaw)</code>.</li><li>Learn to validate motion completion, handle cancellation/failure, and avoid conflicting locomotion commands.</li></ul>
+<h2>5. SLAM operation helpers</h2>
+<ul><li><code>start_mapping()</code> and <code>stop_mapping()</code></li><li><code>relocate()</code></li><li><code>add_point(point_name)</code> and <code>remove_point(...)</code></li><li><code>navigate_to_point()</code></li><li><code>navigate_path()</code> — use the SLAM API&#x27;s built-in complete-path navigation, rather than navigating point by point.</li><li><code>view_map()</code> — return the most recently saved map visualization.</li></ul>
+<p>During mapping, external visualization may be required: once a map is saved on the mainboard, it may no longer be accessible for visualization.</p>
+<h2>6. High- and low-level arm/hand (Dex3) control</h2>
+<ul><li>Work with <code>arm_sdk</code> and low-command topic publishers.</li><li>Use high-level arm actions such as <code>face_wave</code> and <code>clap</code>.</li><li>Implement <code>open_hand</code>, <code>close_hand</code>, <code>teach/repeat</code>, and <code>release/engage</code>.</li><li>Implement <code>extend_arm_forward(side, ...)</code> by interpolating slowly and smoothly from current arm-joint poses to a saved pose.</li><li>Understand when to use high-level actions versus low-level joint commands.</li></ul>
+<h2>7. Safety and control quality</h2>
+<ul><li>Apply safety limits, ramping, and smooth interpolation to all motion.</li><li>Understand threading, synchronization, and safe shutdown.</li><li>Detect publisher signal staleness.</li><li>Handle publisher signal transitions safely, especially while switching controllers, modes, or command sources.</li></ul>
+<h2>8. Audio, ASR, and conversational control</h2>
+<ul><li>Access microphone input through the ROS 2 <code>audio_msg</code> topic.</li><li>Know that the robot must be in wake-up mode before microphone input is available. At present, wake-up mode can only be toggled through the app or remote controller.</li><li>Integrate automatic speech recognition (ASR).</li><li>Bonus task: build a chatbot using OpenAI API calls and microphone input.</li></ul>
+<h2>9. Reference implementations to study</h2>
+<ul><li><code>sdk_wrapper.py</code> — native SDK usage and DDS/environment setup.</li><li><code>../modules/scripts/ollama_ai/nav_bot.py</code> — correct use of the SLAM-operation and visualization stacks.</li><li><code>../hand_pose_navigation/recognition_app_v3?.py</code> — an example PCA depth-point-cloud pose-estimation and IK-grasping pipeline.</li><li><code>../dev/ai_control/*</code> — a more complex OpenAI API stack, which appears to include an OpenAI API perception pipeline.</li></ul>
+<p>Review these examples critically: identify their initialization order, safety assumptions, threading model, hardware dependencies, and reusable components before adopting code.</p>
+<h2>10. Bonus platform and deployment topics</h2>
+<ul><li>Set up and operate <code>rgbd_server_service</code>.</li><li>Set up and diagnose <code>jetson_wifi_connection_service</code>.</li><li>Understand and use the <code>python_cyclonedds_ros2_environment_setup_script</code>.</li><li>Set up and monitor <code>dashboard_service</code>.</li><li>Learn Jetson-specific ROS 2 Foxy deployment knowledge, including version compatibility, environment sourcing, services, hardware/network constraints, and diagnostics.</li></ul>
+<h2>11. Final task: perception-based delivery</h2>
+<p>Build a delivery pipeline that combines perception, grasping, arm control, and SLAM navigation:</p>
+<ol><li>Read basic RGB-D data.</li><li>Use the OpenAI API perception pipeline.</li><li>Estimate ArUco-marker poses.</li><li>Estimate end-effector poses while accounting for the wrist-to-palm offset.</li><li>Use inverse-kinematics end-effector control.</li><li>Execute pickup:<ul><li><code>extend_arm_forward</code></li><li>open the hand</li><li>estimate an end-effector trajectory</li><li>move with IK in small increments</li><li>at the target gripping pose, close the hand</li><li>interpolate to <code>stable_hold_pose</code></li></ul></li><li>Keep <code>stable_hold_pose</code> during SLAM-based navigation from <code>pickup</code> to <code>dropdown</code>.</li><li>Execute drop-off:<ul><li>move with IK to the target ArUco pose</li><li>open the hand</li><li>interpolate to the extended-arm pose</li><li>release</li></ul></li></ol>
+<p>The OpenAI API perception pipeline, IK-control helpers, and other useful helpers will be provided to participants. The academy focus is on understanding, integrating, testing, and safely operating these components.</p>
+<h2>12. Bonus: ROS 2 package development</h2>
+<ul><li>Create a small Python ROS 2 package with ros2 pkg create, package metadata, setup configuration, and a console-script entry point.</li><li>Implement a minimal node with a publisher, subscriber, timer, parameters, and clean shutdown.</li><li>Practice subscribing to a robot-facing topic such as low state or SLAM status without competing with the academy wrapper&#x27;s control publishers.</li><li>Publish only to a dedicated learning/demo topic. Do not create a second publisher for safety-critical robot command topics such as lowcmd unless the ownership and controller-transition plan is explicitly approved.</li></ul>
+<h2>13. Bonus: RAG (Retrieval-Augmented Generation) knowledge implementation</h2>
+<ul><li>Understand the RAG pipeline shape: ingest documents -&gt; chunk -&gt; embed -&gt; store in a vector index -&gt; retrieve top-k matches for a query -&gt; assemble a grounded prompt -&gt; call the LLM.</li><li>Build a small knowledge base from academy material (this notes.txt, todo.txt, sdk_wrapper.py docstrings, notebook markdown cells) as a first ingestion exercise.</li><li>Chunking: split by heading/section rather than fixed character counts where possible; keep chunk size small enough to fit several retrieved chunks in context alongside the system prompt and conversation.</li><li>Embeddings: reuse the existing OpenAI client pattern already used for the chatbot bonus task (<code>05_bonus_services_audio_chatbot</code>) and the perception pipeline in <code>util.py</code> — call the embeddings endpoint once per chunk, cache the vectors locally (e.g. a <code>.json</code>/<code>.npy</code> file) so re-runs don&#x27;t re-embed unchanged content.</li><li>Vector store options for a bonus-scale exercise: start with a flat in-memory store (list of vectors + cosine similarity) before reaching for a dedicated vector DB (Chroma, FAISS, Qdrant); a flat store is enough to demonstrate retrieval correctness on a small corpus.</li><li>Retrieval: given a user query, embed it, rank chunks by cosine similarity, take top-k, and log which chunks were retrieved for debuggability.</li><li>Grounding: inject retrieved chunks into the system/user prompt with clear delimiters and instruct the model to answer only from provided context, citing which chunk supported each claim.</li><li>Integrate with the ASR/chatbot bonus flow: microphone -&gt; ASR transcript -&gt; RAG retrieval over academy docs -&gt; grounded OpenAI chat completion -&gt; Piper TTS response, so the robot can answer questions about itself/the academy material by voice.</li><li>Evaluate: keep a small set of Q/A pairs to sanity-check retrieval quality and catch regressions when the knowledge base changes.</li><li>Safety/scope note: this is a software/knowledge exercise — it does not touch locomotion, arm, or DDS command topics; keep it decoupled from safety-critical publishers.</li></ul>
+<h2>14. Bonus: Simulation knowledge (MuJoCo, Gazebo, Isaac Lab)</h2>
+<p>Learn to validate robot behaviors in simulation before (or instead of) running on hardware — useful for iterating on locomotion, arm control, and perception logic safely.</p>
+<ul><li>MuJoCo<ul><li>Understand the MJCF model format, how the G1/Dex3 URDF/MJCF assets map to joints, actuators, and sensors.</li><li>Run a basic MuJoCo simulation loop (<code>mujoco.MjModel</code>, <code>mujoco.MjData</code>, <code>mj_step</code>) and drive joints with simple position/torque commands.</li><li>Use the built-in viewer for visual debugging; compare simulated joint trajectories against the interpolation/ramping logic used in the real <code>extend_arm_forward</code> and low-level arm helpers.</li><li>Note where MuJoCo is well-suited: fast, accurate contact dynamics for arm/hand manipulation and grasp-force tuning.</li></ul></li><li>Gazebo<ul><li>Understand SDF/URDF world and model description, plugins, and the ROS 2 &lt;-&gt; Gazebo bridge (<code>ros_gz_bridge</code> or equivalent) for topics like odometry, IMU, and joint states.</li><li>Spin up a G1 (or simplified) model in a Gazebo world and confirm the same ROS 2 topics used by the real robot (e.g. odom-mode state, low state) are available in sim, so higher-level helpers can be tested without hardware.</li><li>Note where Gazebo is well-suited: full-robot navigation/SLAM testing, sensor simulation (LiDAR, depth camera), and multi-node ROS 2 integration testing.</li></ul></li><li>Isaac Lab (NVIDIA)<ul><li>Understand the Isaac Lab / Isaac Sim workflow: USD-based robot/scene assets, GPU-parallel environments, and the RL-style environment API (observations, actions, rewards, resets).</li><li>Learn how Isaac Lab differs from MuJoCo/Gazebo: it targets large-scale parallel simulation for reinforcement learning and policy training/sim-to-real transfer, not just single-instance physics or ROS 2 integration testing.</li><li>Explore an existing G1 locomotion or manipulation task config if available in Isaac Lab&#x27;s included environments, and understand how a trained policy would be exported and connected to the real <code>loco_move</code>/<code>odom_move</code>/arm helpers.</li></ul></li><li>Cross-cutting bonus exercise: pick one behavior implemented for the real robot (e.g. <code>odom_move</code> closed-loop arrival, or <code>extend_arm_forward</code> interpolation) and reproduce it in at least one simulator, comparing simulated vs. real joint/pose trajectories to build intuition for the sim-to-real gap.</li></ul>
+<footer>Converted verbatim from <code>academy/notes.txt</code> (no content added or removed) so it renders in a
+browser instead of a plain-text viewer. Curriculum reference: the developer skills each academy notebook builds toward.</footer>
+</div>
+</body>
+</html>
