@@ -119,3 +119,38 @@ The OpenAI API perception pipeline, IK-control helpers, and other useful helpers
 - Implement a minimal node with a publisher, subscriber, timer, parameters, and clean shutdown.
 - Practice subscribing to a robot-facing topic such as low state or SLAM status without competing with the academy wrapper's control publishers.
 - Publish only to a dedicated learning/demo topic. Do not create a second publisher for safety-critical robot command topics such as lowcmd unless the ownership and controller-transition plan is explicitly approved.
+
+## 13. Bonus: RAG (Retrieval-Augmented Generation) knowledge implementation
+
+- Understand the RAG pipeline shape: ingest documents -> chunk -> embed -> store in a vector index -> retrieve top-k matches for a query -> assemble a grounded prompt -> call the LLM.
+- Build a small knowledge base from academy material (this notes.txt, todo.txt, sdk_wrapper.py docstrings, notebook markdown cells) as a first ingestion exercise.
+- Chunking: split by heading/section rather than fixed character counts where possible; keep chunk size small enough to fit several retrieved chunks in context alongside the system prompt and conversation.
+- Embeddings: reuse the existing OpenAI client pattern already used for the chatbot bonus task (`05_bonus_services_audio_chatbot`) and the perception pipeline in `util.py` — call the embeddings endpoint once per chunk, cache the vectors locally (e.g. a `.json`/`.npy` file) so re-runs don't re-embed unchanged content.
+- Vector store options for a bonus-scale exercise: start with a flat in-memory store (list of vectors + cosine similarity) before reaching for a dedicated vector DB (Chroma, FAISS, Qdrant); a flat store is enough to demonstrate retrieval correctness on a small corpus.
+- Retrieval: given a user query, embed it, rank chunks by cosine similarity, take top-k, and log which chunks were retrieved for debuggability.
+- Grounding: inject retrieved chunks into the system/user prompt with clear delimiters and instruct the model to answer only from provided context, citing which chunk supported each claim.
+- Integrate with the ASR/chatbot bonus flow: microphone -> ASR transcript -> RAG retrieval over academy docs -> grounded OpenAI chat completion -> Piper TTS response, so the robot can answer questions about itself/the academy material by voice.
+- Evaluate: keep a small set of Q/A pairs to sanity-check retrieval quality and catch regressions when the knowledge base changes.
+- Safety/scope note: this is a software/knowledge exercise — it does not touch locomotion, arm, or DDS command topics; keep it decoupled from safety-critical publishers.
+
+## 14. Bonus: Simulation knowledge (MuJoCo, Gazebo, Isaac Lab)
+
+Learn to validate robot behaviors in simulation before (or instead of) running on hardware — useful for iterating on locomotion, arm control, and perception logic safely.
+
+- MuJoCo
+  - Understand the MJCF model format, how the G1/Dex3 URDF/MJCF assets map to joints, actuators, and sensors.
+  - Run a basic MuJoCo simulation loop (`mujoco.MjModel`, `mujoco.MjData`, `mj_step`) and drive joints with simple position/torque commands.
+  - Use the built-in viewer for visual debugging; compare simulated joint trajectories against the interpolation/ramping logic used in the real `extend_arm_forward` and low-level arm helpers.
+  - Note where MuJoCo is well-suited: fast, accurate contact dynamics for arm/hand manipulation and grasp-force tuning.
+
+- Gazebo
+  - Understand SDF/URDF world and model description, plugins, and the ROS 2 <-> Gazebo bridge (`ros_gz_bridge` or equivalent) for topics like odometry, IMU, and joint states.
+  - Spin up a G1 (or simplified) model in a Gazebo world and confirm the same ROS 2 topics used by the real robot (e.g. odom-mode state, low state) are available in sim, so higher-level helpers can be tested without hardware.
+  - Note where Gazebo is well-suited: full-robot navigation/SLAM testing, sensor simulation (LiDAR, depth camera), and multi-node ROS 2 integration testing.
+
+- Isaac Lab (NVIDIA)
+  - Understand the Isaac Lab / Isaac Sim workflow: USD-based robot/scene assets, GPU-parallel environments, and the RL-style environment API (observations, actions, rewards, resets).
+  - Learn how Isaac Lab differs from MuJoCo/Gazebo: it targets large-scale parallel simulation for reinforcement learning and policy training/sim-to-real transfer, not just single-instance physics or ROS 2 integration testing.
+  - Explore an existing G1 locomotion or manipulation task config if available in Isaac Lab's included environments, and understand how a trained policy would be exported and connected to the real `loco_move`/`odom_move`/arm helpers.
+
+- Cross-cutting bonus exercise: pick one behavior implemented for the real robot (e.g. `odom_move` closed-loop arrival, or `extend_arm_forward` interpolation) and reproduce it in at least one simulator, comparing simulated vs. real joint/pose trajectories to build intuition for the sim-to-real gap.
