@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>G1 Academy — Components Checklist</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#121013; --panel:#1c1a1e; --panel2:#242024; --ink:#f3eef1; --muted:#a79ba3; --border:#332e33;
+    --accent:#FB1A62; --code-bg:#0d0b0e;
+    --easy:#3aa876; --easy-bg:#0f2c21;
+    --medium:#c99a3a; --medium-bg:#332711;
+    --hard:#e0294f; --hard-bg:#3a0f1c;
+    --status-bg:#242024;
+  }
+  @media (prefers-color-scheme: light){
+    :root{
+      --bg:#f7f2f4; --panel:#ffffff; --panel2:#f7f3f5; --ink:#1d1e1f; --muted:#6a5f65; --border:#eadfe4;
+      --code-bg:#f4eef1;
+    }
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:16px/1.55 Roboto,-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+  }
+  .page{max-width:1180px; margin:0 auto; padding:36px 20px 80px;}
+  code{font:.88em ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace; background:var(--code-bg); padding:.1em .35em; border-radius:4px;}
+  h1{font-size:1.7rem; margin:0 0 8px; padding-bottom:16px; border-bottom:3px solid var(--accent);}
+  h2{font-size:1.15rem; margin:40px 0 10px; padding-bottom:8px; border-bottom:2px solid var(--border);}
+  p.lead{color:var(--muted); max-width:90ch; margin:10px 0 24px;}
+  .legend{display:flex; flex-wrap:wrap; gap:8px 18px; margin:0 0 20px; font-size:12.5px; color:var(--muted); align-items:center;}
+  .legend .sw{display:inline-block; width:12px; height:12px; border-radius:3px; margin-right:5px; vertical-align:-1px;}
+  .sw-easy{background:var(--easy-bg); border:1px solid var(--easy);}
+  .sw-medium{background:var(--medium-bg); border:1px solid var(--medium);}
+  .sw-hard{background:var(--hard-bg); border:1px solid var(--hard);}
+  .table-wrap{overflow-x:auto; border:1px solid var(--border); border-radius:10px; background:var(--panel);}
+  table{border-collapse:collapse; width:100%; min-width:1000px; font-size:14px;}
+  th, td{padding:9px 12px; border-bottom:1px solid var(--border); text-align:left; vertical-align:top;}
+  th{
+    background:var(--panel2); position:sticky; top:0; font-size:11.5px; text-transform:uppercase;
+    letter-spacing:.03em; color:var(--muted);
+  }
+  tbody tr:nth-child(even){background:var(--panel2);}
+  tbody tr:hover{background:rgba(251,26,98,.06);}
+  td.num{text-align:center; font-variant-numeric:tabular-nums; font-weight:700; color:var(--accent);}
+  .status{
+    display:inline-block; font-size:11px; font-weight:800; letter-spacing:.04em; text-transform:uppercase;
+    padding:2px 9px; border-radius:99px; background:var(--status-bg); border:1px solid var(--border); color:var(--muted);
+  }
+  .diff{
+    display:inline-block; font-size:11px; font-weight:800; letter-spacing:.03em; text-transform:uppercase;
+    padding:2px 9px; border-radius:99px;
+  }
+  .diff-easy{color:var(--easy); background:var(--easy-bg);}
+  .diff-medium{color:var(--medium); background:var(--medium-bg);}
+  .diff-hard{color:var(--hard); background:var(--hard-bg);}
+  footer{margin-top:28px; padding-top:14px; border-top:1px solid var(--border); color:var(--muted); font-size:12.5px;}
+  footer a{color:var(--accent);}
+</style>
+</head>
+<body>
+<div class="page">
+<h1>G1 Academy &mdash; Components Checklist</h1>
+<p class="lead">Tracking status for the 13 <code>solved/task1_*.ipynb</code>&ndash;<code>task13_*.ipynb</code>
+notebooks (see <a href="slides.html" style="color:var(--accent)">slides.html</a> /
+<a href="docs.html" style="color:var(--accent)">docs.html</a> for the taught material behind each one).
+&ldquo;Notebook status&rdquo; is a hardware/CI verification flag, not a content-completeness flag &mdash;
+every notebook listed already has full solution code; none has yet been run end-to-end against a physical
+G1 for this checklist, so all rows start at <code>untested</code>. Update per row as each is verified.</p>
+
+<div class="legend">
+  <span><span class="sw sw-easy"></span>Easy &mdash; native-SDK boilerplate, low physical risk</span>
+  <span><span class="sw sw-medium"></span>Medium &mdash; real hardware motion or external services involved</span>
+  <span><span class="sw sw-hard"></span>Hard &mdash; multi-system coordination and/or physical safety risk</span>
+</div>
+
+<div class="table-wrap">
+<table>
+<thead><tr>
+  <th>#</th><th>Task name</th><th>Task description</th><th>Minimal solution</th><th>Special requirements</th>
+  <th>Notebook status</th><th>Difficulty</th>
+</tr></thead>
+<tbody>
+<tr>
+  <td class="num">1</td>
+  <td>Using <code>sdk_wrapper.G1</code> (say / set_headlight)</td>
+  <td>Construct one <code>G1</code> instance and call the finished <code>say()</code>/<code>set_headlight()</code> methods to see the target API surface before rebuilding it natively.</td>
+  <td>n/a &mdash; usage-only demo, no code to write (calls the finished wrapper)</td>
+  <td>Robot powered on and reachable; Piper voice model installed</td>
+  <td><span class="status">untested</span></td>
+  <td><span class="diff diff-easy">Easy</span></td>
+</tr>
+<tr>
+  <td class="num">2</td>
+  <td>Necessary DDS init + pub/sub helpers</td>
+  <td>Build the one-time <code>ChannelFactory</code> guard and a generic &ldquo;latest message&rdquo; subscriber cache that every later task reuses.</td>
+  <td><code>ensure_channel_factory</code>, <code>class Latest</code>, <code>make_publisher</code>, <code>diagnose</code></td>
+  <td>Network joined to the robot subnet; <code>unitree_sdk2py</code> installed; <code>rt/lowstate</code> publishing</td>
+  <td><span class="status">untested</span></td>
+  <td><span class="diff diff-easy">Easy</span></td>
+</tr>
+<tr>
+  <td class="num">3</td>
+  <td>Developing <code>say()</code> and <code>set_headlight()</code></td>
+  <td>Wire a native <code>AudioClient</code> for Piper playback and a cancellable background thread that holds a headlight color.</td>
+  <td><code>AudioClient</code> wiring, <code>parse_color</code>/<code>scale_color</code>, <code>HeadlightThread</code>, <code>set_headlight</code></td>
+  <td>Piper installed with a voice model; <code>AudioClient</code>/LED reachable</td>
+  <td><span class="status">untested</span></td>
+  <td><span class="diff diff-easy">Easy</span></td>
+</tr>
+<tr>
+  <td class="num">4</td>
+  <td>Robot-state observation (dictionary-based <code>get_*</code>)</td>
+  <td>Build seven dictionary-based readers (lowstate, odom, battery, SLAM, RGB-D, services) so later tasks never touch raw DDS layouts.</td>
+  <td>7 readers: <code>get_lowstate</code>, <code>get_odommodestate</code>, <code>get_battery</code>, <code>get_slam_info</code>, <code>get_occupancygrid</code> (refuses), <code>get_rgbd</code>, <code>get_services</code></td>
+  <td><code>rgbd_server_service</code> / <code>realsense_rgbd_zmq_stream.py</code> running for <code>get_rgbd()</code>; BMS + SLAM topics publishing</td>
+  <td><span class="status">untested</span></td>
+  <td><span class="diff diff-medium">Medium</span></td>
+</tr>
+<tr>
+  <td class="num">5</td>
+  <td>Services and mode switching</td>
+  <td>Implement <code>damp_mode</code>, service/gait toggling, and a composite custom mode that announces itself and holds a light color.</td>
+  <td><code>damp_mode</code>, <code>toggle_service</code>, <code>toggle_gait</code>, <code>toggle_custom_mode</code></td>
+  <td>Robot in <code>ai_sport</code> mode; <code>RobotStateClient</code>/<code>MotionSwitcherClient</code> reachable; clear space for FSM transitions</td>
+  <td><span class="status">untested</span></td>
+  <td><span class="diff diff-medium">Medium</span></td>
+</tr>
+<tr>
+  <td class="num">6</td>
+  <td>Basic locomotion helpers</td>
+  <td>Drive the robot with a timed velocity command and a closed-loop relative move that confirms arrival from odometry.</td>
+  <td><code>loco_move</code>, <code>odom_move</code>, <code>loco_stop</code></td>
+  <td>Robot standing/walk-capable; <code>rt/odommodestate</code> publishing; clear floor space and a spotter</td>
+  <td><span class="status">untested</span></td>
+  <td><span class="diff diff-medium">Medium</span></td>
+</tr>
+<tr>
+  <td class="num">7</td>
+  <td>SLAM operation and map visualization</td>
+  <td>Run a full mapping/relocate/named-point/navigate session and capture map snapshots while mapping is still live.</td>
+  <td><code>SlamRpc</code>, <code>current_pose</code>, mapping/relocate, <code>add_point</code>/<code>navigate_to_point</code>, <code>capture_map_snapshot</code>/<code>view_map</code></td>
+  <td>Livox Mid-360 + its IMU publishing; <code>unitree_slam</code> service enabled; <code>matplotlib</code> installed; open room to map</td>
+  <td><span class="status">untested</span></td>
+  <td><span class="diff diff-hard">Hard</span></td>
+</tr>
+<tr>
+  <td class="num">8</td>
+  <td>High-level gestures, teach/repeat, pose interpolation</td>
+  <td>Trigger canned high-level gestures, hand off <code>rt/arm_sdk</code> ownership safely, and record/replay multi-waypoint arm sequences.</td>
+  <td><code>exec_arm_action</code>, <code>write_arm_sdk_pose</code>, <code>release_arms</code>/<code>engage_arms</code>, <code>teach</code>/<code>repeat</code></td>
+  <td>Clear <code>rt/arm_sdk</code> ownership; <code>G1ArmActionClient</code> reachable; clear space around both arms</td>
+  <td><span class="status">untested</span></td>
+  <td><span class="diff diff-hard">Hard</span></td>
+</tr>
+<tr>
+  <td class="num">9</td>
+  <td>Low-level joint control + q/dq/kp/kd/tau visualizer</td>
+  <td>Build the full 29-joint <code>rt/lowcmd</code> publisher and a live visualizer for q/dq/kp/kd/tau tracking.</td>
+  <td><code>LowCmdPublisher</code>, <code>require_fresh</code>, <code>current_q_mode</code>, <code>move_ll_joint</code></td>
+  <td>Clear <code>rt/lowcmd</code> ownership; <code>ipywidgets</code> + <code>matplotlib</code> installed; low-stakes joint selected first</td>
+  <td><span class="status">untested</span></td>
+  <td><span class="diff diff-hard">Hard</span></td>
+</tr>
+<tr>
+  <td class="num">10</td>
+  <td>End-effector IK control + teleoperation UI</td>
+  <td>Solve small bounded Cartesian steps with damped least-squares IK and ramp to them safely, wrapped in a jog-button teleop panel.</td>
+  <td><code>fk_solver</code>/<code>ik_solver</code>, <code>ik_move_ee</code>, jog-button panel</td>
+  <td><code>hand_pose_navigation</code> on the import path; <code>numpy</code>; arm_sdk already engaged (Task 8)</td>
+  <td><span class="status">untested</span></td>
+  <td><span class="diff diff-hard">Hard</span></td>
+</tr>
+<tr>
+  <td class="num">11</td>
+  <td>Dex3 gradual gripping (baseline, close, open)</td>
+  <td>Calibrate a tactile contact threshold and implement a stop-on-contact close plus a gentle, symmetric release.</td>
+  <td><code>write_hand</code>, <code>measure_baseline</code>, <code>gradual_close</code>, <code>gradual_open</code></td>
+  <td>Dex3 hand(s) connected and publishing <code>HandState_</code>; fresh no-object tactile baseline per session</td>
+  <td><span class="status">untested</span></td>
+  <td><span class="diff diff-medium">Medium</span></td>
+</tr>
+<tr>
+  <td class="num">12</td>
+  <td>Usage of the perception and pose-estimation pipeline</td>
+  <td>Validate a supplied OpenAI/ArUco perception result (freshness + confidence) before ever letting it drive motion.</td>
+  <td><code>make_pipeline</code>, <code>validated_target</code></td>
+  <td>Calibrated <code>camera_matrix</code>/<code>distortion</code>/<code>camera_to_base</code>/<code>wrist_to_palm</code>; OpenAI API key; <code>get_rgbd()</code> stream live; measured ArUco marker</td>
+  <td><span class="status">untested</span></td>
+  <td><span class="diff diff-medium">Medium</span></td>
+</tr>
+<tr>
+  <td class="num">13</td>
+  <td>Final task: perception-based delivery</td>
+  <td>Assemble Tasks 2&ndash;12 into one consolidated class and run the full pickup &rarr; carry &rarr; drop-off sequence.</td>
+  <td><code>AcademyRobot</code>, <code>deliver(...)</code></td>
+  <td>Everything from Tasks 2&ndash;12 working; saved <code>stable_hold_pose</code>; SLAM <code>pickup</code>/<code>dropdown</code> points saved after a successful relocate; pickup + dropoff ArUco markers mounted</td>
+  <td><span class="status">untested</span></td>
+  <td><span class="diff diff-hard">Hard</span></td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<h2>Documentation</h2>
+<p class="lead">Taught-material artifacts referenced by the notebook table above.</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Artifact</th><th>Description</th><th>Status</th></tr></thead>
+<tbody>
+<tr>
+  <td><code>slides.html</code></td>
+  <td>Day-by-day slide deck covering the material behind all 13 tasks.</td>
+  <td><span class="status">must be validated</span></td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<h2>Users environment &amp; JupyterHub</h2>
+<p class="lead">Multi-user setup for running the notebooks on the headless Jetson: per-participant Linux
+accounts with a cloned SDK/DDS environment, and browser-based JupyterLab access on top of it.</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Component</th><th>Description</th><th>Status</th></tr></thead>
+<tbody>
+<tr>
+  <td><code>reset_users.sh</code><br>teilnehmer1&ndash;13 accounts</td>
+  <td>Prunes/recreates the 13 participant Linux accounts (no sudo, SSH password
+  <code>academy2026</code>) and clones the CycloneDDS + <code>unitree_sdk2_python</code> + Piper TTS +
+  ipython/jupyter/rich/pandas/numpy/opencv setup from the reference <code>unitree</code> account, with
+  paths and environment variables rewritten per account.</td>
+  <td><span class="status">not tested</span></td>
+</tr>
+<tr>
+  <td><code>setup_jupyterhub.sh</code><br>JupyterHub (TLJH)</td>
+  <td>PAM-authenticated JupyterHub spawning each student's own single-user server and kernel on the
+  Jetson under their own Linux account, with per-user memory/CPU limits and idle culling.</td>
+  <td><span class="status">not tested</span></td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<footer>
+  Generated for the <code>ef_ws/g1</code> academy repository. Replaces <code>todo.html</code> (removed) as the
+  active tracking surface for this bonus 13-notebook track &mdash; open coverage-gap prose that isn't a
+  per-notebook test status lives in <a href="notes.html">notes.html</a> instead.
+  Minimal-solution/requirements columns are sourced from <code>solved/lib_solved.py</code> and
+  <code>slides.html</code>; update the status/difficulty columns as each notebook is actually run against
+  hardware.
+</footer>
+</div>
+</body>
+</html>

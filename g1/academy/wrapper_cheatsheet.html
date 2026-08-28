@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>G1 Wrapper Cheatsheet</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#121013; --panel:#1c1a1e; --panel2:#242024; --ink:#f3eef1; --muted:#a79ba3; --border:#332e33;
+    --accent:#FB1A62; --code-bg:#0d0b0e;
+    --green:#3aa876; --green-bg:#0f2c21;
+    --blue:#5b8cff; --blue-bg:#16233f;
+    --amber:#c99a3a; --amber-bg:#332711;
+    --purple:#a35bd6; --purple-bg:#24123a;
+  }
+  @media (prefers-color-scheme: light){
+    :root{
+      --bg:#f7f2f4; --panel:#ffffff; --panel2:#f7f3f5; --ink:#1d1e1f; --muted:#6a5f65; --border:#eadfe4;
+      --code-bg:#f4eef1;
+    }
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:16px/1.55 Roboto,-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+  }
+  .page{max-width:1280px; margin:0 auto; padding:36px 20px 90px;}
+  a{color:var(--accent);}
+  code{font:.86em ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace; background:var(--code-bg); padding:.1em .35em; border-radius:4px;}
+  h1{font-size:1.7rem; margin:0 0 8px; padding-bottom:16px; border-bottom:3px solid var(--accent);}
+  p.lead{color:var(--muted); max-width:100ch; margin:10px 0 20px;}
+  h2{font-size:1.25rem; margin:44px 0 6px; padding-top:14px; border-top:3px solid var(--accent);}
+  h2 .n{color:var(--muted); font-weight:400; font-size:.85em;}
+  p.section-lead{color:var(--muted); max-width:100ch; margin:2px 0 16px; font-size:14.5px;}
+  h3{
+    font-size:14px; text-transform:uppercase; letter-spacing:.04em; color:var(--accent);
+    margin:26px 0 8px;
+  }
+  h3:first-of-type{margin-top:14px;}
+  .table-wrap{overflow-x:auto; border:1px solid var(--border); border-radius:10px; background:var(--panel); margin-bottom:6px;}
+  table{border-collapse:collapse; width:100%; min-width:640px; font-size:13.8px;}
+  th, td{padding:8px 12px; border-bottom:1px solid var(--border); text-align:left; vertical-align:top;}
+  th{
+    background:var(--panel2); font-size:11px; text-transform:uppercase;
+    letter-spacing:.03em; color:var(--muted);
+  }
+  tbody tr:nth-child(even){background:var(--panel2);}
+  tbody tr:hover{background:rgba(251,26,98,.06);}
+  td.name{white-space:nowrap; font-weight:600;}
+  td.sig{white-space:nowrap;}
+  .kind{
+    display:inline-block; font-size:10.5px; font-weight:800; letter-spacing:.03em; text-transform:uppercase;
+    padding:2px 8px; border-radius:99px; white-space:nowrap;
+  }
+  .kind-ctor{color:var(--accent); background:rgba(251,26,98,.14);}
+  .kind-private{color:var(--muted); background:var(--panel2); border:1px solid var(--border);}
+  .kind-public{color:var(--green); background:var(--green-bg);}
+  .toc{
+    display:flex; flex-wrap:wrap; gap:6px 10px; margin:14px 0 0; padding:12px 14px;
+    border:1px solid var(--border); border-radius:10px; background:var(--panel);
+  }
+  .toc a{
+    font-size:12.5px; color:var(--ink); text-decoration:none; padding:3px 9px; border-radius:99px;
+    background:var(--panel2); border:1px solid var(--border);
+  }
+  .toc a:hover{border-color:var(--accent); color:var(--accent);}
+  .note{
+    background:var(--panel2); border:1px solid var(--border); border-left:3px solid var(--accent);
+    border-radius:8px; padding:10px 14px; margin:10px 0 18px; font-size:13.5px; color:var(--muted);
+  }
+  .note b{color:var(--ink);}
+  footer{margin-top:36px; padding-top:14px; border-top:1px solid var(--border); color:var(--muted); font-size:12.5px;}
+</style>
+</head>
+<body>
+<div class="page">
+<h1>G1 Wrapper Cheatsheet</h1>
+<p class="lead">A reference for <code>academy/sdk_wrapper.py</code>'s <code>G1</code> class and the module-level
+plumbing it's built from &mdash; every row below is read directly off that file, current as of this write-up.
+Table 1 is the reusable low-level patterns (DDS setup, threads, the RGB-D server, ...); Table 2 is every
+module-level constant/mapping and what it maps <i>as a convention</i> (not the literal values &mdash; see
+<a href="../mappings_and_constraints.html">mappings_and_constraints.html</a> for exact ids); Table 3 is every
+method on <code>G1</code> itself, grouped and described.</p>
+
+<div class="toc">
+  <a href="#t1">Table 1 &middot; Necessary setups</a>
+  <a href="#t2">Table 2 &middot; Important mappings</a>
+  <a href="#t3">Table 3 &middot; G1 class components</a>
+  <a href="#s-ctor">Constructor</a>
+  <a href="#s-private">Private methods</a>
+  <a href="#s-state">State monitoring</a>
+  <a href="#s-fsm">FSM &amp; service toggling</a>
+  <a href="#s-nav">Navigation &amp; SLAM</a>
+  <a href="#s-hlarm">HL arm control</a>
+  <a href="#s-llpose">Saved LL pose sequences</a>
+  <a href="#s-llarm">LL arm control</a>
+  <a href="#s-lldev">LL dev mode control</a>
+  <a href="#s-audio">Audio &amp; lights</a>
+</div>
+
+<h2 id="t1">Table 1 &mdash; Necessary setups</h2>
+<p class="section-lead">The reusable low-level patterns every higher-level <code>G1</code> method is built
+from &mdash; each row names the concrete class/function in <code>sdk_wrapper.py</code> that embodies it.</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Setup</th><th>Embodied by</th><th>Purpose / convention</th></tr></thead>
+<tbody>
+<tr><td class="name">DDS ChannelFactory init</td><td class="sig"><code>_ensure_factory(domain_id, iface)</code></td>
+<td>Module-level guard around <code>ChannelFactoryInitialize</code>. One DDS participant per process: stores the
+first <code>(domain_id, iface)</code> it sees, and raises instead of silently reconnecting if called again with
+different arguments.</td></tr>
+<tr><td class="name">Subscriber (pub/sub read side)</td><td class="sig"><code>class _Latest</code></td>
+<td>Wraps one <code>ChannelSubscriber</code>. The callback caches only the newest message plus its receipt time;
+<code>.get()</code> returns <code>(msg, timestamp)</code>. Every state reader in the class is built on one of these.</td></tr>
+<tr><td class="name">Publisher, typed command (pub/sub write side)</td><td class="sig"><code>class _Dex3</code>, <code>class _LowCmd</code>, <code>class _ArmSdk</code></td>
+<td>Each wraps one <code>ChannelPublisher</code> for a specific command topic (<code>rt/dex3/&lt;side&gt;/cmd</code>,
+<code>rt/lowcmd</code>, <code>rt/arm_sdk</code>). <code>_LowCmd</code>/<code>_ArmSdk</code> also own a <code>CRC()</code>
+and recompute it on every <code>write()</code> before publishing.</td></tr>
+<tr><td class="name">Lazy client singleton</td><td class="sig"><code>_audio_client()</code>, <code>_motion_client()</code>, <code>_robot_state_client()</code>, <code>_arm_action_client()</code>, <code>_video_client()</code>, <code>_slam_client()</code>, <code>_lowcmd_client()</code>, <code>_arm_sdk_client()</code>, <code>_arm_fk_solver()</code>, <code>_arm_ik_solver()</code>, <code>_dex3_hand()</code></td>
+<td>Construct + <code>SetTimeout()</code> + <code>Init()</code> on first use only, then cache on <code>self</code>.
+Keeps <code>__init__</code> cheap and never opens a client/solver a given session doesn't end up using.</td></tr>
+<tr><td class="name">RPC / service client</td><td class="sig"><code>class _SlamClient(Client)</code></td>
+<td>Subclasses the generic <code>unitree_sdk2py.rpc.client.Client</code>, registers its API ids via
+<code>_RegistApi</code>, and calls through a small <code>_call_json(api_id, payload)</code> helper
+(<code>_Call</code> + JSON encode/decode).</td></tr>
+<tr><td class="name">Background thread (cancellable, persistent)</td><td class="sig"><code>class _HeadlightThread(threading.Thread)</code></td>
+<td>Re-asserts a value (<code>LedControl</code>) on a fixed interval until a <code>threading.Event</code> is set
+or a duration elapses; always attempts a safe reset in a <code>finally</code> block, even on error.</td></tr>
+<tr><td class="name">RGB-D / RealSense server</td><td class="sig"><code>get_rgbd()</code>'s ZMQ SUB socket</td>
+<td>Connects to the external <code>rgbd_server_service</code> over ZeroMQ on port 5555 (tries
+<code>0.0.0.0</code>/<code>127.0.0.1</code>/<code>localhost</code> in turn), 3s receive timeout, one
+<code>[rgb_jpeg, depth_png, depth_scale]</code> multipart frame per call &mdash; not a DDS topic.</td></tr>
+<tr><td class="name">External TTS process</td><td class="sig"><code>say()</code>'s Piper subprocess</td>
+<td>Shells out to a local <code>piper</code> binary (resolved from <code>$G1_PIPER_BIN</code>/<code>$PIPER_BIN</code>/PATH,
+or <code>~/.local/bin/piper</code>), then resamples the WAV to mono/16-bit/16kHz with <code>audioop</code> before
+streaming it through <code>AudioClient.PlayStream</code>.</td></tr>
+<tr><td class="name">Environment-variable configuration</td><td class="sig"><code>os.environ.get(...)</code></td>
+<td><code>G1_PIPER_BIN</code> / <code>PIPER_BIN</code> (Piper binary override), <code>G1_SLAM_MAP_PATH</code>
+(default <code>/home/unitree/test.pcd</code>) &mdash; the only two externally-configurable settings in this file.</td></tr>
+<tr><td class="name">Freshness / staleness convention</td><td class="sig"><code>_Latest.get()</code> &rarr; <code>(msg, timestamp)</code></td>
+<td><code>get_battery()</code>'s 3s window is the <b>only</b> place this class enforces a max-age itself &mdash;
+every other reader just returns whatever is currently cached (possibly <code>None</code>) and leaves the
+staleness judgment to the caller.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="t2">Table 2 &mdash; Important mappings</h2>
+<p class="section-lead">Every module-level constant dict/list in <code>sdk_wrapper.py</code> and what it maps,
+as a convention &mdash; not the literal ids/values (see <code>mappings_and_constraints.html</code> for those).</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Constant</th><th>Maps</th><th>Convention / description</th></tr></thead>
+<tbody>
+<tr><td class="name"><code>FSM_IDS</code></td><td>mode name &rarr; FSM id</td>
+<td>Short, memorable name (<code>"zero_torque"</code>, <code>"damp"</code>, <code>"prepare"</code>,
+<code>"walk"</code>, <code>"run"</code>) to the integer <code>LocoClient.SetFsmId</code> expects; every
+<code>*_mode()</code> method is a one-line lookup into this dict.</td></tr>
+<tr><td class="name"><code>SERVICE_CATALOG</code></td><td>service name &rarr; human description</td>
+<td>Annotates <code>RobotStateClient.ServiceList()</code> rows (and back-fills any of the five documented names
+missing from a live response) so <code>get_service()</code> never returns a bare, unexplained string.</td></tr>
+<tr><td class="name"><code>HL_ARM_ACTIONS</code></td><td>gesture name &rarr; action id</td>
+<td>The vocabulary <code>G1ArmActionClient.ExecuteAction()</code> accepts; every canned-gesture method
+(<code>clap</code>, <code>hug</code>, ...) is a lookup into this dict via <code>_exec_arm_action</code>.</td></tr>
+<tr><td class="name"><code>HL_ARM_ACTION_ALIASES</code></td><td>informal phrasing &rarr; canonical <code>HL_ARM_ACTIONS</code> key</td>
+<td>Lets a caller say <code>"xray"</code> or <code>"two hand kiss"</code> and still resolve correctly; the input
+is lowercased, underscores&rarr;spaces, and whitespace-collapsed before lookup.</td></tr>
+<tr><td class="name"><code>LEFT_LEG_JOINTS</code> / <code>RIGHT_LEG_JOINTS</code> / <code>WAIST_JOINTS</code> / <code>LEFT_ARM_JOINTS</code> / <code>RIGHT_ARM_JOINTS</code></td><td>body region &rarr; ordered joint-id list</td>
+<td>The 29-joint low-level array split into its five anatomical groups, in the same index order the firmware uses.</td></tr>
+<tr><td class="name"><code>LOWCMD_JOINTS</code></td><td>concatenation of all five groups above</td>
+<td>The full ordered joint list every <code>rt/lowcmd</code> write iterates over.</td></tr>
+<tr><td class="name"><code>UPPER_BODY_JOINTS</code></td><td>waist + both arms</td>
+<td>The subset <code>_upper_body_pose()</code>, <code>release_arms()</code>, <code>engage_arms()</code>, and
+<code>move_ll_joint(arm_sdk=True)</code> operate on.</td></tr>
+<tr><td class="name"><code>HAND_JOINT_NAMES</code></td><td>hand joint index &rarr; name</td>
+<td>Ordered <code>thumb_0..index_1</code> names for the 7 Dex3 finger/thumb joints; labels
+<code>get_dex3_hand_sensors()</code> output.</td></tr>
+<tr><td class="name"><code>HAND_CMD_TOPICS</code> / <code>HAND_STATE_TOPICS</code></td><td>side (<code>"left"</code>/<code>"right"</code>) &rarr; DDS topic</td>
+<td>Which <code>rt/dex3/&lt;side&gt;/cmd</code>&middot;<code>state</code> topic each <code>_Dex3</code> instance
+publishes/subscribes.</td></tr>
+<tr><td class="name"><code>HAND_MAX</code> / <code>HAND_MIN</code></td><td>side &rarr; 7-element joint-limit array</td>
+<td>Per-joint clamp bounds <code>_clamp_hand()</code> enforces on every Dex3 write.</td></tr>
+<tr><td class="name"><code>HAND_THUMB0</code></td><td>side &rarr; fixed thumb-rotation value</td>
+<td>The thumb's first joint is held at a constant rest rotation in both <code>HAND_OPEN</code> and
+<code>HAND_CLOSED</code> rather than driven open/closed like the other six.</td></tr>
+<tr><td class="name"><code>HAND_CLOSED</code> / <code>HAND_OPEN</code></td><td>side &rarr; 7-element target array</td>
+<td>The two named poses <code>open_dex3_hand()</code>/<code>close_dex3_hand()</code> move to;
+<code>HAND_OPEN</code> is derived from <code>HAND_CLOSED</code> by picking whichever bound
+(<code>HAND_MIN</code>/<code>HAND_MAX</code>) is farther away, per joint.</td></tr>
+<tr><td class="name"><code>BMS_TOPICS</code></td><td>ordered list of battery topic names</td>
+<td>The dedicated-topic search order <code>get_battery()</code> tries before falling back to the
+lowstate-embedded BMS block.</td></tr>
+<tr><td class="name"><code>INSPIRE_CONFIGS</code></td><td>side &rarr; <code>(host, port, unit_id)</code></td>
+<td>Modbus TCP endpoint for each Inspire hand &mdash; a separate network path from every DDS topic above.</td></tr>
+<tr><td class="name"><code>INSPIRE_OPEN</code> / <code>INSPIRE_CLOSE</code></td><td>6-element raw register-value array</td>
+<td>The open/close actuator targets <code>_modbus_move()</code> writes; raw register units, not joint angles,
+and not clamped the way Dex3 targets are.</td></tr>
+<tr><td class="name"><code>_NAMED_COLORS</code></td><td>color name &rarr; <code>(r,g,b)</code></td>
+<td>The small named-color vocabulary <code>_parse_color()</code> accepts alongside <code>#RRGGBB</code> and
+<code>"R,G,B"</code> strings.</td></tr>
+<tr><td class="name"><code>_PIPER_VOICES</code></td><td>language code &rarr; Piper voice-model name</td>
+<td>Resolves <code>say(language=...)</code>'s short codes/aliases to the actual <code>.onnx</code> voice-model
+file to load.</td></tr>
+<tr><td class="name"><code>SLAM_POINT_TOPICS</code></td><td>ordered list of point-cloud topic names</td>
+<td>Every topic <code>get_point_cloud()</code> considers; it decodes from whichever has the newest timestamp.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="t3">Table 3 &mdash; <code>G1</code> class components</h2>
+<p class="section-lead">Every method on <code>G1</code>, grouped by role. <span class="kind kind-ctor">Constructor</span>
+<span class="kind kind-private">Private</span> <span class="kind kind-public">Public</span></p>
+
+<h3 id="s-ctor">Constructor</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th></th><th>Method</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><span class="kind kind-ctor">Ctor</span></td><td class="name"><code>__init__(iface, domain_id=0)</code></td>
+<td>The only entry point. Stores <code>iface</code>/<code>domain_id</code>, calls the module-level
+<code>_ensure_factory</code> guard (so <code>ChannelFactoryInitialize</code> runs at most once per process),
+constructs+<code>Init()</code>s a <code>LocoClient</code>, initializes every lazy-client slot to
+<code>None</code>/<code>{}</code>, reads <code>G1_SLAM_MAP_PATH</code> from the environment, and eagerly
+constructs every <code>_Latest</code> state subscriber the class ever reads from (<code>rt/lowstate</code>,
+<code>rt/odommodestate</code>, <code>rt/sportmodestate</code>, <code>rt/odom</code>,
+<code>rt/unitree/slam_mapping/odom</code>, the four SLAM cloud topics, <code>rt/slam_info</code>,
+<code>rt/slam_key_info</code>, <code>rt/audio_msg</code>, and every BMS topic/type combination) &mdash; these
+are the only things <b>not</b> lazy, since a fresh state read must be possible from the moment the object exists.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3 id="s-private">Private methods</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th></th><th>Method</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><span class="kind kind-private">Private</span></td><td class="name"><code>_load_type(primary_module, name, fallback_module=None)</code></td>
+<td>Imports <code>name</code> from <code>primary_module</code>; if not found and a <code>fallback_module</code>
+is given, imports it from there instead. Used once in <code>__init__</code> to load <code>LowState_</code> from
+<code>unitree_hg</code> with a <code>unitree_go</code> fallback.</td></tr>
+<tr><td><span class="kind kind-private">Private</span></td><td class="name"><code>_bms_types()</code></td>
+<td>Returns whichever of <code>unitree_hg</code>/<code>unitree_go</code>'s <code>BmsState_</code> types actually
+exist in the installed SDK, so <code>__init__</code> can construct dedicated-topic subscribers for both message
+schemas.</td></tr>
+<tr><td><span class="kind kind-private">Private</span></td><td class="name"><code>_latest(topic, msg_type, queue_len=10)</code></td>
+<td>One-line factory: constructs and returns a <code>_Latest</code> subscriber wrapper for <code>topic</code>,
+so <code>__init__</code> doesn't repeat the same two lines a dozen-plus times.</td></tr>
+<tr><td><span class="kind kind-private">Private</span></td><td class="name"><code>_robot_state_client()</code></td>
+<td>Lazily constructs (and caches) a <code>RobotStateClient</code>, trying the <code>b2</code> module path first
+and <code>go2</code> as a fallback; sets a 2s timeout if the loaded client supports it.</td></tr>
+<tr><td><span class="kind kind-private">Private</span></td><td class="name"><code>_motion_client()</code></td>
+<td>Lazily constructs and caches a <code>MotionSwitcherClient</code> (5s timeout).</td></tr>
+<tr><td><span class="kind kind-private">Private</span></td><td class="name"><code>_audio_client()</code></td>
+<td>Lazily constructs and caches an <code>AudioClient</code> (5s timeout); backs <code>say()</code> and
+<code>set_headlight()</code>.</td></tr>
+<tr><td><span class="kind kind-private">Private</span></td><td class="name"><code>_arm_action_client()</code></td>
+<td>Lazily constructs and caches a <code>G1ArmActionClient</code> (10s timeout); backs every high-level gesture
+method.</td></tr>
+<tr><td><span class="kind kind-private">Private</span></td><td class="name"><code>_video_client()</code></td>
+<td>Lazily constructs and caches a <code>VideoClient</code>, trying <code>g1.video</code> then
+<code>go2.video</code> module paths (2s timeout). Not called by any other method in this file &mdash; a reserved,
+currently-unused hook.</td></tr>
+<tr><td><span class="kind kind-private">Private</span></td><td class="name"><code>_slam_client()</code></td>
+<td>Lazily constructs and caches the module's <code>_SlamClient</code> RPC wrapper (10s timeout); backs
+<code>start_mapping</code>/<code>stop_mapping</code>/<code>relocate</code>/<code>navigate</code>.</td></tr>
+<tr><td><span class="kind kind-private">Private</span></td><td class="name"><code>_lowcmd_client()</code></td>
+<td>Lazily constructs and caches a <code>_LowCmd</code> publisher wrapper for the full-body
+<code>rt/lowcmd</code> topic; backs <code>move_ll_joint(arm_sdk=False)</code>.</td></tr>
+<tr><td><span class="kind kind-private">Private</span></td><td class="name"><code>_arm_sdk_client()</code></td>
+<td>Lazily constructs and caches an <code>_ArmSdk</code> publisher wrapper for <code>rt/arm_sdk</code>; backs
+<code>release_arms</code>/<code>engage_arms</code>/<code>move_ll_joint(arm_sdk=True)</code>/<code>ik_move_ee</code>/<code>extend_arm</code>.</td></tr>
+<tr><td><span class="kind kind-private">Private</span></td><td class="name"><code>_arm_fk_solver(side)</code></td>
+<td>Lazily constructs and caches one <code>ArmFK(side, "urdf")</code> per side; raises if the academy-supplied
+<code>hand_pose_navigation</code> package isn't importable.</td></tr>
+<tr><td><span class="kind kind-private">Private</span></td><td class="name"><code>_arm_ik_solver(side)</code></td>
+<td>Lazily constructs and caches one <code>ArmIK(side, "dls", max_iter=24, tol_pos_m=0.005, tol_rot_rad=0.02)</code>
+per side; same import guard as <code>_arm_fk_solver</code>.</td></tr>
+<tr><td><span class="kind kind-private">Private</span></td><td class="name"><code>_dex3_hand(side)</code></td>
+<td>Lazily constructs and caches one <code>_Dex3</code> hand wrapper (publisher + tactile-state subscriber) per
+side.</td></tr>
+<tr><td><span class="kind kind-private">Private</span></td><td class="name"><code>_lowstate_msg()</code></td>
+<td>Returns the cached <code>rt/lowstate</code> message (or <code>None</code>) &mdash; the single read point
+almost every state/control method goes through.</td></tr>
+<tr><td><span class="kind kind-private">Private</span></td><td class="name"><code>_sport_msg()</code></td>
+<td>Returns whichever of <code>rt/odommodestate</code>/<code>rt/sportmodestate</code> has the newer timestamp
+&mdash; the fallback-preferring read point for gait/odom.</td></tr>
+<tr><td><span class="kind kind-private">Private</span></td><td class="name"><code>_string_data(msg)</code></td>
+<td>Extracts and stringifies a DDS <code>String_</code> message's <code>.data</code> field, or <code>None</code>
+if <code>msg</code> is <code>None</code>.</td></tr>
+<tr><td><span class="kind kind-private">Private</span></td><td class="name"><code>_latest_cloud_msg()</code></td>
+<td>Scans the four SLAM point-cloud subscribers and returns the <code>(topic, msg, timestamp)</code> of
+whichever is freshest.</td></tr>
+<tr><td><span class="kind kind-private">Private</span></td><td class="name"><code>_slam_pose()</code></td>
+<td>Parses the current SLAM pose from <code>get_slam_info()</code>'s JSON text; if parsing fails or returns
+nothing, falls back to the last known good pose instead of returning <code>None</code>.</td></tr>
+<tr><td><span class="kind kind-private">Private</span></td><td class="name"><code>_hand_error(hand, action, exc=None)</code></td>
+<td>Builds the standard <code>{"ok": False, "error": "hand not detected"}</code>-shaped dict every hand method
+returns when a hand isn't present or its call raised.</td></tr>
+<tr><td><span class="kind kind-private">Private</span></td><td class="name"><code>_current_q_mode(timeout=3.0)</code></td>
+<td>Polls <code>rt/lowstate</code> until a message arrives (or times out), returning the full 29-joint
+<code>q</code> array plus <code>mode_machine</code> &mdash; the read point every low-level joint write starts
+from.</td></tr>
+<tr><td><span class="kind kind-private">Private</span></td><td class="name"><code>_upper_body_pose(timeout=3.0)</code></td>
+<td>Same as <code>_current_q_mode</code> but sliced down to just the 17 <code>UPPER_BODY_JOINTS</code>
+(waist + both arms), keyed by joint id.</td></tr>
+<tr><td><span class="kind kind-private">Private</span></td><td class="name"><code>_odom_pose(msg)</code></td>
+<td>Extracts <code>(x, y, yaw)</code> from an odometry-shaped message, trying the standard
+<code>pose.pose.position</code>/<code>orientation</code> path first and an SDK-object-style
+<code>.position()</code>/<code>.imu_state().quaternion()</code> path as a fallback.</td></tr>
+<tr><td><span class="kind kind-private">Private</span></td><td class="name"><code>_exec_arm_action(action, release_after_s=None)</code></td>
+<td>Resolves a gesture name (or raw id) via <code>HL_ARM_ACTIONS</code>, calls <code>ExecuteAction</code>, and
+optionally sleeps then calls the <code>"release arm"</code> action afterward &mdash; the shared implementation
+behind every one of the six HL gesture methods.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3 id="s-state">State monitoring</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th></th><th>Method</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>get_state()</code></td>
+<td>The one-call snapshot: FSM id/mode (raw RPC calls), the current motion-switcher mode name/code, gait,
+battery, lowstate, services, and SLAM info &mdash; all in one dict.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>get_lowstate()</code></td>
+<td>Normalizes the raw <code>rt/lowstate</code> message into <code>{timestamp, joint_positions,
+joint_velocities, joint_torques, imu}</code>, plus the raw message under <code>"raw"</code>.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>get_odom()</code></td>
+<td>Tries <code>rt/odommodestate</code>/<code>rt/sportmodestate</code> first (position/velocity/imu/mode/gait);
+falls back to <code>rt/odom</code>, then <code>rt/unitree/slam_mapping/odom</code>, returning a parsed
+<code>(x,y,yaw)</code> pose from whichever source is available.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>get_imus()</code></td>
+<td>Reads the IMU block off whichever of lowstate/sport-state has one: rpy/gyro/acc/quaternion/temperature,
+each independently guarded so one missing field doesn't fail the whole call.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>get_battery()</code></td>
+<td>Tries each dedicated BMS topic in order (3s freshness window) before falling back to
+<code>bms_state</code>/<code>power_v</code>/<code>power_a</code>/<code>bit_flag</code> embedded in
+<code>rt/lowstate</code>.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>get_slam_info()</code></td>
+<td>Returns the raw JSON text from <code>rt/slam_info</code>, falling back to <code>rt/slam_key_info</code>.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>get_rgbd()</code></td>
+<td>Connects a ZMQ SUB socket to the <code>rgbd_server_service</code> endpoint and returns the newest
+<code>{rgb_jpeg, depth_png, depth_scale}</code> multipart frame.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>get_point_cloud()</code></td>
+<td>Decodes x/y/z out of the freshest SLAM <code>PointCloud2_</code> message's raw byte buffer using its own
+<code>fields</code>/<code>point_step</code> layout, decimating to at most ~20000 points.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>get_mic_input(duration_s=0.0, poll_s=0.05)</code></td>
+<td>Polls <code>rt/audio_msg</code> for up to <code>duration_s</code> seconds (0 = one immediate check),
+de-duplicating by <code>(timestamp, raw_text)</code> and parsing each message's JSON payload for a
+<code>"text"</code> field.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>get_dex3_hand_sensors(hand="both")</code></td>
+<td>Returns each requested Dex3 hand's joint q/dq/tau plus tactile pressure/temperature/lost-sensor arrays, or
+the standard hand-not-detected error dict.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>get_inspire_hand_sensors(hand="both")</code></td>
+<td>Always returns the hand-not-detected error dict for each requested side &mdash; no tactile read-back is
+implemented for Inspire hands in this wrapper.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>get_gait()</code></td>
+<td>Reads <code>gait_type</code>/<code>gaitType</code>/<code>gait</code> off the sport-state message (trying
+each name in turn); falls back to the last value <code>toggle_gait()</code> itself set if the robot hasn't
+reported one yet.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3 id="s-fsm">FSM &amp; service toggling</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th></th><th>Method</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>get_service(service=None)</code></td>
+<td>Lists every service from <code>RobotStateClient.ServiceList()</code>, annotated via
+<code>SERVICE_CATALOG</code>; falls back to just the catalog (status/protected as <code>None</code>) if the
+installed SDK doesn't expose <code>ServiceList</code>. With <code>service</code> given, returns just that row
+(case-insensitive match) or <code>None</code>.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>toggle_service(service)</code></td>
+<td>Looks up the named service via <code>get_service</code>, flips it with <code>ServiceSwitch</code> based on
+its currently-reported status, and returns the name/previous-status/new-enabled-flag/return-code.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>zero_torque_mode()</code></td>
+<td><code>SetFsmId(FSM_IDS["zero_torque"])</code> &mdash; motors off.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>damp_mode()</code></td>
+<td><code>SetFsmId(FSM_IDS["damp"])</code> &mdash; the always-available safe fallback.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>prepare_mode()</code></td>
+<td><code>SetFsmId(FSM_IDS["prepare"])</code> &mdash; stand-up sequencing.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>walk_mode()</code></td>
+<td><code>SetFsmId(FSM_IDS["walk"])</code>.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>run_mode()</code></td>
+<td><code>SetFsmId(FSM_IDS["run"])</code>.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>toggle_dev_mode()</code></td>
+<td>Exactly <code>toggle_service("ai_sport")</code> &mdash; flips whether the main locomotion/AI service owns
+the motors.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>toggle_gait()</code></td>
+<td>Flips a locally-tracked gait flag: to enable, tries <code>SetBalanceMode(1)</code>/<code>SetGaitType(1)</code>
+(whichever the loaded SDK exposes); to disable, tries <code>BalanceStand(0)</code> then
+<code>SetBalanceMode(0)</code>/<code>SetGaitType(0)</code>, then falls back to re-entering <code>walk</code> via
+<code>SetFsmId</code>. Records every attempted method/code pair.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3 id="s-nav">Navigation &amp; SLAM</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th></th><th>Method</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>loco_move(vx, vy, vyaw, duration_s=2)</code></td>
+<td>Starts a continuous <code>Move</code>, sleeps <code>duration_s</code>, and always calls
+<code>loco_stop()</code> in a <code>finally</code> block so an exception mid-sleep can't leave the robot moving.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>loco_stop()</code></td>
+<td><code>StopMove()</code> if the loaded <code>LocoClient</code> exposes it, else a zero-velocity
+non-continuous <code>Move</code>.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>start_mapping()</code></td>
+<td>Records the current SLAM pose as the mapping session's starting pose, then calls the SLAM RPC's
+<code>start_mapping("indoor")</code>.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>stop_mapping()</code></td>
+<td>Calls the SLAM RPC's <code>stop_mapping()</code> with no save path (the "stop without save" API id).</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>relocate()</code></td>
+<td>Re-localizes against the saved map at the current (or last-known/initial) pose; on success, updates both
+the cached "last" and "initial" poses.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>add_map_pose()</code></td>
+<td>Appends the current (or last-known/initial) SLAM pose onto an internal path-points queue for
+<code>navigate()</code>; raises if no pose is available yet.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>navigate(map_pose)</code></td>
+<td>Optionally enqueues one more <code>(x,y,yaw)</code> point, then sends a <code>pose_nav</code> RPC for every
+queued point in order, stopping early on the first non-zero return code; always clears the queue afterward.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3 id="s-hlarm">HL arm control</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th></th><th>Method</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>clap()</code></td><td><code>_exec_arm_action("clap")</code>.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>face_wave()</code></td><td><code>_exec_arm_action("face wave")</code>.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>high_wave()</code></td><td><code>_exec_arm_action("high wave")</code>.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>shake_hand()</code></td><td><code>_exec_arm_action("shake hand", release_after_s=2.0)</code> &mdash; auto-releases 2s later.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>hug()</code></td><td><code>_exec_arm_action("hug", release_after_s=2.0)</code> &mdash; auto-releases 2s later.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>left_kiss()</code></td><td><code>_exec_arm_action("left kiss")</code>.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3 id="s-llpose">Saved LL pose sequences</h3>
+<p class="section-lead">Open/close, teach/repeat, and the arm_sdk ownership handoff (release / re-engage,
+i.e. &ldquo;unrelease&rdquo;) all live here as the closest existing grouping to what those concepts map to
+in this file today.</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th></th><th>Method</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>open_dex3_hand(hand="both")</code></td>
+<td>Moves the requested Dex3 hand(s) to <code>HAND_OPEN</code>; returns per-hand ok/error dicts (a single dict
+if one side was requested, a dict keyed by side otherwise).</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>close_dex3_hand(hand="both")</code></td>
+<td>Same shape, moves to <code>HAND_CLOSED</code>.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>open_inspire_hand(hand="both")</code></td>
+<td>Sends <code>INSPIRE_OPEN</code> register values over Modbus TCP to the requested hand(s)' configured
+IP/port.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>close_inspire_hand(hand="both")</code></td>
+<td>Sends <code>INSPIRE_CLOSE</code> register values the same way.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>release_arms()</code></td>
+<td>Ramps the <code>rt/arm_sdk</code> weight from 1&rarr;0 over 151 steps (~3s) on a smoothstep ease curve,
+holding the upper-body pose fixed while gains fade out &mdash; hands control back to the default controller.
+The &ldquo;release&rdquo; half of the handoff.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>engage_arms()</code></td>
+<td>Ramps the weight 0&rarr;1 over 51 steps (~1s), taking <code>rt/arm_sdk</code> ownership of the current
+upper-body pose. The &ldquo;unrelease&rdquo; / re-engage half of the handoff.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>teach(arm="both")</code></td>
+<td><b>Not implemented</b> &mdash; raises <code>NotImplementedError</code>. A pose/sequence-recording method is
+anticipated by the name but not present in this wrapper version.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>repeat()</code></td>
+<td><b>Not implemented</b> &mdash; raises <code>NotImplementedError</code>. The playback counterpart to
+<code>teach</code>; also absent.</td></tr>
+</tbody>
+</table>
+</div>
+<div class="note">No <code>interpolate</code> method exists on <code>G1</code> in this file. Smooth interpolation
+is inlined inside <code>release_arms</code>/<code>engage_arms</code>/<code>ik_move_ee</code>/<code>extend_arm</code>
+rather than exposed as its own reusable method &mdash; <code>solved/lib_solved.py</code>'s Task 8
+(<code>interpolate_to_ll_pose</code>) is where a standalone version of that idea actually gets built, alongside
+a working <code>teach</code>/<code>repeat</code> pair.</div>
+
+<h3 id="s-llarm">LL arm control</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th></th><th>Method</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>ik_move_ee(hand="right", delta_q=None, pose_increment=None, max_speed=0.35, max_dq=0.2, rate_hz=50.0, position_only=False)</code></td>
+<td>Solves a small 3- or 6-element Cartesian pose increment (<code>[dx,dy,dz]</code> or
+<code>[dx,dy,dz,droll,dpitch,dyaw]</code>) with damped-least-squares IK (or a position-only shoulder/elbow
+solver when <code>position_only=True</code>), clips the resulting joint delta to <code>max_dq</code>, and ramps
+to it via <code>rt/arm_sdk</code> in eased, speed-limited steps. Returns <code>success=False</code> (and does
+not move) if the solve fails.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>extend_arm(hand="right", dx=0.08, dy=0.08, dz=0.04, steps=3, max_speed=0.25, max_dq=0.15, rate_hz=50.0)</code></td>
+<td>Splits a total Cartesian displacement into <code>steps</code> equal position-only <code>ik_move_ee</code>
+calls, so the arm advances toward a forward/extended reach in small bounded increments rather than one large
+solve.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3 id="s-lldev">LL dev mode control</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th></th><th>Method</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>move_ll_joint(joint_id, q, dq, kp, kd, tau, arm_sdk=True)</code></td>
+<td>Two distinct low-level paths selected by <code>arm_sdk</code>. With <code>arm_sdk=True</code> (default):
+moves one joint from <code>UPPER_BODY_JOINTS</code> through the <code>rt/arm_sdk</code>-assisted publisher,
+holding the rest of the upper body at its last observed pose. With <code>arm_sdk=False</code>: targets any of
+the 29 <code>LOWCMD_JOINTS</code> directly through the raw whole-body <code>rt/lowcmd</code> publisher &mdash;
+the true &ldquo;developer mode&rdquo; path, which requires <code>ai_sport</code> released/dev mode entered
+first (see <code>toggle_dev_mode()</code>) &mdash; holding every other joint at its currently observed
+<code>q</code>.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3 id="s-audio">Audio &amp; lights <span style="font-weight:400;color:var(--muted);font-size:11px;">(not part of the requested section list &mdash; kept here rather than dropped)</span></h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th></th><th>Method</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>say(text="", language="EN", volume=100)</code></td>
+<td>Synthesizes <code>text</code> with the local Piper binary, resamples the WAV to mono/16-bit/16kHz, and
+streams it through <code>AudioClient.PlayStream</code>; raises if Piper or the requested voice model isn't
+installed.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>set_headlight(color="green", intensity=100, duration_s=3)</code></td>
+<td>Parses/scales the requested color, sends one immediate <code>LedControl</code> call, and (if
+<code>duration_s &gt; 0</code>) starts a cancellable background thread that keeps re-asserting that color every
+0.2s until the duration elapses &mdash; stopping and joining any earlier thread from a previous call first.</td></tr>
+</tbody>
+</table>
+</div>
+
+<footer>
+  Generated directly from <code>academy/sdk_wrapper.py</code>'s <code>G1</code> class (47 public methods, 24
+  private methods, 1 constructor) plus its module-level setup patterns and constants. See
+  <a href="lib_solved.py">lib_solved.py</a> for the from-scratch, task-by-task rebuild of this same shape, and
+  <a href="../mappings_and_constraints.html">mappings_and_constraints.html</a> for the exact numeric/topic ids
+  this page deliberately omits.
+</footer>
+</div>
+</body>
+</html>

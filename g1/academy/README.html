@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>G1 Academy — Repository Guide</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#121013; --panel:#1c1a1e; --panel2:#242024; --ink:#f3eef1; --muted:#a79ba3; --border:#332e33;
+    --accent:#FB1A62; --code-bg:#0d0b0e;
+    --green:#3aa876; --green-bg:#0f2c21;
+    --blue:#5b8cff; --blue-bg:#16233f;
+    --amber:#c99a3a; --amber-bg:#332711;
+    --purple:#a35bd6; --purple-bg:#24123a;
+  }
+  @media (prefers-color-scheme: light){
+    :root{
+      --bg:#f7f2f4; --panel:#ffffff; --panel2:#f7f3f5; --ink:#1d1e1f; --muted:#6a5f65; --border:#eadfe4;
+      --code-bg:#f4eef1;
+    }
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:16px/1.55 Roboto,-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+  }
+  .page{max-width:1120px; margin:0 auto; padding:36px 20px 90px;}
+  a{color:var(--accent);}
+  code{font:.86em ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace; background:var(--code-bg); padding:.1em .35em; border-radius:4px;}
+  h1{font-size:1.7rem; margin:0 0 8px; padding-bottom:16px; border-bottom:3px solid var(--accent);}
+  p.lead{color:var(--muted); max-width:90ch; margin:10px 0 20px;}
+  h2{font-size:1.25rem; margin:44px 0 6px; padding-top:14px; border-top:3px solid var(--accent);}
+  h2 .n{color:var(--muted); font-weight:400; font-size:.85em;}
+  p.section-lead{color:var(--muted); max-width:90ch; margin:2px 0 16px; font-size:14.5px;}
+  .toc{
+    display:flex; flex-wrap:wrap; gap:6px 10px; margin:14px 0 0; padding:12px 14px;
+    border:1px solid var(--border); border-radius:10px; background:var(--panel);
+  }
+  .toc a{
+    font-size:12.5px; color:var(--ink); text-decoration:none; padding:3px 9px; border-radius:99px;
+    background:var(--panel2); border:1px solid var(--border);
+  }
+  .toc a:hover{border-color:var(--accent); color:var(--accent);}
+  .table-wrap{overflow-x:auto; border:1px solid var(--border); border-radius:10px; background:var(--panel); margin-bottom:6px;}
+  table{border-collapse:collapse; width:100%; min-width:560px; font-size:13.8px;}
+  th, td{padding:9px 12px; border-bottom:1px solid var(--border); text-align:left; vertical-align:top;}
+  th{
+    background:var(--panel2); font-size:11px; text-transform:uppercase;
+    letter-spacing:.03em; color:var(--muted);
+  }
+  tbody tr:nth-child(even){background:var(--panel2);}
+  tbody tr:hover{background:rgba(251,26,98,.06);}
+  td.name{white-space:nowrap; font-weight:600;}
+  .kind{
+    display:inline-block; font-size:10.5px; font-weight:800; letter-spacing:.03em; text-transform:uppercase;
+    padding:2px 8px; border-radius:99px; white-space:nowrap;
+  }
+  .kind-nb{color:var(--accent); background:rgba(251,26,98,.14);}
+  .kind-py{color:var(--blue); background:var(--blue-bg);}
+  .kind-sh{color:var(--amber); background:var(--amber-bg);}
+  .kind-html{color:var(--green); background:var(--green-bg);}
+  .kind-bonus{color:var(--purple); background:var(--purple-bg);}
+  ol.order{margin:10px 0 0; padding-left:22px; max-width:90ch;}
+  ol.order li{margin:6px 0;}
+  .note{
+    background:var(--panel2); border:1px solid var(--border); border-left:3px solid var(--accent);
+    border-radius:8px; padding:10px 14px; margin:10px 0 18px; font-size:13.5px; color:var(--muted);
+  }
+  .note b{color:var(--ink);}
+  footer{margin-top:36px; padding-top:14px; border-top:1px solid var(--border); color:var(--muted); font-size:12.5px;}
+</style>
+</head>
+<body>
+<div class="page">
+
+<h1>G1 Academy — Repository Guide</h1>
+<p class="lead">What's in this folder and what it's for. Read this before the first notebook —
+everything below is a real file sitting next to this one, described in the order you're likely
+to touch it.</p>
+
+<div class="toc">
+  <a href="#getting-started">Getting started</a>
+  <a href="#notebooks">Notebooks</a>
+  <a href="#modules">Python modules</a>
+  <a href="#scripts">Setup scripts</a>
+  <a href="#docs">Reference docs</a>
+</div>
+
+<h2 id="getting-started">Getting started <span class="n">the order these actually get used in</span></h2>
+<p class="section-lead">If this is your first session, this is the sequence — everything else on this
+page is something one of these steps points you at.</p>
+<ol class="order">
+  <li>Environment already set up for you by <code>setup_python_cyclonedds_unitree_sdk.sh</code> and,
+  if you're on your own laptop rather than the lab Jetson, <code>setup_wpa_supplicant_wlan0.sh</code>
+  to join the robot's network — see <a href="#scripts">Setup scripts</a> below.</li>
+  <li>Open <code>01_jupyter_dds_speech_headlights_participant.ipynb</code> and work through
+  notebooks 01&ndash;04 in order — each one imports <code>sdk_wrapper.py</code> and, where noted,
+  <code>util.py</code>/<code>slam_util.py</code>.</li>
+  <li>Keep <a href="mappings_and_constraints.html">mappings_and_constraints.html</a> and
+  <a href="wrapper_cheatsheet.html">wrapper_cheatsheet.html</a> open in another tab while you
+  work — they're the two documents you'll actually reach for mid-task.</li>
+  <li>Notebook 04's capstone needs a printed ArUco marker — that's
+  <a href="aruco_setup.html">aruco_setup.html</a>.</li>
+  <li><code>05_bonus_services_audio_chatbot_participant.ipynb</code> is optional, after 01&ndash;04.</li>
+</ol>
+
+<h2 id="notebooks">Notebooks</h2>
+<p class="section-lead">Five Jupyter notebooks, each with <code>## Task N</code> markdown cells and
+<code>pass</code>/<code># TODO</code> placeholders for you to fill in. Work through 01&ndash;04 in
+order; 05 is a separate, optional bonus track.</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>File</th><th>Kind</th><th>Covers</th></tr></thead>
+<tbody>
+<tr><td class="name">01_jupyter_dds_speech_headlights_participant.ipynb</td><td><span class="kind kind-nb">core</span></td>
+<td>DDS channel setup and pub/sub basics; making the robot speak and change its headlight color.</td></tr>
+<tr><td class="name">02_state_modes_locomotion_participant.ipynb</td><td><span class="kind kind-nb">core</span></td>
+<td>Reading robot state, switching FSM modes/services, and basic walking commands.</td></tr>
+<tr><td class="name">03_arm_and_dex3_control_participant.ipynb</td><td><span class="kind kind-nb">core</span></td>
+<td>Arm gestures and low-level arm control, plus Dex3 hand gripping.</td></tr>
+<tr><td class="name">04_perception_delivery_capstone_participant.ipynb</td><td><span class="kind kind-nb">core</span></td>
+<td>SLAM mapping/navigation and the perception-based delivery capstone (detect → validate → grasp).</td></tr>
+<tr><td class="name">05_bonus_services_audio_chatbot_participant.ipynb</td><td><span class="kind kind-bonus">bonus</span></td>
+<td>Optional: packaging a real ROS 2 node, a minimal from-scratch robot bridge class, and wiring
+supplied ASR/OpenAI modules to voice input.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="modules">Python modules</h2>
+<p class="section-lead">Imported by the notebooks above, or run standalone. You read these, you
+don't edit them.</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>File</th><th>Kind</th><th>What it's for</th></tr></thead>
+<tbody>
+<tr><td class="name">sdk_wrapper.py</td><td><span class="kind kind-py">module</span></td>
+<td>The finished <code>G1</code> wrapper class — one object per robot session, covering state
+reads, mode switching, locomotion, SLAM, arm/hand control, and perception. This is what notebooks
+01&ndash;04 actually call. Full method-by-method reference: <a href="wrapper_cheatsheet.html">wrapper_cheatsheet.html</a>.</td></tr>
+<tr><td class="name">util.py</td><td><span class="kind kind-py">module</span></td>
+<td>Support that's impractical to retype by hand: documented FSM/joint/hand id maps, Piper
+text-to-speech conversion and playback, and the integration points for the supplied perception/IK
+pipelines used in notebook 04.</td></tr>
+<tr><td class="name">slam_util.py</td><td><span class="kind kind-py">module</span></td>
+<td>Standalone SLAM support for notebook 04: the deployed mapping/relocate/navigate RPC calls,
+pose parsing, and named-point persistence. No dependency on <code>sdk_wrapper.py</code>.</td></tr>
+<tr><td class="name">mode_control.py</td><td><span class="kind kind-py">script</span></td>
+<td>A small Dash web app with one button per FSM state (Zero Torque, Damp, Prepare, Walk, Run,
+...) for manual mode control from a browser, instead of from code. Run it directly
+(<code>python3 mode_control.py</code>); it does not get imported by the notebooks.</td></tr>
+<tr><td class="name">realsense_rgbd_zmq_stream.py</td><td><span class="kind kind-py">script</span></td>
+<td>Publishes the RealSense camera's RGB + depth frames over a ZeroMQ socket. This is the server
+side of what <code>sdk_wrapper.G1.get_rgbd()</code> connects to — run it once, near the camera,
+before any notebook that needs perception.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="scripts">Setup scripts</h2>
+<p class="section-lead">One-time environment setup. You shouldn't need these mid-course unless
+something's broken.</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>File</th><th>Kind</th><th>What it's for</th></tr></thead>
+<tbody>
+<tr><td class="name">setup_python_cyclonedds_unitree_sdk.sh</td><td><span class="kind kind-sh">setup</span></td>
+<td>Builds the reference Python environment: CycloneDDS, the Unitree SDK, Piper TTS voices, and
+the rest of what a notebook might import. Example/reference only — review versions and paths
+before running it yourself.</td></tr>
+<tr><td class="name">setup_wpa_supplicant_wlan0.sh</td><td><span class="kind kind-sh">setup</span></td>
+<td>Connects <code>wlan0</code> to a Wi-Fi network via <code>wpa_supplicant</code>. Usage:
+<code>sudo ./setup_wpa_supplicant_wlan0.sh SSID PASSPHRASE</code>.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="docs">Reference docs</h2>
+<p class="section-lead">Browsable HTML — no server needed, just open the file. Keep these handy
+while working through the notebooks rather than reading them cover-to-cover first.</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>File</th><th>Kind</th><th>What it's for</th></tr></thead>
+<tbody>
+<tr><td class="name"><a href="mappings_and_constraints.html">mappings_and_constraints.html</a></td><td><span class="kind kind-html">reference</span></td>
+<td>FSM ids, joint indices, topic names, and safety constraints for the whole robot — the
+one place every id/limit used across the notebooks is collected and explained.</td></tr>
+<tr><td class="name"><a href="wrapper_cheatsheet.html">wrapper_cheatsheet.html</a></td><td><span class="kind kind-html">reference</span></td>
+<td>Every method on <code>sdk_wrapper.G1</code>, grouped and described, plus the underlying
+DDS setup patterns and constant mappings it's built from.</td></tr>
+<tr><td class="name"><a href="aruco_setup.html">aruco_setup.html</a></td><td><span class="kind kind-html">reference</span></td>
+<td>Printing and mounting instructions for the ArUco markers notebook 04's capstone task
+detects and picks up.</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="note">Working solutions for every task exist for instructor reference but aren't part
+of this folder's participant materials — if a task has you stuck, re-read the relevant knowledge
+section in <code>mappings_and_constraints.html</code>/<code>wrapper_cheatsheet.html</code> or ask
+an instructor rather than looking for an answer key here.</div>
+
+<footer>G1 Humanoid Academy &middot; this file describes <code>academy/</code> only.</footer>
+
+</div>
+</body>
+</html>
