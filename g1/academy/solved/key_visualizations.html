@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>G1 Academy — Key Visualizations</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#121013; --panel:#1c1a1e; --panel2:#242024; --ink:#f3eef1; --muted:#a79ba3; --border:#332e33;
+    --accent:#FB1A62; --code-bg:#0d0b0e;
+    --ok:#3aa876; --ok-bg:#0f2c21;
+    --warn:#c99a3a; --warn-bg:#332711;
+    --bad:#e0294f; --bad-bg:#3a0f1c;
+    --info:#4fa3d1; --info-bg:#122a36;
+  }
+  @media (prefers-color-scheme: light){
+    :root{
+      --bg:#f7f2f4; --panel:#ffffff; --panel2:#f7f3f5; --ink:#1d1e1f; --muted:#6a5f65; --border:#eadfe4;
+      --code-bg:#f4eef1;
+    }
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:16px/1.55 Roboto,-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+  }
+  .page{max-width:1180px; margin:0 auto; padding:36px 20px 80px;}
+  code{font:.88em ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace; background:var(--code-bg); padding:.1em .35em; border-radius:4px;}
+  pre{font:.85em ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace; background:var(--code-bg); padding:12px 14px; border-radius:8px; overflow-x:auto; border:1px solid var(--border);}
+  h1{font-size:1.7rem; margin:0 0 8px; padding-bottom:16px; border-bottom:3px solid var(--accent);}
+  h2{font-size:1.25rem; margin:44px 0 6px; padding-bottom:8px; border-bottom:2px solid var(--border);}
+  h2 .src{font-size:.6em; font-weight:400; color:var(--muted); display:block; margin-top:4px;}
+  h3{font-size:1.02rem; margin:26px 0 8px; color:var(--ink);}
+  h3 .tag{font-size:.7em; font-weight:800; text-transform:uppercase; letter-spacing:.03em; color:var(--accent); margin-right:8px;}
+  p.lead{color:var(--muted); max-width:92ch; margin:10px 0 24px;}
+  p{max-width:92ch;}
+  ul, ol{max-width:90ch; padding-left:22px;}
+  li{margin:4px 0;}
+  a{color:var(--accent);}
+  .card{background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:16px 18px; margin:14px 0;}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+  @media (max-width:820px){ .grid2{grid-template-columns:1fr;} }
+  .table-wrap{overflow-x:auto; border:1px solid var(--border); border-radius:10px; background:var(--panel); margin:14px 0;}
+  table{border-collapse:collapse; width:100%; min-width:640px; font-size:13.5px;}
+  th, td{padding:9px 12px; border-bottom:1px solid var(--border); text-align:left; vertical-align:top;}
+  th{
+    background:var(--panel2); position:sticky; top:0; font-size:11px; text-transform:uppercase;
+    letter-spacing:.03em; color:var(--muted);
+  }
+  tbody tr:nth-child(even){background:var(--panel2);}
+  tbody tr:hover{background:rgba(251,26,98,.06);}
+  .pill{display:inline-block; font-size:11px; font-weight:800; letter-spacing:.03em; text-transform:uppercase; padding:2px 9px; border-radius:99px;}
+  .pill-ok{color:var(--ok); background:var(--ok-bg);}
+  .pill-warn{color:var(--warn); background:var(--warn-bg);}
+  .pill-bad{color:var(--bad); background:var(--bad-bg);}
+  .pill-info{color:var(--info); background:var(--info-bg);}
+  .note{border-left:3px solid var(--accent); background:var(--panel2); padding:10px 14px; border-radius:0 8px 8px 0; margin:14px 0; font-size:14px; color:var(--ink);}
+  .note b{color:var(--accent);}
+  .toc{background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:14px 20px; margin:20px 0;}
+  .toc a{display:block; padding:3px 0; font-size:14.5px; color:var(--ink); text-decoration:none;}
+  .toc a:hover{color:var(--accent);}
+  .toc .sub{padding-left:16px; font-size:13.5px; color:var(--muted);}
+  footer{margin-top:36px; padding-top:14px; border-top:1px solid var(--border); color:var(--muted); font-size:12.5px;}
+</style>
+</head>
+<body>
+<div class="page">
+
+<h1>G1 Academy &mdash; Key Visualizations</h1>
+<p class="lead">
+How the academy's live dashboards turn raw robot data into something you can look at &mdash; what data
+feeds each view, what gets plotted/drawn/highlighted, and what is calculated to produce it. All of it lives
+in <code>academy/visualizations/</code> now — the three original dashboards
+(<code>slam_web_app.py</code>, <code>joint_control_dashboard.py</code>, <code>recognition_app_v3.py</code>)
+plus three new read-only monitors built for this doc (<code>dex3_input_viz.py</code>,
+<code>zmp_viz.py</code>, <code>state_monitor.py</code>) — while the shared SDK layer they all import
+(<code>sdk_wrapper.py</code>, <code>sdk_client.py</code>, and the smaller helpers) stayed one level up in
+<code>academy/</code>, alongside the curriculum notebooks that also need it directly. See the note at the
+end of each section for what had to move or get patched to make that split work.
+</p>
+
+<div class="toc">
+  <a href="#slam">1&nbsp;&middot;&nbsp; slam_web_app.py — live SLAM map</a>
+  <span class="sub">Point-cloud layers &middot; occupancy/KISS-ICP overlays &middot; click-to-navigate &middot; pose/distance calc</span>
+  <a href="#joints">2&nbsp;&middot;&nbsp; joint_control_dashboard.py — live 3‑D joint skeleton</a>
+  <span class="sub">Forward kinematics from sensed joints &middot; per-joint control &middot; IK end-effector controller</span>
+  <a href="#recognition">3&nbsp;&middot;&nbsp; recognition_app_v3.py — G1 Recognition Layer</a>
+  <span class="sub">RGB-D acquisition &middot; the 4 view panels &middot; detection gizmos &middot; grasp-surface math &middot; tactile/log panels</span>
+  <a href="#dex3">4&nbsp;&middot;&nbsp; dex3_input_viz.py — Dex3 tactile input</a>
+  <span class="sub">Per-pad pressure bars &middot; rolling strip chart &middot; configurable contact threshold</span>
+  <a href="#zmp">5&nbsp;&middot;&nbsp; zmp_viz.py — ZMP / support polygon</a>
+  <span class="sub">Leg forward kinematics &middot; convex hull &middot; LIPM ZMP estimate &middot; in/out-of-polygon check</span>
+  <a href="#state">6&nbsp;&middot;&nbsp; state_monitor.py — raw state tables</a>
+  <span class="sub">Lowstate/odometry/BMS/services/Dex3 as live tables &middot; per-panel freshness badges</span>
+  <a href="#recap">7&nbsp;&middot;&nbsp; Reusable techniques cheat-sheet</a>
+</div>
+
+<h2 id="slam">1 &middot; slam_web_app.py — live SLAM map
+  <span class="src">academy/visualizations/slam_web_app.py &nbsp;(Dash app, default <code>http://&lt;host&gt;:8060</code>)</span>
+</h2>
+<p>
+A real-time top-down map: a Plotly <code>go.Figure</code> rebuilt from live DDS point-cloud topics and the
+SLAM service's own pose/state every <code>--refresh-ms</code> (2000&nbsp;ms default), redrawn in place via a
+<code>dcc.Interval</code> + <code>dcc.Graph</code>.
+</p>
+
+<h3><span class="tag">Data</span>Where it comes from</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Source</th><th>What it gives you</th><th>Code</th></tr></thead>
+<tbody>
+<tr><td>11 DDS point-cloud topics</td><td>SLAM mapping/relocation/global-map/web-points clouds, deskewed +
+    raw Livox lidar, and collision/pre-collision/safe/warning/grid clouds &mdash; each topic's
+    <b>latest</b> message only, no queueing.</td>
+    <td><code>DEFAULT_TOPICS</code>, one <code>LatestCloudSubscriber</code> (a <code>ChannelSubscriber</code>)
+    per topic.</td></tr>
+<tr><td>Live SLAM pose</td><td><code>{x, y, z, yaw}</code>, parsed from <code>/slam_info</code>; a stray
+    interleaved zero-pose from another publisher is treated as "no data" so relocation never silently
+    starts from the origin.</td><td><code>parse_pose</code> / <code>SlamWebState.current_pose</code></td></tr>
+<tr><td>Task queue</td><td>an ordered list of <code>PoseTarget</code> waypoints, built by clicking the map
+    (see below).</td><td><code>SlamWebState.tasks</code></td></tr>
+<tr><td>Derived occupancy</td><td>a running 0.08&nbsp;m grid built client-side from whatever raw clouds are
+    currently visible &mdash; not something the robot publishes.</td><td><code>OccupancyAccumulator</code></td></tr>
+<tr><td>KISS-ICP layer <span class="pill pill-info">optional</span></td><td>an independent
+    odometry-built voxel map + pose from the deskewed lidar stream, for sanity-checking the SLAM
+    service's own map. Silently disabled if the <code>kiss-icp</code> pip package isn't installed.</td>
+    <td><code>KissIcpLayer</code></td></tr>
+</tbody>
+</table>
+</div>
+
+<h3><span class="tag">Compute</span>From raw DDS bytes to plottable xy</h3>
+<pre>decode_xyz(msg, stride, max_points, z_min=-1.0, z_max=2.4):
+    # reinterpret the PointCloud2 byte blob using the message's own field
+    # offsets/point_step as a structured numpy dtype — no per-point Python loop
+    raw = np.frombuffer(msg.data, dtype=struct_dtype)
+    pts = stack(x, y, z)[::stride]                 # subsample
+    pts = pts[isfinite(pts) & z_min &lt;= z &lt;= z_max]  # drop NaNs, keep a floor-to-head band
+    pts = pts[evenly-spaced indices up to max_points]
+
+transform_xy(pts, pose):                            # world/map-frame view only
+    out.x = cos(yaw)·x − sin(yaw)·y + pose.x         # 2-D rigid transform using the
+    out.y = sin(yaw)·x + cos(yaw)·y + pose.y         # live SLAM pose's yaw/x/y</pre>
+<p class="lead" style="margin-top:6px">SLAM-service topics already publish in map frame and skip the
+transform; raw sensor clouds (deskewed/Livox/collision/&hellip;) go through it only when the "World/map
+frame" radio is selected &mdash; switch to "Sensor frame" to sanity-check the live sweep against the
+accumulated map without the transform in the way.</p>
+
+<h3><span class="tag">Plot</span>What <code>make_figure()</code> draws, layer by layer</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Layer</th><th>Trace</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>Each of the 11 cloud topics <span class="pill pill-info">toggle in sidebar</span></td>
+    <td><code>go.Scattergl</code> markers (WebGL — needed at these point counts)</td>
+    <td>Color/size/opacity per topic from <code>LAYER_STYLE</code>; legend label shows staleness,
+    e.g. <code>"SLAM mapping (0.3s)"</code>.</td></tr>
+<tr><td>Derived occupancy</td><td><code>go.Scattergl</code></td><td>Occupancy grid cell centers.</td></tr>
+<tr><td>KISS-ICP map + pose</td><td><code>go.Scattergl</code> + a pink diamond marker</td>
+    <td>Legend shows frame count processed so far.</td></tr>
+<tr><td>Initial pose</td><td>orange circle marker</td><td>Pose recorded when mapping/relocation started.</td></tr>
+<tr><td>Current SLAM pose</td><td>red diamond marker</td><td>Live, from <code>current_pose()</code>.</td></tr>
+<tr><td>Task points</td><td>black circles + connecting line, numbered</td><td>The queued navigation waypoints, in click order.</td></tr>
+<tr><td>Selected pose</td><td>cyan <code>×</code> marker</td><td>Most recently clicked/selected target.</td></tr>
+<tr><td>Invisible click grid</td><td><code>go.Scatter</code>, ~90×90, near-zero opacity</td>
+    <td>Covers the current data extent (+10% pad) purely so clicking <i>anywhere</i> on the map &mdash;
+    not just on an existing point &mdash; still returns an (x, y) to add a task at.</td></tr>
+</tbody>
+</table>
+</div>
+<p>Axis extent = min/max over every plotted layer's sampled xy, padded by the larger of 1.5&nbsp;m or 10%
+of the span, with the axes locked to a 1:1 aspect ratio (<code>scaleanchor</code>) so distances read
+correctly in both directions.</p>
+
+<h3><span class="tag">Highlight / calculate</span>Interaction &amp; status</h3>
+<div class="grid2">
+<div class="card">
+<b>Click-to-navigate</b>
+<ul>
+<li><code>clickData</code> on the graph &rarr; <code>add_task(x, y)</code>, drawn immediately as the next
+numbered task point.</li>
+<li>Pan/zoom range is remembered across the 2&nbsp;s auto-refresh via a <code>dcc.Store</code> +
+<code>uirevision="slam-map"</code>, so the view doesn't jump back to "fit all" on every redraw.</li>
+<li>Toolbar buttons map 1:1 to <code>SlamWebState</code> methods: Start Mapping / Save Map / Relocate /
+Execute Tasks / Go To Selected / Add Current Pose / Pause / Resume / Stop SLAM / Clear Tasks.</li>
+</ul>
+</div>
+<div class="card">
+<b>Status line + distance/reached calc</b>
+<ul>
+<li>Text banner: iface/domain, <code>slam_running</code>, <code>relocation_ready</code>, task count, live
+pose, KISS-ICP frame count/error.</li>
+<li>Same "arrived" pattern as a nav bot's: <code>xy_distance_to</code> Euclidean distance,
+<code>NAV_REACHED_DISTANCE_M</code>=0.35&nbsp;m, polled every 0.5&nbsp;s, with a
+<code>NAV_TARGET_TIMEOUT_S</code>=120&nbsp;s ceiling &mdash; driving both the mapping worker and
+Execute&nbsp;Tasks.</li>
+</ul>
+</div>
+</div>
+<div class="note">Moved from <code>modules/scripts/slam_web_app.py</code>, first into <code>academy/</code> and then
+one level deeper into <code>academy/visualizations/</code> (alongside the other dashboards below); its own
+<code>from sdk_slam import …</code> resolves against a copy of <code>sdk_slam.py</code> kept in
+<code>academy/</code> (plus <code>dds_env.py</code>, which <code>sdk_slam.py</code> itself needs) &mdash;
+see the dependency note in §3.</div>
+
+<h2 id="joints">2 &middot; joint_control_dashboard.py — live 3‑D joint skeleton
+  <span class="src">academy/visualizations/joint_control_dashboard.py &nbsp;(Dash app, default <code>http://&lt;host&gt;:8060</code>)</span>
+</h2>
+<p>
+No camera involved at all &mdash; this view is pure forward kinematics from the robot's <b>sensed</b> joint
+angles, redrawn as a 3‑D skeleton on every <code>plot-interval</code> tick.
+</p>
+
+<h3><span class="tag">Data &amp; compute</span>From 29 sensed joint angles to 30 world-frame points</h3>
+<pre>compute_skeleton(q_values):        # q_values = 29 sensed joint angles (rad), from RobotLink.snapshot()
+    for each joint id 0..28, in parent order:
+        world_R = parent_R @ quat(joint)  @ axis_rotation(joint.axis, q)   # Rodrigues formula
+        world_t = parent_t + parent_R @ joint.pos
+    → {"pelvis": xyz, 0: xyz, 1: xyz, … 28: xyz}</pre>
+<p>Per-joint offsets/quaternions/rotation-axes/limits are constants embedded in the script, transcribed from
+the G1 29‑DOF MJCF (<code>g1_29dof.xml</code>) in the same 0&ndash;28 order <code>sdk_wrapper.py</code>'s
+<code>LOWCMD_JOINTS</code> uses (legs 0&ndash;11, waist 12&ndash;14, arms 15&ndash;28). <code>RobotLink</code>
+polls the real sensed state in the background — this is a live digital twin of where the joints actually
+are, not of what was last commanded.</p>
+
+<h3><span class="tag">Plot</span><code>build_skeleton_figure()</code></h3>
+<ul>
+<li>One <code>go.Scatter3d</code> "lines" trace per joint group (<code>left_leg / right_leg / waist /
+left_arm / right_arm</code>), each a <code>None</code>-separated chain of parent&rarr;child bone segments,
+colored per-group from the dashboard's fixed categorical palette.</li>
+<li>One <code>go.Scatter3d</code> "markers" trace per group at each joint's world position; hovering shows
+<code>"{joint name} (id {n})&lt;br&gt;{angle}°"</code>.</li>
+<li>A diamond marker at the pelvis root.</li>
+<li>Fixed data-aspect 3‑D scene; camera position is preserved across refreshes via
+<code>uirevision="skeleton"</code> &mdash; the same trick the SLAM map uses to keep pan/zoom stable, applied
+here to orbit/zoom instead.</li>
+</ul>
+
+<h3><span class="tag">Highlight / calculate</span>Two ways to move a joint</h3>
+<div class="grid2">
+<div class="card">
+<b>Per-joint control</b>
+<ul>
+<li>Clicking a joint's marker (<code>customdata</code> = joint id) opens a modal: sliders for
+<code>q, dq, kp, kd, tau</code> and a ramp duration, bounded by that joint's own limits.</li>
+<li><b>Normal mode</b> &mdash; <code>rt/arm_sdk</code>, waist+arms only (legs stay on <code>ai_sport</code>).
+First edit ramps the arm_sdk weight 0&rarr;1 with the same smoothstep <code>engage_arms()</code> uses.</li>
+<li><b>Dev mode</b> &mdash; <code>rt/lowcmd</code>, all 29 joints, <code>ai_sport</code> stopped. Turning it
+on seeds every joint's hold target from its current sensed pose so nothing jumps when
+<code>ai_sport</code> lets go.</li>
+<li>A live per-joint angle readout next to each control row, updated every tick from the same
+<code>sensed_q</code> driving the skeleton.</li>
+</ul>
+</div>
+<div class="card">
+<b>IK end-effector controller</b>
+<ul>
+<li>A separate modal: 6 sliders &mdash; x/y/z (±0.35&nbsp;m around the current position),
+roll/pitch/yaw (±π) &mdash; set an absolute target hand pose in <code>base_link</code> frame.</li>
+<li>On Apply: <code>ArmFK</code> gets the current hand pose, <code>ArmIK</code>'s damped-least-squares
+solver (max 24 iters, 5&nbsp;mm / 0.02&nbsp;rad tolerances &mdash; the same defaults
+<code>sdk_wrapper.G1._arm_ik_solver()</code> uses) solves the 7-joint arm solution.</li>
+<li>The solution is written into the same per-joint command table as manual edits and ramped together as
+one coordinated 0.8&nbsp;s move &mdash; only that arm's 7 joints change.</li>
+<li>Identical ArmFK/ArmIK pipeline to <code>recognition_app_v3.py</code>'s grasp planner &mdash; here
+driven by sliders instead of a detected object pose.</li>
+</ul>
+</div>
+</div>
+<div class="note">Moved from <code>dev/dashboards/joint_control_dashboard.py</code>, via <code>academy/</code>, to its
+current <code>academy/visualizations/</code>. Its <code>from sdk_wrapper_v3 import G1</code> was repointed to
+<code>from sdk_wrapper import G1</code> (the academy convention already used by every notebook —
+<code>sdk_wrapper.py</code>, kept in <code>academy/</code>, <i>is</i> <code>sdk_wrapper_v3.py</code>, just
+renamed), and its <code>sys.path</code> setup adds its own directory plus <code>academy/</code> and
+<code>g1/</code> explicitly rather than relying on directory-depth coincidences.
+<code>hand_pose_navigation.arm_fk</code>/<code>arm_ik</code> still resolve against the package in place at
+<code>g1/hand_pose_navigation/</code> &mdash; nothing there needed copying.</div>
+
+<h2 id="recognition">3 &middot; recognition_app_v3.py — G1 Recognition Layer
+  <span class="src">academy/visualizations/recognition_app_v3.py &nbsp;(Dash app, served at <code>http://&lt;host&gt;:8060</code>)</span>
+</h2>
+<p>
+A Dash/<code>dash_bootstrap_components</code> single-page app with two background threads feeding a shared,
+lock-protected <code>STATE</code> object, and a <code>dcc.Interval</code> that repaints the UI every
+<b>500&nbsp;ms</b>.
+</p>
+
+<h3><span class="tag">Pipeline</span>How the data gets there before anything is drawn</h3>
+<ol>
+<li><b>Camera loop</b> (<code>_camera_loop</code>, its own thread at <code>--camera-rate-hz</code>):
+pulls one RGB-D frame from a ZMQ <code>SUB</code> socket (<code>_ZmqRgbdRobot.get_rgbd</code>), draining
+the queue so the UI always works from the newest frame. A frame is 2&ndash;3 multipart messages: JPEG RGB,
+PNG depth (decoded, converted to grayscale if needed), and an optional 4-byte float
+<code>depth_scale</code> (default 0.001&nbsp;m/unit) — multiplied in to get <code>depth_m</code>. Stores
+<code>rgb_bgr</code>, <code>depth_m</code>, and <code>last_frame_ts</code> on <code>STATE</code>.</li>
+<li><b>Perception loop</b> (<code>_perception_loop</code>, its own thread at <code>--rate-hz</code>,
+independent/slower than the camera loop): on each new frame, runs the open-vocabulary NL-prompted
+<code>VisionDetector</code> to get 2‑D boxes, then per box:
+<ul>
+<li><code>mask_from_box_depth</code> &mdash; keeps only pixels inside the box whose depth is within
+0.05&nbsp;m of the box's own median depth (cuts the object out from the table/wall behind it);</li>
+<li><code>pose_from_mask</code> &mdash; back-projects the masked pixels to a camera-frame 3‑D point
+cloud and fits an oriented pose via PCA/SVD (position = centroid; orientation from the
+largest/smallest-variance axes, "up" flipped to face the camera);</li>
+<li><code>estimate_grasp_surface</code> &mdash; reuses that PCA to get the object's in-view
+<code>width_m</code>/<code>length_m</code> footprint and how far its near surface sits in front of the
+centroid, for sizing the grasp standoff.</li>
+</ul>
+Detections are held for <code>DETECTION_HOLD_S</code>=1.5&nbsp;s past their last sighting (so one slow
+vision call or a motion-blur frame doesn't blank the overlay) and only pruned after that.</li>
+<li><b>Staleness</b>: if no fresh camera frame or detection has landed in <code>STALE_AFTER_S</code>=4&nbsp;s,
+the refresh callback clears the detection list/overlay and shows a <code>STALE</code>/<code>DETECTING</code>
+banner instead of serving frozen data as if it were live.</li>
+</ol>
+
+<h3><span class="tag">View 1</span>The live-view image panel <span class="pill pill-info">html.Img via base64 JPEG</span></h3>
+<p>A single <code>dcc.Dropdown</code> (<code>view-select</code>) picks what the one image panel shows;
+every mode is rendered server-side to a BGR array, JPEG-encoded (<code>cv2.imencode</code>, quality 85)
+and pushed as a <code>data:image/jpeg;base64,…</code> string into <code>html.Img.src</code> — there's no
+canvas/WebGL, the "video" is just a still image replaced 2×/second.</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Mode</th><th>What's shown</th><th>How it's computed</th></tr></thead>
+<tbody>
+<tr><td><code>rgb</code></td><td>Raw camera frame</td><td>Straight JPEG re-encode of <code>STATE.rgb_bgr</code>.</td></tr>
+<tr><td><code>depth</code></td><td>Depth as a heatmap</td>
+    <td>Clip <code>depth_m</code> to 0&ndash;3&nbsp;m, scale to 0&ndash;255, colorize with
+    <code>cv2.COLORMAP_JET</code> (<code>_colorize_depth</code>).</td></tr>
+<tr><td><code>segmentation</code></td><td>Each detected object's mask tinted over the RGB frame</td>
+    <td><code>draw_segmentation_overlay</code>: per mask, alpha-blend (0.45) a palette color
+    (8-color cycle, index = detection order) into the pixels the mask covers.</td></tr>
+<tr><td><code>detections</code> (default)</td><td>Labeled boxes + 3‑D grasp gizmos</td>
+    <td>See below.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3><span class="tag">View 1 detail</span>The "detections" overlay — boxes + pose axes</h3>
+<div class="grid2">
+<div class="card">
+<b>Boxes</b> (<code>draw_detection_boxes</code>)
+<ul>
+<li>One rectangle per box, palette color by draw order; 3px thick if it's the selected detection, 2px
+otherwise.</li>
+<li>A filled label chip above the box: <code>"{label} {score:.2f}"</code>.</li>
+</ul>
+</div>
+<div class="card">
+<b>3‑D gizmos</b> (<code>_draw_detection_gizmos</code>, only for the <i>selected</i> detection)
+<ul>
+<li><b>object axes</b> (cyan): the detection's <code>T_camera_object</code> pose from PCA, drawn with
+<code>cv2.drawFrameAxes</code> after projecting through the camera intrinsics.</li>
+<li><b>"{arm} hand" axes</b> (yellow): the arm's current FK hand pose, transformed camera&larr;base via the
+fixed extrinsic calibration and projected the same way.</li>
+<li><b>"planned hand" axes</b> (light cyan): the grasp target pose the planner computed for that object
+(<code>_direct_grasp_hand_pose</code>), plus a connecting polyline + circle markers between the current
+and planned palm points so you can see the reach at a glance.</li>
+</ul>
+</div>
+</div>
+<p>All of it is one pinhole projection: <code>u = fx·x/z + cx</code>, <code>v = fy·y/z + cy</code>
+(<code>_project_camera_point</code>), using intrinsics auto-selected/scaled for the frame's resolution
+(<code>_update_intrinsics_for_frame</code>).</p>
+
+<h3><span class="tag">View 2</span>Detection list &amp; selected-object readout</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Element</th><th>Source data</th><th>Calculation</th></tr></thead>
+<tbody>
+<tr><td>List rows</td><td><code>STATE.detections</code>, sorted by id</td>
+    <td>Source badge (<code>vision</code>) + <code>"{label} (score={score:.2f})"</code>; clicking sets
+    <code>selected-store</code> which highlights the active row.</td></tr>
+<tr><td>Arm chosen</td><td><code>arm-select</code> = auto/left/right</td>
+    <td>"auto" resolves by the object's sign of <code>y</code> in base frame: <code>y &gt; 0 →
+    left</code> else <code>right</code> (<code>_resolve_arm_and_base_pose</code>).</td></tr>
+<tr><td>Reach readout</td><td>planned wrist target vs. shoulder</td>
+    <td><code>reach_dist = ‖T_base_desired.translation − shoulder‖</code>, compared against
+    <code>ReachabilityChecker.max_reach_m</code>; shown as <code>"reach=0.42/0.55 m"</code>
+    (<code>_reach_preview</code>).</td></tr>
+<tr><td>Estimated object size</td><td><code>Detection.grasp_surface</code></td>
+    <td><code>width_m × length_m</code> in cm, plus <code>confidence</code> (= point count / 400,
+    capped at 1) and the derived grasp <code>standoff</code> in cm.</td></tr>
+<tr><td>Out-of-reach warning</td><td><code>excess_m = max(0, reach_dist − max_reach)</code></td>
+    <td>If &gt;0: either "base step planned ~X m" (when <i>step base closer</i> is on) or an inline
+    warning telling the operator to move closer.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3><span class="tag">Grasp-surface math</span>What <code>estimate_grasp_surface</code> actually computes</h3>
+<pre>points = back-project(masked pixels, depth)         # camera-frame XYZ point cloud
+centroid = mean(points)
+e0, e1, e2 = PCA axes of (points − centroid), most→least variance   # via SVD
+e2 flipped to face the camera (dot(e2, centroid) &gt; 0 ⇒ negate)
+
+length_m  = max(proj·e0) − min(proj·e0)             # long in-view axis
+width_m   = max(proj·e1) − min(proj·e1)              # short axis a pinch grasp closes across
+near_surface_offset_m = max(proj·e2)                 # closest point ahead of the centroid
+confidence = min(1, point_count / 400)</pre>
+<p class="lead" style="margin-top:6px">Coarse by design — a top-down/side-pinch approximation from one
+depth frame's PCA, not a 6-DoF pose network. It's what sizes the grasp standoff
+(<code>_grasp_standoff_for_surface</code>) and — via the object mass field — the target fingertip
+pressure and lift stiffness.</p>
+
+<h3><span class="tag">View 3</span>Tactile, obstacle &amp; grab-log panels</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Panel</th><th>Data</th><th>Displayed as</th></tr></thead>
+<tbody>
+<tr><td>Tactile status</td><td><code>Robot.get_tactile_pressures()</code>, max raw value per hand</td>
+    <td>Text: <code>"{side}={pressure:.0f} raw (contact|no contact)"</code>, contact threshold
+    <code>TACTILE_VALID_THRESHOLD</code>=100000 raw (<code>_tactile_status_text</code>). Also drives the
+    tactile-guided close: pressure target scales with the entered object mass
+    (<code>_grip_target_pressure_raw</code>) and closing stops early once it's reached.</td></tr>
+<tr><td>Obstacle / table status</td><td><code>Obstacles</code> from <code>obstacle_checker.py</code> +
+    <code>estimate_table_plane</code></td><td>Short status text next to the Grab controls.</td></tr>
+<tr><td>Grab log</td><td><code>STATE.grab_log</code>, last 100 lines</td>
+    <td><code>html.Pre</code> scrolling text pane — the same "append text, cap length, join with
+    newlines" pattern the SLAM app's status/topic panes use.</td></tr>
+<tr><td>Camera TF status</td><td>fixed <code>base_link ← camera_color_optical_frame</code> extrinsic</td>
+    <td>Small status line under the motion-options card.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="dex3">4 &middot; dex3_input_viz.py — Dex3 tactile input
+  <span class="src">academy/visualizations/dex3_input_viz.py &nbsp;(Dash app, default <code>http://&lt;host&gt;:8071</code>)</span>
+</h2>
+<p>
+A read-only monitor: no publish loop, no arm/hand control — it only polls
+<code>sdk_wrapper.G1.get_dex3_hand_sensors(hand="both")</code> (i.e. <code>rt/dex3/{left,right}/state</code>'s
+<code>press_sensor_state</code>) at 8&nbsp;Hz and compares every reading against one configurable contact
+threshold, live.
+</p>
+
+<h3><span class="tag">Data</span>Pads, taxels, and the invalid-reading sentinel</h3>
+<p>Each hand's snapshot has an <b>unlabeled</b> list of pressure pads — the DDS message itself doesn't name
+them, so neither does this script (shown as "pad 0", "pad 1", …) — each holding an array of raw per-taxel
+readings. A taxel reading equal to <code>TACTILE_INVALID_VALUE</code>=30000.0 means "sensor dropout this
+tick", not "zero pressure", and is excluded from every max/plot rather than plotted as a real low reading
+&mdash; the same convention <code>recognition_app_v3.py</code>'s tactile readout
+(<code>_is_invalid_tactile_value</code>) and <code>test_dex3_tactile.py</code> use for this identical field.</p>
+
+<h3><span class="tag">Plot / highlight</span>Three views of the same poll</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>View</th><th>What's shown</th><th>Highlight</th></tr></thead>
+<tbody>
+<tr><td>Per-pad bar chart (one per hand)</td><td>Current max valid taxel reading per pad</td>
+    <td>Bar colored green/red by whether it clears the threshold; a gray "n/a" bar for a pad whose taxels
+    are all currently invalid; a dashed horizontal line at the threshold value.</td></tr>
+<tr><td>Rolling strip chart</td><td>Each hand's overall max-valid-pressure over the last 60&nbsp;s</td>
+    <td>Same dashed threshold line, so a grip's approach to (and release from) contact reads as a curve
+    crossing it, not just an instantaneous bar.</td></tr>
+<tr><td>Per-taxel table (per hand)</td><td>The raw numbers behind the selected bar</td>
+    <td>Invalid taxels shown as the literal word "invalid" rather than a misleading number.</td></tr>
+</tbody>
+</table>
+</div>
+<p>The threshold itself is a live numeric input (default 100000 raw, matching
+<code>recognition_app_v3.TACTILE_VALID_THRESHOLD</code>) — changing it recolors the bars and moves the
+strip-chart's reference line on the next tick, no reconnect needed.</p>
+<div class="note">New script, written for this document from <code>sdk_wrapper.G1.get_dex3_hand_sensors()</code>'s
+actual return shape (checked directly against the source, not assumed) — see academy/visualizations/'s
+shared dependency note below for how it resolves <code>from sdk_wrapper import G1</code>.</div>
+
+<h2 id="zmp">5 &middot; zmp_viz.py — ZMP / support polygon
+  <span class="src">academy/visualizations/zmp_viz.py &nbsp;(Dash app, default <code>http://&lt;host&gt;:8072</code>)</span>
+</h2>
+<p>
+No force or pressure foot sensors are read here — the SDK doesn't expose any — so both halves of this
+view are estimates from geometry and odometry/IMU, in the same openly-approximate spirit as
+<code>segmentation.py</code>'s PCA grasp-surface estimate: good enough to see whether the robot looks
+balanced, not a certified stability computation.
+</p>
+
+<h3><span class="tag">Compute</span>Support polygon — leg forward kinematics + convex hull</h3>
+<pre>leg_q = get_lowstate()["joint_positions"][0:12]      # 12 sensed leg joint angles
+frames = foot_frames(leg_q)                           # same FK composition as joint_control_dashboard.py,
+                                                        # scoped to just the leg chain (duplicated, not
+                                                        # imported — that file has page-load side effects)
+left_corners  = 4 corners of a fixed foot rectangle at frames[5]   (left ankle-roll)
+right_corners = 4 corners of a fixed foot rectangle at frames[11]  (right ankle-roll)
+support_polygon = convex_hull(left_corners ∪ right_corners)   # hand-rolled monotone chain, no scipy</pre>
+<p>The foot rectangle's half-length/half-width are UI-configurable (defaults 0.10&nbsp;m / 0.045&nbsp;m) —
+the SDK doesn't hand over the real foot outline either, so this is an adjustable placeholder, openly
+labeled as one, not a spec. The polygon is always drawn as double support: there's no foot contact/force
+sensing available to detect a single-support phase.</p>
+
+<h3><span class="tag">Compute</span>ZMP — the LIPM / cart-table approximation</h3>
+<pre>ZMP_xy = CoM_xy − (h_com / g) · CoM_accel_xy</pre>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Term</th><th>Where it comes from</th></tr></thead>
+<tbody>
+<tr><td><code>CoM_xy</code></td><td>Approximated by the pelvis/base position from <code>get_odom()</code>
+    (no per-link mass data is available to compute a true whole-body CoM).</td></tr>
+<tr><td><code>h_com</code></td><td>A configurable assumed CoM height, default 0.793&nbsp;m — the same
+    fixed pelvis height <code>joint_control_dashboard.py</code>'s <code>PELVIS_POS</code> uses.</td></tr>
+<tr><td><code>CoM_accel_xy</code></td><td><code>get_imus()["acc"]</code> (body-frame accelerometer),
+    rotated into world frame via the IMU roll/pitch/yaw and gravity-compensated
+    (<code>a_world = R·a_body − [0,0,g]</code>), then smoothed over the last 5 samples — raw accelerometer
+    noise would otherwise dominate the estimate.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3><span class="tag">Plot / highlight</span>The 2‑D view</h3>
+<ul>
+<li>Support polygon: filled translucent region (the convex hull), with each individual foot rectangle also
+outlined (dotted) so the hull's construction stays visible, not just its result.</li>
+<li>CoM marker (orange circle) and ZMP marker (diamond) plotted separately, so their divergence — the whole
+point of the dynamic correction term — is visible rather than collapsed into one dot.</li>
+<li>ZMP marker colored green when it's inside the support polygon (point-in-polygon via ray casting), red
+when outside; a status line reports the signed margin in cm (distance to the nearest polygon edge, negative
+when outside) via the same edge-projection math used for the color.</li>
+<li>A short trailing line (last 5&nbsp;s) of the ZMP's own path, useful for seeing it move during walking
+rather than only at a single instant.</li>
+</ul>
+<div class="note">New script, written for this document. Its leg-geometry constants (the 12 leg entries of
+<code>joint_control_dashboard.py</code>'s <code>JOINT_TABLE</code>, plus <code>PELVIS_POS</code> and the
+<code>_quat_to_R</code>/<code>_axis_R</code> helpers) are duplicated rather than imported — importing that
+file would also execute its own <code>dash.Dash(...)</code> app construction and other module-level side
+effects. The FK output was checked against a zero-pose sanity run (both feet symmetric about x, ~24&nbsp;cm
+apart, near the ground) before being trusted for the support polygon.</div>
+
+<h2 id="state">6 &middot; state_monitor.py — raw state tables
+  <span class="src">academy/visualizations/state_monitor.py &nbsp;(Dash app, default <code>http://&lt;host&gt;:8073</code>)</span>
+</h2>
+<p>
+No plots at all — plain <code>dash_table.DataTable</code> panels over the same seven
+<code>get_*()</code> dictionary readers the course's Task 4 (robot-state observation) builds, each with a
+freshness badge instead of a raw timestamp, following that task's own "defensive reads, freshness window"
+pattern (its slide explicitly calls out <code>get_battery()</code>'s 3&nbsp;s BMS freshness check as the
+one to internalize for the rest of the course).
+</p>
+
+<h3><span class="tag">Data</span>Panels and their source</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Panel</th><th>Source</th><th>Shape</th></tr></thead>
+<tbody>
+<tr><td>Lowstate — joints</td><td><code>get_state()["lowstate"]</code></td>
+    <td>One row per of the 29 body joints: id, name (presentation-only label, same order as
+    <code>joint_control_dashboard.py</code>'s <code>JOINT_TABLE</code>), q, dq, tau_est.</td></tr>
+<tr><td>Lowstate — IMU</td><td>same, <code>["imu"]</code></td><td>rpy / gyro / acc as three rows.</td></tr>
+<tr><td>Odometry</td><td><code>get_odom()</code></td><td>Flattened key/value rows — whichever odom source
+    responded (<code>rt/odommodestate</code>, <code>rt/odom</code>, or the SLAM odom fallback) determines
+    which keys are present.</td></tr>
+<tr><td>FSM / mode</td><td><code>get_state()</code>'s <code>id/mode/motion_mode/motion_code/gait</code></td>
+    <td>Key/value rows.</td></tr>
+<tr><td>Battery / BMS</td><td><code>get_state()["battery"]</code></td>
+    <td>Key/value rows, nested <code>bms.*</code> fields flattened with a dotted key; array fields
+    (cell voltages, NTC temperatures, …) shown as a truncated comma list.</td></tr>
+<tr><td>Services</td><td><code>get_state()["services"]</code></td>
+    <td>Direct row-per-service table: name, description, status, protected — the one panel that was
+    already exactly tabular.</td></tr>
+<tr><td>Dex3 hands — joints</td><td><code>get_dex3_hand_sensors(hand="both")</code></td>
+    <td>One row per hand joint: hand, joint name, q, dq, tau_est.</td></tr>
+<tr><td>Dex3 hands — tactile summary</td><td>same</td><td>One row per pad: taxel count, max valid pressure,
+    valid/total taxel ratio — the raw-table counterpart to <code>dex3_input_viz.py</code>'s dedicated
+    plots.</td></tr>
+<tr><td>SLAM info</td><td><code>get_state()["slam_info"]</code></td><td>Raw <code>/slam_info</code> string,
+    pretty-printed if it parses as JSON, shown verbatim otherwise — not tabular, just a text pane.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3><span class="tag">Highlight</span>Per-panel freshness badge</h3>
+<p>All panels come from one combined poll tick (<code>get_state()</code> + <code>get_odom()</code> +
+<code>get_dex3_hand_sensors()</code>, every 2&nbsp;s — <code>get_state()</code> alone makes several
+RPC/DDS reads via <code>ServiceList()</code>, so it isn't polled faster than that), so they share one age
+badge: green under 3&nbsp;s, yellow 3&ndash;10&nbsp;s, red past that — the same 3&nbsp;s cutoff
+<code>get_battery()</code> itself uses to decide whether to trust its dedicated BMS topics.</p>
+<div class="note">New script, written for this document. Deliberately thin: it formats and tabulates what
+each <code>get_*()</code> reader already returns rather than recomputing anything, so a wrong number here
+is a wrong number from the SDK layer, not a bug in this script's own math (unlike <code>zmp_viz.py</code>,
+which does compute new values).</div>
+
+<div class="note">
+<b>Dependency note (applies to every dashboard in this document).</b> The dashboards and their local helper
+modules moved twice: first from three different original locations
+(<code>hand_pose_navigation/</code>, <code>modules/scripts/</code>, and <code>dev/dashboards/</code>) into a
+flat <code>academy/</code>, then the dashboard/visualization <em>scripts themselves</em> (this file,
+<code>slam_web_app.py</code>, <code>joint_control_dashboard.py</code>, plus
+<code>mode_control.py</code>, <code>ros_inspector_ui.py</code>, <code>service_view.py</code>, and
+<code>realsense_rgbd_zmq_stream.py</code>) moved one level deeper into <code>academy/visualizations/</code>,
+so they sit apart from the shared curriculum layer. That shared layer — <code>sdk_wrapper.py</code>,
+<code>sdk_client.py</code>, <code>util.py</code>, <code>slam_util.py</code>, and the small SDK helpers
+<code>sdk_client.py</code> itself needs (<code>dds_env.py</code>, <code>sdk_audio.py</code>,
+<code>sdk_boot.py</code>, <code>sdk_hand.py</code>, <code>secure_boot.py</code>, <code>sdk_sensors.py</code>,
+<code>sdk_slam.py</code>) — stayed behind in <code>academy/</code> rather than moving with the dashboards,
+because several of the participant/solution notebooks import <code>util</code>, <code>slam_util</code>,
+<code>sdk_client</code>, and <code>sdk_wrapper</code> directly and expect them next to the notebook.
+Every dashboard's own <code>sys.path</code> setup was rewritten to explicitly add its own directory plus
+<code>academy/</code> and <code>g1/</code> (rather than relying on directory-depth coincidences, which is
+what silently broke a couple of imports the first time these files moved) — see each section's note above
+for the specifics. One known, narrow gap: <code>sdk_client.py</code>'s optional
+<code>start_robot_chat=True</code> path and <code>sdk_audio.py</code>'s Piper TTS voice-model lookup still
+expect files (<code>chat.py</code>, a <code>.piper_voices/</code> directory) that live elsewhere or aren't
+in this repo at all — neither is exercised by any dashboard here, so it wasn't chased further.
+</div>
+
+<h2 id="recap">7 &middot; Reusable techniques cheat-sheet</h2>
+<div class="card">
+<ul>
+<li><b>Big point clouds → <code>Scattergl</code>, not <code>Scatter</code></b>: the SLAM map's 11 layers
+plus occupancy/KISS-ICP overlays all use WebGL-backed traces — the point counts (up to tens of thousands
+per layer) would stall a plain SVG scatter.</li>
+<li><b>Keep pan/zoom stable across auto-refresh</b>: give the figure a fixed
+<code>uirevision</code> string; both the SLAM map (2‑D pan/zoom) and the joint skeleton (3‑D camera
+orbit) rely on this so a 500&nbsp;ms&ndash;2&nbsp;s redraw doesn't reset the view.</li>
+<li><b>Click-anywhere-to-target</b>: the SLAM map's invisible background scatter grid is a cheap way to
+let <code>clickData</code> report a coordinate even where nothing is actually drawn.</li>
+<li><b>Forward kinematics for a live skeleton</b>: walk the joint tree in parent order,
+<code>world_R = parent_R · quat(joint) · axis_rotation(joint.axis, q)</code> (Rodrigues formula for the
+axis term), <code>world_t = parent_t + parent_R · joint.pos</code> — 29 joints, no physics engine needed,
+just the MJCF-sourced offsets/axes and the sensed angles.</li>
+<li><b>Stream frames into a plain <code>&lt;img&gt;</code>/<code>html.Img</code></b>: encode each frame
+to JPEG bytes, base64, prefix <code>data:image/jpeg;base64,</code>. No canvas/WebGL/video element needed
+— a polling interval (500&nbsp;ms here) is enough for a monitoring UI.</li>
+<li><b>Depth → heatmap</b>: clip to a sane max range, scale to 0&ndash;255, <code>applyColorMap(...,
+COLORMAP_JET)</code>.</li>
+<li><b>Mask overlay</b>: alpha-blend a flat color into the RGB array only where the boolean mask is true
+— cheap, no extra drawing library.</li>
+<li><b>3‑D pose on a 2‑D image</b>: pinhole-project with the known intrinsics (<code>fx, fy, cx, cy</code>)
+and <code>cv2.drawFrameAxes</code>/<code>cv2.projectPoints</code>; chain camera↔base transforms as 4×4
+homogeneous matrices.</li>
+<li><b>Cheap 6-DoF-ish pose/size from depth</b>: back-project a masked region to a point cloud, PCA/SVD
+for orientation and extents — good enough for a standoff or grip-force scale, not for tight tolerances.</li>
+<li><b>Anti-flicker for async detections</b>: hold last-seen results for a short window before dropping
+them (<code>DETECTION_HOLD_S</code>), but still expire them if the source truly goes stale
+(<code>STALE_AFTER_S</code>) — don't let a UI show confident data from a dead feed.</li>
+<li><b>A relocated script's <code>sys.path</code> hack is a landmine</b>: anything computed as
+<code>Path(__file__).parent.parent</code> (or similar) silently points somewhere else once the file moves
+to a different depth — either fix the math or make the script resolve its local deps from its own
+directory instead.</li>
+<li><b>A hand-rolled convex hull is enough for a support polygon</b>: Andrew's monotone chain over &le;8
+points needs no geometry library; pair it with a plain ray-casting point-in-polygon test and you get an
+in/out check and (via nearest-edge distance) a margin, for free.</li>
+<li><b>The LIPM/cart-table ZMP formula turns odometry+IMU into a stability estimate</b>:
+<code>ZMP = CoM_xy − (h/g)·CoM_accel_xy</code>, with CoM approximated by the base position and
+<code>h</code> a fixed assumed height — coarse, but real-time-computable from data every dashboard here
+already has, no per-link mass model required.</li>
+<li><b>A shared "age badge" beats a bare timestamp</b>: fresh/aging/stale bucketed off one poll
+timestamp, reused across every panel in <code>state_monitor.py</code> — cheaper than per-field staleness
+and still enough to stop a frozen feed from reading as confidently live.</li>
+</ul>
+</div>
+
+<footer>
+Generated from <code>academy/visualizations/slam_web_app.py</code>, <code>academy/visualizations/joint_control_dashboard.py</code>,
+<code>academy/visualizations/recognition_app_v3.py</code>, <code>academy/visualizations/dex3_input_viz.py</code>,
+<code>academy/visualizations/zmp_viz.py</code>, and <code>academy/visualizations/state_monitor.py</code>
+(plus <code>hand_pose_navigation/segmentation.py</code> and <code>academy/sdk_wrapper.py</code>) as of
+the current repo state, after the dashboards' relocation into <code>academy/visualizations/</code>.
+Re-check line numbers/behaviour against the source if any of these files change.
+</footer>
+
+</div>
+</body>
+</html>
