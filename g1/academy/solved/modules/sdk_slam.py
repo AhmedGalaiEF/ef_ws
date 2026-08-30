@@ -163,6 +163,62 @@ class SlamInfoSubscriber:
         with self._lock:
             return self._key
 
+    def get_info_with_ts(self) -> tuple[str | None, float]:
+        with self._lock:
+            return self._info, self._last_info
+
+    def get_key_with_ts(self) -> tuple[str | None, float]:
+        with self._lock:
+            return self._key, self._last_key
+
+    @staticmethod
+    def parse_status(payload_raw: str | None) -> dict[str, Any] | None:
+        """Parse the fuller envelope some rt/slam_info / rt/slam_key_info
+        messages carry beyond bare pose data.
+
+        `errorCode`/`info` are present on every message (this is how e.g. the
+        Unitree SLAM demo, keyDemo.cpp, surfaces navigation problems: it just
+        prints `info` whenever `errorCode != 0`, with no separate "obstacle"
+        field). Message `type` seen in practice: "pos_info" (pose only),
+        "ctrl_info" (the richer status blob below, streamed continuously
+        while navigating), "task_result" (terminal per-target result, the one
+        keyDemo.cpp's slamKeyInfoHandler waits on). Every field is optional;
+        this never raises, it returns None fields for whatever is absent.
+
+        `data.obsInfo.state` is the actual obstacle-blocked flag: true while
+        the nav stack currently has the path blocked. Source: a live
+        rt/slam_info capture (dev/slam_viz_in_jupyter.ipynb) and the DDS
+        probe notes in Inspire_hands/topics.md.
+        """
+        if not payload_raw:
+            return None
+        try:
+            payload = json.loads(payload_raw)
+        except Exception:
+            return None
+        if not isinstance(payload, dict):
+            return None
+        data = payload.get("data")
+        data = data if isinstance(data, dict) else {}
+        obs_info = data.get("obsInfo")
+        obs_info = obs_info if isinstance(obs_info, dict) else {}
+        progress = data.get("progress")
+        progress = progress if isinstance(progress, dict) else {}
+        state_machine = data.get("stateMachine")
+        state_machine = state_machine if isinstance(state_machine, dict) else {}
+        return {
+            "type": payload.get("type"),
+            "error_code": int(payload.get("errorCode", 0) or 0),
+            "info": payload.get("info"),
+            "is_arrived": data.get("is_arrived"),
+            "target_node_name": data.get("targetNodeName"),
+            "obstacle_blocked": bool(obs_info["state"]) if "state" in obs_info else None,
+            "obstacle_time": obs_info.get("time"),
+            "completion_pct": progress.get("completion_percentage"),
+            "nav_state": state_machine.get("state"),
+            "nav_paused": state_machine.get("isPause"),
+        }
+
     @staticmethod
     def parse_pose(payload_raw: str | None) -> tuple[float, float, float] | None:
         if not payload_raw:

@@ -754,7 +754,11 @@ the generic <code>Client._Call(api_id, json)</code> RPC mechanism (same transpor
 <h3><code>get_slam_info()</code> output — <code>rt/slam_info</code> / <code>rt/slam_key_info</code></h3>
 <p class="lede">Both are <code>std_msgs/msg/String</code> carrying a JSON payload;
 <code>get_slam_info()</code> returns the raw string, and <code>_parse_slam_pose()</code> extracts a pose from
-it. <span class="badge b-wrapper">WRAPPER</span> / <span class="badge b-probe">LIVE PROBE</span></p>
+it. <code>get_slam_key_info()</code> and <code>get_slam_notice()</code> (new) expose <code>rt/slam_key_info</code>
+directly plus the parsed <code>errorCode</code>/<code>info</code>/<code>is_arrived</code>/<code>obsInfo</code>
+envelope via <code>_parse_slam_status()</code>/<code>_slam_notice()</code>, timestamped so callers waiting on
+arrival can tell a fresh notice from a stale one. <span class="badge b-wrapper">WRAPPER</span> /
+<span class="badge b-probe">LIVE PROBE</span></p>
 <div class="table-wrap">
 <table>
 <thead><tr><th>JSON field</th><th>Notes</th></tr></thead>
@@ -763,14 +767,40 @@ it. <span class="badge b-wrapper">WRAPPER</span> / <span class="badge b-probe">L
 <tr><td><code>data.currentPose.{x,y,z}</code></td><td>Position, metres.</td></tr>
 <tr><td><code>data.currentPose.{q_x,q_y,q_z,q_w}</code></td><td>Orientation quaternion; wrapper derives yaw with <code>atan2(2(q_w q_z + q_x q_y), 1-2(q_y²+q_z²))</code> when present, else falls back to a raw <code>yaw</code> field.</td></tr>
 <tr><td><code>data.startPose</code>, <code>data.targetPose</code></td><td>Present in a live sample (per <code>Inspire_hands/topics.md</code>); not read by the wrapper.</td></tr>
-<tr><td><code>data.is_arrived</code></td><td>Present in a live sample; not read by the wrapper (the wrapper's own arrival check, where implemented, polls <code>current_pose()</code> distance in <code>slam_util.py</code> instead).</td></tr>
-<tr><td><code>data.obsInfo</code>, <code>data.progress</code></td><td>Present in a live sample; not read by the wrapper.</td></tr>
+<tr><td><code>data.is_arrived</code></td><td>Now read by <code>sdk_wrapper.py</code> (<code>_slam_notice()</code> /
+<code>_wait_for_slam_arrival()</code>), <code>slam_util.py</code> (<code>wait_for_arrival()</code>),
+<code>lib_solved.py</code>, and the visualization app's <code>slam_web_app.py</code> — all four now treat this as
+the primary "did we arrive" signal, matching how <code>unitree_sdk2/example</code>'s <code>keyDemo.cpp</code>
+(<code>taskLoopFun</code>) waits on it, falling back to an xy-distance check only if this field is never
+observed. Previously this field was parsed nowhere and every wrapper polled <code>current_pose()</code>
+distance only. <span class="badge b-wrapper">WRAPPER</span></td></tr>
+<tr><td><code>data.obsInfo.state</code></td><td>The actual obstacle-blocked flag — <code>true</code> while the nav
+stack currently has the path blocked (e.g. a person standing in it). Shape confirmed by a live
+<code>rt/slam_info</code> capture: <code>"obsInfo": {"state": false, "time": 0.0}</code> (see
+<code>dev/slam_viz_in_jupyter.ipynb</code>). <code>keyDemo.cpp</code> itself never reads this field by name — it
+just prints whatever <code>info</code> string comes with a non-zero top-level <code>errorCode</code>, so on the
+stock demo an obstacle stop only ever shows up as generic yellow text, not a labeled "obstacle" message. The
+wrappers now parse <code>obsInfo.state</code> directly instead (<code>_parse_slam_status()</code> /
+<code>_parse_status()</code> / <code>parse_status()</code>, depending on the file) so the UI/console can label it
+explicitly.</td></tr>
+<tr><td><code>data.progress</code>, <code>data.stateMachine</code></td><td>Present in a live sample (an object with
+<code>completion_percentage</code>/<code>last_time</code>/<code>used_time</code>, and one with
+<code>state</code>/<code>isPause</code>/<code>isBack</code>/<code>isRotate</code>/<code>isClimbStairs</code>/<code>isOpenPlan</code>/<code>ctrName</code>/<code>vx</code>/<code>vy</code>/<code>vyaw</code>,
+respectively); the wrappers' new status parsers surface <code>completion_pct</code> and <code>nav_state</code>/<code>nav_paused</code>
+from these but don't otherwise act on them.</td></tr>
 </tbody>
 </table>
 </div>
 <p class="note">A message whose parsed pose is exactly <code>(0, 0, 0)</code> (position and yaw all below
 <code>1e-5</code>) is treated as "no pose yet" and discarded by <code>_parse_slam_pose()</code> — the wrapper
 keeps returning the last known good pose (<code>_last_slam_pose</code>) instead.</p>
+<p class="note">Message <code>type</code> values seen in practice: <code>"pos_info"</code> (bare pose, what
+<code>keyDemo.cpp</code>'s <code>slamInfoHandler</code> reads from <code>rt/slam_info</code>),
+<code>"ctrl_info"</code> (the fuller status blob above, streamed continuously while navigating — see the live
+sample in <code>dev/slam_viz_in_jupyter.ipynb</code>), and <code>"task_result"</code> (a terminal per-target
+result on <code>rt/slam_key_info</code>, what <code>keyDemo.cpp</code>'s <code>slamKeyInfoHandler</code> waits on).
+The status parsers added to every wrapper handle all three without gating on <code>type</code> — they just read
+whichever of these fields happen to be present.</p>
 
 <h3>SLAM point-cloud topics (<code>get_point_cloud()</code>)</h3>
 <p class="lede">Reads whichever of these 4 <code>sensor_msgs/msg/PointCloud2</code> topics has the newest

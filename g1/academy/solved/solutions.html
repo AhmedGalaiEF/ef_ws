@@ -434,7 +434,7 @@ Task 3 now covers all requested arm concepts. High-level gestures use G1ArmActio
 <div class="task" id="g1-academy-4-task-2">
 <div class="task-head">
 <h3>Task 2 - Build named-point navigation <span class="stat"><span class="add">+10</span> <span class="del">-6</span></span></h3>
-<p class="desc">Keep named points in an application dictionary/file. Add only after valid localization. Confirm the deployed client supports native complete-path navigation before implementing navigate_path; otherwise document the limitation rather than pretending sequential calls are a path API.</p>
+<p class="desc">Keep named points in an application dictionary/file. Add only after valid localization. There is no deployed multi-point "path" RPC (mapping start/stop, relocate, and single-pose navigation are the only verified SLAM RPC ids), so navigate_path visits points in order via repeated navigate_to()+wait_for_arrival() calls by default — confirmed correct against Unitree's own reference SLAM demo (unitree_sdk2/example's keyDemo.cpp, taskLoopFun), which uses the same sequential approach. native_path_callback remains available to override this if a genuine single-RPC path API is ever verified.</p>
 </div>
 <div class="diff-wrap"><pre class="diff"><span class="dl dl-del"><span class="dl-mark">-</span># TODO: after successful relocation:</span>
 <span class="dl dl-del"><span class="dl-mark">-</span># pickup_pose = slam.save_named_pose(&quot;pickup&quot;)</span>
@@ -450,8 +450,8 @@ Task 3 now covers all requested arm concepts. High-level gestures use G1ArmActio
 <span class="dl dl-add"><span class="dl-mark">+</span>    return slam.navigate_to(name)</span>
 <span class="dl dl-add"><span class="dl-mark">+</span>def view_map():</span>
 <span class="dl dl-add"><span class="dl-mark">+</span>    return slam.view_map()</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>def navigate_path(names, native_path_callback):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    return slam.navigate_path(names, native_path_callback)</span></pre></div>
+<span class="dl dl-add"><span class="dl-mark">+</span>def navigate_path(names, native_path_callback=None):</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    return slam.navigate_path(names, native_path_callback)  # sequential nav+wait by default</span></pre></div>
 </div>
 <div class="task" id="g1-academy-4-task-3">
 <div class="task-head">
@@ -618,7 +618,7 @@ Task 3 now covers all requested arm concepts. High-level gestures use G1ArmActio
 <div class="bonus-card">
   <div class="file">task7_slam_operation_and_map_visualization.ipynb</div>
   <h4>Task 7: SLAM operation and map visualization</h4>
-  <p>This task rebuilds the operational SLAM surface described in `notes.txt` section 5, natively: `start_mapping`/`stop_mapping`, `relocate`, `add_point`/`remove_point`, `navigate_to_point`, `navigate_path`, and `view_map`. The deployed RPC operations this academy has verified are mapping start/stop, relocate (`init_pose`), and single-pose navigation - the same IDs `sdk_wrapper._SlamClient` and `slam_util.SlamRpc` use. Native complete-path navigation is version-dependent, so `navigate_path` refuses a silent point-by-point fallback rather than mislabeling it. Once a map is saved on the mainboard it may no longer be accessible for visualization, so `view_map` reads from *snapshots captured while mapping is running*, not from the saved map file afterward.</p>
+  <p>This task rebuilds the operational SLAM surface described in `notes.txt` section 5, natively: `start_mapping`/`stop_mapping`, `relocate`, `add_point`/`remove_point`, `navigate_to_point`, `navigate_path`, and `view_map`. The deployed RPC operations this academy has verified are mapping start/stop, relocate (`init_pose`), and single-pose navigation - the same IDs `sdk_wrapper._SlamClient` and `slam_util.SlamRpc` use. There is no separate multi-point "path" RPC, so `navigate_path` visits named points in order via repeated `navigate_to_point`+`wait_for_arrival` calls - confirmed correct against Unitree's own reference SLAM demo (`unitree_sdk2/example`'s `keyDemo.cpp`, `taskLoopFun`), which uses the same sequential single-RPC-per-point approach rather than a dedicated path API. `wait_for_arrival` itself now prefers the robot's own `is_arrived`/`obsInfo.state` status (parsed from `rt/slam_info`/`rt/slam_key_info`) over a plain distance check, so an obstacle-blocked path is reported rather than just timing out. Once a map is saved on the mainboard it may no longer be accessible for visualization, so `view_map` reads from *snapshots captured while mapping is running*, not from the saved map file afterward.</p>
   <ol><li>Task 1 - Native `SlamRpc` client + pose parsing</li><li>Task 2 - Mapping lifecycle: `start_mapping` / `stop_mapping` / `relocate`</li><li>Task 3 - `add_point(point_name)` / `remove_point(point_name)`</li><li>Task 4 - `navigate_to_point` / `navigate_path`</li><li>Task 5 - `view_map()`: capture visualization *while mapping is running*</li></ol>
 </div>
 <div class="bonus-card">

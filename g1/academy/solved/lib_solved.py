@@ -554,6 +554,31 @@ SLAM_POINT_TOPICS = [
     "rt/unitree/slam_relocation/global_map", "rt/unitree/slam_relocation/web_points",
 ]
 _map_snapshot_dir = Path("slam_map_snapshots")
+_last_slam_notice = None
+
+
+def _parse_slam_status(raw):
+    """errorCode/info/is_arrived/obsInfo envelope, beyond the bare pose
+    current_pose() extracts. `data.obsInfo.state` is the obstacle-blocked
+    flag; `data.is_arrived` is what keyDemo.cpp's taskLoopFun waits on.
+    Verified against a live rt/slam_info capture (dev/slam_viz_in_jupyter.ipynb,
+    Inspire_hands/topics.md). Every field optional; never raises."""
+    try:
+        payload = json.loads(raw) if raw else None
+    except Exception:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+    obs_info = data.get("obsInfo") if isinstance(data.get("obsInfo"), dict) else {}
+    return {
+        "type": payload.get("type"),
+        "error_code": int(payload.get("errorCode", 0) or 0),
+        "info": payload.get("info"),
+        "is_arrived": data.get("is_arrived"),
+        "target_node_name": data.get("targetNodeName"),
+        "obstacle_blocked": bool(obs_info["state"]) if "state" in obs_info else None,
+    }
 
 
 class SlamRpc(Client):
@@ -586,12 +611,23 @@ class SlamRpc(Client):
 
 def current_pose():
     """An all-zero pose means "no valid pose yet", not "robot at the origin" —
-    treated as absent."""
+    treated as absent. As a side effect, also refreshes _last_slam_notice
+    (errorCode/info/is_arrived/obsInfo) from whichever sub has a message,
+    so wait_for_arrival()/navigate_path() can see obstacle/arrival status
+    without a second subscription."""
+    global _last_slam_notice
+    result = None
     for sub in _get_slam_info_subs():
         if sub.message is None:
             continue
+        raw = sub.message.data
+        notice = _parse_slam_status(raw)
+        if notice is not None:
+            _last_slam_notice = {**notice, "stamp": sub.timestamp}
+        if result is not None:
+            continue
         try:
-            payload = json.loads(sub.message.data)
+            payload = json.loads(raw)
             cur = payload.get("data", {}).get("currentPose", {})
             x, y = float(cur["x"]), float(cur["y"])
             qz, qw = float(cur.get("q_z", 0.0)), float(cur.get("q_w", 1.0))
@@ -600,8 +636,30 @@ def current_pose():
             continue
         if abs(x) < 1e-5 and abs(y) < 1e-5 and abs(yaw) < 1e-5:
             continue
-        return (x, y, yaw)
-    return None
+        result = (x, y, yaw)
+    return result
+
+
+def wait_for_arrival(point_name, tolerance_m=0.35, timeout_s=120.0):
+    """Waits for point_name to be reached, preferring the robot's own
+    `is_arrived` confirmation (_last_slam_notice, refreshed by current_pose())
+    over the xy-distance check -- keyDemo.cpp's taskLoopFun waits on that
+    same flag rather than computing distance itself. Distance remains a
+    fallback for firmware that never publishes it, and to bound the wait.
+    Returns the last notice seen (e.g. obstacle_blocked) either way."""
+    target = _points[point_name]
+    send_ts, deadline = time.time(), time.time() + timeout_s
+    last_notice = None
+    while time.time() < deadline:
+        pose = current_pose()
+        if _last_slam_notice is not None and _last_slam_notice.get("stamp", 0.0) >= send_ts:
+            last_notice = _last_slam_notice
+            if last_notice.get("is_arrived") is True:
+                return {"arrived": True, "pose": pose, "notice": last_notice}
+        if pose is not None and math.hypot(pose[0] - target[0], pose[1] - target[1]) <= tolerance_m:
+            return {"arrived": True, "pose": pose, "notice": last_notice}
+        time.sleep(0.2)
+    return {"arrived": False, "pose": current_pose(), "notice": last_notice}
 
 
 def start_mapping():
@@ -651,13 +709,30 @@ def navigate_to_point(point_name):
     return _slam_rpc().pose_nav(x, y, yaw)
 
 
-def navigate_path(point_names, native_path_callback=None):
-    if native_path_callback is None:
-        raise RuntimeError(
-            "No verified native complete-path SLAM API is configured; refusing a silent "
-            "point-by-point fallback (see academy/todo.txt)."
-        )
-    return native_path_callback([_points[name] for name in point_names])
+def navigate_path(point_names, native_path_callback=None, tolerance_m=0.35, timeout_s=120.0):
+    """Visits point_names in order.
+
+    There is no deployed multi-point "path" RPC -- the verified SLAM RPC ids
+    are start/stop mapping, relocate, and single-pose navigation (1102). So
+    by default this calls navigate_to_point()+wait_for_arrival() once per
+    point, stopping at the first that fails to send or isn't reached. This
+    is not a fallback hack: it's the same sequential approach Unitree's own
+    reference SLAM demo uses (unitree_sdk2/example keyDemo.cpp's
+    taskLoopFun loops over pose_nav the same way). Pass native_path_callback
+    only to override this with a genuine single-RPC path API, if one is
+    ever verified to exist."""
+    if native_path_callback is not None:
+        return native_path_callback([_points[name] for name in point_names])
+    results = []
+    for name in point_names:
+        code, raw = navigate_to_point(name)
+        entry = {"name": name, "code": code, "raw": raw}
+        if int(code) == 0:
+            entry["arrival"] = wait_for_arrival(name, tolerance_m=tolerance_m, timeout_s=timeout_s)
+        results.append(entry)
+        if int(code) != 0 or not entry.get("arrival", {}).get("arrived", True):
+            break
+    return results
 
 
 def _decode_xy(msg, max_points=20000):

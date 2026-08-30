@@ -56,6 +56,10 @@ LEFT_ARM_JOINTS = [15, 16, 17, 18, 19, 20, 21]
 RIGHT_ARM_JOINTS = [22, 23, 24, 25, 26, 27, 28]
 LOWCMD_JOINTS = LEFT_LEG_JOINTS + RIGHT_LEG_JOINTS + WAIST_JOINTS + LEFT_ARM_JOINTS + RIGHT_ARM_JOINTS
 UPPER_BODY_JOINTS = WAIST_JOINTS + LEFT_ARM_JOINTS + RIGHT_ARM_JOINTS
+#: Conservative default ceiling for interpolate_to_pose()/repeat()/
+#: dev_mode_repeat()'s velocity-safety check. Override per-call if you're
+#: confident a faster motion is safe for the joints/payload involved.
+DEFAULT_MAX_JOINT_SPEED_RAD_S = 0.6
 HAND_JOINT_NAMES = ["thumb_0", "thumb_1", "thumb_2", "middle_0", "middle_1", "index_0", "index_1"]
 HAND_CMD_TOPICS = {"left": "rt/dex3/left/cmd", "right": "rt/dex3/right/cmd"}
 HAND_STATE_TOPICS = {"left": "rt/dex3/left/state", "right": "rt/dex3/right/state"}
@@ -328,6 +332,30 @@ def _parse_slam_pose(raw):
     return (x, y, yaw)
 
 
+def _parse_slam_status(raw):
+    """Parse the errorCode/info/is_arrived/obsInfo envelope a rt/slam_info or
+    rt/slam_key_info message may carry, beyond the bare pose _parse_slam_pose()
+    extracts. `data.obsInfo.state` is the actual obstacle-blocked flag (true
+    while the nav stack currently has the path blocked); `data.is_arrived` is
+    the arrival flag keyDemo.cpp's slamKeyInfoHandler waits on. Field names
+    verified against a live rt/slam_info capture recorded in
+    dev/slam_viz_in_jupyter.ipynb and the DDS probe notes in
+    Inspire_hands/topics.md. Every field is optional; never raises."""
+    payload = _decode_json_text(raw)
+    if not isinstance(payload, dict):
+        return None
+    data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+    obs_info = data.get("obsInfo") if isinstance(data.get("obsInfo"), dict) else {}
+    return {
+        "type": payload.get("type"),
+        "error_code": int(payload.get("errorCode", 0) or 0),
+        "info": payload.get("info"),
+        "is_arrived": data.get("is_arrived"),
+        "target_node_name": data.get("targetNodeName"),
+        "obstacle_blocked": bool(obs_info["state"]) if "state" in obs_info else None,
+    }
+
+
 class _Latest:
     def __init__(self, topic, msg_type, queue_len=10):
         self.msg = None
@@ -376,6 +404,9 @@ class _Dex3:
         self.pub = ChannelPublisher(HAND_CMD_TOPICS[side], HandCmd_)
         self.pub.Init()
         self.state = _Latest(HAND_STATE_TOPICS[side], HandState_, 20)
+        self._last_targets = None
+        self._release_stop = None
+        self._release_thread = None
     def _write(self, targets, kp=0.8, kd=0.05, tau=0.02):
         msg = unitree_hg_msg_dds__HandCmd_()
         for i, q in enumerate(_clamp_hand(self.side, targets)):
@@ -392,6 +423,69 @@ class _Dex3:
         for _ in range(max(1, int(max(0.0, float(hold_s)) * max(1.0, float(rate_hz))))):
             self._write(targets)
             time.sleep(dt)
+        self._last_targets = _clamp_hand(self.side, targets)
+    def _current_positions(self, max_age=1.0):
+        msg, ts = self.state.get()
+        if msg is None or (time.time() - ts) > max_age:
+            return None
+        try:
+            return _clamp_hand(self.side, [float(m.q) for m in list(msg.motor_state)[:7]])
+        except Exception:
+            return None
+    def set_targets(self, targets, hold_s=0.6, rate_hz=50.0, kp=1.2, kd=0.05, tau=0.05, ramp_s=None):
+        """Like move(), but ramps smoothly from the current (or last
+        commanded) position to `targets` first instead of snapping there --
+        ported from sdk_hand.Dex3HandController.set_targets()."""
+        self._stop_release_thread()
+        target_list = _clamp_hand(self.side, [float(v) for v in targets])
+        rate = max(1.0, float(rate_hz))
+        total_hold_s = max(0.0, float(hold_s))
+        ramp_duration_s = min(total_hold_s, max(1.0 / rate, 0.25 if ramp_s is None else float(ramp_s)))
+        start = self._current_positions() or (list(self._last_targets) if self._last_targets is not None else target_list)
+        if any(abs(dst - src) > 1e-6 for src, dst in zip(start, target_list)) and ramp_duration_s > 0.0:
+            ramp_steps = max(2, int(round(ramp_duration_s * rate)))
+            for step in range(1, ramp_steps + 1):
+                alpha = float(step) / float(ramp_steps)
+                frame = [s + (e - s) * alpha for s, e in zip(start, target_list)]
+                self._write(frame, kp=kp, kd=kd, tau=tau)
+                time.sleep(1.0 / rate)
+        remaining = max(0.0, total_hold_s - ramp_duration_s)
+        for _ in range(max(1, int(remaining * rate)) if remaining > 0.0 else 1):
+            self._write(target_list, kp=kp, kd=kd, tau=tau)
+            time.sleep(1.0 / rate)
+        self._last_targets = target_list
+    def _stop_release_thread(self):
+        if self._release_stop is not None:
+            self._release_stop.set()
+        if self._release_thread is not None and self._release_thread.is_alive():
+            self._release_thread.join(timeout=1.0)
+        self._release_stop = None
+        self._release_thread = None
+    def release_fingers(self, hold_s=0.5, rate_hz=50.0, persistent=False):
+        """Publishes zero-gain (backdrivable) commands at the last-commanded
+        (or currently-open) targets -- lets the fingers be moved freely by
+        hand/contact without snapping to a default pose. `persistent=True`
+        keeps doing so on a background thread until stop_release_fingers()."""
+        self._stop_release_thread()
+        targets = list(self._last_targets) if self._last_targets is not None else HAND_OPEN[self.side]
+        if persistent:
+            stop_event = threading.Event()
+            def _loop():
+                dt = 1.0 / max(1.0, float(rate_hz))
+                while not stop_event.is_set():
+                    self._write(targets, kp=0.0, kd=0.0, tau=0.0)
+                    time.sleep(dt)
+            self._release_stop = stop_event
+            self._release_thread = threading.Thread(target=_loop, name=f"dex3-{self.side}-release", daemon=True)
+            self._release_thread.start()
+        else:
+            dt = 1.0 / max(1.0, float(rate_hz))
+            for _ in range(max(1, int(max(0.0, float(hold_s)) * max(1.0, float(rate_hz))))):
+                self._write(targets, kp=0.0, kd=0.0, tau=0.0)
+                time.sleep(dt)
+        self._last_targets = None
+    def stop_release_fingers(self):
+        self._stop_release_thread()
     def snapshot(self):
         msg, ts = self.state.get()
         if msg is None:
@@ -457,6 +551,77 @@ class _ArmSdk:
         self.pub.Write(self.msg)
 
 
+def _smoothstep(t):
+    t = max(0.0, min(1.0, float(t)))
+    return t * t * (3.0 - 2.0 * t)
+
+
+def _lerp_row(ts, qs, t):
+    """Linear interpolation into a recorded (ts[i], qs[i]) trajectory at
+    time t; qs[i] is itself a sequence (one value per joint). Clamps to the
+    first/last sample outside [ts[0], ts[-1]]."""
+    if t <= ts[0]:
+        return list(qs[0])
+    if t >= ts[-1]:
+        return list(qs[-1])
+    hi = 1
+    while hi < len(ts) - 1 and ts[hi] < t:
+        hi += 1
+    lo = hi - 1
+    span = ts[hi] - ts[lo]
+    alpha = 0.0 if span <= 0.0 else (t - ts[lo]) / span
+    return [qs[lo][i] + (qs[hi][i] - qs[lo][i]) * alpha for i in range(len(qs[lo]))]
+
+
+def _safe_duration(start, target, duration_s, max_joint_speed):
+    """Extends duration_s if needed so no joint's average speed between
+    `start` and `target` (both {joint_id: q} dicts) exceeds max_joint_speed
+    (rad/s) -- a caller can't accidentally command a too-fast move just by
+    passing too short a duration or too large a delta. Pass
+    max_joint_speed=0 (or None) to disable the check entirely."""
+    if not max_joint_speed:
+        return float(duration_s)
+    max_delta = max((abs(float(q) - float(start.get(j, q))) for j, q in target.items()), default=0.0)
+    return max(float(duration_s), max_delta / float(max_joint_speed))
+
+
+class _ArmOnlyLowCmd:
+    """rt/lowcmd publisher that enables PD control for only a given set of
+    joints, leaving every other motor_cmd entry at mode=0 (inactive).
+
+    Used by G1.dev_mode_teach()/dev_mode_repeat(), which write rt/lowcmd
+    directly and therefore need the AI/sport service's motion mode released
+    first (see G1.enter_dev_mode()) -- rt/arm_sdk (teach()/repeat()/
+    release_arms()/engage_arms()/interpolate_to_pose()) doesn't need that
+    because it blends on top of whatever high-level controller is already
+    running instead of requiring exclusive control."""
+
+    def __init__(self, joint_indices):
+        self.joint_indices = [int(j) for j in joint_indices]
+        self.crc = CRC()
+        self.pub = ChannelPublisher("rt/lowcmd", LowCmd_)
+        self.pub.Init()
+        self.msg = unitree_hg_msg_dds__LowCmd_()
+        self.msg.mode_pr = 0
+
+    def write(self, targets, mode_machine, kp, kd, tau=0.0):
+        self.msg.mode_pr = 0
+        self.msg.mode_machine = int(mode_machine)
+        for i in self.joint_indices:
+            cmd = self.msg.motor_cmd[i]
+            if i in targets:
+                cmd.mode = 1
+                cmd.q = float(targets[i])
+                cmd.dq = 0.0
+                cmd.kp = float(kp)
+                cmd.kd = float(kd)
+                cmd.tau = float(tau)
+            else:
+                cmd.mode = 0
+        self.msg.crc = self.crc.Crc(self.msg)
+        self.pub.Write(self.msg)
+
+
 class _SlamClient(Client):
     def __init__(self):
         super().__init__("slam_operate", False)
@@ -464,6 +629,8 @@ class _SlamClient(Client):
         self._RegistApi(1802, 0)
         self._RegistApi(1804, 0)
         self._RegistApi(1102, 0)
+        self._RegistApi(1201, 0)
+        self._RegistApi(1202, 0)
         self._RegistApi(1901, 0)
         self._SetApiVerson("1.0.0.1")
     def _call_json(self, api_id, payload):
@@ -483,6 +650,10 @@ class _SlamClient(Client):
         qz = math.sin(float(yaw) * 0.5)
         qw = math.cos(float(yaw) * 0.5)
         return self._call_json(1102, {"data": {"targetPose": {"x": float(x), "y": float(y), "z": 0.0, "q_x": 0.0, "q_y": 0.0, "q_z": qz, "q_w": qw}, "mode": 1}})
+    def pause_nav(self):
+        return self._call_json(1201, {"data": {}})
+    def resume_nav(self):
+        return self._call_json(1202, {"data": {}})
 
 
 def _modbus_move(host, port, unit_id, values, timeout=2.0):
@@ -538,8 +709,18 @@ class G1:
         self._dex3 = {}
         self._last_slam_pose = None
         self._initial_slam_pose = None
+        self._last_slam_notice = None
         self._gait_override = None
         self._slam_map_path = os.environ.get("G1_SLAM_MAP_PATH", "/home/unitree/test.pcd")
+        # teach()/repeat()/interpolate_to_pose()/save() and
+        # dev_mode_teach()/dev_mode_repeat() persistence -- lazily loaded,
+        # see _load_ll_poses()/_load_sequences()/_load_trajectories().
+        self._ll_pose_path = os.environ.get("G1_LL_POSE_PATH", "ll_poses.json")
+        self._sequence_path = os.environ.get("G1_ARM_SEQUENCE_PATH", "arm_sequences.json")
+        self._trajectory_path = os.environ.get("G1_ARM_TRAJECTORY_PATH", "arm_trajectories.json")
+        self._ll_poses = None
+        self._sequences = None
+        self._trajectories = None
         self._lowstate = self._latest("rt/lowstate", self._load_type("unitree_sdk2py.idl.unitree_hg.msg.dds_", "LowState_", "unitree_sdk2py.idl.unitree_go.msg.dds_"))
         self._sport = self._latest("rt/odommodestate", SportModeState_)
         self._sport_alt = self._latest("rt/sportmodestate", SportModeState_)
@@ -687,6 +868,45 @@ class G1:
             return pose
         return self._last_slam_pose
 
+    def _slam_notice(self):
+        """Latest parsed status (errorCode/info/is_arrived/obsInfo) from
+        whichever of rt/slam_key_info / rt/slam_info is newer, with a
+        timestamp so callers can tell a fresh notice from a stale one."""
+        msg, ts = self._slam_key.get()
+        notice = _parse_slam_status(None if msg is None else self._string_data(msg))
+        if notice is None:
+            msg, ts = self._slam_info.get()
+            notice = _parse_slam_status(None if msg is None else self._string_data(msg))
+        if notice is not None:
+            self._last_slam_notice = {**notice, "stamp": ts}
+        return self._last_slam_notice
+
+    def get_slam_notice(self):
+        """Public accessor for _slam_notice() -- includes `obstacle_blocked`
+        (from `data.obsInfo.state`) and `is_arrived`, whichever of
+        rt/slam_info / rt/slam_key_info most recently carried them."""
+        return self._slam_notice()
+
+    def _wait_for_slam_arrival(self, x, y, tolerance_m=0.35, timeout_s=120.0):
+        """Waits for (x, y) to be reached, preferring the robot's own
+        `is_arrived` confirmation (see _slam_notice()) the way keyDemo.cpp's
+        taskLoopFun does, falling back to an xy-distance check and an
+        overall timeout. Returns (arrived, last_known_pose, last_notice)."""
+        send_ts = time.time()
+        deadline = send_ts + float(timeout_s)
+        last_notice = None
+        while time.time() < deadline:
+            notice = self._slam_notice()
+            if notice is not None and notice.get("stamp", 0.0) >= send_ts:
+                last_notice = notice
+                if notice.get("is_arrived") is True:
+                    return True, self._slam_pose(), last_notice
+            pose = self._slam_pose()
+            if pose is not None and math.hypot(pose[0] - x, pose[1] - y) <= tolerance_m:
+                return True, pose, last_notice
+            time.sleep(0.2)
+        return False, self._slam_pose(), last_notice
+
     def _hand_error(self, hand, action, exc=None):
         out = {"hand": hand, "ok": False, "action": action, "error": "hand not detected"}
         if exc is not None:
@@ -781,6 +1001,25 @@ class G1:
         enabled = row.get("status") != 0
         code = int(self._robot_state_client().ServiceSwitch(row["name"], bool(enabled)))
         return {"name": row["name"], "previous_status": row.get("status"), "enabled": enabled, "code": code}
+
+    def set_service(self, service, enabled):
+        """Like toggle_service(), but sets an explicit on/off state instead
+        of always flipping whatever the current one is."""
+        row = self.get_service(service)
+        if row is None:
+            raise ValueError(f"Unknown service: {service}")
+        code = int(self._robot_state_client().ServiceSwitch(row["name"], bool(enabled)))
+        return {"name": row["name"], "previous_status": row.get("status"), "enabled": bool(enabled), "code": code}
+
+    def set_report_freq(self, interval, duration):
+        """robot_state's SetReportFreq RPC (API id 1002): how often (and for
+        how long) the mainboard should push state reports."""
+        client = self._robot_state_client()
+        if hasattr(client, "SetReportFreq"):
+            return int(client.SetReportFreq(int(interval), int(duration)))
+        parameter = json.dumps({"interval": int(interval), "duration": int(duration)})
+        code, _data = client._Call(1002, parameter)
+        return int(code)
 
     def zero_torque_mode(self):
         return self._client.SetFsmId(FSM_IDS["zero_torque"])
@@ -922,28 +1161,51 @@ class G1:
         self._headlight_thread.start()
         return code
 
-    def release_arms(self):
+    def release_arms(self, duration_s=3.0, rate_hz=50.0):
         positions = self._upper_body_pose()
         arm_sdk = self._arm_sdk_client()
-        for i in range(151):
-            ratio = float(i) / 150.0
+        steps = max(1, int(max(0.0, float(duration_s)) * max(1.0, float(rate_hz))))
+        dt = 1.0 / max(1.0, float(rate_hz))
+        for i in range(steps + 1):
+            ratio = float(i) / float(steps)
             fade = ratio * ratio * (3.0 - 2.0 * ratio)
             weight = 1.0 - fade
             arm_sdk.write(positions, weight=weight, kp=30.0 * weight, kd=1.5 * weight, waist_kp={j: 480.0 * weight for j in WAIST_JOINTS}, waist_kd={j: 12.0 * weight for j in WAIST_JOINTS})
-            time.sleep(0.02)
+            time.sleep(dt)
         return {"final_arm_sdk_weight": 0.0, "joint_count": len(positions)}
 
-    def engage_arms(self):
+    def engage_arms(self, duration_s=1.0, rate_hz=50.0):
         positions = self._upper_body_pose()
         arm_sdk = self._arm_sdk_client()
-        for i in range(51):
-            weight = float(i) / 50.0
+        steps = max(1, int(max(0.0, float(duration_s)) * max(1.0, float(rate_hz))))
+        dt = 1.0 / max(1.0, float(rate_hz))
+        for i in range(steps + 1):
+            weight = float(i) / float(steps)
             arm_sdk.write(positions, weight=weight, kp=30.0, kd=1.5, waist_kp={j: 480.0 for j in WAIST_JOINTS}, waist_kd={j: 12.0 for j in WAIST_JOINTS})
-            time.sleep(0.02)
+            time.sleep(dt)
         return {"final_arm_sdk_weight": 1.0, "joint_count": len(positions)}
 
+    def move_upper_body_joint(self, joint_index, target, duration_s=0.0, steps=100, max_joint_speed=0.45):
+        """Moves a single waist/arm joint to `target`, holding every other
+        upper-body joint at its current position -- a one-joint special case
+        of interpolate_to_pose(), so it gets the same velocity-safety
+        (max_joint_speed) and smoothstep ramp for free."""
+        joint = int(joint_index)
+        if joint not in UPPER_BODY_JOINTS:
+            raise ValueError("joint_index must be a waist or arm joint.")
+        pose = self._upper_body_pose()
+        pose[joint] = float(target)
+        return self.interpolate_to_pose(pose, duration_s=duration_s, steps=steps, max_joint_speed=max_joint_speed)
+
     def loco_move(self, vx, vy, vyaw, duration_s=2):
+        """Sends a continuous velocity command. With a duration_s (the
+        default), blocks for that long then stops -- pass duration_s=None
+        for a true fire-and-forget send (one Move() RPC, returns
+        immediately, no auto-stop): e.g. sending (0, 0, 0) to stop
+        immediately shouldn't itself block for a couple of seconds first."""
         code = int(self._client.Move(float(vx), float(vy), float(vyaw), continous_move=True) or 0)
+        if duration_s is None:
+            return code
         try:
             time.sleep(max(0.0, float(duration_s)))
         finally:
@@ -1021,6 +1283,12 @@ class G1:
         msg, _ = self._slam_key.get()
         return None if msg is None else self._string_data(msg)
 
+    def get_slam_key_info(self):
+        """rt/slam_key_info specifically, unlike get_slam_info()'s
+        info-falls-back-to-key merge -- lets a caller tell the two apart."""
+        msg, _ = self._slam_key.get()
+        return None if msg is None else self._string_data(msg)
+
     def move_ll_joint(self, joint_id, q, dq, kp, kd, tau, arm_sdk=True):
         joint_id = int(joint_id)
         if arm_sdk:
@@ -1061,6 +1329,15 @@ class G1:
         if msg is not None:
             return {"timestamp": ts, "topic": "rt/unitree/slam_mapping/odom", "pose": self._odom_pose(msg), "raw": msg}
         return None
+
+    def get_slam_odom_pose(self):
+        """SLAM-frame odometry pose (rt/unitree/slam_mapping/odom) as a bare
+        (x, y, yaw), distinct from get_odom()'s sport/body-frame odometry --
+        do not substitute one for the other, they're different frames. Meant
+        as a last-resort SLAM pose fallback when neither rt/slam_info nor
+        rt/slam_key_info have published a usable pose yet."""
+        msg, _ts = self._slam_odom.get()
+        return None if msg is None else self._odom_pose(msg)
 
     def get_imus(self):
         msg = self._lowstate_msg() or self._sport_msg()
@@ -1144,30 +1421,76 @@ class G1:
             },
         }
 
-    def open_dex3_hand(self, hand="both"):
-        sides = ("left", "right") if str(hand).strip().lower() == "both" else (_normalize_side(hand),)
+    def _dex3_sides(self, hand):
+        return ("left", "right") if str(hand).strip().lower() == "both" else (_normalize_side(hand),)
+
+    def open_dex3_hand(self, hand="both", hold_s=0.6, rate_hz=50.0, ramp_s=None):
+        sides = self._dex3_sides(hand)
         out = {}
         for side in sides:
             try:
-                self._dex3_hand(side).move(HAND_OPEN[side])
+                self._dex3_hand(side).set_targets(HAND_OPEN[side], hold_s=hold_s, rate_hz=rate_hz, kp=1.5, kd=0.1, tau=0.03, ramp_s=ramp_s)
                 out[side] = {"hand": side, "ok": True, "action": "open_dex3_hand"}
             except Exception as exc:
                 out[side] = self._hand_error(side, "open_dex3_hand", exc)
         return out if len(sides) > 1 else out[sides[0]]
 
-    def close_dex3_hand(self, hand="both"):
-        sides = ("left", "right") if str(hand).strip().lower() == "both" else (_normalize_side(hand),)
+    def close_dex3_hand(self, hand="both", hold_s=0.6, rate_hz=50.0, ramp_s=None):
+        sides = self._dex3_sides(hand)
         out = {}
         for side in sides:
             try:
-                self._dex3_hand(side).move(HAND_CLOSED[side])
+                self._dex3_hand(side).set_targets(HAND_CLOSED[side], hold_s=hold_s, rate_hz=rate_hz, kp=1.5, kd=0.1, tau=0.03, ramp_s=ramp_s)
                 out[side] = {"hand": side, "ok": True, "action": "close_dex3_hand"}
             except Exception as exc:
                 out[side] = self._hand_error(side, "close_dex3_hand", exc)
         return out if len(sides) > 1 else out[sides[0]]
 
+    def grip_dex3_hand(self, hand, percent, hold_s=0.6, rate_hz=50.0, ramp_s=None):
+        """Grips at `percent` between fully open (0) and fully closed (100)."""
+        sides = self._dex3_sides(hand)
+        alpha = min(1.0, max(0.0, float(percent) / 100.0))
+        out = {}
+        for side in sides:
+            try:
+                targets = [o + (c - o) * alpha for o, c in zip(HAND_OPEN[side], HAND_CLOSED[side])]
+                self._dex3_hand(side).set_targets(targets, hold_s=hold_s, rate_hz=rate_hz, kp=1.5, kd=0.1, tau=0.03, ramp_s=ramp_s)
+                out[side] = {"hand": side, "ok": True, "action": "grip_dex3_hand", "percent": float(percent)}
+            except Exception as exc:
+                out[side] = self._hand_error(side, "grip_dex3_hand", exc)
+        return out if len(sides) > 1 else out[sides[0]]
+
+    def hand_pose(self, targets, hand="right", hold_s=0.6, rate_hz=50.0, kp=1.2, kd=0.05, tau=0.05, ramp_s=None):
+        """Moves one hand to an explicit list of 7 joint targets (see
+        HAND_JOINT_NAMES for the order), ramped smoothly like open/close/
+        grip -- for poses other than plain open/closed/a grip percentage."""
+        side = _normalize_side(hand)
+        self._dex3_hand(side).set_targets(targets, hold_s=hold_s, rate_hz=rate_hz, kp=kp, kd=kd, tau=tau, ramp_s=ramp_s)
+        return {"hand": side, "ok": True, "action": "hand_pose"}
+
+    def release_dex3_fingers(self, hand="both", hold_s=0.5, rate_hz=50.0, persistent=False):
+        """Lets the fingers go backdrivable (zero gain) at their last
+        commanded pose -- use before physically repositioning them by hand,
+        or before handing an object off. persistent=True keeps doing so on a
+        background thread until stop_release_dex3_fingers()."""
+        sides = self._dex3_sides(hand)
+        out = {}
+        for side in sides:
+            try:
+                self._dex3_hand(side).release_fingers(hold_s=hold_s, rate_hz=rate_hz, persistent=persistent)
+                out[side] = {"hand": side, "ok": True, "action": "release_dex3_fingers"}
+            except Exception as exc:
+                out[side] = self._hand_error(side, "release_dex3_fingers", exc)
+        return out if len(sides) > 1 else out[sides[0]]
+
+    def stop_release_dex3_fingers(self, hand="both"):
+        sides = self._dex3_sides(hand)
+        for side in sides:
+            self._dex3_hand(side).stop_release_fingers()
+        return {"hand": list(sides)}
+
     def get_dex3_hand_sensors(self, hand="both"):
-        sides = ("left", "right") if str(hand).strip().lower() == "both" else (_normalize_side(hand),)
+        sides = self._dex3_sides(hand)
         out = {}
         for side in sides:
             try:
@@ -1176,6 +1499,12 @@ class G1:
             except Exception as exc:
                 out[side] = self._hand_error(side, "get_dex3_hand_sensors", exc)
         return out if len(sides) > 1 else out[sides[0]]
+
+    def get_dex3_tactile_pressures(self, hand="both"):
+        snapshot = self.get_dex3_hand_sensors(hand)
+        if "hand" in snapshot:  # single side
+            return snapshot.get("tactile_pressures")
+        return {side: row.get("tactile_pressures") for side, row in snapshot.items()}
 
     def get_inspire_hand_sensors(self, hand="both"):
         sides = ("left", "right") if str(hand).strip().lower() == "both" else (_normalize_side(hand),)
@@ -1206,22 +1535,59 @@ class G1:
                 out[side] = self._hand_error(side, "close_inspire_hand", exc)
         return out if len(sides) > 1 else out[sides[0]]
 
-    def start_mapping(self):
+    def start_mapping(self, slam_type="indoor"):
         self._initial_slam_pose = self._slam_pose()
-        code, raw = self._slam_client().start_mapping("indoor")
+        code, raw = self._slam_client().start_mapping(slam_type)
         return {"code": code, "raw": raw}
 
-    def stop_mapping(self):
-        code, raw = self._slam_client().stop_mapping()
+    def stop_mapping(self, save_path=None):
+        if save_path:
+            self._slam_map_path = str(save_path)
+        code, raw = self._slam_client().stop_mapping(save_path)
         return {"code": code, "raw": raw}
 
-    def relocate(self):
-        pose = self._slam_pose() or self._last_slam_pose or self._initial_slam_pose or (0.0, 0.0, 0.0)
+    def relocate(self, map_path=None, pose=None):
+        """Relocalizes against the saved map at `pose` (an (x, y, yaw)
+        tuple), or -- if not given -- at the current/last-known/initial SLAM
+        pose, falling back to (0, 0, 0) as a last resort. Pass `pose`
+        explicitly when the caller has its own, possibly stricter, notion of
+        "no valid pose yet" (e.g. refusing outright rather than silently
+        relocating to the origin)."""
+        if map_path:
+            self._slam_map_path = str(map_path)
+        if pose is None:
+            pose = self._slam_pose() or self._last_slam_pose or self._initial_slam_pose or (0.0, 0.0, 0.0)
         code, resp = self._slam_client().init_pose(pose[0], pose[1], yaw=pose[2], address=self._slam_map_path)
         if int(code) == 0:
             self._last_slam_pose = pose
             self._initial_slam_pose = pose
         return {"code": code, "raw": resp}
+
+    def get_slam_pose(self):
+        """Public wrapper around _slam_pose(): last known (x, y, yaw), or None."""
+        return self._slam_pose()
+
+    def pose_nav(self, x, y, yaw=0.0):
+        """Single-shot nav to (x, y, yaw), without queuing (see navigate() for
+        the queued/multi-point path). Does not wait for arrival -- pair with
+        wait_for_arrival() if you need to block until reached."""
+        code, raw = self._slam_client().pose_nav(x, y, yaw=yaw)
+        return {"code": code, "raw": raw}
+
+    def wait_for_arrival(self, x, y, tolerance_m=0.35, timeout_s=120.0):
+        """Public wrapper around _wait_for_slam_arrival() for callers running
+        their own per-point navigation loop (e.g. a UI-managed task queue)
+        instead of using navigate()'s built-in one. Returns
+        (arrived, last_known_pose, last_notice)."""
+        return self._wait_for_slam_arrival(x, y, tolerance_m=tolerance_m, timeout_s=timeout_s)
+
+    def pause_nav(self):
+        code, raw = self._slam_client().pause_nav()
+        return {"code": code, "raw": raw}
+
+    def resume_nav(self):
+        code, raw = self._slam_client().resume_nav()
+        return {"code": code, "raw": raw}
 
     def add_map_pose(self):
         pose = self._slam_pose() or self._last_slam_pose or self._initial_slam_pose
@@ -1231,6 +1597,17 @@ class G1:
         return pose
 
     def navigate(self, map_pose):
+        """Visits each queued (x, y, yaw) point in order via pose_nav.
+
+        Previously this fired every queued pose_nav call back-to-back with
+        no wait in between -- since pose_nav just acks a new target rather
+        than blocking until it's reached, queuing more than one point meant
+        each new call pre-empted the previous target before the robot had
+        gotten anywhere near it, so only the last point actually had any
+        effect. This now waits for each point to be confirmed reached
+        (_wait_for_slam_arrival) before sending the next, stopping early on
+        an RPC failure, a timeout, or an obstacle-blocked path (see
+        get_slam_notice())."""
         if map_pose is not None:
             self._path_points.append((float(map_pose[0]), float(map_pose[1]), float(map_pose[2])))
         if not self._path_points:
@@ -1238,8 +1615,15 @@ class G1:
         out = []
         for x, y, yaw in self._path_points:
             code, raw = self._slam_client().pose_nav(x, y, yaw=yaw)
-            out.append({"target": (x, y, yaw), "code": code, "raw": raw})
-            if code != 0:
+            entry = {"target": (x, y, yaw), "code": code, "raw": raw}
+            if int(code) == 0:
+                arrived, final_pose, notice = self._wait_for_slam_arrival(x, y)
+                entry["arrived"] = arrived
+                entry["final_pose"] = final_pose
+                if notice:
+                    entry["notice"] = notice
+            out.append(entry)
+            if int(code) != 0 or not entry.get("arrived", True):
                 break
         self._path_points.clear()
         return out
@@ -1381,8 +1765,236 @@ class G1:
             out.append(self.ik_move_ee(hand=side, pose_increment=inc, max_speed=max_speed, max_dq=max_dq, rate_hz=rate_hz, position_only=True))
         return {"hand": side, "steps": step_count, "step_increment": inc, "position_only": True, "results": out}
 
-    def teach(self, arm="both"):
-        raise NotImplementedError
+    # -- pose/sequence/trajectory persistence -----------------------------
 
-    def repeat(self):
-        raise NotImplementedError
+    def _load_ll_poses(self):
+        if self._ll_poses is None:
+            path = Path(self._ll_pose_path)
+            self._ll_poses = json.loads(path.read_text()) if path.exists() else {}
+        return self._ll_poses
+
+    def _save_ll_poses(self):
+        Path(self._ll_pose_path).write_text(json.dumps(self._ll_poses, indent=2))
+
+    def _load_sequences(self):
+        if self._sequences is None:
+            path = Path(self._sequence_path)
+            self._sequences = json.loads(path.read_text()) if path.exists() else {}
+        return self._sequences
+
+    def _save_sequences(self):
+        Path(self._sequence_path).write_text(json.dumps(self._sequences, indent=2))
+
+    def _load_trajectories(self):
+        if self._trajectories is None:
+            path = Path(self._trajectory_path)
+            self._trajectories = json.loads(path.read_text()) if path.exists() else {}
+        return self._trajectories
+
+    def _save_trajectories(self):
+        Path(self._trajectory_path).write_text(json.dumps(self._trajectories, indent=2))
+
+    def save(self, name):
+        """Saves the current upper-body (waist + both arms) joint pose under
+        `name`, persisted to disk (G1_LL_POSE_PATH, default ll_poses.json) so
+        it survives a process restart. Use with interpolate_to_pose(name) to
+        move back to it later."""
+        pose = self._upper_body_pose()
+        self._load_ll_poses()
+        self._ll_poses[str(name)] = pose
+        self._save_ll_poses()
+        return pose
+
+    # -- rt/arm_sdk-based smooth pose interpolation + discrete teach/repeat
+
+    def interpolate_to_pose(self, name_or_pose, duration_s=4.0, steps=150, max_joint_speed=DEFAULT_MAX_JOINT_SPEED_RAD_S, weight_ramp_steps=25):
+        """Smoothly and safely interpolates the waist+arm joints from the
+        current pose to a saved (by name, see save()) or literal
+        {joint_id: q} upper-body pose, over rt/arm_sdk.
+
+        Safety:
+          - `duration_s` is a *floor*, not a fixed value: _safe_duration()
+            extends it if needed so no joint's average speed would exceed
+            `max_joint_speed` rad/s -- pass max_joint_speed=0 to disable.
+          - position follows a smoothstep ease curve (the same one
+            release_arms()/engage_arms() use), so velocity is zero at both
+            ends instead of snapping there.
+          - if rt/arm_sdk's blend weight isn't already 1.0 (e.g. right after
+            teach()'s damp-mode capture), it's ramped 0->1 over the first
+            `weight_ramp_steps` alongside the start of the motion instead of
+            jumping straight to full stiffness.
+        """
+        target = self._ll_poses_get(name_or_pose)
+        start = self._upper_body_pose()
+        duration_s = _safe_duration(start, target, duration_s, max_joint_speed)
+        steps = max(1, int(steps))
+        arm_sdk = self._arm_sdk_client()
+        start_weight = float(arm_sdk.msg.motor_cmd[29].q)
+        waist_kp = {j: 480.0 for j in WAIST_JOINTS}
+        waist_kd = {j: 12.0 for j in WAIST_JOINTS}
+        for step in range(1, steps + 1):
+            smooth = _smoothstep(step / steps)
+            frame = {j: start.get(j, q) + (q - start.get(j, q)) * smooth for j, q in target.items()}
+            ramp = min(1.0, step / max(1, weight_ramp_steps))
+            weight = start_weight + (1.0 - start_weight) * ramp if start_weight < 1.0 else 1.0
+            arm_sdk.write(frame, weight=weight, waist_kp=waist_kp, waist_kd=waist_kd)
+            time.sleep(duration_s / steps)
+        return {"target": target, "steps": steps, "duration_s": duration_s}
+
+    def _ll_poses_get(self, name_or_pose):
+        if isinstance(name_or_pose, str):
+            self._load_ll_poses()
+            pose = self._ll_poses[name_or_pose]
+        else:
+            pose = name_or_pose
+        return {int(j): float(q) for j, q in pose.items()}
+
+    def teach(self, sequence_name, reset=False):
+        """Appends the current upper-body pose as the next waypoint of a
+        named, persisted sequence (G1_ARM_SEQUENCE_PATH, default
+        arm_sequences.json) -- call repeatedly, physically moving the arm
+        (e.g. after damp_mode()) between calls, to build up a multi-waypoint
+        motion; play it back with repeat(sequence_name). This is a discrete
+        waypoint capture -- see dev_mode_teach() for a continuous recording."""
+        self._load_sequences()
+        if reset or sequence_name not in self._sequences:
+            self._sequences[sequence_name] = []
+        self._sequences[sequence_name].append(self._upper_body_pose())
+        self._save_sequences()
+        return len(self._sequences[sequence_name])
+
+    def repeat(self, sequence_name, waypoint_duration_s=3.0, steps_per_waypoint=100, max_joint_speed=DEFAULT_MAX_JOINT_SPEED_RAD_S):
+        """Plays back a sequence recorded with teach(), interpolating
+        smoothly and safely (interpolate_to_pose()) between consecutive
+        waypoints."""
+        self._load_sequences()
+        waypoints = self._sequences[sequence_name]
+        for waypoint in waypoints:
+            self.interpolate_to_pose(waypoint, duration_s=waypoint_duration_s, steps=steps_per_waypoint, max_joint_speed=max_joint_speed)
+        return {"sequence": sequence_name, "waypoints": len(waypoints)}
+
+    # -- rt/lowcmd-based continuous dev-mode teach/repeat ------------------
+    #
+    # Distinct from teach()/repeat() above: those blend on top of whatever
+    # high-level controller is running via rt/arm_sdk's weight, and never
+    # need the AI/sport service to step aside. rt/lowcmd is the opposite --
+    # it's ignored outright while that service owns the robot, so
+    # dev_mode_repeat() must release its active mode first
+    # (enter_dev_mode()) and restore it afterward, matching
+    # modules/scripts/dev_mode_teach_repeat.py's `repeat` command.
+
+    def enter_dev_mode(self, timeout_s=5.0):
+        """Releases the MotionSwitcher's active mode (e.g. "ai_sport") so
+        raw rt/lowcmd joint commands take effect. Returns the mode name that
+        was active beforehand (empty string if none was), to hand to
+        exit_dev_mode() afterward. Raises TimeoutError if it won't release
+        within timeout_s."""
+        client = self._motion_client()
+        deadline = time.time() + max(0.0, float(timeout_s))
+        code, data = client.CheckMode()
+        previous = _mode_name(data)
+        while int(code) == 0 and _mode_name(data):
+            client.ReleaseMode()
+            time.sleep(0.5)
+            if time.time() > deadline:
+                raise TimeoutError("Timed out releasing MotionSwitcher mode.")
+            code, data = client.CheckMode()
+        if int(code) != 0:
+            raise RuntimeError(f"MotionSwitcher CheckMode failed: code={code} data={data}")
+        return previous
+
+    def exit_dev_mode(self, previous_mode):
+        """Restores the MotionSwitcher mode enter_dev_mode() released, if
+        any (a falsy previous_mode, e.g. "", is a no-op)."""
+        if not previous_mode:
+            return 0
+        code, _data = self._motion_client().SelectMode(previous_mode)
+        return int(code)
+
+    def dev_mode_teach(self, name, duration_s=10.0, poll_s=0.02, stop_event=None):
+        """Continuously records the waist+arm joint trajectory while the
+        robot is backdrivable, via zero-gain rt/arm_sdk (kp=kd=0, weight=1)
+        -- unlike teach()'s discrete per-call snapshot, this captures the
+        whole motion as a time series (programming-by-demonstration),
+        matching modules/scripts/dev_mode_teach_repeat.py's `teach` command.
+        Does not need enter_dev_mode()/rt/lowcmd: zero-gain rt/arm_sdk
+        blends on top of whatever's already running, same as teach() does.
+
+        Stops after `duration_s` seconds (<=0 means "until stop_event"), or
+        as soon as `stop_event` (a threading.Event another thread/UI can
+        set) is set -- a library method has no business blocking on
+        input()."""
+        arm_sdk = self._arm_sdk_client()
+        joints = list(UPPER_BODY_JOINTS)
+        zero_kp = {j: 0.0 for j in WAIST_JOINTS}
+        start = time.time()
+        timestamps, samples = [], []
+        while True:
+            elapsed = time.time() - start
+            if stop_event is not None and stop_event.is_set():
+                break
+            if duration_s > 0.0 and elapsed >= duration_s:
+                break
+            pose = self._upper_body_pose()
+            arm_sdk.write(pose, weight=1.0, kp=0.0, kd=0.0, waist_kp=zero_kp, waist_kd=zero_kp)
+            timestamps.append(elapsed)
+            samples.append([pose[j] for j in joints])
+            time.sleep(max(0.001, float(poll_s)))
+        if not samples:
+            raise RuntimeError("No samples recorded.")
+        self._load_trajectories()
+        self._trajectories[str(name)] = {"joints": joints, "ts": timestamps, "qs": samples}
+        self._save_trajectories()
+        # Hold the final recorded pose at normal gains instead of leaving
+        # rt/arm_sdk at zero stiffness once recording stops.
+        final_pose = dict(zip(joints, samples[-1]))
+        arm_sdk.write(final_pose, weight=1.0, kp=30.0, kd=1.5,
+                       waist_kp={j: 480.0 for j in WAIST_JOINTS}, waist_kd={j: 12.0 for j in WAIST_JOINTS})
+        return {"name": str(name), "sample_count": len(samples), "duration_s": timestamps[-1]}
+
+    def dev_mode_repeat(self, name, speed=1.0, start_ramp_s=0.8, final_hold_s=0.8, kp=40.0, kd=1.0,
+                         rate_hz=50.0, max_joint_speed=DEFAULT_MAX_JOINT_SPEED_RAD_S):
+        """Replays a trajectory recorded with dev_mode_teach() through raw
+        rt/lowcmd: ramps (velocity-safe, see _safe_duration()) from the
+        current pose to the first recorded sample, replays at `speed`x the
+        recorded rate, then holds the final sample for `final_hold_s`.
+        Releases the active MotionSwitcher mode for the duration
+        (enter_dev_mode()) and restores it afterward even if replay raises."""
+        self._load_trajectories()
+        traj = self._trajectories[str(name)]
+        joints = [int(j) for j in traj["joints"]]
+        speed = max(1e-6, float(speed))
+        ts = [float(t) / speed for t in traj["ts"]]
+        qs = traj["qs"]
+        lowcmd = _ArmOnlyLowCmd(joints)
+        previous_mode = self.enter_dev_mode()
+        try:
+            mode_machine = self._current_q_mode()[1]
+            start_pose = self._upper_body_pose()
+            first_targets = {j: float(qs[0][idx]) for idx, j in enumerate(joints)}
+            ramp_duration = _safe_duration(start_pose, first_targets, start_ramp_s, max_joint_speed)
+            ramp_steps = max(1, int(ramp_duration * rate_hz))
+            for step in range(1, ramp_steps + 1):
+                smooth = _smoothstep(step / ramp_steps)
+                frame = {j: start_pose.get(j, q) + (q - start_pose.get(j, q)) * smooth for j, q in first_targets.items()}
+                lowcmd.write(frame, mode_machine=mode_machine, kp=kp, kd=kd)
+                time.sleep(1.0 / rate_hz)
+
+            started = time.time()
+            t_final = ts[-1]
+            while True:
+                elapsed = time.time() - started
+                if elapsed > t_final:
+                    break
+                row = _lerp_row(ts, qs, elapsed)
+                lowcmd.write({j: float(row[idx]) for idx, j in enumerate(joints)}, mode_machine=mode_machine, kp=kp, kd=kd)
+                time.sleep(1.0 / rate_hz)
+
+            final_targets = {j: float(qs[-1][idx]) for idx, j in enumerate(joints)}
+            hold_deadline = time.time() + max(0.0, float(final_hold_s))
+            while time.time() < hold_deadline:
+                lowcmd.write(final_targets, mode_machine=mode_machine, kp=kp, kd=kd)
+                time.sleep(1.0 / rate_hz)
+        finally:
+            self.exit_dev_mode(previous_mode)
+        return {"name": str(name), "sample_count": len(ts), "duration_s": t_final}

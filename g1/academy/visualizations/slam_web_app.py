@@ -5,9 +5,9 @@ import os
 import sys
 from pathlib import Path
 
-# Make `from sdk_slam import ...` resolve regardless of cwd. This file lives
-# in academy/visualizations/; sdk_slam.py (and the dds_env.py it needs) sit
-# one level up in academy/.
+# Make `from sdk_wrapper import G1` resolve regardless of cwd. This file
+# lives in academy/visualizations/; sdk_wrapper.py sits one level up in
+# academy/, and viz_util.py sits alongside this file.
 _SCRIPT_DIR = Path(__file__).resolve().parent      # academy/visualizations
 _ACADEMY_DIR = _SCRIPT_DIR.parent                    # academy
 for _p in (_SCRIPT_DIR, _ACADEMY_DIR):
@@ -15,9 +15,10 @@ for _p in (_SCRIPT_DIR, _ACADEMY_DIR):
         sys.path.insert(0, str(_p))
 
 from unitree_sdk2py.idl.sensor_msgs.msg.dds_ import PointCloud2_
-from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelSubscriber
+from unitree_sdk2py.core.channel import ChannelSubscriber
 
-from sdk_slam import SlamInfoSubscriber, SlamOdomSubscriber, SlamOperateClient
+from sdk_wrapper import G1
+from viz_util import normalize_rpc
 
 import argparse
 import json
@@ -52,7 +53,9 @@ DEFAULT_TOPICS = {
     "collision": "rt/collision_clouds",
     "pre_collision": "rt/pre_collision_clouds",
     "safe": "rt/safe_clouds",
+    "pre_safe": "rt/pre_safe_clouds",
     "warning": "rt/warning_clouds",
+    "no_warning": "rt/no_warning_clouds",
     "grid": "rt/grid_clouds",
 }
 
@@ -66,7 +69,9 @@ LAYER_STYLE = {
     "collision": ("Collision cloud", "#ff365d", 4, 0.90),
     "pre_collision": ("Pre-collision cloud", "#ff8a3d", 4, 0.75),
     "safe": ("Safe cloud", "#2ed47a", 3, 0.55),
+    "pre_safe": ("Pre-safe cloud", "#8fe3a8", 3, 0.45),
     "warning": ("Warning cloud", "#ffd166", 4, 0.85),
+    "no_warning": ("No-warning cloud", "#ffe9a8", 3, 0.40),
     "grid": ("Grid cloud", "#f0f0f0", 2, 0.50),
     "kiss_map": ("KISS-ICP voxel map", "#ffffff", 2, 0.80),
     "occupancy": ("Derived occupied cells", "#d9d9d9", 4, 0.70),
@@ -91,9 +96,6 @@ class PoseTarget:
     y: float
     yaw: float = 0.0
     z: float = 0.0
-
-    def quaternion(self) -> tuple[float, float, float, float]:
-        return (0.0, 0.0, math.sin(self.yaw * 0.5), math.cos(self.yaw * 0.5))
 
     def xy_distance_to(self, other: "PoseTarget") -> float:
         return math.hypot(self.x - other.x, self.y - other.y)
@@ -164,18 +166,6 @@ def parse_pose(payload_raw: Optional[str]) -> Optional[PoseTarget]:
         return pose
     except Exception:
         return None
-
-
-def response_dict(resp: Any) -> dict[str, Any]:
-    raw = resp.raw
-    try:
-        raw = json.loads(raw) if isinstance(raw, str) else raw
-    except Exception:
-        pass
-    ok = int(resp.code) == 0
-    if isinstance(raw, dict):
-        ok = ok and int(raw.get("errorCode", 0)) == 0 and bool(raw.get("succeed", True))
-    return {"code": int(resp.code), "ok": bool(ok), "raw": raw}
 
 
 def decode_xyz(
@@ -357,17 +347,15 @@ class KissIcpLayer:
 
 class SlamWebState:
     def __init__(self, iface: str, domain_id: int, topics: dict[str, str], map_path: str) -> None:
-        ChannelFactoryInitialize(domain_id, iface)
+        # G1() brings up the DDS channel factory itself and eagerly
+        # subscribes to rt/slam_info, rt/slam_key_info, and
+        # rt/unitree/slam_mapping/odom -- do this before creating the
+        # LatestCloudSubscriber layers below, which reuse that same
+        # process-wide factory for their own direct ChannelSubscriber calls.
+        self.g1 = G1(iface=iface, domain_id=domain_id)
         self.iface = iface
         self.domain_id = domain_id
         self.map_path = map_path
-        self.client = SlamOperateClient()
-        self.client.Init()
-        self.client.SetTimeout(10.0)
-        self.info = SlamInfoSubscriber("rt/slam_info", "rt/slam_key_info")
-        self.info.start()
-        self.odom = SlamOdomSubscriber()
-        self.odom.start()
         self.subs = {name: LatestCloudSubscriber(name, topic) for name, topic in topics.items()}
         for sub in self.subs.values():
             sub.start()
@@ -378,37 +366,67 @@ class SlamWebState:
         self.slam_running = False
         self.relocation_ready = False
         self.last_action: dict[str, Any] = {"label": "startup", "ok": True, "raw": "ready"}
+        self.last_notice: Optional[dict[str, Any]] = None
         self.occupancy = OccupancyAccumulator()
         self.kiss = KissIcpLayer()
         self._seen_counts: dict[str, int] = {}
+        # Guards every mutable field above (self.tasks, last_action,
+        # last_notice, selected_pose, initial_pose, slam_running,
+        # relocation_ready, task_progress): both the Dash callback thread(s)
+        # and the background task-sequence thread below touch these.
+        self._state_lock = threading.RLock()
+        self.task_progress: dict[str, Any] = {"running": False}
+        self._task_thread: Optional[threading.Thread] = None
+        self._task_cancel = threading.Event()
         self._worker_stop = threading.Event()
         self._worker = threading.Thread(target=self._mapping_worker,
                                         name="slam-web-map-worker", daemon=True)
         self._worker.start()
 
     def current_pose(self) -> Optional[PoseTarget]:
-        pose = parse_pose(self.info.get_info()) or parse_pose(self.info.get_key())
+        pose = parse_pose(self.g1.get_slam_info()) or parse_pose(self.g1.get_slam_key_info())
+        if pose is None:
+            # Neither status string carried a non-zero pose (or none has
+            # arrived yet) -- fall back to raw SLAM odometry (a different
+            # frame from G1.get_odom()'s sport/body odometry -- see
+            # G1.get_slam_odom_pose()'s docstring).
+            odom_pose = self.g1.get_slam_odom_pose()
+            if odom_pose is not None and not is_default_zero_pose(PoseTarget(*odom_pose)):
+                x, y, yaw = odom_pose
+                pose = PoseTarget(x=x, y=y, yaw=yaw)
+        # G1.get_slam_notice() already picks whichever of rt/slam_key_info /
+        # rt/slam_info is the relevant one and timestamps it.
+        notice = self.g1.get_slam_notice()
+        if notice is not None:
+            with self._state_lock:
+                self.last_notice = notice
         if pose is not None:
             self.last_valid_pose = pose
         return pose
 
     def _record(self, label: str, result: dict[str, Any]) -> dict[str, Any]:
-        self.last_action = {"label": label, **result, "stamp": time.time()}
-        return self.last_action
+        with self._state_lock:
+            self.last_action = {"label": label, **result, "stamp": time.time()}
+            return self.last_action
 
     def start_mapping(self, slam_type: str) -> dict[str, Any]:
-        self.tasks.clear()
+        with self._state_lock:
+            self.tasks.clear()
         self.occupancy.reset()
         self.kiss.reset()
-        self.initial_pose = self.current_pose()
-        result = response_dict(self.client.start_mapping(slam_type=slam_type))
-        self.slam_running = bool(result["ok"])
-        self.relocation_ready = False
+        initial_pose = self.current_pose()
+        result = normalize_rpc(self.g1.start_mapping(slam_type))
+        with self._state_lock:
+            self.initial_pose = initial_pose
+            self.slam_running = bool(result["ok"])
+            self.relocation_ready = False
         return self._record("start_mapping", result)
 
     def save_map(self, path: str) -> dict[str, Any]:
         self.map_path = path
-        return self._record("end_mapping", response_dict(self.client.end_mapping(path)))
+        # G1.stop_mapping(save_path=...) -> end_mapping (1802); see stop_slam
+        # below for the no-save close_slam (1901) case.
+        return self._record("end_mapping", normalize_rpc(self.g1.stop_mapping(save_path=path)))
 
     def relocate(self, path: str) -> dict[str, Any]:
         self.map_path = path
@@ -419,101 +437,179 @@ class SlamWebState:
                 "ok": False,
                 "raw": "Cannot start relocation: no valid non-zero SLAM pose has been received yet.",
             })
-        qx, qy, qz, qw = pose.quaternion()
-        result = response_dict(self.client.init_pose(pose.x, pose.y, pose.z, qx, qy, qz, qw, path))
-        self.relocation_ready = bool(result["ok"])
-        if self.relocation_ready:
-            self.initial_pose = pose
+        # Pass our own already-validated pose explicitly -- G1.relocate()'s
+        # own fallback would otherwise silently relocate to (0, 0, 0) if it
+        # ever ran out of poses, which is exactly what the check above
+        # refuses to do.
+        result = normalize_rpc(self.g1.relocate(map_path=path, pose=(pose.x, pose.y, pose.yaw)))
+        with self._state_lock:
+            self.relocation_ready = bool(result["ok"])
+            if self.relocation_ready:
+                self.initial_pose = pose
         return self._record("init_pose", result)
 
     def stop_slam(self) -> dict[str, Any]:
-        result = response_dict(self.client.close_slam())
-        self.slam_running = False
-        self.relocation_ready = False
+        self._task_cancel.set()  # abort any in-flight task sequence, mirrors
+        # keyDemo.cpp's taskThreadStop() being called before stopNodeFun()
+        result = normalize_rpc(self.g1.stop_mapping())  # no path -> close_slam (1901)
+        with self._state_lock:
+            self.slam_running = False
+            self.relocation_ready = False
         return self._record("close_slam", result)
 
     def pause(self) -> dict[str, Any]:
-        return self._record("pause_nav", response_dict(self.client.pause_nav()))
+        return self._record("pause_nav", normalize_rpc(self.g1.pause_nav()))
 
     def resume(self) -> dict[str, Any]:
-        return self._record("resume_nav", response_dict(self.client.resume_nav()))
+        return self._record("resume_nav", normalize_rpc(self.g1.resume_nav()))
 
     def add_task(self, x: float, y: float, yaw: Optional[float] = None) -> PoseTarget:
         pose = self.current_pose()
         target = PoseTarget(float(x), float(y), float(
             pose.yaw if yaw is None and pose else yaw or 0.0))
-        self.tasks.append(target)
-        self.selected_pose = target
-        self.last_action = {"label": "add_task", "ok": True, "code": 0, "raw": {
-            "x": target.x, "y": target.y, "yaw": target.yaw}, "stamp": time.time()}
+        with self._state_lock:
+            self.tasks.append(target)
+            self.selected_pose = target
+            self.last_action = {"label": "add_task", "ok": True, "code": 0, "raw": {
+                "x": target.x, "y": target.y, "yaw": target.yaw}, "stamp": time.time()}
         return target
 
     def add_current_pose(self) -> dict[str, Any]:
         pose = self.current_pose()
         if pose is None:
             return self._record("add_current_pose", {"code": 1, "ok": False, "raw": "No current SLAM pose available."})
-        self.tasks.append(pose)
-        self.selected_pose = pose
-        return self._record("add_current_pose", {"code": 0, "ok": True, "raw": {"x": pose.x, "y": pose.y, "z": pose.z, "yaw": pose.yaw, "task_count": len(self.tasks)}})
+        with self._state_lock:
+            self.tasks.append(pose)
+            self.selected_pose = pose
+            task_count = len(self.tasks)
+        return self._record("add_current_pose", {"code": 0, "ok": True, "raw": {"x": pose.x, "y": pose.y, "z": pose.z, "yaw": pose.yaw, "task_count": task_count}})
 
     def go_to_selected_pose(self) -> dict[str, Any]:
-        target = self.selected_pose
+        with self._state_lock:
+            target = self.selected_pose
+            relocation_ready = self.relocation_ready
         if target is None:
             return self._record("go_to_selected_pose", {"code": 1, "ok": False, "raw": "No selected pose. Click the map or add a task point first."})
-        if not self.relocation_ready:
+        if not relocation_ready:
             return self._record("go_to_selected_pose", {"code": 1, "ok": False, "raw": "Relocation is not active."})
-        qx, qy, qz, qw = target.quaternion()
-        result = response_dict(self.client.pose_nav(
-            target.x, target.y, target.z, qx, qy, qz, qw, mode=1))
+        result = normalize_rpc(self.g1.pose_nav(target.x, target.y, target.yaw))
         result["target"] = {"x": target.x, "y": target.y, "z": target.z, "yaw": target.yaw}
         return self._record("go_to_selected_pose", result)
 
     def clear_tasks(self) -> dict[str, Any]:
-        self.tasks.clear()
-        self.selected_pose = None
+        self._task_cancel.set()  # stop an in-flight sequence, if any
+        with self._state_lock:
+            self.tasks.clear()
+            self.selected_pose = None
         return self._record("clear_tasks", {"code": 0, "ok": True, "raw": {}})
 
     def execute_tasks(self) -> dict[str, Any]:
-        if not self.tasks:
-            return self._record("execute_tasks", {"code": 1, "ok": False, "raw": "No task points queued."})
-        if not self.relocation_ready:
-            return self._record("execute_tasks", {"code": 1, "ok": False, "raw": "Relocation is not active."})
-        results = []
+        """Kicks off the queued task points on a background thread and
+        returns immediately.
+
+        Blocking here (as the previous implementation did, waiting up to
+        NAV_TARGET_TIMEOUT_S per point inside the Dash button callback) froze
+        the whole single-threaded dev server -- including the periodic map
+        refresh -- for the entire multi-point run. keyDemo.cpp avoids exactly
+        this by running its task loop on a detached thread
+        (taskThreadRun/taskLoopFun); this mirrors that.
+        """
+        with self._state_lock:
+            if not self.tasks:
+                return self._record("execute_tasks", {"code": 1, "ok": False, "raw": "No task points queued."})
+            if not self.relocation_ready:
+                return self._record("execute_tasks", {"code": 1, "ok": False, "raw": "Relocation is not active."})
+            if self._task_thread is not None and self._task_thread.is_alive():
+                return self._record("execute_tasks", {"code": 1, "ok": False, "raw": "A task sequence is already running."})
+            snapshot = list(self.tasks)
+            self._task_cancel.clear()
+            self.task_progress = {"running": True, "index": 0, "total": len(snapshot)}
+            thread = threading.Thread(
+                target=self._execute_tasks_worker, args=(snapshot,),
+                name="slam-web-task-exec", daemon=True,
+            )
+            self._task_thread = thread
+        thread.start()
+        return self._record("execute_tasks", {
+            "code": 0, "ok": True,
+            "raw": f"Started navigating {len(snapshot)} queued point(s) in the background.",
+        })
+
+    def _execute_tasks_worker(self, snapshot: list[PoseTarget]) -> None:
+        results: list[dict[str, Any]] = []
         ok = True
-        for idx, target in enumerate(self.tasks, start=1):
-            qx, qy, qz, qw = target.quaternion()
-            result = response_dict(self.client.pose_nav(
-                target.x, target.y, target.z, qx, qy, qz, qw, mode=1))
+        for idx, target in enumerate(snapshot, start=1):
+            if self._task_cancel.is_set():
+                ok = False
+                break
+            with self._state_lock:
+                self.task_progress = {
+                    "running": True, "index": idx, "total": len(snapshot),
+                    "target": {"x": target.x, "y": target.y},
+                }
+            result = normalize_rpc(self.g1.pose_nav(target.x, target.y, target.yaw))
             result["target_index"] = idx
             result["target"] = {"x": target.x, "y": target.y, "yaw": target.yaw}
             if result["ok"]:
-                reached, final_pose, elapsed = self._wait_for_target(target)
+                reached, final_pose, elapsed, notice = self._wait_for_target(target)
                 result["reached"] = reached
                 result["elapsed_s"] = round(elapsed, 2)
+                if notice:
+                    result["notice"] = notice
                 if final_pose is not None:
                     result["final_pose"] = {"x": final_pose.x, "y": final_pose.y, "yaw": final_pose.yaw}
                     result["final_distance_m"] = round(final_pose.xy_distance_to(target), 3)
                 if not reached:
                     result["ok"] = False
                     result["code"] = 1
-                    result["raw"] = f"Timed out waiting for task {idx} to be reached."
+                    blocked = bool(notice and notice.get("obstacle_blocked"))
+                    result["raw"] = (
+                        f"Task {idx} looks blocked by an obstacle (obsInfo.state=true)."
+                        if blocked else f"Timed out waiting for task {idx} to be reached."
+                    )
             results.append(result)
+            with self._state_lock:
+                self.task_progress = {"running": True, "index": idx, "total": len(snapshot), "done": idx}
+                self._record("execute_tasks", {"code": 0 if result["ok"] else 1, "ok": result["ok"], "raw": list(results)})
             if not result["ok"]:
                 ok = False
                 break
-        return self._record("execute_tasks", {"code": 0 if ok else 1, "ok": ok, "raw": results})
+        with self._state_lock:
+            self.task_progress = {"running": False, "index": len(results), "total": len(snapshot)}
+            self._record("execute_tasks", {"code": 0 if ok else 1, "ok": ok, "raw": results})
 
-    def _wait_for_target(self, target: PoseTarget) -> tuple[bool, Optional[PoseTarget], float]:
+    def _wait_for_target(self, target: PoseTarget) -> tuple[bool, Optional[PoseTarget], float, Optional[dict[str, Any]]]:
+        """Waits for `target` to be reached.
+
+        Primarily waits for the robot's own arrival confirmation
+        (`data.is_arrived` on rt/slam_info / rt/slam_key_info -- see
+        G1.get_slam_notice()) rather than only a client-computed xy-distance
+        threshold, mirroring how keyDemo.cpp's taskLoopFun waits
+        on the `is_arrived` flag its slamKeyInfoHandler sets from the
+        robot's own task_result messages. The distance check remains as a
+        fallback for firmware that never publishes that field. Whatever the
+        latest relevant status notice was (including an obstacle-blocked
+        flag) is returned alongside the result so callers can report it.
+        """
         start = time.time()
         last_pose: Optional[PoseTarget] = None
+        last_notice: Optional[dict[str, Any]] = None
         while time.time() - start < NAV_TARGET_TIMEOUT_S:
+            if self._task_cancel.is_set():
+                break
             pose = self.current_pose()
             if pose is not None:
                 last_pose = pose
-                if pose.xy_distance_to(target) <= NAV_REACHED_DISTANCE_M:
-                    return True, pose, time.time() - start
+            with self._state_lock:
+                notice = self.last_notice
+            if notice is not None and notice.get("stamp", 0.0) >= start:
+                last_notice = notice
+                if notice.get("is_arrived") is True:
+                    return True, pose or last_pose, time.time() - start, last_notice
+            if pose is not None and pose.xy_distance_to(target) <= NAV_REACHED_DISTANCE_M:
+                return True, pose, time.time() - start, last_notice
             time.sleep(NAV_POLL_INTERVAL_S)
-        return False, last_pose, time.time() - start
+        return False, last_pose, time.time() - start, last_notice
 
     def _mapping_worker(self) -> None:
         while not self._worker_stop.is_set():
@@ -555,21 +651,24 @@ class SlamWebState:
                 }
             )
         _cloud, _pose, kiss_meta = self.kiss.snapshot()
-        return {
-            "iface": self.iface,
-            "domain_id": self.domain_id,
-            "slam_running": self.slam_running,
-            "relocation_ready": self.relocation_ready,
-            "pose": None if pose is None else {"x": pose.x, "y": pose.y, "yaw": pose.yaw},
-            "initial_pose": None if self.initial_pose is None else {"x": self.initial_pose.x, "y": self.initial_pose.y, "yaw": self.initial_pose.yaw},
-            "selected_pose": None if self.selected_pose is None else {"x": self.selected_pose.x, "y": self.selected_pose.y, "yaw": self.selected_pose.yaw},
-            "task_count": len(self.tasks),
-            "last_action": self.last_action,
-            "slam_info": self.info.get_info(),
-            "slam_key": self.info.get_key(),
-            "topics": topic_rows,
-            "kiss": kiss_meta,
-        }
+        with self._state_lock:
+            return {
+                "iface": self.iface,
+                "domain_id": self.domain_id,
+                "slam_running": self.slam_running,
+                "relocation_ready": self.relocation_ready,
+                "pose": None if pose is None else {"x": pose.x, "y": pose.y, "yaw": pose.yaw},
+                "initial_pose": None if self.initial_pose is None else {"x": self.initial_pose.x, "y": self.initial_pose.y, "yaw": self.initial_pose.yaw},
+                "selected_pose": None if self.selected_pose is None else {"x": self.selected_pose.x, "y": self.selected_pose.y, "yaw": self.selected_pose.yaw},
+                "task_count": len(self.tasks),
+                "last_action": self.last_action,
+                "last_notice": self.last_notice,
+                "task_progress": dict(self.task_progress),
+                "slam_info": self.g1.get_slam_info(),
+                "slam_key": self.g1.get_slam_key_info(),
+                "topics": topic_rows,
+                "kiss": kiss_meta,
+            }
 
 
 def make_figure(
@@ -666,17 +765,19 @@ def make_figure(
                 marker={"size": 15, "color": "#ff3154", "symbol": "diamond"},
             )
         )
-    if state.tasks:
-        extent_points.extend((p.x, p.y) for p in state.tasks)
+    with state._state_lock:
+        tasks_snapshot = list(state.tasks)
+    if tasks_snapshot:
+        extent_points.extend((p.x, p.y) for p in tasks_snapshot)
         fig.add_trace(
             go.Scattergl(
-                x=[p.x for p in state.tasks],
-                y=[p.y for p in state.tasks],
+                x=[p.x for p in tasks_snapshot],
+                y=[p.y for p in tasks_snapshot],
                 mode="markers+lines",
                 name="Task points",
                 marker={"size": 13, "color": "#111111", "symbol": "circle"},
                 line={"color": "#111111", "width": 3},
-                text=[str(i) for i in range(1, len(state.tasks) + 1)],
+                text=[str(i) for i in range(1, len(tasks_snapshot) + 1)],
                 hovertemplate="task %{text}<br>x=%{x:.2f}<br>y=%{y:.2f}<extra></extra>",
             )
         )
@@ -758,7 +859,9 @@ def app_layout(state: SlamWebState, refresh_interval_ms: int = DEFAULT_MAP_REFRE
             "collision",
             "pre_collision",
             "safe",
+            "pre_safe",
             "warning",
+            "no_warning",
             "grid",
         ]
     ]
@@ -902,15 +1005,32 @@ def create_dash_app(
         pose = status["pose"]
         pose_text = "pose=<none>" if pose is None else f"pose x={pose['x']:.2f} y={pose['y']:.2f} yaw={pose['yaw']:.2f}"
         kiss = status["kiss"]
+        progress = status["task_progress"]
+        if progress.get("running"):
+            progress_text = f"task {progress.get('index', 0)}/{progress.get('total', 0)} running"
+        else:
+            progress_text = "no task sequence running"
+        notice = status["last_notice"]
+        notice_text = ""
+        if notice:
+            if notice.get("obstacle_blocked"):
+                notice_text = " ⚠ OBSTACLE: path blocked"
+            elif notice.get("error_code"):
+                notice_text = f" ⚠ {notice.get('info') or ('errorCode=' + str(notice['error_code']))}"
+            elif notice.get("nav_state") and notice.get("nav_state") != "ready":
+                notice_text = f" nav_state={notice['nav_state']}"
         line = (
             f"iface={status['iface']} domain={status['domain_id']} "
             f"slam={'RUNNING' if status['slam_running'] else 'idle'} "
             f"relocation={'ready' if status['relocation_ready'] else 'not ready'} "
-            f"tasks={status['task_count']} {pose_text} "
+            f"tasks={status['task_count']} ({progress_text}) {pose_text} "
             f"KISS frames={kiss['frames']} {'err=' + kiss['error'] if kiss.get('error') else ''}"
+            f"{notice_text}"
         )
         topics = json.dumps(
-            {"topics": status["topics"], "last_action": status["last_action"]}, indent=2, sort_keys=True)
+            {"topics": status["topics"], "last_action": status["last_action"], "last_notice": notice},
+            indent=2, sort_keys=True, default=str,
+        )
         return fig, line, topics
 
     @app.callback(
@@ -1010,7 +1130,7 @@ def main() -> None:
     app = create_dash_app(state, refresh_interval_ms=args.refresh_ms)
     print(
         f"SLAM web app: http://{args.host}:{args.port} iface={args.iface} domain={args.domain_id}")
-    app.run(host=args.host, port=args.port, debug=False)
+    app.run(host=args.host, port=args.port, debug=False, threaded=True)
 
 
 if __name__ == "__main__":

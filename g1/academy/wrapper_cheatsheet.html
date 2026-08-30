@@ -422,8 +422,17 @@ the cached "last" and "initial" poses.</td></tr>
 <td>Appends the current (or last-known/initial) SLAM pose onto an internal path-points queue for
 <code>navigate()</code>; raises if no pose is available yet.</td></tr>
 <tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>navigate(map_pose)</code></td>
-<td>Optionally enqueues one more <code>(x,y,yaw)</code> point, then sends a <code>pose_nav</code> RPC for every
-queued point in order, stopping early on the first non-zero return code; always clears the queue afterward.</td></tr>
+<td>Optionally enqueues one more <code>(x,y,yaw)</code> point, then sends a <code>pose_nav</code> RPC for each
+queued point in order, <b>now waiting for each to be confirmed reached</b> (<code>_wait_for_slam_arrival()</code>,
+preferring the robot's own <code>is_arrived</code> flag over an xy-distance check) before sending the next —
+previously it fired every queued <code>pose_nav</code> back-to-back with no wait, so each call pre-empted the
+last before the robot got anywhere near it and only the final point actually had any effect. Stops early on a
+non-zero return code, a timeout, or an obstacle-blocked path (<code>get_slam_notice()</code>); always clears the
+queue afterward.</td></tr>
+<tr><td><span class="kind kind-public">Public</span></td><td class="name"><code>get_slam_notice()</code></td>
+<td>New. Returns the latest parsed <code>errorCode</code>/<code>info</code>/<code>is_arrived</code>/<code>obsInfo</code>
+status from whichever of <code>rt/slam_key_info</code> / <code>rt/slam_info</code> is newer —
+<code>obstacle_blocked</code> is <code>true</code> while the nav stack currently has the path blocked.</td></tr>
 </tbody>
 </table>
 </div>

@@ -6,7 +6,8 @@ Shows the RGB-D feed, a segmentation overlay, and a labeled-detections overlay
 (open-vocabulary vision model, NL-prompted). Pick a detected object from the
 list, hit Grab, and direct_nav.DirectHandPoseNav drives the arm to it (no ROS
 2) and closes the hand. Release Arms and Damp are also exposed as one-click
-safety controls (sdk_client.Robot.release_arms() / .damp()).
+safety controls (gripping_util.ControlAdapter.release_arms() / .damp(), backed
+by sdk_wrapper.G1).
 
 The ROS 2/TF backend (hand_pose_nav_node.HandPoseNavNode via grab_ros2.py)
 was removed from this app: it was never exercised past the initial scaffold
@@ -20,7 +21,7 @@ v3 additions over recognition_app_old.py:
     object's in-view footprint and how far its near surface sits in front
     of the point-cloud centroid, and the grasp standoff is sized from that
     instead of one fixed distance for every object.
-  - Dex3 tactile sensor feedback (sdk_client.Robot.get_tactile_pressures(),
+  - Dex3 tactile sensor feedback (gripping_util.ControlAdapter.get_tactile_pressures(),
     same raw-value semantics as modules/scripts/test_dex3_tactile.py):
     hand closing is driven by measured fingertip pressure instead of a
     single fixed close command, and current pressures are shown in the UI.
@@ -85,18 +86,16 @@ from dash import dcc, html, Input, Output, State, callback_context, no_update, A
 import dash_bootstrap_components as dbc
 
 try:
-    from sdk_client import Robot
-    _ROBOT_AVAILABLE = True
-except ImportError:
-    Robot = None
-    _ROBOT_AVAILABLE = False
-
-try:
-    from sdk_hand import hand_closed_targets, hand_open_targets
+    from sdk_wrapper import G1
+    from gripping_util import ControlAdapter, hand_closed_targets, hand_open_targets
+    _CONTROL_ADAPTER_AVAILABLE = True
     _HAND_TARGETS_AVAILABLE = True
 except ImportError:
+    G1 = None
+    ControlAdapter = None
     hand_closed_targets = None
     hand_open_targets = None
+    _CONTROL_ADAPTER_AVAILABLE = False
     _HAND_TARGETS_AVAILABLE = False
 
 
@@ -561,17 +560,17 @@ def _perception_loop(vision: VisionDetector, rate_hz: float) -> None:
         time.sleep(max(0.0, period - dt))
 
 
-def _hand_fk_loop(iface: str, domain_id: int) -> None:
+def _hand_fk_loop(control_robot: Any) -> None:
+    """Reads rt/lowstate through the already-connected control G1 (see
+    _make_control_robot()) instead of opening a second, independent
+    connection -- previously this built its own sdk_sensors.LatestSubscriber
+    + dds_env-initialized channel just to read the same topic."""
+    g1 = getattr(control_robot, "g1", None)
+    if g1 is None:
+        with STATE.lock:
+            STATE.hand_fk_status = "FK hand unavailable: no control robot (G1) connected"
+        return
     try:
-        from dds_env import ensure_channel_factory_initialized
-        from sdk_sensors import LatestSubscriber, resolve_lowstate_type, lowstate_snapshot_from_msg
-
-        ensure_channel_factory_initialized(int(domain_id), iface)
-        lowstate_type = resolve_lowstate_type()
-        if lowstate_type is None:
-            raise RuntimeError("Could not resolve Unitree LowState_ message type.")
-        sub = LatestSubscriber("rt/lowstate", lowstate_type)
-        sub.start(queue_len=10)
         fk = {"left": ArmFK("left"), "right": ArmFK("right")}
     except Exception as exc:
         with STATE.lock:
@@ -579,17 +578,22 @@ def _hand_fk_loop(iface: str, domain_id: int) -> None:
         return
 
     while True:
-        msg, ts = sub.get_latest()
-        if msg is None:
+        try:
+            q, _mode_machine = g1._current_q_mode(timeout=0.5)
+        except TimeoutError:
             with STATE.lock:
                 STATE.hand_fk_status = "FK hand: waiting for rt/lowstate"
             time.sleep(0.2)
             continue
+        except Exception as exc:
+            with STATE.lock:
+                STATE.hand_fk_status = f"FK hand error: {exc}"
+            time.sleep(0.2)
+            continue
         try:
-            snap = lowstate_snapshot_from_msg(msg)
             q_full = np.zeros(30, dtype=np.float64)
-            n = min(len(snap.joint_positions), q_full.size)
-            q_full[:n] = np.asarray(snap.joint_positions[:n], dtype=np.float64)
+            n = min(len(q), q_full.size)
+            q_full[:n] = np.asarray(q[:n], dtype=np.float64)
             hand_T = {
                 side: fk[side].compute(q_full).copy()
                 for side in ("left", "right")
@@ -601,7 +605,7 @@ def _hand_fk_loop(iface: str, domain_id: int) -> None:
             with STATE.lock:
                 STATE.hand_fk_base = hands
                 STATE.hand_fk_T_base = hand_T
-                STATE.hand_fk_ts = float(ts or time.time())
+                STATE.hand_fk_ts = time.time()
                 STATE.hand_fk_status = "FK hand: rt/lowstate"
         except Exception as exc:
             with STATE.lock:
@@ -611,23 +615,23 @@ def _hand_fk_loop(iface: str, domain_id: int) -> None:
 
 def _init_unitree_dds_once(iface: str, domain_id: int) -> str:
     try:
-        from dds_env import ensure_channel_factory_initialized
-        ensure_channel_factory_initialized(int(domain_id), iface)
+        import sdk_wrapper
+        sdk_wrapper._ensure_factory(int(domain_id), iface)
         return f"Unitree DDS initialized: iface={iface} domain_id={domain_id}"
     except Exception as exc:
         return f"Unitree DDS init failed: {exc}"
 
 
 def _make_control_robot(iface: str, domain_id: int):
-    if not _ROBOT_AVAILABLE:
-        return None, "sdk_client.Robot unavailable"
+    """Builds the control-side robot handle -- a ControlAdapter wrapping
+    sdk_wrapper.G1, independent of whatever _ROBOT (perception) backend is
+    active (mock or ZMQ RGBD -- see _ZmqRgbdRobot/_MockRobot above, both of
+    which already implement get_rgbd() without any sdk_client dependency)."""
+    if not _CONTROL_ADAPTER_AVAILABLE:
+        return None, "sdk_wrapper.G1 / gripping_util unavailable"
     try:
-        robot = Robot(
-            iface=iface,
-            domain_id=domain_id,
-            auto_start_sensors=True,
-        )
-        return robot, "control robot ready"
+        g1 = G1(iface=iface, domain_id=domain_id)
+        return ControlAdapter(g1), "control robot ready"
     except Exception as exc:
         return None, f"control robot unavailable: {exc!r}"
 
@@ -1682,27 +1686,9 @@ def _hand_snapshot(side: str) -> Optional[Dict[str, Any]]:
     if _CONTROL_ROBOT is None:
         return None
     try:
-        snapshot = _CONTROL_ROBOT.get_hand_state_snapshot(side)
-    except Exception:
-        snapshot = None
-    if snapshot is not None:
-        return snapshot
-    try:
-        controller = _CONTROL_ROBOT._get_hand(side)
-        if hasattr(controller, "get_state_snapshot"):
-            state = controller.get_state_snapshot(max_age=1.0)
-            if state is not None:
-                positions = state.get("positions")
-                if isinstance(positions, list):
-                    from sdk_hand import HAND_JOINT_NAMES
-                    state["positions"] = {
-                        HAND_JOINT_NAMES[idx]: positions[idx]
-                        for idx in range(min(len(positions), len(HAND_JOINT_NAMES)))
-                    }
-                return state
+        return _CONTROL_ROBOT.get_hand_state_snapshot(side)
     except Exception:
         return None
-    return None
 
 
 def _hand_target_error(side: str, target: List[float]) -> Optional[float]:
@@ -1713,7 +1699,7 @@ def _hand_target_error(side: str, target: List[float]) -> Optional[float]:
     if not isinstance(positions, dict):
         return None
     try:
-        from sdk_hand import HAND_JOINT_NAMES
+        from sdk_wrapper import HAND_JOINT_NAMES
         actual = [float(positions[name]) for name in HAND_JOINT_NAMES]
     except Exception:
         return None
@@ -3142,11 +3128,6 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--rgbd-host", default="192.168.2.41")
     p.add_argument("--rgbd-port", type=int, default=5555)
     p.add_argument("--rgbd-topic", default="")
-    p.add_argument(
-        "--sdk-rgbd",
-        action="store_true",
-        help="Use sdk_client.Robot.get_rgbd() instead of the persistent ZMQ receiver.",
-    )
     p.add_argument("--rate-hz", type=float, default=3.0, help="perception loop rate")
     p.add_argument("--camera-rate-hz", type=float, default=15.0, help="raw RGB-D capture loop rate")
     p.add_argument("--vision-model", default="yolov8s-world.pt")
@@ -3167,31 +3148,26 @@ with STATE.lock:
 
 if _ARGS.mock:
     _ROBOT = _MockRobot()
-elif _ARGS.sdk_rgbd and _ROBOT_AVAILABLE:
-    _ROBOT = Robot(
-        iface=_ARGS.iface,
-        domain_id=_ARGS.domain_id,
-        auto_start_sensors=True,
-        rgbd_host=_ARGS.rgbd_host,
-        rgbd_port=_ARGS.rgbd_port,
-    )
 else:
+    # _ZmqRgbdRobot already implements the same get_rgbd() interface
+    # (rgb_bgr/depth_m/...) independently of sdk_client.Robot -- there used
+    # to be a --sdk-rgbd flag to pull frames through Robot.get_rgbd()
+    # instead, but that was just an alternative implementation of the same
+    # capability, not something uniquely needed, so it's retired along with
+    # the Robot dependency it pulled in.
     _ROBOT = _ZmqRgbdRobot(
         host=_ARGS.rgbd_host,
         port=_ARGS.rgbd_port,
         topic=_ARGS.rgbd_topic,
     )
 
-_CONTROL_ROBOT = _ROBOT if (Robot is not None and isinstance(_ROBOT, Robot)) else None
+_CONTROL_ROBOT = None
 _CONTROL_STATUS = "control robot unavailable"
 if _ARGS.mock:
     _CONTROL_ROBOT = _ROBOT
     _CONTROL_STATUS = "mock control robot"
 elif _DDS_STATUS.startswith("Unitree DDS initialized"):
-    if _CONTROL_ROBOT is None:
-        _CONTROL_ROBOT, _CONTROL_STATUS = _make_control_robot(_ARGS.iface, _ARGS.domain_id)
-    else:
-        _CONTROL_STATUS = "control robot ready"
+    _CONTROL_ROBOT, _CONTROL_STATUS = _make_control_robot(_ARGS.iface, _ARGS.domain_id)
 else:
     _CONTROL_STATUS = _DDS_STATUS
 with STATE.lock:
@@ -3214,7 +3190,7 @@ threading.Thread(
 
 if not _ARGS.mock and _DDS_STATUS.startswith("Unitree DDS initialized"):
     threading.Thread(
-        target=_hand_fk_loop, args=(_ARGS.iface, _ARGS.domain_id),
+        target=_hand_fk_loop, args=(_CONTROL_ROBOT,),
         daemon=True,
     ).start()
 

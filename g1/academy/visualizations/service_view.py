@@ -2,20 +2,20 @@
 from __future__ import annotations
 
 import argparse
-import importlib
-import json
 import shlex
 import sys
 import time
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-# Make `from dds_env import ...` resolve regardless of cwd — dds_env.py lives
-# one level up, in academy/.
-_ACADEMY_DIR = Path(__file__).resolve().parent.parent
-if str(_ACADEMY_DIR) not in sys.path:
-    sys.path.insert(0, str(_ACADEMY_DIR))
+# Make `from sdk_wrapper import G1` resolve regardless of cwd. This file
+# lives in academy/visualizations/; sdk_wrapper.py sits one level up in
+# academy/, and viz_util.py sits alongside this file.
+_SCRIPT_DIR = Path(__file__).resolve().parent
+_ACADEMY_DIR = _SCRIPT_DIR.parent
+for _p in (_SCRIPT_DIR, _ACADEMY_DIR):
+    if str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
 
 try:
     from rich import box
@@ -32,171 +32,55 @@ except ImportError as exc:
         "  pip install rich"
     ) from exc
 
-try:
-    from dds_env import default_dds_iface, ensure_channel_factory_initialized
-except ImportError as exc:
-    raise SystemExit("Local dds_env.py helper is required for service_view.py.") from exc
-
-
-SERVICE_CATALOG = {
-    "ai_sport": "Main Motion Control Service",
-    "basic_service": "Basic Service",
-    "g1_arm_example": "Upper Limb Motion Service",
-    "vui_service": "Audio and Lighting Control Service",
-    "unitree_slam": "Navigation Service",
-}
+from viz_util import ServiceRow, SERVICE_STATUS_LABELS, service_error_text, service_rows, resolve_service_name
 
 ROBOT_STATE_API_ID_REPORT_FREQ = 1002
 
-ERROR_HINTS = {
-    0: "success",
-    3001: "RPC unknown error",
-    3102: "RPC client send error",
-    3103: "RPC API not registered",
-    3104: "RPC timeout",
-    3105: "RPC API mismatch",
-    3106: "RPC client data error",
-    3201: "RPC server send error",
-    3202: "RPC server internal error",
-    3203: "RPC API not implemented",
-    3204: "RPC server parameter error",
-    5201: "service switch execution error",
-    5202: "service is protected",
-}
-
-STATUS_TEXT = {
-    0: ("ON", "green"),
-    1: ("OFF", "red"),
-    5: ("PROTECTED", "yellow"),
-}
-
-
-@dataclass(frozen=True)
-class ServiceRow:
-    name: str
-    description: str
-    status: int | None = None
-    protected: bool | None = None
-
 
 class RobotStateController:
+    """Thin adapter from service_view.py's TUI commands onto sdk_wrapper.G1 --
+    G1.get_service()/set_service()/set_report_freq() do the actual RPC work
+    (see academy/sdk_wrapper.py); this just lazily owns the G1 instance and
+    converts its plain-dict rows into ServiceRow for the table."""
+
     def __init__(self, iface: str, domain_id: int, timeout: float) -> None:
         self.iface = iface
         self.domain_id = int(domain_id)
         self.timeout = float(timeout)
-        self._client: Any | None = None
-        self._client_source = ""
+        self._g1: Any | None = None
 
     @property
     def client_source(self) -> str:
-        return self._client_source or "not initialized"
+        return "sdk_wrapper.G1" if self._g1 is not None else "not initialized"
 
-    def _load_client_type(self) -> tuple[type[Any], str]:
-        errors: list[str] = []
-        for module_name in (
-            "unitree_sdk2py.b2.robot_state.robot_state_client",
-            "unitree_sdk2py.go2.robot_state.robot_state_client",
-        ):
-            try:
-                module = importlib.import_module(module_name)
-                return module.RobotStateClient, module_name
-            except ModuleNotFoundError as exc:
-                errors.append(f"{module_name}: {exc}")
-            except ImportError as exc:
-                errors.append(f"{module_name}: {exc}")
-        details = "\n  ".join(errors) if errors else "no candidate modules found"
-        raise RuntimeError(f"RobotStateClient could not be imported:\n  {details}")
+    def _ensure_g1(self) -> Any:
+        if self._g1 is None:
+            from sdk_wrapper import G1  # deferred: only needed once connecting
 
-    def _ensure_client(self) -> Any:
-        if self._client is not None:
-            return self._client
-
-        ensure_channel_factory_initialized(self.domain_id, self.iface)
-        client_type, source = self._load_client_type()
-        client = client_type()
-        if hasattr(client, "SetTimeout"):
-            client.SetTimeout(self.timeout)
-        client.Init()
-        self._client = client
-        self._client_source = source
-        return client
+            self._g1 = G1(iface=self.iface, domain_id=self.domain_id)
+            # G1._robot_state_client() hardcodes a 2s RPC timeout; override it
+            # with what the user asked for on the command line.
+            self._g1._robot_state_client().SetTimeout(self.timeout)
+        return self._g1
 
     def list_services(self) -> tuple[int, list[ServiceRow]]:
-        client = self._ensure_client()
-        if not hasattr(client, "ServiceList"):
-            rows = [
-                ServiceRow(name=name, description=description)
-                for name, description in SERVICE_CATALOG.items()
-            ]
-            return 0, rows
-
-        code, service_states = client.ServiceList()
-        if int(code) != 0:
-            return int(code), []
-
-        rows: list[ServiceRow] = []
-        for state in service_states or []:
-            name = str(getattr(state, "name", "")).strip()
-            if not name:
-                continue
-            rows.append(
-                ServiceRow(
-                    name=name,
-                    description=SERVICE_CATALOG.get(name, ""),
-                    status=_to_optional_int(getattr(state, "status", None)),
-                    protected=_to_optional_bool(getattr(state, "protect", None)),
-                )
-            )
-
-        known = {row.name for row in rows}
-        for name, description in SERVICE_CATALOG.items():
-            if name not in known:
-                rows.append(ServiceRow(name=name, description=description))
-
-        return 0, rows
+        return 0, service_rows(self._ensure_g1())
 
     def switch(self, name: str, enabled: bool) -> int:
-        client = self._ensure_client()
-        return int(client.ServiceSwitch(name, bool(enabled)))
+        return int(self._ensure_g1().set_service(name, enabled)["code"])
 
     def set_report_freq(self, interval: int, duration: int) -> int:
-        client = self._ensure_client()
-        if hasattr(client, "_Call"):
-            parameter = json.dumps({"interval": int(interval), "duration": int(duration)})
-            code, _data = client._Call(ROBOT_STATE_API_ID_REPORT_FREQ, parameter)
-            return int(code)
-        return int(client.SetReportFreq(int(interval), int(duration)))
-
-
-def _to_optional_int(value: Any) -> int | None:
-    try:
-        return None if value is None else int(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _to_optional_bool(value: Any) -> bool | None:
-    if value is None:
-        return None
-    if isinstance(value, bool):
-        return value
-    try:
-        return bool(int(value))
-    except (TypeError, ValueError):
-        return bool(value)
+        return int(self._ensure_g1().set_report_freq(interval, duration))
 
 
 def code_text(code: int | None) -> str:
-    if code is None:
-        return ""
-    hint = ERROR_HINTS.get(int(code), "unknown")
-    return f"{code}: {hint}"
+    return "" if code is None else service_error_text(code)
 
 
 def status_text(status: int | None) -> Text:
     if status is None:
         return Text("UNKNOWN", style="dim")
-    label, style = STATUS_TEXT.get(status, (str(status), "yellow"))
+    label, style = SERVICE_STATUS_LABELS.get(status, (str(status), "yellow"))
     return Text(label, style=style)
 
 
@@ -253,25 +137,6 @@ def build_screen(
     return Group(header, build_table(rows), footer)
 
 
-def resolve_service(token: str, rows: list[ServiceRow]) -> str:
-    value = token.strip()
-    if not value:
-        raise ValueError("missing service name or table number")
-    if value.isdigit():
-        index = int(value)
-        if not 1 <= index <= len(rows):
-            raise ValueError(f"service number {index} is outside the table")
-        return rows[index - 1].name
-
-    for row in rows:
-        if row.name == value:
-            return row.name
-    for row in rows:
-        if row.name.lower() == value.lower():
-            return row.name
-    raise ValueError(f"unknown service: {value}")
-
-
 def run_once(controller: RobotStateController, console: Console) -> int:
     code, rows = controller.list_services()
     console.print(build_screen(rows, controller.iface, controller.domain_id, controller.client_source, code_text(code)))
@@ -326,7 +191,7 @@ def run_tui(controller: RobotStateController, console: Console) -> int:
             if command in {"on", "off"}:
                 if len(parts) != 2:
                     raise ValueError(f"usage: {command} <service-number|service-name>")
-                name = resolve_service(parts[1], rows)
+                name = resolve_service_name(parts[1], rows)
                 switch_code = controller.switch(name, command == "on")
                 last_result = f"{name} {command}: code={code_text(switch_code)}"
                 continue
@@ -349,11 +214,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Rich TUI for Unitree G1 robot_state service status and switches.",
     )
-    parser.add_argument(
-        "--iface",
-        default=default_dds_iface("eth0"),
-        help="DDS network interface. Defaults to eth0 when it is up, otherwise the first live NIC.",
-    )
+    parser.add_argument("--iface", default="eth0", help="DDS network interface.")
     parser.add_argument("--domain-id", type=int, default=0, help="DDS domain id.")
     parser.add_argument("--timeout", type=float, default=2.0, help="RPC timeout in seconds.")
     parser.add_argument("--once", action="store_true", help="Print the service table once and exit.")

@@ -7,9 +7,13 @@ Participants use the high-level operations; they do not re-create this RPC
 boilerplate in a notebook.
 
 The available deployed RPC operations are mapping start/stop, relocate, and
-single-pose navigation.  Native complete-path navigation is version-dependent:
-provide a verified native_path_callback to enable navigate_path; otherwise the
-method refuses rather than silently navigating one point at a time.
+single-pose navigation -- there is no separate multi-point "path" RPC id.
+navigate_path() therefore visits named points in order via repeated
+single-pose navigate_to() + wait_for_arrival() calls; this is not a fallback
+hack, it is the same approach Unitree's own reference SLAM demo uses
+(unitree_sdk2/example keyDemo.cpp's taskLoopFun loops over pose_nav calls the
+same way). Pass a native_path_callback to navigate_path() only if a genuine
+single-RPC multi-point path API becomes available and you want to prefer it.
 """
 from __future__ import annotations
 
@@ -51,6 +55,35 @@ class Pose:
 
     def distance_xy(self, other: "Pose") -> float:
         return math.hypot(self.x - other.x, self.y - other.y)
+
+
+def _parse_status(raw: str | None) -> dict[str, Any] | None:
+    """Parse the errorCode/info/is_arrived/obsInfo envelope a rt/slam_info or
+    rt/slam_key_info message may carry, beyond the bare pose _find_pose()
+    extracts. `data.obsInfo.state` is the actual obstacle-blocked flag (true
+    while the nav stack currently has the path blocked); `data.is_arrived` is
+    the arrival flag keyDemo.cpp's slamKeyInfoHandler waits on.
+    Field names verified against a live rt/slam_info capture recorded in
+    dev/slam_viz_in_jupyter.ipynb and the DDS probe notes in
+    Inspire_hands/topics.md. Every field is optional; never raises."""
+    if not raw:
+        return None
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+    obs_info = data.get("obsInfo") if isinstance(data.get("obsInfo"), dict) else {}
+    return {
+        "type": payload.get("type"),
+        "error_code": int(payload.get("errorCode", 0) or 0),
+        "info": payload.get("info"),
+        "is_arrived": data.get("is_arrived"),
+        "target_node_name": data.get("targetNodeName"),
+        "obstacle_blocked": bool(obs_info["state"]) if "state" in obs_info else None,
+    }
 
 
 def _find_pose(value: Any) -> Pose | None:
@@ -111,6 +144,7 @@ class SlamUtility:
         self.points = self._load_points()
         self.visualization_path: str | None = None
         self.relocated = False
+        self.last_notice: dict[str, Any] | None = None
         self.client = SlamRpc()
         self.client.SetTimeout(10.0)
         self.client.Init()
@@ -136,16 +170,21 @@ class SlamUtility:
         os.replace(temporary, self.points_path)
 
     def current_pose(self, max_age_s: float = 2.0) -> Pose | None:
+        pose = None
         for topic in ("rt/slam_info", "rt/slam_key_info"):
             raw = self.latest.get(topic)
-            if raw and time.time() - raw[1] <= max_age_s:
+            if not raw or time.time() - raw[1] > max_age_s:
+                continue
+            notice = _parse_status(raw[0])
+            if notice is not None:
+                self.last_notice = {**notice, "stamp": raw[1]}
+            if pose is None:
                 pose = _find_pose(raw[0])
-                if pose is not None:
-                    return pose
-        return None
+        return pose
 
     def status(self) -> dict[str, Any]:
-        return {"pose": None if self.current_pose() is None else asdict(self.current_pose()), "relocated": self.relocated, "map_path": self.map_path, "points": sorted(self.points), "visualization_path": self.visualization_path}
+        pose = self.current_pose()
+        return {"pose": None if pose is None else asdict(pose), "relocated": self.relocated, "map_path": self.map_path, "points": sorted(self.points), "visualization_path": self.visualization_path, "last_notice": self.last_notice}
 
     def _result(self, result: tuple[int, Any]) -> dict[str, Any]:
         code, raw = result
@@ -184,13 +223,30 @@ class SlamUtility:
         return self._result(self.client.pose_nav(self.points[str(name)]))
 
     def wait_for_arrival(self, name: str, tolerance_m: float = 0.35, timeout_s: float = 120.0) -> dict[str, Any]:
+        """Waits for `name` to be reached.
+
+        Prefers the robot's own arrival confirmation (`data.is_arrived`,
+        surfaced via _parse_status()/self.last_notice) over the xy-distance
+        check -- keyDemo.cpp's taskLoopFun waits on that same flag rather
+        than computing distance itself. The distance check remains as a
+        fallback for firmware that never publishes it, and to bound the
+        overall wait. `self.last_notice` (e.g. `obstacle_blocked`) is
+        returned alongside so callers can report *why* a wait failed."""
         target, deadline = self.points[str(name)], time.time() + timeout_s
+        send_ts = time.time()
+        last_notice: dict[str, Any] | None = None
         while time.time() < deadline:
             pose = self.current_pose()
+            notice = self.last_notice
+            if notice is not None and notice.get("stamp", 0.0) >= send_ts:
+                last_notice = notice
+                if notice.get("is_arrived") is True:
+                    return {"arrived": True, "pose": None if pose is None else asdict(pose), "notice": last_notice}
             if pose and pose.distance_xy(target) <= tolerance_m:
-                return {"arrived": True, "pose": asdict(pose)}
-            time.sleep(0.5)
-        return {"arrived": False, "pose": None if self.current_pose() is None else asdict(self.current_pose())}
+                return {"arrived": True, "pose": asdict(pose), "notice": last_notice}
+            time.sleep(0.2)
+        pose = self.current_pose()
+        return {"arrived": False, "pose": None if pose is None else asdict(pose), "notice": last_notice}
 
     def set_visualization_path(self, path: str) -> None:
         self.visualization_path = str(path)
@@ -198,7 +254,31 @@ class SlamUtility:
     def view_map(self) -> Path | None:
         return Path(self.visualization_path) if self.visualization_path and Path(self.visualization_path).exists() else None
 
-    def navigate_path(self, names: list[str], native_path_callback: Callable[[list[Pose]], Any] | None = None) -> Any:
-        if native_path_callback is None:
-            raise RuntimeError("No verified native complete-path callback is configured; refusing sequential fallback.")
-        return native_path_callback([self.points[name] for name in names])
+    def navigate_path(
+        self,
+        names: list[str],
+        native_path_callback: Callable[[list[Pose]], Any] | None = None,
+        tolerance_m: float = 0.35,
+        timeout_s: float = 120.0,
+    ) -> list[dict[str, Any]] | Any:
+        """Visits named points in `names` order.
+
+        There is no deployed multi-point "path" RPC (§ module docstring), so
+        by default this calls navigate_to()+wait_for_arrival() once per
+        point, stopping at the first point that fails to send or isn't
+        reached -- the same sequential approach Unitree's own keyDemo.cpp
+        reference demo uses (taskLoopFun). Pass native_path_callback only to
+        override this with a genuine single-RPC path API, if one is ever
+        verified to exist."""
+        if native_path_callback is not None:
+            return native_path_callback([self.points[name] for name in names])
+        if not self.relocated:
+            raise RuntimeError("Relocate successfully before navigation.")
+        results = []
+        for name in names:
+            nav_result = self.navigate_to(name)
+            arrival = nav_result["ok"] and self.wait_for_arrival(name, tolerance_m=tolerance_m, timeout_s=timeout_s)
+            results.append({"name": name, "nav": nav_result, "arrival": arrival or None})
+            if not nav_result["ok"] or not (arrival and arrival["arrived"]):
+                break
+        return results
