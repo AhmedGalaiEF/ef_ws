@@ -147,7 +147,6 @@ class SlamUtility:
         self.last_notice: dict[str, Any] | None = None
         self.client = SlamRpc()
         self.client.SetTimeout(10.0)
-        self.client.Init()
         self._subscribe("rt/slam_info")
         self._subscribe("rt/slam_key_info")
 

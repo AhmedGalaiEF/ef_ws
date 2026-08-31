@@ -393,23 +393,35 @@ def damp_mode():
     """The always-available safe fallback: bounded joint damping, no
     locomotion. Call this before an emergency stop, or before releasing
     controller ownership of any other publisher."""
-    return int(_loco_client().SetFsmId(FSM_IDS["damp"]))
+    return _rpc_code(_loco_client().SetFsmId(FSM_IDS["damp"]))
+
+
+def _rpc_code(value):
+    return 0 if value is None else int(value)
 
 
 def get_service(name):
     code, rows = _robot_state_client().ServiceList()
     if int(code) != 0:
         raise RuntimeError(f"ServiceList failed: {code}")
-    return next((r for r in rows if r.name == name), None)
+    target = str(name).strip().lower()
+    return next((r for r in rows if str(r.name).strip().lower() == target), None)
 
 
 def toggle_service(name):
     row = get_service(name)
     if row is None:
         raise ValueError(f"Unknown service: {name}")
-    enable = row.status == 0
-    code = int(_robot_state_client().ServiceSwitch(row.name, enable))
-    return {"name": row.name, "previous_status": int(row.status), "enabled": enable, "code": code}
+    enable = int(row.status) != 0  # status 0 is ON, status 1 is OFF
+    return set_service(row.name, enable)
+
+
+def set_service(name, enabled):
+    row = get_service(name)
+    if row is None:
+        raise ValueError(f"Unknown service: {name}")
+    code = _rpc_code(_robot_state_client().ServiceSwitch(row.name, bool(enabled)))
+    return {"name": row.name, "previous_status": int(row.status), "enabled": bool(enabled), "code": code}
 
 
 def toggle_gait():
@@ -420,16 +432,19 @@ def toggle_gait():
     if target:
         for method_name in ("SetBalanceMode", "SetGaitType"):
             if hasattr(loco, method_name):
-                code = int(getattr(loco, method_name)(1))
+                code = _rpc_code(getattr(loco, method_name)(1))
                 codes.append((method_name, code))
                 if code == 0:
                     _gait_override = 1
                     return {"gait": 1, "codes": codes}
     else:
         if hasattr(loco, "BalanceStand"):
-            codes.append(("BalanceStand", int(loco.BalanceStand(0))))
+            codes.append(("BalanceStand", _rpc_code(loco.BalanceStand(0))))
+        for method_name in ("SetBalanceMode", "SetGaitType"):
+            if hasattr(loco, method_name):
+                codes.append((method_name, _rpc_code(getattr(loco, method_name)(0))))
         if hasattr(loco, "SetFsmId"):
-            codes.append(("SetFsmId", int(loco.SetFsmId(FSM_IDS["walk"]))))
+            codes.append(("SetFsmId", _rpc_code(loco.SetFsmId(FSM_IDS["walk"]))))
         if any(code == 0 for _, code in codes):
             _gait_override = 0
     return {"gait": target, "codes": codes}
@@ -456,7 +471,7 @@ def toggle_custom_mode(mode_name, language="en", voice=None, headlight_color="gr
         _exit_custom_mode()
     spec = _custom_modes[mode_name]
     say(spec["announce"], language=language)
-    fsm_code = int(_loco_client().SetFsmId(FSM_IDS[spec["fsm"]]))
+    fsm_code = _rpc_code(_loco_client().SetFsmId(FSM_IDS[spec["fsm"]]))
     rgb = parse_color(headlight_color)
     stop_event = threading.Event()
 
@@ -673,7 +688,11 @@ def stop_mapping(save_path=None):
 def relocate():
     pose = current_pose()
     if pose is None:
-        raise RuntimeError("No valid SLAM pose to relocate from.")
+        return {
+            "ok": False,
+            "error": "No SLAM pose received yet. Start mapping/relocation, or pass an explicit pose in the notebook helper.",
+            "topics": ["rt/slam_info", "rt/slam_key_info"],
+        }
     return _slam_rpc().init_pose(*pose, address=_map_path)
 
 
@@ -784,6 +803,7 @@ HL_ARM_ACTIONS = {"release arm": 99, "clap": 17, "face wave": 25, "high wave": 2
 WAIST_JOINTS = (12, 13, 14)
 LEFT_ARM_JOINTS = list(range(15, 22))
 RIGHT_ARM_JOINTS = list(range(22, 29))
+ARM_JOINTS = LEFT_ARM_JOINTS + RIGHT_ARM_JOINTS
 UPPER_BODY_JOINTS = list(WAIST_JOINTS) + LEFT_ARM_JOINTS + RIGHT_ARM_JOINTS
 _ll_pose_store_path = Path("ll_poses.json")
 _ll_poses = {}
@@ -840,6 +860,62 @@ def write_arm_sdk_pose(targets, weight=1.0, kp=30.0, kd=1.5, waist_kp=480.0, wai
         cmd.kd = waist_kd if int(joint) in WAIST_JOINTS else kd
     msg.crc = _arm_sdk_crc().Crc(msg)
     _arm_sdk_pub().Write(msg)
+
+
+_zero_stiffness_state = {"thread": None, "stop": None, "arm": None, "frames": 0}
+
+
+def arms_restore_stiffness():
+    """Stop free-move mode and hold the current upper-body pose normally."""
+    state = _zero_stiffness_state
+    if state["stop"] is not None:
+        state["stop"].set()
+        state["thread"].join(timeout=2.0)
+    pose = current_upper_body_pose()
+    write_arm_sdk_pose(pose, weight=1.0, kp=30.0, kd=1.5, waist_kp=480.0, waist_kd=12.0)
+    result = {"arm": state["arm"], "frames": state["frames"], "final_pose": pose}
+    state.update(thread=None, stop=None, arm=None, frames=0)
+    return result
+
+
+def arms_zero_stiffness(rate_hz=50.0, arm="both", handoff=True):
+    """Keep one or both arms backdrivable until arms_restore_stiffness().
+
+    This matches ``modules.sdk_client.Robot.teach``: arm joints use zero
+    gains, while the waist keeps its normal hold gains for stability.
+    """
+    state = _zero_stiffness_state
+    arm = str(arm).lower()
+    joints = {"left": LEFT_ARM_JOINTS, "right": RIGHT_ARM_JOINTS, "both": ARM_JOINTS}.get(arm)
+    if joints is None:
+        raise ValueError("arm must be 'left', 'right', or 'both'")
+    if state["thread"] is not None and state["thread"].is_alive():
+        if state["arm"] != arm:
+            raise RuntimeError("Free-move mode is already active for a different arm selection")
+        return {"active": True, "arm": arm, "frames": state["frames"]}
+    if handoff:
+        release_arms()
+        engage_arms()
+    waist_hold = current_upper_body_pose()
+    stop = threading.Event()
+    interval_s = 1.0 / max(1.0, float(rate_hz))
+    state.update(stop=stop, arm=arm, frames=0)
+
+    def worker():
+        while not stop.is_set():
+            pose = current_upper_body_pose()
+            targets = {joint: waist_hold[joint] for joint in WAIST_JOINTS}
+            targets.update({joint: pose[joint] for joint in joints})
+            write_arm_sdk_pose(
+                targets, weight=1.0, kp=0.0, kd=0.0,
+                waist_kp=480.0, waist_kd=12.0,
+            )
+            state["frames"] += 1
+            stop.wait(interval_s)
+
+    state["thread"] = threading.Thread(target=worker, name="arms-zero-stiffness", daemon=True)
+    state["thread"].start()
+    return {"active": True, "arm": arm, "joints": joints, "kp": 0.0, "kd": 0.0, "waist_kp": 480.0}
 
 
 def _ease(ratio):
@@ -912,13 +988,13 @@ def _save_sequences():
     _sequences_path.write_text(json.dumps(_sequences, indent=2))
 
 
-def teach(sequence_name, reset=False):
-    """Append the current pose as the next waypoint of a named, persisted
-    sequence. Call repeatedly (move the arm by hand in damp mode between
-    calls) to build up a multi-waypoint motion."""
+def teach(sequence_name, reset=False, arm="both"):
+    """Append a waypoint while free-move mode remains active."""
     if reset or sequence_name not in _sequences:
         _sequences[sequence_name] = []
-    _sequences[sequence_name].append(current_upper_body_pose())
+    arms_zero_stiffness(arm=arm)
+    pose = current_upper_body_pose()
+    _sequences[sequence_name].append(pose)
     _save_sequences()
     return len(_sequences[sequence_name])
 
@@ -1184,6 +1260,8 @@ class AcademyRobot:
 
     # -- arm ----------------------------------------------------------------
     write_arm_sdk_pose = staticmethod(write_arm_sdk_pose)
+    arms_zero_stiffness = staticmethod(arms_zero_stiffness)
+    arms_restore_stiffness = staticmethod(arms_restore_stiffness)
     engage_arms = staticmethod(engage_arms)
     release_arms = staticmethod(release_arms)
     interpolate_to_ll_pose = staticmethod(interpolate_to_ll_pose)
@@ -1417,6 +1495,5 @@ def _slam_rpc():
     if _state["slam_rpc"] is None:
         client = SlamRpc()
         client.SetTimeout(10.0)
-        client.Init()
         _state["slam_rpc"] = client
     return _state["slam_rpc"]

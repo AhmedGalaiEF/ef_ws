@@ -179,6 +179,8 @@ def _read(obj, name, default=None):
 
 
 def _result_code(result):
+    if result is None:
+        return 0
     if isinstance(result, tuple):
         return int(result[0])
     return int(result)
@@ -1006,7 +1008,7 @@ class G1:
         if row is None:
             raise ValueError(f"Unknown service: {service}")
         enabled = row.get("status") != 0
-        code = int(self._robot_state_client().ServiceSwitch(row["name"], bool(enabled)))
+        code = _result_code(self._robot_state_client().ServiceSwitch(row["name"], bool(enabled)))
         return {"name": row["name"], "previous_status": row.get("status"), "enabled": enabled, "code": code}
 
     def set_service(self, service, enabled):
@@ -1015,7 +1017,7 @@ class G1:
         row = self.get_service(service)
         if row is None:
             raise ValueError(f"Unknown service: {service}")
-        code = int(self._robot_state_client().ServiceSwitch(row["name"], bool(enabled)))
+        code = _result_code(self._robot_state_client().ServiceSwitch(row["name"], bool(enabled)))
         return {"name": row["name"], "previous_status": row.get("status"), "enabled": bool(enabled), "code": code}
 
     def set_report_freq(self, interval, duration):
@@ -1067,7 +1069,7 @@ class G1:
             for method_name in ("SetBalanceMode", "SetGaitType"):
                 if hasattr(self._client, method_name):
                     try:
-                        code = int(getattr(self._client, method_name)(1))
+                        code = _result_code(getattr(self._client, method_name)(1))
                     except Exception:
                         continue
                     codes.append((method_name, code))
@@ -1077,19 +1079,19 @@ class G1:
         else:
             if hasattr(self._client, "BalanceStand"):
                 try:
-                    codes.append(("BalanceStand", int(self._client.BalanceStand(0))))
+                    codes.append(("BalanceStand", _result_code(self._client.BalanceStand(0))))
                 except Exception:
                     pass
             for method_name in ("SetBalanceMode", "SetGaitType"):
                 if hasattr(self._client, method_name):
                     try:
-                        code = int(getattr(self._client, method_name)(0))
+                        code = _result_code(getattr(self._client, method_name)(0))
                     except Exception:
                         continue
                     codes.append((method_name, code))
             if hasattr(self._client, "SetFsmId"):
                 try:
-                    codes.append(("SetFsmId", int(self._client.SetFsmId(FSM_IDS["walk"]))))
+                    codes.append(("SetFsmId", _result_code(self._client.SetFsmId(FSM_IDS["walk"]))))
                 except Exception:
                     pass
             if any(code == 0 for _, code in codes):
