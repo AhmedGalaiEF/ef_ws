@@ -387,7 +387,7 @@ class _HeadlightThread(threading.Thread):
                 if remaining > 0 and self.stop_event.wait(remaining):
                     break
                 self.last_code = int(self.client.LedControl(*self.rgb))
-                if self.last_code != 0:
+                if not _led_control_was_accepted(self.last_code):
                     self.stop_event.set()
                     break
                 next_call += self.interval
@@ -396,6 +396,13 @@ class _HeadlightThread(threading.Thread):
                 self.client.LedControl(0, 0, 0)
             except Exception:
                 pass
+
+
+def _led_control_was_accepted(code):
+    # The G1 audio LED RPC can time out (3104) even when the LED command was
+    # visibly applied. Treat it as accepted so the refresh thread keeps the
+    # headlight latched instead of falling back to a one-shot flash.
+    return int(code) in (0, 3104)
 
 
 class _Dex3:
@@ -1154,7 +1161,7 @@ class G1:
             self._headlight_stop.set()
             self._headlight_thread.join()
         code = int(client.LedControl(*rgb))
-        if code != 0 or float(duration_s) <= 0:
+        if not _led_control_was_accepted(code) or float(duration_s) <= 0:
             return code
         self._headlight_stop = threading.Event()
         self._headlight_thread = _HeadlightThread(client, rgb, duration_s, 0.2, self._headlight_stop)
