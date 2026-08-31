@@ -94,6 +94,8 @@ log/
 # Local model weights
 g1/modules/scripts/ollama_ai/weights/
 g1/modules/scripts/ollama_ai/*.pt
+g1/academy/visualizations/weights/
+g1/academy/visualizations/*.pt
 
 # Altegro edge runtime (moved to ~/altegro_edge/)
 g1/dev/edge_runtime/
