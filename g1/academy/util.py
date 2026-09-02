@@ -124,7 +124,13 @@ class DeliveryPipeline:
 
     def _client(self):
         if self.client is None:
-            from openai import OpenAI
+            try:
+                from openai import OpenAI
+            except ModuleNotFoundError as exc:
+                raise RuntimeError(
+                    "OpenAI vision is unavailable. Install the optional 'openai' package "
+                    "or pass an initialized openai_client to DeliveryPipeline."
+                ) from exc
             self.client = OpenAI()
         return self.client
 
@@ -136,7 +142,17 @@ class DeliveryPipeline:
             "confidence": "number 0..1",
             "center_px": "[x, y] pixel center in the supplied image",
         }
-        response = self._client().chat.completions.create(
+        try:
+            client = self._client()
+        except RuntimeError as exc:
+            return Detection2D(
+                label="unavailable",
+                confidence=0.0,
+                center_px=(float("nan"), float("nan")),
+                raw={"available": False, "reason": str(exc)},
+            )
+
+        response = client.chat.completions.create(
             model=self.model,
             response_format={"type": "json_object"},
             messages=[{"role": "user", "content": [
@@ -151,13 +167,43 @@ class DeliveryPipeline:
     def aruco_pose(self, bgr_image, marker_length_m: float, dictionary_name: str = "DICT_4X4_50") -> PoseEstimate:
         """Estimate the first detected ArUco marker pose in the camera frame."""
         import cv2
+        if not hasattr(cv2, "aruco"):
+            raise RuntimeError("OpenCV was installed without the contrib ArUco module.")
         aruco = cv2.aruco
-        dictionary = aruco.getPredefinedDictionary(getattr(aruco, dictionary_name))
-        corners, ids, _ = aruco.detectMarkers(bgr_image, dictionary)
+        dictionary_id = getattr(aruco, dictionary_name, None)
+        if dictionary_id is None:
+            raise ValueError(f"Unknown ArUco dictionary: {dictionary_name}")
+        dictionary = aruco.getPredefinedDictionary(dictionary_id)
+        if hasattr(aruco, "ArucoDetector"):
+            corners, ids, _ = aruco.ArucoDetector(dictionary).detectMarkers(bgr_image)
+        elif hasattr(aruco, "detectMarkers"):
+            corners, ids, _ = aruco.detectMarkers(bgr_image, dictionary)
+        else:
+            raise RuntimeError("This OpenCV ArUco build exposes no marker detector.")
         if ids is None or not len(corners):
             raise RuntimeError("No ArUco marker detected.")
-        rvecs, tvecs, _ = aruco.estimatePoseSingleMarkers(corners, float(marker_length_m), self.camera_matrix, self.distortion)
-        rvec, tvec = rvecs[0].reshape(3), tvecs[0].reshape(3)
+        if hasattr(aruco, "estimatePoseSingleMarkers"):
+            rvecs, tvecs, _ = aruco.estimatePoseSingleMarkers(
+                corners, float(marker_length_m), self.camera_matrix, self.distortion
+            )
+            rvec, tvec = rvecs[0].reshape(3), tvecs[0].reshape(3)
+        else:
+            half = float(marker_length_m) / 2.0
+            object_points = self.np.array(
+                [[-half, half, 0.0], [half, half, 0.0], [half, -half, 0.0], [-half, -half, 0.0]],
+                dtype=self.np.float32,
+            )
+            image_points = self.np.asarray(corners[0], dtype=self.np.float32).reshape(4, 2)
+            success, rvec, tvec = cv2.solvePnP(
+                object_points,
+                image_points,
+                self.camera_matrix,
+                self.distortion,
+                flags=getattr(cv2, "SOLVEPNP_IPPE_SQUARE", cv2.SOLVEPNP_ITERATIVE),
+            )
+            if not success:
+                raise RuntimeError("Unable to estimate the ArUco marker pose.")
+            rvec, tvec = rvec.reshape(3), tvec.reshape(3)
         return PoseEstimate(tuple(float(x) for x in tvec), tuple(float(x) for x in rvec), "camera")
 
     def transform_pose(self, pose: PoseEstimate, transform, frame: str) -> PoseEstimate:

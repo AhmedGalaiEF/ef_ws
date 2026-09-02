@@ -25,10 +25,9 @@ import numpy as np
 
 # ── Path setup ────────────────────────────────────────────────────────────────
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-ROOT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
-MODULES_DIR = os.path.join(ROOT_DIR, "modules")
-for _p in reversed((SCRIPT_DIR, os.path.join(SCRIPT_DIR, "modules"),
-                    ROOT_DIR, MODULES_DIR)):
+ACADEMY_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
+SOLVED_MODULES_DIR = os.path.join(ACADEMY_DIR, "solved", "modules")
+for _p in reversed((SCRIPT_DIR, SOLVED_MODULES_DIR)):
     if os.path.isdir(_p) and _p not in sys.path:
         sys.path.insert(0, _p)
 
@@ -123,15 +122,6 @@ def _dex3_action(hand: str, action: str, hold_s: float, ramp_s: Optional[float])
             ctrl.open(hold_s=hold_s, ramp_s=ramp)
         else:
             ctrl.close(hold_s=hold_s, ramp_s=ramp)
-
-
-def _inspire_action(hand: str, action: str, speed: int, force: int) -> None:
-    """Call inspire_sdk open_hand / close_hand."""
-    from inspire_sdk import open_hand, close_hand
-    fn = open_hand if action == "open" else close_hand
-    sides = ["left", "right"] if hand == "both" else [hand]
-    for side in sides:
-        fn(side, speed=speed, force=force, hold=0.0)
 
 
 # ── Layout helpers ─────────────────────────────────────────────────────────────
@@ -240,45 +230,6 @@ def _dex3_card() -> dbc.Card:
                 ]),
             ], width=12),
         ]),
-    ])
-
-
-def _inspire_card() -> dbc.Card:
-    return _card("Inspire Hand Control (inspire_sdk, Modbus TCP)", [
-        dbc.Row([
-            dbc.Col([
-                html.Small("Side:"),
-                dbc.RadioItems(
-                    id="inspire-side",
-                    options=[
-                        {"label": "Right", "value": "right"},
-                        {"label": "Left",  "value": "left"},
-                        {"label": "Both",  "value": "both"},
-                    ],
-                    value="right",
-                    inline=True,
-                    className="small",
-                ),
-            ], width="auto"),
-            dbc.Col([
-                html.Small("Speed:"),
-                dbc.Input(id="inspire-speed", type="number",
-                          value=200, step=50, min=1, max=1000,
-                          style={"width": "70px"}, size="sm"),
-            ], width="auto"),
-            dbc.Col([
-                html.Small("Force:"),
-                dbc.Input(id="inspire-force", type="number",
-                          value=200, step=50, min=1, max=1000,
-                          style={"width": "70px"}, size="sm"),
-            ], width="auto"),
-        ], className="mb-2 align-items-end"),
-        dbc.ButtonGroup([
-            dbc.Button("✋ Open",  id="inspire-open",  color="success", size="sm"),
-            dbc.Button("✊ Close", id="inspire-close", color="warning", size="sm"),
-        ]),
-        html.Div(id="hand-status-bar",
-                 className="mt-2 small font-monospace text-muted"),
     ])
 
 
@@ -395,10 +346,7 @@ def make_layout() -> html.Div:
         ]),
 
         # ── Hand controls ─────────────────────────────────────────────────────
-        dbc.Row([
-            dbc.Col(_dex3_card(),    width=6),
-            dbc.Col(_inspire_card(), width=6),
-        ]),
+        _dex3_card(),
 
         # ── Status bar ────────────────────────────────────────────────────────
         html.Div(id="status-bar", className="p-2 rounded small font-monospace mb-3",
@@ -804,26 +752,6 @@ def dex3_open_close(_o, _c, side, hold_s, ramp_s):
     hs  = max(0.0, float(hold_s or 0.6))
     rs  = float(ramp_s or 0) or None
     _run_hand_action(_dex3_action, side or "right", action, hs, rs)
-    return no_update
-
-
-# ── Inspire open / close ──────────────────────────────────────────────────────
-
-@app.callback(
-    Output("_hand-act", "data", allow_duplicate=True),
-    Input("inspire-open",  "n_clicks"),
-    Input("inspire-close", "n_clicks"),
-    State("inspire-side",  "value"),
-    State("inspire-speed", "value"),
-    State("inspire-force", "value"),
-    prevent_initial_call=True,
-)
-def inspire_open_close(_o, _c, side, speed, force):
-    trig = (callback_context.triggered or [{}])[0].get("prop_id", "").split(".")[0]
-    action = "open" if trig == "inspire-open" else "close"
-    sp = int(speed or 200)
-    fo = int(force or 200)
-    _run_hand_action(_inspire_action, side or "right", action, sp, fo)
     return no_update
 
 

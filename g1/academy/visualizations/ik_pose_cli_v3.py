@@ -77,31 +77,21 @@ import numpy as np
 
 # ── Path setup ────────────────────────────────────────────────────────────────
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-ROOT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
+ACADEMY_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
+SOLVED_MODULES_DIR = os.path.join(ACADEMY_DIR, "solved", "modules")
 _PATH_CANDIDATES = (
     SCRIPT_DIR,
-    os.path.join(SCRIPT_DIR, "modules"),
-    ROOT_DIR,
-    os.path.join(ROOT_DIR, "modules"),
+    SOLVED_MODULES_DIR,
 )
 for _p in reversed(_PATH_CANDIDATES):
     if os.path.isdir(_p) and _p not in sys.path:
         sys.path.insert(0, _p)
 
-try:
-    from hand_pose_navigation_copy.arm_fk import JOINT_LIMITS
-    from hand_pose_navigation_copy.arm_ik import ArmIK
-    from hand_pose_navigation_copy.arm_fk import (
-        ArmFK, LEFT_ARM_JOINTS, RIGHT_ARM_JOINTS,
-        _LEFT_SHOULDER_IN_BASE, _RIGHT_SHOULDER_IN_BASE,
-    )
-except ModuleNotFoundError:
-    from hand_pose_navigation.arm_fk import JOINT_LIMITS
-    from hand_pose_navigation.arm_ik import ArmIK
-    from hand_pose_navigation.arm_fk import (
-        ArmFK, LEFT_ARM_JOINTS, RIGHT_ARM_JOINTS,
-        _LEFT_SHOULDER_IN_BASE, _RIGHT_SHOULDER_IN_BASE,
-    )
+from academy_arm_fk import (
+    ArmFK, JOINT_LIMITS, LEFT_ARM_JOINTS, RIGHT_ARM_JOINTS,
+    _LEFT_SHOULDER_IN_BASE, _RIGHT_SHOULDER_IN_BASE,
+)
+from academy_arm_ik import ArmIK
 
 from sdk_hand import Dex3HandController, hand_grip_targets
 from dds_env import (
@@ -171,7 +161,7 @@ FOCUS_POSES = 1
 FOCUS_SEQUENCE = 2
 
 DEFAULT_POSE_FILE = os.path.join(SCRIPT_DIR, "saved_ik_pose_cli_v3_poses.json")
-DEFAULT_LOCK_FILE = "/tmp/ik_pose_cli_v3_rt_arm_sdk.lock"
+DEFAULT_LOCK_FILE = "/tmp/academy_ik_pose_cli_v3_rt_arm_sdk.lock"
 
 # ── Rotation helpers ──────────────────────────────────────────────────────────
 

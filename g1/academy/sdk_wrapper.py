@@ -121,6 +121,12 @@ def _ensure_factory(domain_id, iface):
         raise RuntimeError(f"ChannelFactoryInitialize already called with {_factory}, got {cfg}")
 
 
+def ensure_channel_factory(domain_id=0, interface="eth0"):
+    """Shared DDS initialization guard used by the Academy notebooks."""
+    _ensure_factory(domain_id, interface)
+    return _factory
+
+
 def _rpc_get_int(client, api_id):
     code, data = client._Call(int(api_id), "{}")
     if int(code) != 0 or not data:
@@ -229,6 +235,57 @@ def _clamp_arm_q(q, side):
     lo = np.array([lim[0] for lim in JOINT_LIMITS[side]], dtype=np.float64)
     hi = np.array([lim[1] for lim in JOINT_LIMITS[side]], dtype=np.float64)
     return np.clip(q, lo, hi)
+
+
+# Minimal URDF-derived position FK/DLS fallback.  It keeps the Academy
+# notebooks usable on systems where the optional hand_pose_navigation package
+# is not installed.  Full 6-DoF IK still requires that optional package.
+_FALLBACK_ARM_LIMITS = {
+    "right": [(-2.6700, 3.0890), (-2.2000, 1.5708), (-2.1817, 2.1817), (-1.0472, 2.0944), (-1.9722, 1.9722), (-1.6580, 1.6580), (-1.6580, 1.6580)],
+    "left": [(-3.0890, 2.6700), (-1.5708, 2.2000), (-2.1817, 2.1817), (-1.0472, 2.0944), (-1.9722, 1.9722), (-1.6580, 1.6580), (-1.6580, 1.6580)],
+}
+_FALLBACK_ARM_CHAIN = {
+    "right": [([.003956, -.10021, .24778], [-.27931, 0, 0], [0, 1, 0]), ([0, -.038, -.013831], [.27925, 0, 0], [1, 0, 0]), ([0, -.00624, -.1032], [0, 0, 0], [0, 0, 1]), ([.015783, 0, -.080518], [0, 0, 0], [0, 1, 0]), ([.100, -.001888, -.010], [0, 0, 0], [1, 0, 0]), ([.038, 0, 0], [0, 0, 0], [0, 1, 0]), ([.046, 0, 0], [0, 0, 0], [0, 0, 1])],
+    "left": [([.003956, .10022, .24778], [.27931, 0, 0], [0, 1, 0]), ([0, .038, -.013831], [-.27925, 0, 0], [1, 0, 0]), ([0, .00624, -.1032], [0, 0, 0], [0, 0, 1]), ([.015783, 0, -.080518], [0, 0, 0], [0, 1, 0]), ([.100, .001888, -.010], [0, 0, 0], [1, 0, 0]), ([.038, 0, 0], [0, 0, 0], [0, 1, 0]), ([.046, 0, 0], [0, 0, 0], [0, 0, 1])],
+}
+
+
+def _fallback_arm_fk(side, q):
+    def transform(xyz, rpy):
+        r, p, y = rpy
+        cr, sr, cp, sp, cy, sy = math.cos(r), math.sin(r), math.cos(p), math.sin(p), math.cos(y), math.sin(y)
+        out = np.eye(4)
+        out[:3, :3] = [[cy * cp, cy * sp * sr - sy * cr, cy * sp * cr + sy * sr], [sy * cp, sy * sp * sr + cy * cr, sy * sp * cr - cy * sr], [-sp, cp * sr, cp * cr]]
+        out[:3, 3] = xyz
+        return out
+    def rotate(axis, angle):
+        ax, ay, az = axis
+        skew = np.array([[0, -az, ay], [az, 0, -ax], [-ay, ax, 0]], dtype=float)
+        out = np.eye(4)
+        out[:3, :3] = np.eye(3) + math.sin(angle) * skew + (1 - math.cos(angle)) * (skew @ skew)
+        return out
+    out = np.eye(4)
+    out[:3, 3] = [-.003964, 0.0, .044]
+    for angle, (xyz, rpy, axis) in zip(q, _FALLBACK_ARM_CHAIN[side]):
+        out = out @ transform(xyz, rpy) @ rotate(axis, float(angle))
+    return out @ transform([.0215, -.003 if side == "right" else .003, 0.0], [0, 0, 0])
+
+
+def _fallback_position_ik(side, q_init, target_xyz, max_iter=80, damping=.04):
+    limits = np.asarray(_FALLBACK_ARM_LIMITS[side], dtype=float).T
+    q = np.clip(np.asarray(q_init, dtype=float).copy(), limits[0], limits[1])
+    for iteration in range(max_iter):
+        point = _fallback_arm_fk(side, q)[:3, 3]
+        error = np.asarray(target_xyz, dtype=float) - point
+        if np.linalg.norm(error) < .004:
+            return q, {"iterations": iteration, "error_pos_m": float(np.linalg.norm(error)), "mode": "fallback_position"}
+        jacobian = np.zeros((3, 7), dtype=float)
+        for index in range(7):
+            q1 = q.copy(); q1[index] += 1e-5
+            jacobian[:, index] = (_fallback_arm_fk(side, q1)[:3, 3] - point) / 1e-5
+        dq = jacobian.T @ np.linalg.solve(jacobian @ jacobian.T + damping * damping * np.eye(3), error)
+        q = np.clip(q + np.clip(dq, -.08, .08), limits[0], limits[1])
+    return None, {"iterations": max_iter, "error_pos_m": float(np.linalg.norm(np.asarray(target_xyz) - _fallback_arm_fk(side, q)[:3, 3])), "mode": "fallback_position"}
 
 
 def _solve_position_shoulder_elbow(fk, side, target_T, q_init, selected_axis=None):
@@ -1298,17 +1355,23 @@ class G1:
         msg, _ = self._slam_key.get()
         return None if msg is None else self._string_data(msg)
 
-    def move_ll_joint(self, joint_id, q, dq, kp, kd, tau, arm_sdk=True):
+    def move_ll_joint(self, joint_id, q, dq=0.0, kp=40.0, kd=1.0, tau=0.0, dev_mode=False):
+        """Command one joint without changing service ownership.
+
+        The default uses ``rt/arm_sdk`` and therefore supports waist/arm
+        joints (12-28) while AI Sport remains in control. Set ``dev_mode``
+        only after manually disabling AI Sport to use all-body ``rt/lowcmd``.
+        """
         joint_id = int(joint_id)
-        if arm_sdk:
+        if not dev_mode:
             if joint_id not in UPPER_BODY_JOINTS:
-                raise ValueError("arm_sdk=True only supports joints 12-28")
+                raise ValueError("dev_mode=False uses rt/arm_sdk and supports joints 12-28")
             pose = self._upper_body_pose()
             pose[joint_id] = float(q)
             self._arm_sdk_client().write(pose, kp=float(kp), kd=float(kd), dq=float(dq), tau=float(tau), waist_kp={j: 480.0 for j in WAIST_JOINTS}, waist_kd={j: 12.0 for j in WAIST_JOINTS})
-            return {"joint_id": joint_id, "arm_sdk": True}
+            return {"joint_id": joint_id, "dev_mode": False, "topic": "rt/arm_sdk"}
         if joint_id not in LOWCMD_JOINTS:
-            raise ValueError("arm_sdk=False only supports lowcmd body joints 0-28")
+            raise ValueError("dev_mode=True supports lowcmd body joints 0-28")
         q_all, mode_machine = self._current_q_mode()
         q_all[joint_id] = float(q)
         kp_all = [60,60,60,100,40,40,60,60,60,100,40,40,60,40,40,40,40,40,40,40,40,40,40,40,40,40,40,40,40]
@@ -1316,7 +1379,7 @@ class G1:
         kp_all[joint_id] = float(kp)
         kd_all[joint_id] = float(kd)
         self._lowcmd_client().write(q_all, mode_machine, kp=kp_all, kd=kd_all, dq=float(dq), tau=float(tau))
-        return {"joint_id": joint_id, "arm_sdk": False, "topic": "rt/lowcmd"}
+        return {"joint_id": joint_id, "dev_mode": True, "topic": "rt/lowcmd"}
 
     def get_odom(self):
         msg = self._sport_msg()
@@ -1637,6 +1700,15 @@ class G1:
         self._path_points.clear()
         return out
 
+    def navigate_to_point(self, point_name, points_path="slam_points.json", timeout_s=120.0):
+        """Navigate to a named point saved by the SLAM Academy task."""
+        x, y, yaw = json.loads(Path(points_path).read_text())[str(point_name)]
+        result = self.pose_nav(float(x), float(y), float(yaw))
+        if int(result["code"]) != 0:
+            return result
+        arrived, pose, notice = self.wait_for_arrival(float(x), float(y), timeout_s=timeout_s)
+        return {**result, "arrived": arrived, "pose": pose, "notice": notice}
+
     def get_mic_input(self, duration_s=0.0, poll_s=0.05):
         deadline = time.time() + max(0.0, float(duration_s))
         seen = set()
@@ -1692,8 +1764,12 @@ class G1:
         joints = RIGHT_ARM_JOINTS if side == "right" else LEFT_ARM_JOINTS
         current = self._upper_body_pose()
         q_init = np.array([current[j] for j in joints], dtype=np.float64)
-        fk = self._arm_fk_solver(side)
-        target_T = fk.compute_arm(q_init).copy()
+        using_fallback = ArmFK is None
+        if using_fallback and not position_only:
+            raise RuntimeError("Full 6-DoF IK requires hand_pose_navigation; use position_only=True or install it.")
+        fk = None if using_fallback else self._arm_fk_solver(side)
+        initial_T = _fallback_arm_fk(side, q_init) if using_fallback else fk.compute_arm(q_init)
+        target_T = initial_T.copy()
 
         target_T[0, 3] += dx
         target_T[1, 3] += dy if side == "left" else -dy
@@ -1712,7 +1788,9 @@ class G1:
         xyz_nonzero = [idx for idx, value in enumerate((dx, dy, dz)) if abs(value) > 1e-12]
         if position_only and len(xyz_nonzero) == 1:
             selected_axis = xyz_nonzero[0]
-        if position_only:
+        if using_fallback:
+            q_sol, info = _fallback_position_ik(side, q_init, target_T[:3, 3])
+        elif position_only:
             q_sol, info = _solve_position_shoulder_elbow(
                 fk,
                 side,
@@ -1749,7 +1827,7 @@ class G1:
                 frame[joint_id] = current[joint_id] + (target[joint_id] - current[joint_id]) * ramp
             arm_sdk.write(frame, kp=30.0, kd=1.5, waist_kp={12: 200.0, 13: 200.0, 14: 480.0}, waist_kd={j: 12.0 for j in WAIST_JOINTS})
             time.sleep(1.0 / max(1.0, float(rate_hz)))
-        final_T = fk.compute_arm(q_apply)
+        final_T = _fallback_arm_fk(side, q_apply) if using_fallback else fk.compute_arm(q_apply)
         return {
             "hand": side,
             "success": True,
@@ -1773,6 +1851,24 @@ class G1:
         for _ in range(step_count):
             out.append(self.ik_move_ee(hand=side, pose_increment=inc, max_speed=max_speed, max_dq=max_dq, rate_hz=rate_hz, position_only=True))
         return {"hand": side, "steps": step_count, "step_increment": inc, "position_only": True, "results": out}
+
+    def extend_arm_forward(self, hand="right", duration_s=4.0):
+        return self.interpolate_to_pose(f"extended_{_normalize_side(hand)}", duration_s=duration_s)
+
+    def current_palm_xyz(self, hand="right"):
+        """Return the current palm position using the same IK kinematics."""
+        side = _normalize_side(hand)
+        joints = RIGHT_ARM_JOINTS if side == "right" else LEFT_ARM_JOINTS
+        current = self._upper_body_pose()
+        q = np.array([current[joint_id] for joint_id in joints], dtype=np.float64)
+        transform = _fallback_arm_fk(side, q) if ArmFK is None else self._arm_fk_solver(side).compute_arm(q)
+        return tuple(float(value) for value in transform[:3, 3])
+
+    def gradual_open(self, hand="right", **kwargs):
+        return self.open_dex3_hand(hand=hand, **kwargs)
+
+    def gradual_close(self, hand="right", **kwargs):
+        return self.close_dex3_hand(hand=hand, **kwargs)
 
     # -- pose/sequence/trajectory persistence -----------------------------
 

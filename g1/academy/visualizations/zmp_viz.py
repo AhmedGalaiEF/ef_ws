@@ -41,14 +41,11 @@ suppressed back to double — this can only make the call more conservative,
 never invent a single-support the height gap didn't already suggest, and
 is skipped entirely if torques aren't reported.
 
-Both the support polygon and the CoM offset are computed pelvis-relative,
-then rotated by the robot's current body yaw (IMU `rpy`, or the odom pose's
-own yaw on the `rt/odom`/SLAM fallback paths) before being placed at the
-odom xy position. This matters once the robot is turning while walking —
-without it, the plotted geometry stays correct in shape but drifts out of
-true world orientation as heading diverges from 0, which a single static
-snapshot never exercises. If no yaw source is available on a given tick,
-this falls back to the old unrotated placement, flagged in the status line.
+Body/pelvis-relative FK is retained for debugging, then all CoM and sole
+points are transformed once into gravity/world by the full IMU orientation
+``Rz(yaw) @ Ry(pitch) @ Rx(roll)``. Odom provides translation only. This is
+critical: applying only yaw leaves base roll/pitch out of the model and can
+make a forward-arm diagnostic misleading.
 
 ZMP
 ----
@@ -67,10 +64,10 @@ then that CoM's height above the mean foot sole-contact height, so it
 tracks crouching/leaning instead of being a fixed constant. If fewer than
 29 joint samples are available (older firmware, or legs-only), this falls
 back to pelvis-as-CoM and a user-set assumed height, same as before.
-CoM_accel_xy is the IMU's measured linear acceleration
-(`get_imus()["acc"]`, gravity-compensated and rotated from body into world
-frame via the IMU roll/pitch/yaw), smoothed over a short moving-average
-window since raw accelerometer noise would otherwise dominate the estimate.
+CoM_accel_xy is based on the IMU acceleration rotated into world and smoothed.
+The native SDK field's gravity convention is not documented in this repository,
+so the UI exposes its gravity-included assumption instead of silently claiming
+gravity compensation.
 If the IMU has nothing to offer on a given tick (missing `acc`/`rpy`), a
 kinematic fallback steps in instead: a second finite difference of the
 whole-body CoM velocity (see ICP below), smoothed over its own window.
@@ -105,6 +102,7 @@ even with no robot reachable; click Connect once the network is up.
 from __future__ import annotations
 
 import argparse
+import csv
 import math
 import sys
 import threading
@@ -168,14 +166,14 @@ BODY_JOINTS: dict[int, tuple[int, tuple, tuple, tuple]] = {
     12: (-1, (0, 0, 0), _IDENT_Q, (0, 0, 1)),                       # waist_yaw
     13: (12, (-0.0039635, 0, 0.035), _IDENT_Q, (1, 0, 0)),          # waist_roll
     14: (13, (0, 0, 0.019), _IDENT_Q, (0, 1, 0)),                   # waist_pitch (== torso frame)
-    15: (14, (0.0039563, 0.10022, 0.23778), _L_SHOULDER_PITCH_Q, (0, 1, 0)),   # left_shoulder_pitch
+    15: (14, (0.0039563, 0.10022, 0.24778), _L_SHOULDER_PITCH_Q, (0, 1, 0)),   # left_shoulder_pitch (URDF)
     16: (15, (0, 0.038, -0.013831), _L_SHOULDER_ROLL_Q, (1, 0, 0)),            # left_shoulder_roll
     17: (16, (0, 0.00624, -0.1032), _IDENT_Q, (0, 0, 1)),                      # left_shoulder_yaw
     18: (17, (0.015783, 0, -0.080518), _IDENT_Q, (0, 1, 0)),                   # left_elbow
     19: (18, (0.1, 0.00188791, -0.01), _IDENT_Q, (1, 0, 0)),                   # left_wrist_roll
     20: (19, (0.038, 0, 0), _IDENT_Q, (0, 1, 0)),                             # left_wrist_pitch
     21: (20, (0.046, 0, 0), _IDENT_Q, (0, 0, 1)),                            # left_wrist_yaw
-    22: (14, (0.0039563, -0.10021, 0.23778), _R_SHOULDER_PITCH_Q, (0, 1, 0)),  # right_shoulder_pitch
+    22: (14, (0.0039563, -0.10021, 0.24778), _R_SHOULDER_PITCH_Q, (0, 1, 0)),  # right_shoulder_pitch (URDF)
     23: (22, (0, -0.038, -0.013831), _R_SHOULDER_ROLL_Q, (1, 0, 0)),           # right_shoulder_roll
     24: (23, (0, -0.00624, -0.1032), _IDENT_Q, (0, 0, 1)),                     # right_shoulder_yaw
     25: (24, (0.015783, 0, -0.080518), _IDENT_Q, (0, 1, 0)),                   # right_elbow
@@ -288,13 +286,10 @@ def _rot_z(a: float) -> np.ndarray:
 
 
 def body_frames(q: list[float]) -> dict[int, tuple[np.ndarray, np.ndarray]]:
-    """FK for however many of the 29 body joints are given — pass 12 for
-    legs-only (support polygon), 29 for legs+waist+arms (whole-body CoM).
-    Returns {joint_id: (world_R, world_t)}, pelvis-relative (pelvis itself
-    sits at PELVIS_POS in whatever frame `q` is silent about — i.e. this is
-    base/pelvis-relative geometry, not world/odom; the odom pose is applied
-    separately to place it in the world). Every BODY_JOINTS parent id is
-    numerically smaller than its child, so a single forward pass suffices.
+    """Pelvis/body-relative FK.  The returned root is deliberately identity.
+
+    World FK is obtained exactly once with ``world_from_body`` below.  Keeping
+    this routine body-only makes posture changes separable from IMU attitude.
     """
     frames: dict[int, tuple[np.ndarray, np.ndarray]] = {}
     root_R = np.eye(3, dtype=np.float64)
@@ -310,33 +305,76 @@ def body_frames(q: list[float]) -> dict[int, tuple[np.ndarray, np.ndarray]]:
     return frames
 
 
-def foot_sole_contacts_pelvis_frame(world_R: np.ndarray, world_t: np.ndarray) -> np.ndarray:
-    """4 real sole-contact points (pelvis frame, xyz), from an ankle-roll
-    frame — see FOOT_SOLE_CONTACTS_LOCAL."""
-    return world_t + FOOT_SOLE_CONTACTS_LOCAL @ world_R.T
+def world_from_body(points_body: np.ndarray, R_world_body: np.ndarray,
+                    base_world: np.ndarray) -> np.ndarray:
+    """Map Nx3 body/pelvis coordinates to gravity/world exactly once."""
+    return np.asarray(points_body) @ R_world_body.T + base_world
 
 
-def whole_body_com_pelvis_frame(q: list[float]) -> Optional[tuple[np.ndarray, float]]:
+def foot_sole_contacts_body_frame(R_body_foot: np.ndarray, t_body_foot: np.ndarray) -> np.ndarray:
+    """Four URDF collision contact points in the pelvis/body frame."""
+    return t_body_foot + FOOT_SOLE_CONTACTS_LOCAL @ R_body_foot.T
+
+
+def whole_body_com_body_frame(q: list[float], exclude_arms: str = "none") -> Optional[np.ndarray]:
     """Whole-body CoM (x, y, z), pelvis-relative, mass-weighting every URDF
-    link's own CoM through FK of the sensed joint angles. Needs all 29
-    leg+waist+arm joints; returns None if fewer are available (older
-    firmware, or a caller that only has leg_q)."""
+    link's own CoM through FK of the sensed joint angles. ``exclude_arms`` is
+    diagnostic only (left/right/both) and re-normalizes the remaining mass."""
     if len(q) < 29:
         return None
     frames = body_frames(q)
     weighted = np.zeros(3, dtype=np.float64)
+    included_mass = 0.0
     for jid, (mass, com_local) in LINK_INERTIAL.items():
+        if (exclude_arms in ("left", "both") and 15 <= jid <= 21) or (exclude_arms in ("right", "both") and 22 <= jid <= 28):
+            continue
         R, t = frames[jid]
         weighted += mass * (t + R @ np.array(com_local, dtype=np.float64))
+        included_mass += mass
     for attach_jid, fixed_pos, mass, com_local in EXTRA_MASSES:
+        if (exclude_arms in ("left", "both") and attach_jid == LEFT_WRIST_ID) or (exclude_arms in ("right", "both") and attach_jid == RIGHT_WRIST_ID):
+            continue
         if attach_jid is None:
             R, t = np.eye(3, dtype=np.float64), np.array(PELVIS_POS, dtype=np.float64)
         else:
             R, t = frames[attach_jid]
         anchor = t + R @ np.array(fixed_pos, dtype=np.float64)
         weighted += mass * (anchor + R @ np.array(com_local, dtype=np.float64))
-    com = weighted / TOTAL_MASS_KG
-    return com[:2], float(com[2])
+        included_mass += mass
+    return weighted / included_mass
+
+
+def rpy_world_body(rpy: Optional[tuple | list]) -> np.ndarray:
+    """Body -> gravity/world. SDK RPY is assumed roll,pitch,yaw; URDF/world
+    convention is +x forward, +y left, +z up.  No odometry rotation is mixed
+    into this transform."""
+    if rpy is None or len(rpy) < 3:
+        return np.eye(3)
+    roll, pitch, yaw = (float(x) for x in rpy[:3])
+    return _rot_z(yaw) @ _rot_y(pitch) @ _rot_x(roll)
+
+
+def foot_tilt_rpy(R_world_foot: np.ndarray) -> tuple[float, float]:
+    """Sole roll/pitch relative to the gravity plane (radians)."""
+    pitch = math.atan2(-R_world_foot[2, 0], math.hypot(R_world_foot[0, 0], R_world_foot[1, 0]))
+    roll = math.atan2(R_world_foot[2, 1], R_world_foot[2, 2])
+    return roll, pitch
+
+
+def shrunken_sole_points(points_body: np.ndarray, shrink_m: float) -> np.ndarray:
+    """Inset a convex sole region about its centroid; valid geometric
+    conservative estimate, never a claimed CoP/contact-pressure region."""
+    center = np.mean(points_body[:, :2], axis=0)
+    v = points_body[:, :2] - center
+    radii = np.linalg.norm(v, axis=1)
+    scale = np.maximum(0.05, (radii - max(0.0, shrink_m)) / np.maximum(radii, 1e-9))
+    out = points_body.copy()
+    out[:, :2] = center + v * scale[:, None]
+    return out
+
+
+def projected_limits(points_body: np.ndarray, axis: int) -> tuple[float, float]:
+    return float(np.min(points_body[:, axis])), float(np.max(points_body[:, axis]))
 
 
 # ---------------------------------------------------------------------------
@@ -398,6 +436,33 @@ def signed_margin(pt: tuple[float, float], poly: np.ndarray) -> float:
     return best if point_in_polygon(pt, poly) else -best
 
 
+def infer_stance(left_z: np.ndarray, right_z: np.ndarray, left_tilt: tuple[float, float],
+                 right_tilt: tuple[float, float], torques: list[float], threshold_m: float) -> tuple[str, str, list[str]]:
+    """Kinematic contact model only: no force, CoP, ZMP or Fz is inferred."""
+    lm, rm = float(np.mean(left_z)), float(np.mean(right_z))
+    ls, rs = float(np.ptp(left_z)), float(np.ptp(right_z))
+    reasons = [f"sole mean gap {(lm-rm)*100:+.1f} cm", f"spreads L/R {ls*100:.1f}/{rs*100:.1f} cm"]
+    stance = "uncertain/double-assumed"
+    if lm - rm > threshold_m:
+        stance = "right"
+    elif rm - lm > threshold_m:
+        stance = "left"
+    if stance in ("left", "right") and len(torques) >= 12:
+        load_l = abs(float(torques[3])) + abs(float(torques[4]))
+        load_r = abs(float(torques[9])) + abs(float(torques[10]))
+        # A torque disagreement suppresses a categorical stance call; torque
+        # is only a mechanical proxy, explicitly not contact/force sensing.
+        if (stance == "left" and load_r > load_l) or (stance == "right" and load_l > load_r):
+            stance = "uncertain/double-assumed"
+            reasons.append("leg torque proxy disagrees")
+    max_tilt = max(abs(x) for x in (*left_tilt, *right_tilt))
+    quality = "HIGH" if stance in ("left", "right") and max(ls, rs) < .008 and max_tilt < math.radians(5) else "MEDIUM"
+    if stance.startswith("uncertain") or max(ls, rs) > .02 or max_tilt > math.radians(10):
+        quality = "LOW"
+    reasons.append(f"max foot tilt {math.degrees(max_tilt):.1f} deg")
+    return stance, quality, reasons
+
+
 # ---------------------------------------------------------------------------
 # Robot connection + poll loop
 # ---------------------------------------------------------------------------
@@ -454,11 +519,39 @@ class ZmpLink:
         self.poll_err: Optional[str] = None
 
         self.com_xy: Optional[tuple[float, float]] = None
+        self.com_body = np.zeros(3)
+        self.com_world = np.zeros(3)
         self.com_vel_xy: Optional[tuple[float, float]] = None
+        self.com_vel_body = np.zeros(3)
         self.left_corners: Optional[np.ndarray] = None
         self.right_corners: Optional[np.ndarray] = None
+        self.left_body: Optional[np.ndarray] = None
+        self.right_body: Optional[np.ndarray] = None
+        self.nominal_hull: Optional[np.ndarray] = None
+        self.conservative_hull: Optional[np.ndarray] = None
+        self.conservative_world: Optional[np.ndarray] = None
         self.zmp_xy: Optional[tuple[float, float]] = None
         self.icp_xy: Optional[tuple[float, float]] = None
+        self.zmp_body = np.zeros(2)
+        self.icp_body = np.zeros(2)
+        self.rpy = (0.0, 0.0, 0.0)
+        self.raw_accel = np.zeros(3)
+        self.world_accel = np.zeros(3)
+        self.foot_info: dict[str, Any] = {}
+        self.contact_confidence = "LOW"
+        self.stance_reasons: list[str] = []
+        self.q: list[float] = []
+        self.torques: list[float] = []
+        self.arm_shift_body = np.zeros(2)
+        self.arm_com_excluded: dict[str, np.ndarray] = {}
+        self.omega = 0.0
+        self.history: deque = deque(maxlen=int(12 * POLL_HZ))
+        self.step_events: deque = deque(maxlen=40)
+        self.frozen = False
+        self.recording = False
+        self._record_file = None
+        self._record_writer = None
+        self._last_stance = "uncertain/double-assumed"
         self.h_com: float = DEFAULT_COM_HEIGHT_FALLBACK_M
         self.h_com_auto: bool = False
         self.stance: str = "double"  # "double" | "left" | "right", see _poll_once
@@ -527,15 +620,20 @@ class ZmpLink:
     # Configurable from the UI; read by the poll loop each tick.
     _com_height_fallback_m = DEFAULT_COM_HEIGHT_FALLBACK_M
     _swing_height_threshold_m = DEFAULT_SWING_HEIGHT_THRESHOLD_M
+    _conservative_shrink_m = 0.018
+    _imu_accel_includes_gravity = True
 
     def _poll_once(self, g1, com_height_fallback_m: float, swing_threshold_m: float) -> None:
         lowstate = g1.get_lowstate()
         odom = g1.get_odom()
         imu = g1.get_imus()
 
-        base_xy = _extract_xy(odom)
-        yaw = _extract_yaw(odom, imu)
-        yaw_R2 = None if yaw is None else _rot_z(yaw)[:2, :2]
+        # Odometry supplies translation only.  Attitude is always the full
+        # IMU R_world_body = Rz(yaw) Ry(pitch) Rx(roll), applied once below.
+        base_xy = _extract_xy(odom) or (0.0, 0.0)
+        rpy = tuple(imu.get("rpy") or (0.0, 0.0, _extract_yaw(odom, imu) or 0.0)) if imu else (0.0, 0.0, _extract_yaw(odom, imu) or 0.0)
+        Rwb = rpy_world_body(rpy)
+        base_world = np.array([base_xy[0], base_xy[1], 0.0])
         positions = (lowstate.get("joint_positions") or []) if lowstate is not None else []
         torques = (lowstate.get("joint_torques") or []) if lowstate is not None else []
         leg_q = positions[:12] if len(positions) >= 12 else None
@@ -544,31 +642,33 @@ class ZmpLink:
         left_corners = right_corners = None
         h_com = com_height_fallback_m
         h_com_auto = False
-        stance = "double"
+        stance = "uncertain/double-assumed"
         stance_torque_overridden = False
 
         if leg_q is not None:
             frames = body_frames(leg_q)
             lR, lt = frames[LEFT_FOOT_ID]
             rR, rt = frames[RIGHT_FOOT_ID]
-            left3 = foot_sole_contacts_pelvis_frame(lR, lt)
-            right3 = foot_sole_contacts_pelvis_frame(rR, rt)
-            left_ground_z = float(left3[:, 2].mean())
-            right_ground_z = float(right3[:, 2].mean())
-            left_corners, right_corners = left3[:, :2], right3[:, :2]
+            left3 = foot_sole_contacts_body_frame(lR, lt)
+            right3 = foot_sole_contacts_body_frame(rR, rt)
+            left_world3 = world_from_body(left3, Rwb, base_world)
+            right_world3 = world_from_body(right3, Rwb, base_world)
+            left_ground_z, right_ground_z = float(left_world3[:, 2].mean()), float(right_world3[:, 2].mean())
+            ltilt, rtilt = foot_tilt_rpy(Rwb @ lR), foot_tilt_rpy(Rwb @ rR)
+            stance, contact_confidence, stance_reasons = infer_stance(left_world3[:, 2], right_world3[:, 2], ltilt, rtilt, torques, swing_threshold_m)
+            # Actual world heights are intentionally retained; a mean height
+            # alone must never claim a whole foot is flat or in contact.
+            foot_info = {"left_mean": left_ground_z, "right_mean": right_ground_z,
+                         "left_spread": float(np.ptp(left_world3[:, 2])), "right_spread": float(np.ptp(right_world3[:, 2])),
+                         "left_tilt": ltilt, "right_tilt": rtilt,
+                         "left_heights": left_world3[:, 2].copy(), "right_heights": right_world3[:, 2].copy()}
 
             # Coarse gait-phase heuristic (still no force/contact sensing): if
             # one sole sits meaningfully higher than the other, treat it as
             # the swing foot and shrink both the support polygon and the
             # ground-height reference to the stance foot alone, instead of
             # always assuming double support.
-            gap = left_ground_z - right_ground_z
-            if gap > swing_threshold_m:
-                stance, ground_z = "right", right_ground_z
-            elif -gap > swing_threshold_m:
-                stance, ground_z = "left", left_ground_z
-            else:
-                stance, ground_z = "double", (left_ground_z + right_ground_z) / 2.0
+            ground_z = left_ground_z if stance == "left" else right_ground_z if stance == "right" else min(left_ground_z, right_ground_z)
 
             # Cross-check against knee+ankle-pitch torque (tau_est) — still
             # not a real force sensor, but load-bearing joints report more
@@ -581,40 +681,29 @@ class ZmpLink:
             # — it can't invent a single-support the height gap didn't already
             # suggest. Skipped (leaves the height-only call as-is) if torques
             # aren't reported.
-            if stance != "double" and len(torques) >= 12:
-                left_load = abs(torques[3]) + abs(torques[4])    # left knee + ankle_pitch
-                right_load = abs(torques[9]) + abs(torques[10])  # right knee + ankle_pitch
-                stance_load, swing_load = (left_load, right_load) if stance == "left" else (right_load, left_load)
-                if swing_load > stance_load:
-                    stance, ground_z = "double", (left_ground_z + right_ground_z) / 2.0
-                    stance_torque_overridden = True
-
-            whole_body = whole_body_com_pelvis_frame(positions[:29])
+            stance_torque_overridden = "leg torque proxy disagrees" in stance_reasons
+            whole_body = whole_body_com_body_frame(positions[:29])
             if whole_body is not None:
-                com_xy_local, com_z_local = whole_body
-                h_com = com_z_local - ground_z
+                com_body = whole_body
+                com_world = world_from_body(com_body[None, :], Rwb, base_world)[0]
+                h_com = com_world[2] - ground_z
                 h_com_auto = True
+                no_left = whole_body_com_body_frame(positions[:29], "left")
+                no_right = whole_body_com_body_frame(positions[:29], "right")
+                no_arms = whole_body_com_body_frame(positions[:29], "both")
+                arm_shift = com_body[:2] - no_arms[:2] if no_arms is not None else np.zeros(2)
+                arm_excluded = {k: v for k, v in (("left", no_left), ("right", no_right), ("both", no_arms)) if v is not None}
             else:
-                com_xy_local = np.zeros(2, dtype=np.float64)  # legs-only: pelvis-as-CoM fallback
-
-            if base_xy is not None:
-                # Feet/CoM were computed pelvis-relative; rotate by body yaw
-                # (when available) then shift into the same world/odom frame
-                # the base (pelvis) position is reported in, so the plotted
-                # polygon/CoM stay correctly oriented as the robot turns
-                # instead of only being right while facing yaw=0. Skipping
-                # rotation when yaw is unavailable is a small extra
-                # approximation on top of the ones already documented above.
-                if yaw_R2 is not None:
-                    left_corners = left_corners @ yaw_R2.T
-                    right_corners = right_corners @ yaw_R2.T
-                    com_xy_local = yaw_R2 @ com_xy_local
-                shift = np.array(base_xy, dtype=np.float64)
-                left_corners = left_corners + shift
-                right_corners = right_corners + shift
-                com_xy = (float(shift[0] + com_xy_local[0]), float(shift[1] + com_xy_local[1]))
-        elif base_xy is not None:
-            com_xy = base_xy  # no leg data at all: fall back to pelvis-as-CoM
+                com_body, com_world, arm_shift, arm_excluded = np.zeros(3), base_world, np.zeros(2), {}
+            left_corners, right_corners = left_world3[:, :2], right_world3[:, :2]
+            com_xy = tuple(com_world[:2])
+            left_body, right_body = left3, right3
+        else:
+            com_body, com_world, arm_shift, arm_excluded, contact_confidence, stance_reasons = np.zeros(3), base_world, np.zeros(2), {}, "LOW", ["no leg FK"]
+            left_body = right_body = None
+            foot_info = {}
+            ground_z = float(base_world[2])
+            com_xy = tuple(base_world[:2])
 
         now = time.time()
 
@@ -665,12 +754,16 @@ class ZmpLink:
                                       sum(v[1] for v in self._com_accel_hist) / len(self._com_accel_hist))
 
         ax_world = ay_world = 0.0
+        a_world = np.zeros(3, dtype=np.float64)
         accel_source = "none"
-        if imu is not None and imu.get("acc") is not None and imu.get("rpy") is not None:
+        if imu is not None and imu.get("acc") is not None and imu.get("rpy") is not None and np.linalg.norm(np.asarray(imu["acc"], dtype=float)) > 1e-6:
             roll, pitch, imu_yaw = imu["rpy"]
-            R = _rot_z(imu_yaw) @ _rot_y(pitch) @ _rot_x(roll)
+            R = Rwb
             a_body = np.array(imu["acc"], dtype=np.float64)
-            a_world = R @ a_body - np.array([0.0, 0.0, G_ACCEL])
+            # sdk_wrapper only forwards the native field and this repository
+            # provides no convention proof. UI selects the explicit runtime
+            # assumption; stationary horizontal acceleration is shown below.
+            a_world = R @ a_body - (np.array([0.0, 0.0, G_ACCEL]) if self._imu_accel_includes_gravity else 0.0)
             with self.lock:
                 self._accel_hist.append((float(a_world[0]), float(a_world[1])))
                 ax_world = sum(v[0] for v in self._accel_hist) / len(self._accel_hist)
@@ -679,6 +772,11 @@ class ZmpLink:
         elif kinematic_accel_xy is not None:
             ax_world, ay_world = kinematic_accel_xy
             accel_source = "kinematic"
+        elif imu is not None and imu.get("acc") is not None:
+            # Observed on rt/odommodestate on this robot: accelerometer is
+            # [0,0,0]. It is not a usable measured acceleration, regardless
+            # of the gravity convention toggle.
+            accel_source = "imu-zero/unusable"
 
         zmp_xy = None
         if com_xy is not None:
@@ -695,22 +793,79 @@ class ZmpLink:
             omega = math.sqrt(G_ACCEL / h_com)
             icp_xy = (com_xy[0] + com_vel_xy[0] / omega, com_xy[1] + com_vel_xy[1] / omega)
 
+        # Body longitudinal/lateral values use body coordinates, intentionally
+        # avoiding yaw-dependent world projections as the robot turns.
+        zmp_body = (Rwb.T @ (np.array([*(zmp_xy or com_xy), ground_z]) - base_world))[:2]
+        icp_body = (Rwb.T @ (np.array([*(icp_xy or com_xy), ground_z]) - base_world))[:2]
+        vel_body = Rwb.T @ np.array([*(com_vel_xy or (0.0, 0.0)), 0.0])
+        use_l = left_body if stance == "left" else right_body if stance == "right" else np.vstack([left_body, right_body]) if left_body is not None else np.zeros((0, 3))
+        support_body = convex_hull(use_l[:, :2]) if len(use_l) else None
+        shrink_l = shrunken_sole_points(left_body, self._conservative_shrink_m) if left_body is not None else None
+        shrink_r = shrunken_sole_points(right_body, self._conservative_shrink_m) if right_body is not None else None
+        use_c = shrink_l if stance == "left" else shrink_r if stance == "right" else np.vstack([shrink_l, shrink_r]) if shrink_l is not None else np.zeros((0, 3))
+        conservative_body = convex_hull(use_c[:, :2]) if len(use_c) else None
+
         with self.lock:
             self.com_xy = com_xy
+            self.com_body, self.com_world = com_body, com_world
             self.com_vel_xy = com_vel_xy
+            self.com_vel_body = vel_body
             self.left_corners = left_corners
             self.right_corners = right_corners
+            self.left_body, self.right_body = left_body, right_body
+            self.nominal_hull, self.conservative_hull = support_body, conservative_body
+            self.conservative_world = world_from_body(use_c, Rwb, base_world)[:, :2] if len(use_c) else None
             self.zmp_xy = zmp_xy
             self.icp_xy = icp_xy
             self.h_com = h_com
             self.h_com_auto = h_com_auto
             self.stance = stance
             self.stance_torque_overridden = stance_torque_overridden
-            self.yaw_applied = yaw_R2 is not None
+            self.yaw_applied = True
             self.accel_source = accel_source
+            self.rpy, self.raw_accel, self.world_accel = rpy, np.array(imu.get("acc") if imu and imu.get("acc") else (0,0,0)), a_world
+            self.foot_info, self.contact_confidence, self.stance_reasons = foot_info, contact_confidence, stance_reasons
+            self.q, self.torques, self.arm_shift_body, self.arm_com_excluded = list(positions), list(torques), arm_shift, arm_excluded
+            self.omega, self.zmp_body, self.icp_body = math.sqrt(G_ACCEL / h_com) if h_com > 1e-3 else 0.0, zmp_body, icp_body
             self.ts = now
             if zmp_xy is not None:
                 self.zmp_trail.append((now, zmp_xy[0], zmp_xy[1]))
+            if stance != self._last_stance and (stance in ("left", "right") or self._last_stance in ("left", "right")):
+                self.step_events.append(now)
+            self._last_stance = stance
+            if not self.frozen:
+                self.history.append({"t": now, "com": float(com_body[0]), "zmp": float(zmp_body[0]), "icp": float(icp_body[0]), "vel": float(vel_body[0]), "front": projected_limits(support_body, 0)[1] if support_body is not None else np.nan, "rear": projected_limits(support_body, 0)[0] if support_body is not None else np.nan, "pitch": float(rpy[1])})
+            if self.recording:
+                self._record(now)
+
+    def _record(self, timestamp: float) -> None:
+        """Called from poll thread, never from Dash's UI callback."""
+        if self._record_writer is None:
+            name = f"zmp_diagnostics_{time.strftime('%Y%m%d_%H%M%S')}.csv"
+            self._record_file = open(_SCRIPT_DIR / name, "w", newline="", encoding="utf-8")
+            fields = ["timestamp", "stance", "contact_confidence", "roll", "pitch", "yaw", "com_body_x", "com_body_y", "com_body_z", "com_world_x", "com_world_y", "com_world_z", "com_vx", "com_vy", "zmp_x", "zmp_y", "icp_x", "icp_y", "zmp_nominal_margin", "zmp_conservative_margin", "icp_nominal_margin", "icp_conservative_margin", "joint_positions", "joint_torques", "raw_accel", "world_accel", "foot_corner_heights"]
+            self._record_writer = csv.DictWriter(self._record_file, fieldnames=fields)
+            self._record_writer.writeheader()
+        nom, con = self.nominal_hull, self.conservative_hull
+        row = {"timestamp": timestamp, "stance": self.stance, "contact_confidence": self.contact_confidence,
+               "roll": self.rpy[0], "pitch": self.rpy[1], "yaw": self.rpy[2],
+               "com_body_x": self.com_body[0], "com_body_y": self.com_body[1], "com_body_z": self.com_body[2],
+               "com_world_x": self.com_world[0], "com_world_y": self.com_world[1], "com_world_z": self.com_world[2],
+               "com_vx": self.com_vel_xy[0] if self.com_vel_xy else "", "com_vy": self.com_vel_xy[1] if self.com_vel_xy else "",
+               "zmp_x": self.zmp_xy[0] if self.zmp_xy else "", "zmp_y": self.zmp_xy[1] if self.zmp_xy else "",
+               "icp_x": self.icp_xy[0] if self.icp_xy else "", "icp_y": self.icp_xy[1] if self.icp_xy else "",
+               "zmp_nominal_margin": signed_margin(self.zmp_body, nom) if nom is not None else "", "zmp_conservative_margin": signed_margin(self.zmp_body, con) if con is not None else "",
+               "icp_nominal_margin": signed_margin(self.icp_body, nom) if nom is not None else "", "icp_conservative_margin": signed_margin(self.icp_body, con) if con is not None else "",
+               "joint_positions": repr(self.q), "joint_torques": repr(self.torques), "raw_accel": repr(self.raw_accel.tolist()), "world_accel": repr(self.world_accel.tolist()), "foot_corner_heights": repr(self.foot_info)}
+        self._record_writer.writerow(row)
+        self._record_file.flush()
+
+    def stop_recording(self) -> None:
+        with self.lock:
+            self.recording = False
+            if self._record_file:
+                self._record_file.close()
+            self._record_file = self._record_writer = None
 
 
 # ---------------------------------------------------------------------------
@@ -722,6 +877,10 @@ def build_figure(link: "ZmpLink") -> tuple[go.Figure, list[tuple[str, str]]]:
         com_xy = link.com_xy
         left_corners = None if link.left_corners is None else link.left_corners.copy()
         right_corners = None if link.right_corners is None else link.right_corners.copy()
+        conservative_world = None if link.conservative_world is None else link.conservative_world.copy()
+        nominal_body = None if link.nominal_hull is None else link.nominal_hull.copy()
+        conservative_body = None if link.conservative_hull is None else link.conservative_hull.copy()
+        zmp_body, icp_body, contact_confidence = link.zmp_body.copy(), link.icp_body.copy(), link.contact_confidence
         zmp_xy = link.zmp_xy
         icp_xy = link.icp_xy
         h_com = link.h_com
@@ -755,6 +914,12 @@ def build_figure(link: "ZmpLink") -> tuple[go.Figure, list[tuple[str, str]]]:
                                       line={"color": "#55c7ff", "width": 2},
                                       name=poly_name))
             extent.extend(zip(hx, hy))
+        if conservative_world is not None:
+            ch = convex_hull(conservative_world)
+            if len(ch) >= 3:
+                fig.add_trace(go.Scatter(x=list(ch[:, 0]) + [ch[0, 0]], y=list(ch[:, 1]) + [ch[0, 1]], mode="lines",
+                                         line={"color": "#ff8c42", "width": 2, "dash": "dash"},
+                                         name="conservative geometric support estimate"))
         for label, corners, color in (("left foot", left_corners, "#3987e5"),
                                        ("right foot", right_corners, "#d95926")):
             cx = list(corners[:, 0]) + [corners[0, 0]]
@@ -797,7 +962,9 @@ def build_figure(link: "ZmpLink") -> tuple[go.Figure, list[tuple[str, str]]]:
                                   name="ZMP"))
         extent.append(zmp_xy)
         if margin is not None:
-            zmp_line = (f"ZMP {'INSIDE' if inside else 'OUTSIDE'} support polygon — margin {margin * 100:+.1f} cm · {h_com_note}", zmp_color)
+            mn = signed_margin(zmp_body, nominal_body) if nominal_body is not None else float("nan")
+            mc = signed_margin(zmp_body, conservative_body) if conservative_body is not None else float("nan")
+            zmp_line = (f"Estimated ZMP: {'inside' if inside else 'outside'} nominal geometric support ({mn*100:+.1f} cm); conservative {mc*100:+.1f} cm · contact {contact_confidence} · force sensing unavailable · {h_com_note}", zmp_color)
         else:
             zmp_line = (f"ZMP computed, no support polygon (no leg data) · {h_com_note}", zmp_color)
 
@@ -811,7 +978,9 @@ def build_figure(link: "ZmpLink") -> tuple[go.Figure, list[tuple[str, str]]]:
                                   name="Capture point (ICP)"))
         extent.append(icp_xy)
         if icp_margin is not None:
-            icp_line = (f"ICP (where CoM is headed) {'INSIDE' if icp_inside else 'OUTSIDE'} support polygon — margin {icp_margin * 100:+.1f} cm", icp_color)
+            mn = signed_margin(icp_body, nominal_body) if nominal_body is not None else float("nan")
+            mc = signed_margin(icp_body, conservative_body) if conservative_body is not None else float("nan")
+            icp_line = (f"Estimated Capture Point / DCM: {'inside' if icp_inside else 'outside'} nominal support ({mn*100:+.1f} cm); conservative {mc*100:+.1f} cm — LIPM approximation", icp_color)
         else:
             icp_line = ("ICP computed, no support polygon (no leg data)", icp_color)
     elif com_xy is not None:
@@ -844,6 +1013,46 @@ def build_figure(link: "ZmpLink") -> tuple[go.Figure, list[tuple[str, str]]]:
 # Dash app / layout
 # ---------------------------------------------------------------------------
 
+def build_history_figure(link: "ZmpLink") -> go.Figure:
+    with link.lock:
+        hist, events = list(link.history), list(link.step_events)
+    fig = go.Figure()
+    if hist:
+        t0 = hist[-1]["t"]
+        x = [r["t"] - t0 for r in hist]
+        for key, name, color in (("com", "CoM forward", "#ffae00"), ("zmp", "ZMP forward", "#55c7ff"), ("icp", "ICP/DCM forward", "#f5c84b"), ("front", "support front", "#3aa876"), ("rear", "support rear", "#e0294f")):
+            fig.add_trace(go.Scatter(x=x, y=[r[key] for r in hist], mode="lines", name=name, line={"color": color}))
+        fig.add_trace(go.Scatter(x=x, y=[r["vel"] for r in hist], mode="lines", name="CoM forward velocity (m/s)", yaxis="y2", line={"color": "#c77dff"}))
+        for event in events:
+            if event >= hist[0]["t"]:
+                fig.add_vline(x=event-t0, line_dash="dot", line_color="#ffffff", annotation_text="inferred step")
+    fig.update_layout(template="plotly_dark", height=330, margin={"l":40,"r":50,"t":25,"b":35}, xaxis_title="seconds (latest = 0)", yaxis_title="body forward x (m)", yaxis2={"title":"velocity m/s", "overlaying":"y", "side":"right"}, legend={"orientation":"h", "y":1.15}, uirevision="history")
+    return fig
+
+
+def diagnostics_panel(link: "ZmpLink") -> html.Div:
+    with link.lock:
+        rpy, raw, acc = link.rpy, link.raw_accel.copy(), link.world_accel.copy()
+        cb, cw, vb, z, i = link.com_body.copy(), link.com_world.copy(), link.com_vel_body.copy(), link.zmp_body.copy(), link.icp_body.copy()
+        nom, con, stance, confidence = link.nominal_hull, link.conservative_hull, link.stance, link.contact_confidence
+        info, q, shift, arm_excluded, omega, source, reasons = (dict(link.foot_info), list(link.q), link.arm_shift_body.copy(),
+                                                                  dict(link.arm_com_excluded), link.omega,
+                                                                  link.accel_source, list(link.stance_reasons))
+    def margin(p, poly): return signed_margin(p, poly) * 100 if poly is not None else float("nan")
+    front, rear = projected_limits(nom, 0) if nom is not None else (float("nan"), float("nan"))
+    f = lambda v, unit="": "—" if not np.isfinite(v) else f"{v:.2f}{unit}"
+    foot = lambda side: f"{side}: heel L/R {[round(v*100,1) for v in info.get(side+'_heights',[])[:2]]} cm, toe L/R {[round(v*100,1) for v in info.get(side+'_heights',[])[2:]]} cm; mean {f(info.get(side+'_mean',np.nan)*100,' cm')}, spread {f(info.get(side+'_spread',np.nan)*100,' cm')}, roll/pitch {f(math.degrees(info.get(side+'_tilt',(np.nan,np.nan))[0]),'°')}/{f(math.degrees(info.get(side+'_tilt',(np.nan,np.nan))[1]),'°')}"
+    return html.Div([
+        html.B("CONTACT MODEL: GEOMETRIC / NO FORCE SENSING", style={"color":"#ff8c42"}), html.Br(),
+        html.Small("Validity: CoM FK/URDF · velocity finite difference · acceleration IMU/assumption · ZMP & ICP LIPM estimates · support geometric heuristic · contact forces unavailable"), html.Hr(),
+        html.B("IMU"), html.Br(), f"roll/pitch/yaw {f(math.degrees(rpy[0]),'°')} / {f(math.degrees(rpy[1]),'°')} / {f(math.degrees(rpy[2]),'°')} · raw accel {np.round(raw,2)} · world accel {np.round(acc,2)} · source {source}", html.Br(),
+        html.B("CoM"), html.Br(), f"body {np.round(cb,3)} m · world {np.round(cw,3)} m · vx/vy body {f(vb[0],' m/s')}/{f(vb[1],' m/s')} · speed {f(np.linalg.norm(vb[:2]),' m/s')} · h {f(cw[2]-min(info.get('left_mean',cw[2]),info.get('right_mean',cw[2])),' m')}", html.Br(),
+        html.B("Dynamics (LIPM approximation, not proof of stability)"), html.Br(), f"ZMP body x/y {np.round(z,3)} · nominal/conservative margin {f(margin(z,nom),' cm')}/{f(margin(z,con),' cm')} · ICP/DCM {np.round(i,3)} · nominal/conservative margin {f(margin(i,nom),' cm')}/{f(margin(i,con),' cm')} · ω {f(omega,' rad/s')} · τ {f(1/omega if omega else np.nan,' s')}", html.Br(),
+        html.B("Forward/lateral support"), html.Br(), f"rear/front {f(rear*100,' cm')}/{f(front*100,' cm')} · ZMP front margin {f((front-z[0])*100,' cm')} · ICP front margin {f((front-i[0])*100,' cm')} · CoM front margin {f((front-cb[0])*100,' cm')} · lateral CoM y {f(cb[1]*100,' cm')}", html.Br(),
+        html.B("Feet / stance"), html.Br(), foot("left"), html.Br(), foot("right"), html.Br(), f"estimated stance: {stance}; confidence: {confidence}; {', '.join(reasons)}", html.Br(),
+        html.B("Posture / arm-model check"), html.Br(), f"L/R shoulder pitch {f(math.degrees(q[15]) if len(q)>15 else np.nan,'°')}/{f(math.degrees(q[22]) if len(q)>22 else np.nan,'°')}; L/R elbow {f(math.degrees(q[18]) if len(q)>18 else np.nan,'°')}/{f(math.degrees(q[25]) if len(q)>25 else np.nan,'°')}; waist pitch/roll {f(math.degrees(q[14]) if len(q)>14 else np.nan,'°')}/{f(math.degrees(q[13]) if len(q)>13 else np.nan,'°')}; CoM excluding L/R/both arms {[np.round(arm_excluded[k],3).tolist() for k in ('left','right','both') if k in arm_excluded]}; arm posture CoM shift forward/lateral {f(shift[0]*100,' cm')}/{f(shift[1]*100,' cm')}"
+    ], style={"fontSize":"12px", "whiteSpace":"normal", "padding":"8px", "border":"1px solid #555", "borderRadius":"4px"})
+
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.DARKLY])
 app.title = "G1 ZMP / Support Polygon"
 
@@ -865,9 +1074,13 @@ app.layout = dbc.Container([
                              style={"fontSize": "12px"}),
                  dcc.Input(id="swing-threshold-input", type="number", value=DEFAULT_SWING_HEIGHT_THRESHOLD_M,
                            min=0.0, max=0.05, step=0.005, style={"width": "100%"})], width=3),
-        dbc.Col(html.Div(id="zmp-status", style={"fontSize": "15px", "marginTop": "24px"}), width=6),
+        dbc.Col([html.Label("Conservative sole inset (m)", style={"fontSize":"12px"}), dcc.Input(id="shrink-input", type="number", value=.018, min=0, max=.05, step=.001, style={"width":"100%"})], width=2),
+        dbc.Col([dbc.Checklist(id="accel-gravity-toggle", options=[{"label":" IMU accel includes gravity (assumption)", "value":"g"}], value=["g"], switch=True)], width=3),
+        dbc.Col(html.Div(id="zmp-status", style={"fontSize": "14px", "marginTop": "12px"}), width=4),
     ], className="mb-3 gy-2"),
-    dcc.Graph(id="zmp-graph"),
+    dbc.Row([dbc.Col(dcc.Graph(id="zmp-graph"), lg=7), dbc.Col(html.Div(id="diagnostics-panel"), lg=5)]),
+    dcc.Graph(id="history-graph"),
+    dbc.Row([dbc.Col(dbc.Button("Freeze", id="btn-freeze", color="warning"), width="auto"), dbc.Col(dbc.Button("Clear history", id="btn-clear", color="secondary"), width="auto"), dbc.Col(dbc.Button("Start recording", id="btn-record-start", color="success"), width="auto"), dbc.Col(dbc.Button("Stop recording", id="btn-record-stop", color="danger"), width="auto")], className="mb-2 gy-2"),
     html.Div(id="poll-err", className="mt-2", style={"fontSize": "12px", "color": "#e0294f"}),
     dcc.Interval(id="status-interval", interval=1000, n_intervals=0),
     dcc.Interval(id="plot-interval", interval=PLOT_INTERVAL_MS, n_intervals=0),
@@ -901,15 +1114,21 @@ def on_connection(_connect, _disconnect, _tick, iface, domain_id):
 
 @app.callback(
     Output("zmp-graph", "figure"),
+    Output("history-graph", "figure"),
     Output("zmp-status", "children"),
+    Output("diagnostics-panel", "children"),
     Output("poll-err", "children"),
     Input("plot-interval", "n_intervals"),
     Input("com-height-input", "value"),
     Input("swing-threshold-input", "value"),
+    Input("shrink-input", "value"),
+    Input("accel-gravity-toggle", "value"),
 )
-def on_plot_tick(_n, com_height_fallback_m, swing_threshold_m):
+def on_plot_tick(_n, com_height_fallback_m, swing_threshold_m, shrink_m, accel_gravity):
     LINK._com_height_fallback_m = float(com_height_fallback_m or DEFAULT_COM_HEIGHT_FALLBACK_M)
     LINK._swing_height_threshold_m = max(0.0, float(swing_threshold_m if swing_threshold_m is not None else DEFAULT_SWING_HEIGHT_THRESHOLD_M))
+    LINK._conservative_shrink_m = max(0.0, float(shrink_m if shrink_m is not None else .018))
+    LINK._imu_accel_includes_gravity = "g" in (accel_gravity or [])
     fig, lines = build_figure(LINK)
     with LINK.lock:
         err = LINK.poll_err
@@ -918,7 +1137,41 @@ def on_plot_tick(_n, com_height_fallback_m, swing_threshold_m):
         if i:
             status_children.append(html.Br())
         status_children.append(html.Span(text, style={"color": color, "fontWeight": 700}))
-    return fig, html.Div(status_children), (f"poll error: {err}" if err else "")
+    return fig, build_history_figure(LINK), html.Div(status_children), diagnostics_panel(LINK), (f"poll error: {err}" if err else "")
+
+
+@app.callback(Output("btn-freeze", "children"), Input("btn-freeze", "n_clicks"), Input("btn-clear", "n_clicks"), Input("btn-record-start", "n_clicks"), Input("btn-record-stop", "n_clicks"), prevent_initial_call=True)
+def controls(_freeze, _clear, _start, _stop):
+    with LINK.lock:
+        if dash.ctx.triggered_id == "btn-freeze": LINK.frozen = not LINK.frozen
+        elif dash.ctx.triggered_id == "btn-clear": LINK.history.clear(); LINK.step_events.clear()
+        elif dash.ctx.triggered_id == "btn-record-start": LINK.recording = True
+        elif dash.ctx.triggered_id == "btn-record-stop": LINK.stop_recording()
+    return "Unfreeze" if LINK.frozen else "Freeze"
+
+
+def run_sanity_tests() -> None:
+    """Pure Python frame/geometry checks; no robot or Dash server required."""
+    p = np.array([[1.0, 0.0, 1.0]])
+    assert np.allclose(world_from_body(p, rpy_world_body((0, 0, 0)), np.zeros(3)), p)  # A
+    assert np.allclose(rpy_world_body((0, 0, math.pi / 2)) @ np.array([1., 0., 0.]), [0., 1., 0.], atol=1e-9)  # B
+    # C: positive pitch sends a point above the pelvis toward +x under Ry.
+    assert (rpy_world_body((0, math.pi / 6, 0)) @ np.array([0., 0., 1.]))[0] > 0
+    com, velocity, h = np.array([.1, -.02]), np.zeros(2), .7
+    omega = math.sqrt(G_ACCEL / h)
+    assert np.allclose(com + velocity / omega, com)  # D
+    square = np.array([[0,0],[1,0],[1,1],[0,1]], dtype=float)
+    assert signed_margin((.5,.5), square) > 0 and signed_margin((1.5,.5), square) < 0  # E
+    print("zmp_viz sanity tests: PASS")
+
+
+def verify_joint_mapping() -> None:
+    """Fail loudly if the low-state/URDF arm partition this FK relies on drifts."""
+    assert list(range(15, 22)) == [15, 16, 17, 18, 19, 20, 21]
+    assert list(range(22, 29)) == [22, 23, 24, 25, 26, 27, 28]
+    assert BODY_JOINTS[15][3] == BODY_JOINTS[22][3] == (0, 1, 0)
+    assert BODY_JOINTS[18][3] == BODY_JOINTS[25][3] == (0, 1, 0)
+    print("G1 FK mapping: ids 15-21 left arm, 22-28 right arm; shoulder/elbow axes +Y; URDF inertial hand masses included")
 
 
 def _parse_args() -> argparse.Namespace:
@@ -927,11 +1180,16 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--domain-id", type=int, default=0)
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8072)
+    parser.add_argument("--sanity-test", action="store_true", help="run pure frame/LIPM/geometry checks and exit")
     return parser.parse_args()
 
 
 def main() -> int:
     args = _parse_args()
+    if args.sanity_test:
+        run_sanity_tests()
+        return 0
+    verify_joint_mapping()
     global LINK
     LINK = ZmpLink(args.iface, args.domain_id)
     print(f"ZMP viz: http://{args.host}:{args.port} iface={args.iface} domain={args.domain_id}")
