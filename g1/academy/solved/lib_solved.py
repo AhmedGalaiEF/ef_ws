@@ -39,8 +39,10 @@ from __future__ import annotations
 import importlib
 import json
 import math
+import os
 import re
 import struct
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -805,10 +807,57 @@ LEFT_ARM_JOINTS = list(range(15, 22))
 RIGHT_ARM_JOINTS = list(range(22, 29))
 ARM_JOINTS = LEFT_ARM_JOINTS + RIGHT_ARM_JOINTS
 UPPER_BODY_JOINTS = list(WAIST_JOINTS) + LEFT_ARM_JOINTS + RIGHT_ARM_JOINTS
-_ll_pose_store_path = Path("ll_poses.json")
+_MODULE_DIR = Path(__file__).resolve().parent
+_ll_pose_store_path = Path(
+    os.environ.get("G1_LL_POSE_PATH", str(_MODULE_DIR / "ll_poses.json"))
+).expanduser()
 _ll_poses = {}
-_sequences_path = Path("arm_sequences.json")
+_sequences_path = Path(
+    os.environ.get("G1_ARM_SEQUENCE_PATH", str(_MODULE_DIR / "arm_sequences.json"))
+).expanduser()
 _sequences = {}
+
+
+def _finite_float(value, name, *, minimum=None, maximum=None):
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a number") from exc
+    if not math.isfinite(parsed):
+        raise ValueError(f"{name} must be finite")
+    if minimum is not None and parsed < minimum:
+        raise ValueError(f"{name} must be >= {minimum}")
+    if maximum is not None and parsed > maximum:
+        raise ValueError(f"{name} must be <= {maximum}")
+    return parsed
+
+
+def _positive_steps(value, name="steps"):
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ValueError(f"{name} must be a positive integer")
+    return value
+
+
+def _atomic_write_json(path, value):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        dir=path.parent,
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(value, handle, indent=2, allow_nan=False)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_name, path)
+    finally:
+        try:
+            os.unlink(temporary_name)
+        except FileNotFoundError:
+            pass
 
 
 def exec_arm_action(name, release_after_s=None):
@@ -846,32 +895,54 @@ def write_arm_sdk_pose(targets, weight=1.0, kp=30.0, kd=1.5, waist_kp=480.0, wai
     """Writes a complete rt/arm_sdk LowCmd_ frame, including the weight byte
     at motor_cmd[29] that arbitrates between the default controller and this
     publisher (0 = released, 1 = this publisher owns the arm/waist joints)."""
+    weight = _finite_float(weight, "weight", minimum=0.0, maximum=1.0)
+    kp = _finite_float(kp, "kp", minimum=0.0)
+    kd = _finite_float(kd, "kd", minimum=0.0)
+    waist_kp = _finite_float(waist_kp, "waist_kp", minimum=0.0)
+    waist_kd = _finite_float(waist_kd, "waist_kd", minimum=0.0)
+    normalized_targets = {}
+    for joint, q in targets.items():
+        joint = int(joint)
+        if joint not in UPPER_BODY_JOINTS:
+            raise ValueError(f"arm_sdk target joint is outside the upper body: {joint}")
+        normalized_targets[joint] = _finite_float(q, f"joint {joint} target")
+
     msg = unitree_hg_msg_dds__LowCmd_()
     msg.mode_pr = 0
     msg.mode_machine = 0
-    msg.motor_cmd[29].q = max(0.0, min(1.0, float(weight)))
-    for joint, q in targets.items():
-        cmd = msg.motor_cmd[int(joint)]
+    msg.motor_cmd[29].q = weight
+    for joint, q in normalized_targets.items():
+        cmd = msg.motor_cmd[joint]
         cmd.mode = 1
         cmd.q = float(q)
         cmd.dq = 0.0
         cmd.tau = 0.0
-        cmd.kp = waist_kp if int(joint) in WAIST_JOINTS else kp
-        cmd.kd = waist_kd if int(joint) in WAIST_JOINTS else kd
+        cmd.kp = waist_kp if joint in WAIST_JOINTS else kp
+        cmd.kd = waist_kd if joint in WAIST_JOINTS else kd
     msg.crc = _arm_sdk_crc().Crc(msg)
     _arm_sdk_pub().Write(msg)
 
 
-_zero_stiffness_state = {"thread": None, "stop": None, "arm": None, "frames": 0}
+_zero_stiffness_state = {
+    "thread": None,
+    "stop": None,
+    "arm": None,
+    "frames": 0,
+    "error": None,
+}
 
 
 def _stop_zero_stiffness_stream():
     state = _zero_stiffness_state
     if state["stop"] is not None:
         state["stop"].set()
-        state["thread"].join(timeout=2.0)
-    result = {"arm": state["arm"], "frames": state["frames"]}
-    state.update(thread=None, stop=None, arm=None, frames=0)
+        thread = state["thread"]
+        if thread is not None:
+            thread.join(timeout=4.0)
+            if thread.is_alive():
+                raise RuntimeError("Zero-stiffness worker did not stop; refusing a competing arm command")
+    result = {"arm": state["arm"], "frames": state["frames"], "error": state["error"]}
+    state.update(thread=None, stop=None, arm=None, frames=0, error=None)
     return result
 
 
@@ -891,6 +962,7 @@ def arms_zero_stiffness(rate_hz=50.0, arm="both", handoff=True):
     gains, while the waist keeps its normal hold gains for stability.
     """
     state = _zero_stiffness_state
+    rate_hz = _finite_float(rate_hz, "rate_hz", minimum=1.0, maximum=200.0)
     arm = str(arm).lower()
     joints = {"left": LEFT_ARM_JOINTS, "right": RIGHT_ARM_JOINTS, "both": ARM_JOINTS}.get(arm)
     if joints is None:
@@ -904,20 +976,26 @@ def arms_zero_stiffness(rate_hz=50.0, arm="both", handoff=True):
         engage_arms()
     waist_hold = current_upper_body_pose()
     stop = threading.Event()
-    interval_s = 1.0 / max(1.0, float(rate_hz))
-    state.update(stop=stop, arm=arm, frames=0)
+    interval_s = 1.0 / rate_hz
+    state.update(stop=stop, arm=arm, frames=0, error=None)
 
     def worker():
-        while not stop.is_set():
-            pose = current_upper_body_pose()
-            targets = {joint: waist_hold[joint] for joint in WAIST_JOINTS}
-            targets.update({joint: pose[joint] for joint in joints})
-            write_arm_sdk_pose(
-                targets, weight=1.0, kp=0.0, kd=0.0,
-                waist_kp=480.0, waist_kd=12.0,
-            )
-            state["frames"] += 1
-            stop.wait(interval_s)
+        try:
+            while not stop.is_set():
+                pose = current_upper_body_pose()
+                if stop.is_set():
+                    break
+                targets = {joint: waist_hold[joint] for joint in WAIST_JOINTS}
+                targets.update({joint: pose[joint] for joint in joints})
+                write_arm_sdk_pose(
+                    targets, weight=1.0, kp=0.0, kd=0.0,
+                    waist_kp=480.0, waist_kd=12.0,
+                )
+                state["frames"] += 1
+                stop.wait(interval_s)
+        except Exception as exc:
+            state["error"] = str(exc)
+            stop.set()
 
     state["thread"] = threading.Thread(target=worker, name="arms-zero-stiffness", daemon=True)
     state["thread"].start()
@@ -932,6 +1010,8 @@ def release_arms(steps=150, rate_hz=50.0):
     """Ramp the arm_sdk weight 1 -> 0 on an ease curve, handing control back
     to the default controller. Run this before this publisher stops owning
     rt/arm_sdk."""
+    steps = _positive_steps(steps)
+    rate_hz = _finite_float(rate_hz, "rate_hz", minimum=1.0, maximum=200.0)
     # A zero-stiffness worker must never publish during this ownership ramp.
     _stop_zero_stiffness_stream()
     pose = current_upper_body_pose()
@@ -944,6 +1024,8 @@ def release_arms(steps=150, rate_hz=50.0):
 
 def engage_arms(steps=50, rate_hz=50.0):
     """Ramp the arm_sdk weight 0 -> 1, taking ownership of the arm/waist joints."""
+    steps = _positive_steps(steps)
+    rate_hz = _finite_float(rate_hz, "rate_hz", minimum=1.0, maximum=200.0)
     pose = current_upper_body_pose()
     for i in range(steps + 1):
         write_arm_sdk_pose(pose, weight=i / steps)
@@ -958,7 +1040,7 @@ def _load_ll_poses():
 
 
 def _save_ll_poses():
-    _ll_pose_store_path.write_text(json.dumps(_ll_poses, indent=2))
+    _atomic_write_json(_ll_pose_store_path, _ll_poses)
 
 
 def save_current_ll_pose(name):
@@ -989,11 +1071,13 @@ def extend_arm_forward(side="right", duration_s=4.0):
 def _load_sequences():
     global _sequences
     _sequences = json.loads(_sequences_path.read_text()) if _sequences_path.exists() else {}
+    if not isinstance(_sequences, dict):
+        raise ValueError(f"Arm sequence store must contain a JSON object: {_sequences_path}")
     return _sequences
 
 
 def _save_sequences():
-    _sequences_path.write_text(json.dumps(_sequences, indent=2))
+    _atomic_write_json(_sequences_path, _sequences)
 
 
 def _arm_joints(arm):
@@ -1003,10 +1087,61 @@ def _arm_joints(arm):
     return joints
 
 
+def _sequence_name(value):
+    name = str(value).strip()
+    if not name or len(name) > 128 or any(ord(char) < 32 for char in name):
+        raise ValueError("sequence_name must be 1-128 printable characters")
+    return name
+
+
+def _validate_trajectory(sequence):
+    if not isinstance(sequence, dict) or sequence.get("format") != "trajectory_v1":
+        raise ValueError("Re-record this sequence with teach(); legacy waypoint sequences are not safe to replay.")
+    arm = str(sequence.get("arm", "")).lower()
+    expected_joints = list(_arm_joints(arm))
+    try:
+        joints = [int(joint) for joint in sequence["joints"]]
+        timestamps = [float(timestamp) for timestamp in sequence["timestamps"]]
+        raw_frames = sequence["frames"]
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("Recorded sequence has invalid trajectory fields") from exc
+    if not isinstance(raw_frames, list):
+        raise ValueError("Recorded frames must be a list")
+    if joints != expected_joints:
+        raise ValueError(f"Recorded joints do not match the declared {arm!r} arm selection")
+    if not timestamps or len(raw_frames) != len(timestamps):
+        raise ValueError("Recorded sequence has invalid frames or timestamps")
+    if any(not math.isfinite(timestamp) or timestamp < 0.0 for timestamp in timestamps):
+        raise ValueError("Recorded timestamps must be finite and non-negative")
+    if any(current <= previous for previous, current in zip(timestamps, timestamps[1:])):
+        raise ValueError("Recorded timestamps must be strictly increasing")
+    first_timestamp = timestamps[0]
+    timestamps = [timestamp - first_timestamp for timestamp in timestamps]
+    frames = []
+    for frame_index, frame in enumerate(raw_frames):
+        if not isinstance(frame, dict):
+            raise ValueError(f"Recorded frame {frame_index} must be an object")
+        normalized = {}
+        for joint in joints:
+            raw_value = frame.get(str(joint), frame.get(joint))
+            if raw_value is None:
+                raise ValueError(f"Recorded frame {frame_index} is missing joint {joint}")
+            normalized[joint] = _finite_float(
+                raw_value,
+                f"recorded frame {frame_index} joint {joint}",
+            )
+        frames.append(normalized)
+    return arm, joints, timestamps, frames
+
+
 def teach(sequence_name, reset=False, arm="both", rate_hz=50.0):
     """Record until Enter is pressed, while the selected arms stay backdrivable."""
+    sequence_name = _sequence_name(sequence_name)
     arm = str(arm).lower()
     joints = _arm_joints(arm)
+    rate_hz = _finite_float(rate_hz, "rate_hz", minimum=1.0, maximum=200.0)
+    if sequence_name in _sequences and not reset:
+        raise ValueError("Sequence already exists; pass reset=True to replace it")
     arms_zero_stiffness(arm=arm)
     done = threading.Event()
 
@@ -1018,29 +1153,31 @@ def teach(sequence_name, reset=False, arm="both", rate_hz=50.0):
         done.set()
 
     threading.Thread(target=wait_for_enter, name="teach-enter", daemon=True).start()
-    interval_s = 1.0 / max(1.0, float(rate_hz))
+    interval_s = 1.0 / rate_hz
     start = time.monotonic()
     next_report = start + 1.0
     timestamps, frames = [], []
-    while not done.is_set():
-        elapsed = time.monotonic() - start
-        pose = current_upper_body_pose()
-        timestamps.append(elapsed)
-        frames.append(pose)
-        if time.monotonic() >= next_report:
-            print(f"[teach] {len(frames)} frames, {elapsed:.1f}s saved")
-            next_report += 1.0
-        done.wait(interval_s)
-    if not frames:
-        raise RuntimeError("No teach frames were captured.")
-    _sequences[sequence_name] = {
-        "format": "trajectory_v1", "arm": arm, "joints": joints,
-        "timestamps": timestamps, "frames": frames,
-    }
-    _save_sequences()
-    duration_s = timestamps[-1]
-    print(f"[teach] complete: {len(frames)} frames over {duration_s:.1f}s")
-    release_arms()
+    try:
+        while not done.is_set():
+            elapsed = time.monotonic() - start
+            pose = current_upper_body_pose()
+            timestamps.append(elapsed)
+            frames.append({joint: pose[joint] for joint in joints})
+            if time.monotonic() >= next_report:
+                print(f"[teach] {len(frames)} frames, {elapsed:.1f}s saved")
+                next_report += 1.0
+            done.wait(interval_s)
+        if not frames:
+            raise RuntimeError("No teach frames were captured.")
+        _sequences[sequence_name] = {
+            "format": "trajectory_v1", "arm": arm, "joints": joints,
+            "timestamps": timestamps, "frames": frames,
+        }
+        _save_sequences()
+        duration_s = timestamps[-1]
+        print(f"[teach] complete: {len(frames)} frames over {duration_s:.1f}s")
+    finally:
+        release_arms()
     return {
         "sequence": sequence_name, "frames": len(frames), "duration_s": duration_s,
         "arm": arm, "released_to_ai": True,
@@ -1049,27 +1186,32 @@ def teach(sequence_name, reset=False, arm="both", rate_hz=50.0):
 
 def repeat(sequence_name, speed=1.0, rate_hz=50.0, start_ramp_s=0.8, final_hold_s=0.8, max_joint_speed=0.45):
     """Replay a recorded trajectory with a safe ramp, speed limit, final hold, and release."""
-    sequence = _sequences[sequence_name]
-    if not isinstance(sequence, dict) or sequence.get("format") != "trajectory_v1":
-        raise ValueError("Re-record this sequence with teach(); legacy waypoint sequences are not safe to replay.")
-    arm = sequence["arm"]
-    joints = [int(j) for j in sequence["joints"]]
-    timestamps = [float(t) for t in sequence["timestamps"]]
-    frames = [{int(j): float(q) for j, q in frame.items()} for frame in sequence["frames"]]
-    if not frames or len(frames) != len(timestamps):
-        raise ValueError("Recorded sequence has invalid frames or timestamps.")
-    speed = max(1e-3, float(speed))
-    rate_hz = max(1.0, float(rate_hz))
+    sequence_name = _sequence_name(sequence_name)
+    if sequence_name not in _sequences:
+        raise KeyError(f"Unknown arm sequence: {sequence_name}")
+    arm, joints, timestamps, frames = _validate_trajectory(_sequences[sequence_name])
+    speed = _finite_float(speed, "speed", minimum=1e-3)
+    rate_hz = _finite_float(rate_hz, "rate_hz", minimum=1.0, maximum=200.0)
+    start_ramp_s = _finite_float(start_ramp_s, "start_ramp_s", minimum=0.0)
+    final_hold_s = _finite_float(final_hold_s, "final_hold_s", minimum=0.0, maximum=60.0)
+    max_joint_speed = _finite_float(
+        max_joint_speed,
+        "max_joint_speed",
+        minimum=1e-3,
+        maximum=2.0,
+    )
     dt = 1.0 / rate_hz
     release_arms()
-    engage_arms()
     try:
+        engage_arms()
         start_pose = current_upper_body_pose()
         waist_hold = {j: start_pose[j] for j in WAIST_JOINTS}
         first = frames[0]
         max_delta = max(abs(first[j] - start_pose[j]) for j in joints)
-        ramp_s = max(float(start_ramp_s), max_delta / max(1e-3, float(max_joint_speed)))
-        steps = max(1, int(ramp_s * rate_hz))
+        # Smoothstep's peak slope is 1.5, so use that factor to make the
+        # configured joint-speed limit a true peak limit, not only an average.
+        ramp_s = max(start_ramp_s, 1.5 * max_delta / max_joint_speed)
+        steps = max(1, math.ceil(ramp_s * rate_hz))
         for step in range(1, steps + 1):
             smooth = (step / steps) ** 2 * (3.0 - 2.0 * step / steps)
             target = dict(start_pose)
@@ -1091,18 +1233,34 @@ def repeat(sequence_name, speed=1.0, rate_hz=50.0, start_ramp_s=0.8, final_hold_
             desired = {j: frames[index][j] + (frames[next_index][j] - frames[index][j]) * alpha for j in joints}
             target = current_upper_body_pose()
             target.update(waist_hold)
-            max_step = float(max_joint_speed) * dt
+            max_step = max_joint_speed * dt
             for j in joints:
                 previous[j] += max(-max_step, min(max_step, desired[j] - previous[j]))
                 target[j] = previous[j]
             write_arm_sdk_pose(target, weight=1.0, kp=30.0, kd=1.5, waist_kp=480.0, waist_kd=12.0)
             time.sleep(dt)
         final = frames[-1]
-        deadline = time.monotonic() + max(0.0, float(final_hold_s))
+        # Reach the final frame through the same velocity limiter. Writing it
+        # directly here could otherwise snap after a speed-limited replay.
+        while True:
+            target = current_upper_body_pose()
+            target.update(waist_hold)
+            reached = True
+            for j in joints:
+                delta = final[j] - previous[j]
+                if abs(delta) > 1e-9:
+                    reached = False
+                previous[j] += max(-max_step, min(max_step, delta))
+                target[j] = previous[j]
+            write_arm_sdk_pose(target, weight=1.0, kp=30.0, kd=1.5, waist_kp=480.0, waist_kd=12.0)
+            if reached:
+                break
+            time.sleep(dt)
+        deadline = time.monotonic() + final_hold_s
         while time.monotonic() < deadline:
             target = current_upper_body_pose()
             target.update(waist_hold)
-            target.update({j: final[j] for j in joints})
+            target.update({j: previous[j] for j in joints})
             write_arm_sdk_pose(target, weight=1.0, kp=30.0, kd=1.5, waist_kp=480.0, waist_kd=12.0)
             time.sleep(dt)
     finally:

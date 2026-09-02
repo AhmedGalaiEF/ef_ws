@@ -291,16 +291,17 @@ def body_frames(q: list[float]) -> dict[int, tuple[np.ndarray, np.ndarray]]:
     World FK is obtained exactly once with ``world_from_body`` below.  Keeping
     this routine body-only makes posture changes separable from IMU attitude.
     """
+    q_values = _finite_vector(q, 1, "joint positions")
     frames: dict[int, tuple[np.ndarray, np.ndarray]] = {}
     root_R = np.eye(3, dtype=np.float64)
     root_t = np.array(PELVIS_POS, dtype=np.float64)
-    for jid in range(len(q)):
+    for jid in range(len(q_values)):
         if jid not in BODY_JOINTS:
             continue
         parent, pos, quat, axis = BODY_JOINTS[jid]
         parent_R, parent_t = (root_R, root_t) if parent == -1 else frames[parent]
         world_t = parent_t + parent_R @ np.array(pos, dtype=np.float64)
-        world_R = parent_R @ _quat_to_R(quat) @ _axis_R(axis, float(q[jid]))
+        world_R = parent_R @ _quat_to_R(quat) @ _axis_R(axis, float(q_values[jid]))
         frames[jid] = (world_R, world_t)
     return frames
 
@@ -474,9 +475,37 @@ COM_VEL_SMOOTH_SAMPLES = 3  # lighter than accel's — ICP should stay responsiv
 COM_VEL_SAMPLE_DT_RANGE_S = (0.02, 0.5)  # discard finite-diff samples outside this dt (gap or jitter)
 ZMP_TRAIL_S = 5.0
 PLOT_INTERVAL_MS = 400
+DOMAIN_ID_RANGE = (0, 232)
+PORT_RANGE = (1, 65535)
+COM_HEIGHT_RANGE_M = (0.2, 1.5)
 
 DEFAULT_COM_HEIGHT_FALLBACK_M = PELVIS_POS[2]
 DEFAULT_SWING_HEIGHT_THRESHOLD_M = 0.015  # foot sole height gap ⇒ treat as single support
+
+
+def _finite_vector(values: Any, minimum_length: int, name: str) -> np.ndarray:
+    try:
+        vector = np.asarray(values, dtype=np.float64).reshape(-1)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a numeric sequence") from exc
+    if vector.size < minimum_length:
+        raise ValueError(f"{name} must contain at least {minimum_length} values")
+    if not np.all(np.isfinite(vector)):
+        raise ValueError(f"{name} contains non-finite values")
+    return vector
+
+
+def _bounded_int(minimum: int, maximum: int):
+    def parse(value: str) -> int:
+        try:
+            parsed = int(value)
+        except ValueError as exc:
+            raise argparse.ArgumentTypeError("must be an integer") from exc
+        if not minimum <= parsed <= maximum:
+            raise argparse.ArgumentTypeError(f"must be between {minimum} and {maximum}")
+        return parsed
+
+    return parse
 
 
 def _extract_xy(odom: Optional[dict]) -> Optional[tuple[float, float]]:
@@ -484,10 +513,12 @@ def _extract_xy(odom: Optional[dict]) -> Optional[tuple[float, float]]:
         return None
     position = odom.get("position")
     if position is not None:
-        return float(position[0]), float(position[1])
+        vector = _finite_vector(position, 2, "odometry position")
+        return float(vector[0]), float(vector[1])
     pose = odom.get("pose")
     if pose is not None:
-        return float(pose[0]), float(pose[1])
+        vector = _finite_vector(pose, 2, "odometry pose")
+        return float(vector[0]), float(vector[1])
     return None
 
 
@@ -499,12 +530,33 @@ def _extract_yaw(odom: Optional[dict], imu: Optional[dict]) -> Optional[float]:
     their own `pose` tuple. Returns None only if neither is available (in
     which case callers skip rotation, same as the old behavior)."""
     if imu is not None and imu.get("rpy") is not None:
-        return float(imu["rpy"][2])
+        try:
+            return float(_finite_vector(imu["rpy"], 3, "IMU rpy")[2])
+        except ValueError:
+            pass
     if odom is not None:
         pose = odom.get("pose")
-        if pose is not None and len(pose) >= 3:
-            return float(pose[2])
+        if pose is not None:
+            try:
+                vector = _finite_vector(pose, 3, "odometry pose")
+                return float(vector[2])
+            except ValueError:
+                # Some odometry adapters expose xy only. Position remains
+                # usable even though world-orientation correction is not.
+                return None
     return None
+
+
+def _imu_acceleration_world(imu: Optional[dict]) -> Optional[np.ndarray]:
+    if not imu or imu.get("acc") is None or imu.get("rpy") is None:
+        return None
+    try:
+        roll, pitch, yaw = _finite_vector(imu["rpy"], 3, "IMU rpy")[:3]
+        acceleration = _finite_vector(imu["acc"], 3, "IMU acceleration")[:3]
+    except ValueError:
+        return None
+    rotation = _rot_z(float(yaw)) @ _rot_y(float(pitch)) @ _rot_x(float(roll))
+    return rotation @ acceleration - np.array([0.0, 0.0, G_ACCEL])
 
 
 class ZmpLink:
@@ -565,14 +617,34 @@ class ZmpLink:
         self._prev_com_sample: Optional[tuple[float, float, float]] = None  # (ts, x, y)
         self._com_accel_hist: deque = deque(maxlen=ACCEL_SMOOTH_SAMPLES)
         self._prev_com_vel_sample: Optional[tuple[float, float, float]] = None  # (ts, vx, vy)
+        self._com_height_fallback_m = DEFAULT_COM_HEIGHT_FALLBACK_M
+        self._swing_height_threshold_m = DEFAULT_SWING_HEIGHT_THRESHOLD_M
 
-        self._stop = threading.Event()
+        self._stop: Optional[threading.Event] = None
         self._poll_thread: Optional[threading.Thread] = None
+
+    def _reset_dynamic_state_locked(self) -> None:
+        self.com_xy = None
+        self.com_vel_xy = None
+        self.left_corners = None
+        self.right_corners = None
+        self.zmp_xy = None
+        self.icp_xy = None
+        self.ts = 0.0
+        self.zmp_trail.clear()
+        self._accel_hist.clear()
+        self._com_vel_hist.clear()
+        self._com_accel_hist.clear()
+        self._prev_com_sample = None
+        self._prev_com_vel_sample = None
 
     def connect(self) -> None:
         with self.lock:
             self.connect_requested = True
             if self.g1 is not None:
+                return
+            if self._poll_thread is not None and self._poll_thread.is_alive():
+                self.init_err = "Previous polling thread is still stopping; try Connect again."
                 return
             try:
                 from sdk_wrapper import G1  # deferred: only needed once connecting
@@ -582,15 +654,30 @@ class ZmpLink:
                 self.init_err = str(exc)
                 self.g1 = None
                 return
-            self._stop.clear()
-            self._poll_thread = threading.Thread(target=self._poll_loop, daemon=True)
+            self._reset_dynamic_state_locked()
+            stop = threading.Event()
+            self._stop = stop
+            self._poll_thread = threading.Thread(target=self._poll_loop, args=(stop,), daemon=True)
             self._poll_thread.start()
 
     def disconnect(self) -> None:
         with self.lock:
             self.connect_requested = False
-            self._stop.set()
+            stop = self._stop
+            thread = self._poll_thread
+            if stop is not None:
+                stop.set()
             self.g1 = None
+            self._reset_dynamic_state_locked()
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(timeout=2.0)
+        with self.lock:
+            if self._poll_thread is thread and (thread is None or not thread.is_alive()):
+                self._poll_thread = None
+                self._stop = None
+            # A poll already in progress when disconnect was requested may
+            # have published one final snapshot before exiting.
+            self._reset_dynamic_state_locked()
 
     def status(self) -> tuple[str, str]:
         with self.lock:
@@ -602,19 +689,26 @@ class ZmpLink:
                 return "Error", "danger"
             return "Connecting…", "warning"
 
-    def _poll_loop(self) -> None:
+    def _poll_loop(self, stop: threading.Event) -> None:
         period = 1.0 / POLL_HZ
-        while not self._stop.is_set():
-            g1 = self.g1
+        while not stop.is_set():
+            with self.lock:
+                g1 = self.g1
+                com_height = self._com_height_fallback_m
+                swing_threshold = self._swing_height_threshold_m
             if g1 is not None:
                 try:
-                    self._poll_once(g1, com_height_fallback_m=self._com_height_fallback_m,
-                                     swing_threshold_m=self._swing_height_threshold_m)
+                    self._poll_once(
+                        g1,
+                        com_height_fallback_m=com_height,
+                        swing_threshold_m=swing_threshold,
+                    )
                     with self.lock:
                         self.poll_err = None
                 except Exception as exc:
                     with self.lock:
                         self.poll_err = str(exc)
+<<<<<<< HEAD
             time.sleep(period)
 
     # Configurable from the UI; read by the poll loop each tick.
@@ -622,12 +716,16 @@ class ZmpLink:
     _swing_height_threshold_m = DEFAULT_SWING_HEIGHT_THRESHOLD_M
     _conservative_shrink_m = 0.018
     _imu_accel_includes_gravity = True
+=======
+            stop.wait(period)
+>>>>>>> 134802629fc365c6592869d0220ac49d919aa440
 
     def _poll_once(self, g1, com_height_fallback_m: float, swing_threshold_m: float) -> None:
         lowstate = g1.get_lowstate()
         odom = g1.get_odom()
         imu = g1.get_imus()
 
+<<<<<<< HEAD
         # Odometry supplies translation only.  Attitude is always the full
         # IMU R_world_body = Rz(yaw) Ry(pitch) Rx(roll), applied once below.
         base_xy = _extract_xy(odom) or (0.0, 0.0)
@@ -636,6 +734,19 @@ class ZmpLink:
         base_world = np.array([base_xy[0], base_xy[1], 0.0])
         positions = (lowstate.get("joint_positions") or []) if lowstate is not None else []
         torques = (lowstate.get("joint_torques") or []) if lowstate is not None else []
+=======
+        base_xy = _extract_xy(odom)
+        yaw = _extract_yaw(odom, imu)
+        yaw_R2 = None if yaw is None else _rot_z(yaw)[:2, :2]
+        raw_positions = lowstate.get("joint_positions") if lowstate is not None else None
+        raw_torques = lowstate.get("joint_torques") if lowstate is not None else None
+        positions = (
+            []
+            if raw_positions is None
+            else _finite_vector(raw_positions, 1, "joint positions").tolist()
+        )
+        torques = [] if raw_torques is None else list(raw_torques)
+>>>>>>> 134802629fc365c6592869d0220ac49d919aa440
         leg_q = positions[:12] if len(positions) >= 12 else None
 
         com_xy = None
@@ -681,6 +792,7 @@ class ZmpLink:
             # — it can't invent a single-support the height gap didn't already
             # suggest. Skipped (leaves the height-only call as-is) if torques
             # aren't reported.
+<<<<<<< HEAD
             stance_torque_overridden = "leg torque proxy disagrees" in stance_reasons
             whole_body = whole_body_com_body_frame(positions[:29])
             if whole_body is not None:
@@ -693,6 +805,35 @@ class ZmpLink:
                 no_arms = whole_body_com_body_frame(positions[:29], "both")
                 arm_shift = com_body[:2] - no_arms[:2] if no_arms is not None else np.zeros(2)
                 arm_excluded = {k: v for k, v in (("left", no_left), ("right", no_right), ("both", no_arms)) if v is not None}
+=======
+            if stance != "double" and len(torques) >= 12:
+                load_values = np.asarray(
+                    [torques[3], torques[4], torques[9], torques[10]],
+                    dtype=np.float64,
+                )
+                if np.all(np.isfinite(load_values)):
+                    left_load = abs(load_values[0]) + abs(load_values[1])
+                    right_load = abs(load_values[2]) + abs(load_values[3])
+                    stance_load, swing_load = (
+                        (left_load, right_load)
+                        if stance == "left"
+                        else (right_load, left_load)
+                    )
+                    if swing_load > stance_load:
+                        stance = "double"
+                        ground_z = (left_ground_z + right_ground_z) / 2.0
+                        stance_torque_overridden = True
+
+            whole_body = whole_body_com_pelvis_frame(positions[:29])
+            if whole_body is not None:
+                com_xy_local, com_z_local = whole_body
+                measured_height = com_z_local - ground_z
+                if math.isfinite(measured_height) and (
+                    COM_HEIGHT_RANGE_M[0] <= measured_height <= COM_HEIGHT_RANGE_M[1]
+                ):
+                    h_com = measured_height
+                    h_com_auto = True
+>>>>>>> 134802629fc365c6592869d0220ac49d919aa440
             else:
                 com_body, com_world, arm_shift, arm_excluded = np.zeros(3), base_world, np.zeros(2), {}
             left_corners, right_corners = left_world3[:, :2], right_world3[:, :2]
@@ -705,7 +846,7 @@ class ZmpLink:
             ground_z = float(base_world[2])
             com_xy = tuple(base_world[:2])
 
-        now = time.time()
+        now = time.monotonic()
 
         # CoM velocity, finite-differenced across poll ticks and lightly
         # smoothed — same "no dedicated sensor for this" spirit as the IMU
@@ -756,6 +897,7 @@ class ZmpLink:
         ax_world = ay_world = 0.0
         a_world = np.zeros(3, dtype=np.float64)
         accel_source = "none"
+<<<<<<< HEAD
         if imu is not None and imu.get("acc") is not None and imu.get("rpy") is not None and np.linalg.norm(np.asarray(imu["acc"], dtype=float)) > 1e-6:
             roll, pitch, imu_yaw = imu["rpy"]
             R = Rwb
@@ -764,6 +906,10 @@ class ZmpLink:
             # provides no convention proof. UI selects the explicit runtime
             # assumption; stationary horizontal acceleration is shown below.
             a_world = R @ a_body - (np.array([0.0, 0.0, G_ACCEL]) if self._imu_accel_includes_gravity else 0.0)
+=======
+        a_world = _imu_acceleration_world(imu)
+        if a_world is not None:
+>>>>>>> 134802629fc365c6592869d0220ac49d919aa440
             with self.lock:
                 self._accel_hist.append((float(a_world[0]), float(a_world[1])))
                 ax_world = sum(v[0] for v in self._accel_hist) / len(self._accel_hist)
@@ -1124,11 +1270,32 @@ def on_connection(_connect, _disconnect, _tick, iface, domain_id):
     Input("shrink-input", "value"),
     Input("accel-gravity-toggle", "value"),
 )
+<<<<<<< HEAD
 def on_plot_tick(_n, com_height_fallback_m, swing_threshold_m, shrink_m, accel_gravity):
     LINK._com_height_fallback_m = float(com_height_fallback_m or DEFAULT_COM_HEIGHT_FALLBACK_M)
     LINK._swing_height_threshold_m = max(0.0, float(swing_threshold_m if swing_threshold_m is not None else DEFAULT_SWING_HEIGHT_THRESHOLD_M))
     LINK._conservative_shrink_m = max(0.0, float(shrink_m if shrink_m is not None else .018))
     LINK._imu_accel_includes_gravity = "g" in (accel_gravity or [])
+=======
+def on_plot_tick(_n, com_height_fallback_m, swing_threshold_m):
+    try:
+        com_height = float(com_height_fallback_m)
+    except (TypeError, ValueError):
+        com_height = DEFAULT_COM_HEIGHT_FALLBACK_M
+    if not math.isfinite(com_height):
+        com_height = DEFAULT_COM_HEIGHT_FALLBACK_M
+    com_height = max(COM_HEIGHT_RANGE_M[0], min(COM_HEIGHT_RANGE_M[1], com_height))
+    try:
+        swing_threshold = float(swing_threshold_m)
+    except (TypeError, ValueError):
+        swing_threshold = DEFAULT_SWING_HEIGHT_THRESHOLD_M
+    if not math.isfinite(swing_threshold):
+        swing_threshold = DEFAULT_SWING_HEIGHT_THRESHOLD_M
+    swing_threshold = max(0.0, min(0.05, swing_threshold))
+    with LINK.lock:
+        LINK._com_height_fallback_m = com_height
+        LINK._swing_height_threshold_m = swing_threshold
+>>>>>>> 134802629fc365c6592869d0220ac49d919aa440
     fig, lines = build_figure(LINK)
     with LINK.lock:
         err = LINK.poll_err
@@ -1174,14 +1341,19 @@ def verify_joint_mapping() -> None:
     print("G1 FK mapping: ids 15-21 left arm, 22-28 right arm; shoulder/elbow axes +Y; URDF inertial hand masses included")
 
 
-def _parse_args() -> argparse.Namespace:
+def _parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="G1 ZMP / support-polygon estimator and live plot.")
     parser.add_argument("--iface", default="eth0")
-    parser.add_argument("--domain-id", type=int, default=0)
+    parser.add_argument("--domain-id", type=_bounded_int(*DOMAIN_ID_RANGE), default=0)
     parser.add_argument("--host", default="0.0.0.0")
+<<<<<<< HEAD
     parser.add_argument("--port", type=int, default=8072)
     parser.add_argument("--sanity-test", action="store_true", help="run pure frame/LIPM/geometry checks and exit")
     return parser.parse_args()
+=======
+    parser.add_argument("--port", type=_bounded_int(*PORT_RANGE), default=8072)
+    return parser.parse_args(argv)
+>>>>>>> 134802629fc365c6592869d0220ac49d919aa440
 
 
 def main() -> int:
