@@ -40,7 +40,7 @@ def load_zmp_viz(monkeypatch: pytest.MonkeyPatch):
 
     dbc = ModuleType("dash_bootstrap_components")
     dbc.themes = SimpleNamespace(DARKLY="darkly")
-    for name in ("Container", "Row", "Col", "Input", "Button", "Badge"):
+    for name in ("Container", "Row", "Col", "Input", "Button", "Badge", "Checklist"):
         setattr(dbc, name, component)
 
     graph_objects = ModuleType("plotly.graph_objects")

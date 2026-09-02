@@ -16,7 +16,9 @@ Examples:
 from __future__ import annotations
 
 import argparse
+from collections import deque
 import json
+import math
 import shutil
 import subprocess
 import sys
@@ -39,27 +41,50 @@ ROS_FORCE_WORDS = ("foot", "force", "contact", "pressure", "wrench")
 FORCE_FIELD_WORDS = ("foot", "force", "contact", "pressure", "wrench", "load")
 
 
-def positive_float(value: str) -> float:
-    parsed = float(value)
-    if parsed <= 0:
-        raise argparse.ArgumentTypeError("must be greater than zero")
+def bounded_positive_float(maximum: float):
+    def parse(value: str) -> float:
+        try:
+            parsed = float(value)
+        except ValueError as exc:
+            raise argparse.ArgumentTypeError("must be a number") from exc
+        if not math.isfinite(parsed) or not 0.0 < parsed <= maximum:
+            raise argparse.ArgumentTypeError(f"must be finite and between 0 and {maximum:g}")
+        return parsed
+
+    return parse
+
+
+def domain_id(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be an integer") from exc
+    if not 0 <= parsed <= 232:
+        raise argparse.ArgumentTypeError("must be between 0 and 232")
     return parsed
 
 
-def parse_args() -> argparse.Namespace:
+def nonempty_iface(value: str) -> str:
+    parsed = str(value).strip()
+    if not parsed:
+        raise argparse.ArgumentTypeError("must not be empty")
+    return parsed
+
+
+def parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--seconds", type=positive_float, default=3.0,
+    parser.add_argument("--seconds", type=bounded_positive_float(300.0), default=3.0,
                         help="DDS collection time (default: 3).")
-    parser.add_argument("--iface", default=default_dds_iface("eth0"),
+    parser.add_argument("--iface", type=nonempty_iface, default=default_dds_iface("eth0"),
                         help="DDS NIC; use auto to let CycloneDDS choose.")
-    parser.add_argument("--domain-id", type=int, default=0, help="DDS domain ID.")
-    parser.add_argument("--ros-timeout", type=positive_float, default=3.0,
+    parser.add_argument("--domain-id", type=domain_id, default=0, help="DDS domain ID.")
+    parser.add_argument("--ros-timeout", type=bounded_positive_float(60.0), default=3.0,
                         help="Timeout for ROS 2 discovery commands (default: 3).")
-    parser.add_argument("--ros-echo-seconds", type=positive_float, default=2.0,
+    parser.add_argument("--ros-echo-seconds", type=bounded_positive_float(60.0), default=2.0,
                         help="Wait time for one message per relevant ROS topic (default: 2).")
     parser.add_argument("--no-ros", action="store_true", help="Skip ROS 2 discovery.")
     parser.add_argument("--json", action="store_true", help="Also print machine-readable results.")
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def as_values(value: Any) -> list[float | int] | None:
@@ -77,6 +102,8 @@ def as_values(value: Any) -> list[float | int] | None:
         try:
             number = float(item)
         except (TypeError, ValueError):
+            return None
+        if not math.isfinite(number):
             return None
         converted.append(int(number) if number.is_integer() else number)
     return converted
@@ -101,27 +128,32 @@ def numeric_force_fields(msg: Any) -> dict[str, list[float | int]]:
 class LowStateProbe:
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self.samples: list[dict[str, list[float | int]]] = []
+        self.samples: deque[dict[str, list[float | int]]] = deque(maxlen=1000)
+        self.samples_received = 0
         self.field_names: set[str] = set()
+        self.ever_nonzero: dict[str, bool] = {}
 
     def callback(self, msg: Any) -> None:
         fields = numeric_force_fields(msg)
         with self._lock:
+            self.samples_received += 1
             self.samples.append(fields)
             self.field_names.update(fields)
+            for name, values in fields.items():
+                self.ever_nonzero[name] = self.ever_nonzero.get(name, False) or any(
+                    value != 0 for value in values
+                )
 
     def result(self) -> dict[str, Any]:
         with self._lock:
             samples = list(self.samples)
+            samples_received = self.samples_received
             field_names = sorted(self.field_names)
+            nonzero = dict(self.ever_nonzero)
         latest = samples[-1] if samples else {}
-        nonzero = {
-            name: any(value != 0 for sample in samples for value in sample.get(name, []))
-            for name in field_names
-        }
         return {
             "topic": GO2_LOWSTATE_TOPIC,
-            "samples_received": len(samples),
+            "samples_received": samples_received,
             "force_like_fields": field_names,
             "latest": latest,
             "any_nonzero": nonzero,
@@ -202,7 +234,8 @@ def sample_ros_topic(topic: str, type_name: str, timeout_s: float) -> tuple[int,
         subscription = node.create_subscription(message_type, topic, lambda msg: received.append(msg), 10)
         deadline = time.monotonic() + timeout_s
         while not received and time.monotonic() < deadline:
-            rclpy.spin_once(node, timeout_sec=min(0.1, deadline - time.monotonic()))
+            remaining = max(0.0, deadline - time.monotonic())
+            rclpy.spin_once(node, timeout_sec=min(0.1, remaining))
         node.destroy_subscription(subscription)
         if not received:
             return 124, "(no message received before timeout)"
@@ -279,8 +312,6 @@ def print_human(dds: dict[str, Any], ros: dict[str, Any] | None) -> None:
 
 def main() -> int:
     args = parse_args()
-    if args.domain_id < 0:
-        raise SystemExit("--domain-id must be non-negative")
     ros = None if args.no_ros else run_ros_probe(args)
     # rclpy and unitree_sdk2py both create CycloneDDS participants. ROS must
     # run first on this Foxy installation, otherwise rclpy cannot create a
@@ -289,7 +320,7 @@ def main() -> int:
     print_human(dds, ros)
     if args.json:
         print("\nJSON:")
-        print(json.dumps({"dds": dds, "ros": ros}, indent=2, sort_keys=True))
+        print(json.dumps({"dds": dds, "ros": ros}, indent=2, sort_keys=True, allow_nan=False))
     # A missing force field/data is a probe finding, not a script failure.
     return 0
 

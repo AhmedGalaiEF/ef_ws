@@ -619,6 +619,8 @@ class ZmpLink:
         self._prev_com_vel_sample: Optional[tuple[float, float, float]] = None  # (ts, vx, vy)
         self._com_height_fallback_m = DEFAULT_COM_HEIGHT_FALLBACK_M
         self._swing_height_threshold_m = DEFAULT_SWING_HEIGHT_THRESHOLD_M
+        self._conservative_shrink_m = 0.018
+        self._imu_accel_includes_gravity = True
 
         self._stop: Optional[threading.Event] = None
         self._poll_thread: Optional[threading.Thread] = None
@@ -708,36 +710,25 @@ class ZmpLink:
                 except Exception as exc:
                     with self.lock:
                         self.poll_err = str(exc)
-<<<<<<< HEAD
-            time.sleep(period)
-
-    # Configurable from the UI; read by the poll loop each tick.
-    _com_height_fallback_m = DEFAULT_COM_HEIGHT_FALLBACK_M
-    _swing_height_threshold_m = DEFAULT_SWING_HEIGHT_THRESHOLD_M
-    _conservative_shrink_m = 0.018
-    _imu_accel_includes_gravity = True
-=======
             stop.wait(period)
->>>>>>> 134802629fc365c6592869d0220ac49d919aa440
 
     def _poll_once(self, g1, com_height_fallback_m: float, swing_threshold_m: float) -> None:
         lowstate = g1.get_lowstate()
         odom = g1.get_odom()
         imu = g1.get_imus()
 
-<<<<<<< HEAD
         # Odometry supplies translation only.  Attitude is always the full
         # IMU R_world_body = Rz(yaw) Ry(pitch) Rx(roll), applied once below.
         base_xy = _extract_xy(odom) or (0.0, 0.0)
-        rpy = tuple(imu.get("rpy") or (0.0, 0.0, _extract_yaw(odom, imu) or 0.0)) if imu else (0.0, 0.0, _extract_yaw(odom, imu) or 0.0)
+        fallback_yaw = _extract_yaw(odom, imu) or 0.0
+        raw_rpy = imu.get("rpy") if imu else None
+        try:
+            rpy_values = _finite_vector(raw_rpy, 3, "IMU rpy") if raw_rpy is not None else None
+        except ValueError:
+            rpy_values = None
+        rpy = tuple(rpy_values) if rpy_values is not None else (0.0, 0.0, fallback_yaw)
         Rwb = rpy_world_body(rpy)
         base_world = np.array([base_xy[0], base_xy[1], 0.0])
-        positions = (lowstate.get("joint_positions") or []) if lowstate is not None else []
-        torques = (lowstate.get("joint_torques") or []) if lowstate is not None else []
-=======
-        base_xy = _extract_xy(odom)
-        yaw = _extract_yaw(odom, imu)
-        yaw_R2 = None if yaw is None else _rot_z(yaw)[:2, :2]
         raw_positions = lowstate.get("joint_positions") if lowstate is not None else None
         raw_torques = lowstate.get("joint_torques") if lowstate is not None else None
         positions = (
@@ -746,7 +737,12 @@ class ZmpLink:
             else _finite_vector(raw_positions, 1, "joint positions").tolist()
         )
         torques = [] if raw_torques is None else list(raw_torques)
->>>>>>> 134802629fc365c6592869d0220ac49d919aa440
+        if torques:
+            try:
+                torque_values = np.asarray(torques, dtype=np.float64).reshape(-1)
+                torques = torque_values.tolist() if np.all(np.isfinite(torque_values)) else []
+            except (TypeError, ValueError):
+                torques = []
         leg_q = positions[:12] if len(positions) >= 12 else None
 
         com_xy = None
@@ -792,48 +788,22 @@ class ZmpLink:
             # — it can't invent a single-support the height gap didn't already
             # suggest. Skipped (leaves the height-only call as-is) if torques
             # aren't reported.
-<<<<<<< HEAD
             stance_torque_overridden = "leg torque proxy disagrees" in stance_reasons
             whole_body = whole_body_com_body_frame(positions[:29])
             if whole_body is not None:
                 com_body = whole_body
                 com_world = world_from_body(com_body[None, :], Rwb, base_world)[0]
-                h_com = com_world[2] - ground_z
-                h_com_auto = True
-                no_left = whole_body_com_body_frame(positions[:29], "left")
-                no_right = whole_body_com_body_frame(positions[:29], "right")
-                no_arms = whole_body_com_body_frame(positions[:29], "both")
-                arm_shift = com_body[:2] - no_arms[:2] if no_arms is not None else np.zeros(2)
-                arm_excluded = {k: v for k, v in (("left", no_left), ("right", no_right), ("both", no_arms)) if v is not None}
-=======
-            if stance != "double" and len(torques) >= 12:
-                load_values = np.asarray(
-                    [torques[3], torques[4], torques[9], torques[10]],
-                    dtype=np.float64,
-                )
-                if np.all(np.isfinite(load_values)):
-                    left_load = abs(load_values[0]) + abs(load_values[1])
-                    right_load = abs(load_values[2]) + abs(load_values[3])
-                    stance_load, swing_load = (
-                        (left_load, right_load)
-                        if stance == "left"
-                        else (right_load, left_load)
-                    )
-                    if swing_load > stance_load:
-                        stance = "double"
-                        ground_z = (left_ground_z + right_ground_z) / 2.0
-                        stance_torque_overridden = True
-
-            whole_body = whole_body_com_pelvis_frame(positions[:29])
-            if whole_body is not None:
-                com_xy_local, com_z_local = whole_body
-                measured_height = com_z_local - ground_z
+                measured_height = float(com_world[2] - ground_z)
                 if math.isfinite(measured_height) and (
                     COM_HEIGHT_RANGE_M[0] <= measured_height <= COM_HEIGHT_RANGE_M[1]
                 ):
                     h_com = measured_height
                     h_com_auto = True
->>>>>>> 134802629fc365c6592869d0220ac49d919aa440
+                no_left = whole_body_com_body_frame(positions[:29], "left")
+                no_right = whole_body_com_body_frame(positions[:29], "right")
+                no_arms = whole_body_com_body_frame(positions[:29], "both")
+                arm_shift = com_body[:2] - no_arms[:2] if no_arms is not None else np.zeros(2)
+                arm_excluded = {k: v for k, v in (("left", no_left), ("right", no_right), ("both", no_arms)) if v is not None}
             else:
                 com_body, com_world, arm_shift, arm_excluded = np.zeros(3), base_world, np.zeros(2), {}
             left_corners, right_corners = left_world3[:, :2], right_world3[:, :2]
@@ -897,19 +867,21 @@ class ZmpLink:
         ax_world = ay_world = 0.0
         a_world = np.zeros(3, dtype=np.float64)
         accel_source = "none"
-<<<<<<< HEAD
-        if imu is not None and imu.get("acc") is not None and imu.get("rpy") is not None and np.linalg.norm(np.asarray(imu["acc"], dtype=float)) > 1e-6:
-            roll, pitch, imu_yaw = imu["rpy"]
-            R = Rwb
-            a_body = np.array(imu["acc"], dtype=np.float64)
+        a_body = None
+        if imu is not None and imu.get("acc") is not None:
+            try:
+                a_body = _finite_vector(imu["acc"], 3, "IMU acceleration")[:3]
+            except ValueError:
+                a_body = None
+        if a_body is not None and np.linalg.norm(a_body) > 1e-6:
             # sdk_wrapper only forwards the native field and this repository
             # provides no convention proof. UI selects the explicit runtime
             # assumption; stationary horizontal acceleration is shown below.
-            a_world = R @ a_body - (np.array([0.0, 0.0, G_ACCEL]) if self._imu_accel_includes_gravity else 0.0)
-=======
-        a_world = _imu_acceleration_world(imu)
-        if a_world is not None:
->>>>>>> 134802629fc365c6592869d0220ac49d919aa440
+            a_world = Rwb @ a_body - (
+                np.array([0.0, 0.0, G_ACCEL])
+                if self._imu_accel_includes_gravity
+                else 0.0
+            )
             with self.lock:
                 self._accel_hist.append((float(a_world[0]), float(a_world[1])))
                 ax_world = sum(v[0] for v in self._accel_hist) / len(self._accel_hist)
@@ -969,7 +941,11 @@ class ZmpLink:
             self.stance_torque_overridden = stance_torque_overridden
             self.yaw_applied = True
             self.accel_source = accel_source
-            self.rpy, self.raw_accel, self.world_accel = rpy, np.array(imu.get("acc") if imu and imu.get("acc") else (0,0,0)), a_world
+            self.rpy = rpy
+            self.raw_accel = np.array(
+                a_body if a_body is not None else (0.0, 0.0, 0.0), dtype=np.float64
+            )
+            self.world_accel = a_world
             self.foot_info, self.contact_confidence, self.stance_reasons = foot_info, contact_confidence, stance_reasons
             self.q, self.torques, self.arm_shift_body, self.arm_com_excluded = list(positions), list(torques), arm_shift, arm_excluded
             self.omega, self.zmp_body, self.icp_body = math.sqrt(G_ACCEL / h_com) if h_com > 1e-3 else 0.0, zmp_body, icp_body
@@ -1270,14 +1246,7 @@ def on_connection(_connect, _disconnect, _tick, iface, domain_id):
     Input("shrink-input", "value"),
     Input("accel-gravity-toggle", "value"),
 )
-<<<<<<< HEAD
 def on_plot_tick(_n, com_height_fallback_m, swing_threshold_m, shrink_m, accel_gravity):
-    LINK._com_height_fallback_m = float(com_height_fallback_m or DEFAULT_COM_HEIGHT_FALLBACK_M)
-    LINK._swing_height_threshold_m = max(0.0, float(swing_threshold_m if swing_threshold_m is not None else DEFAULT_SWING_HEIGHT_THRESHOLD_M))
-    LINK._conservative_shrink_m = max(0.0, float(shrink_m if shrink_m is not None else .018))
-    LINK._imu_accel_includes_gravity = "g" in (accel_gravity or [])
-=======
-def on_plot_tick(_n, com_height_fallback_m, swing_threshold_m):
     try:
         com_height = float(com_height_fallback_m)
     except (TypeError, ValueError):
@@ -1292,10 +1261,18 @@ def on_plot_tick(_n, com_height_fallback_m, swing_threshold_m):
     if not math.isfinite(swing_threshold):
         swing_threshold = DEFAULT_SWING_HEIGHT_THRESHOLD_M
     swing_threshold = max(0.0, min(0.05, swing_threshold))
+    try:
+        conservative_shrink = float(shrink_m)
+    except (TypeError, ValueError):
+        conservative_shrink = 0.018
+    if not math.isfinite(conservative_shrink):
+        conservative_shrink = 0.018
+    conservative_shrink = max(0.0, min(0.05, conservative_shrink))
     with LINK.lock:
         LINK._com_height_fallback_m = com_height
         LINK._swing_height_threshold_m = swing_threshold
->>>>>>> 134802629fc365c6592869d0220ac49d919aa440
+        LINK._conservative_shrink_m = conservative_shrink
+        LINK._imu_accel_includes_gravity = "g" in (accel_gravity or [])
     fig, lines = build_figure(LINK)
     with LINK.lock:
         err = LINK.poll_err
@@ -1346,14 +1323,9 @@ def _parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument("--iface", default="eth0")
     parser.add_argument("--domain-id", type=_bounded_int(*DOMAIN_ID_RANGE), default=0)
     parser.add_argument("--host", default="0.0.0.0")
-<<<<<<< HEAD
-    parser.add_argument("--port", type=int, default=8072)
-    parser.add_argument("--sanity-test", action="store_true", help="run pure frame/LIPM/geometry checks and exit")
-    return parser.parse_args()
-=======
     parser.add_argument("--port", type=_bounded_int(*PORT_RANGE), default=8072)
+    parser.add_argument("--sanity-test", action="store_true", help="run pure frame/LIPM/geometry checks and exit")
     return parser.parse_args(argv)
->>>>>>> 134802629fc365c6592869d0220ac49d919aa440
 
 
 def main() -> int:

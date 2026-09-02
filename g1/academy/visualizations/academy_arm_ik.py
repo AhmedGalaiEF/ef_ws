@@ -23,10 +23,80 @@ from academy_arm_fk import ArmFK, JOINT_LIMITS, LEFT_ARM_JOINTS, RIGHT_ARM_JOINT
 # Utilities
 # ---------------------------------------------------------------------------
 
+def _finite_scalar(value, name: str, *, minimum: float | None = None, maximum: float | None = None) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a number") from exc
+    if not np.isfinite(parsed):
+        raise ValueError(f"{name} must be finite")
+    if minimum is not None and parsed < minimum:
+        raise ValueError(f"{name} must be >= {minimum}")
+    if maximum is not None and parsed > maximum:
+        raise ValueError(f"{name} must be <= {maximum}")
+    return parsed
+
+
+def _finite_vector(values, size: int, name: str) -> np.ndarray:
+    try:
+        vector = np.asarray(values, dtype=np.float64).reshape(-1)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a numeric vector") from exc
+    if vector.size != size:
+        raise ValueError(f"{name} must contain exactly {size} values")
+    if not np.all(np.isfinite(vector)):
+        raise ValueError(f"{name} must contain only finite values")
+    return vector
+
+
+def _validate_transform(value, name: str = "T_base_desired") -> np.ndarray:
+    try:
+        transform = np.asarray(value, dtype=np.float64)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a numeric 4x4 transform") from exc
+    if transform.shape != (4, 4):
+        raise ValueError(f"{name} must have shape (4, 4)")
+    if not np.all(np.isfinite(transform)):
+        raise ValueError(f"{name} must contain only finite values")
+    if not np.allclose(transform[3], [0.0, 0.0, 0.0, 1.0], atol=1e-7):
+        raise ValueError(f"{name} must have homogeneous bottom row [0, 0, 0, 1]")
+    rotation = transform[:3, :3]
+    if not np.allclose(rotation.T @ rotation, np.eye(3), atol=1e-5) or not np.isclose(
+        np.linalg.det(rotation), 1.0, atol=1e-5
+    ):
+        raise ValueError(f"{name} rotation must be orthonormal with determinant +1")
+    return transform.copy()
+
+
 def _clamp(q: np.ndarray, limits: List[Tuple[float, float]]) -> np.ndarray:
     lo = np.array([lim[0] for lim in limits])
     hi = np.array([lim[1] for lim in limits])
     return np.clip(q, lo, hi)
+
+
+def _rotation_log(rotation: np.ndarray) -> np.ndarray:
+    """Return the SO(3) logarithm as an axis-angle vector."""
+    cosine = float(np.clip((np.trace(rotation) - 1.0) * 0.5, -1.0, 1.0))
+    angle = float(np.arccos(cosine))
+    skew = np.array(
+        [
+            rotation[2, 1] - rotation[1, 2],
+            rotation[0, 2] - rotation[2, 0],
+            rotation[1, 0] - rotation[0, 1],
+        ],
+        dtype=np.float64,
+    )
+    if angle < 1e-7:
+        return 0.5 * skew
+    if np.pi - angle < 1e-5:
+        eigenvalues, eigenvectors = np.linalg.eig(rotation)
+        index = int(np.argmin(np.abs(eigenvalues - 1.0)))
+        axis = np.real(eigenvectors[:, index])
+        norm = float(np.linalg.norm(axis))
+        if norm <= 1e-12:
+            raise ValueError("Could not determine axis for 180-degree rotation error")
+        return axis / norm * angle
+    return skew * (angle / (2.0 * np.sin(angle)))
 
 
 def _pose_error(T_desired: np.ndarray, T_current: np.ndarray) -> np.ndarray:
@@ -36,12 +106,7 @@ def _pose_error(T_desired: np.ndarray, T_current: np.ndarray) -> np.ndarray:
     """
     pos_err = T_desired[:3, 3] - T_current[:3, 3]
     R_err = T_desired[:3, :3] @ T_current[:3, :3].T
-    # Extract axis-angle from rotation error matrix
-    rot_err = np.array([
-        R_err[2, 1] - R_err[1, 2],
-        R_err[0, 2] - R_err[2, 0],
-        R_err[1, 0] - R_err[0, 1],
-    ]) * 0.5
+    rot_err = _rotation_log(R_err)
     return np.concatenate([pos_err, rot_err])
 
 
@@ -75,7 +140,7 @@ class ArmIK:
 
     Args:
         arm:          "left" | "right"
-        solver:       "dls" | "scipy" | "pin"
+        solver:       "dls"
         max_iter:     maximum iterations for iterative solvers
         tol_pos_m:    position convergence tolerance (metres)
         tol_rot_rad:  rotation convergence tolerance (radians)
@@ -91,12 +156,16 @@ class ArmIK:
         tol_rot_rad: float = 0.01,
         damping: float = 0.05,
     ) -> None:
+        if solver != "dls":
+            raise ValueError("The academy IK module supports only solver='dls'")
+        if isinstance(max_iter, bool) or not isinstance(max_iter, int) or not 1 <= max_iter <= 5000:
+            raise ValueError("max_iter must be an integer between 1 and 5000")
         self.arm = arm
         self.solver = solver
         self.max_iter = max_iter
-        self.tol_pos_m = tol_pos_m
-        self.tol_rot_rad = tol_rot_rad
-        self.damping = damping
+        self.tol_pos_m = _finite_scalar(tol_pos_m, "tol_pos_m", minimum=1e-6, maximum=0.1)
+        self.tol_rot_rad = _finite_scalar(tol_rot_rad, "tol_rot_rad", minimum=1e-6, maximum=1.0)
+        self.damping = _finite_scalar(damping, "damping", minimum=1e-6, maximum=10.0)
         self._fk = ArmFK(arm=arm, backend="urdf")
         self._limits = JOINT_LIMITS[arm]
         self._joint_indices = LEFT_ARM_JOINTS if arm == "left" else RIGHT_ARM_JOINTS
@@ -119,22 +188,21 @@ class ArmIK:
             (q_arm, info) where q_arm is length-7 or None on failure.
             info dict contains: "success", "error_pos_m", "error_rot_rad", "iterations"
         """
+        T_base_desired = _validate_transform(T_base_desired)
         if q_init is None:
-            q_init = np.zeros(7)
-        q = _clamp(q_init.copy(), self._limits)
+            q_init = np.zeros(7, dtype=np.float64)
+        q = _clamp(_finite_vector(q_init, 7, "q_init"), self._limits)
 
-        if self.solver == "dls":
-            q_sol, info = self._solve_dls(T_base_desired, q)
-            if q_sol is not None:
-                return q_sol, info
-            q_pos, pos_info = self._solve_position_dls(T_base_desired, q)
-            if q_pos is not None:
-                pos_info["fallback"] = "position_dls"
-                return q_pos, pos_info
-            info["fallback_error_pos_m"] = pos_info["error_pos_m"]
-            return None, info
-        if self.solver != "dls":
-            raise ValueError(f"Unknown solver: {self.solver!r}")
+        q_sol, info = self._solve_dls(T_base_desired, q)
+        if q_sol is not None:
+            return q_sol, info
+        q_pos, pos_info = self._solve_position_dls(T_base_desired, q)
+        if q_pos is not None:
+            pos_info["fallback"] = "position_dls"
+            pos_info["orientation_relaxed"] = True
+            return q_pos, pos_info
+        info["fallback_error_pos_m"] = pos_info["error_pos_m"]
+        return None, info
 
     # ------------------------------------------------------------------
     # Damped Least Squares (primary solver — fast, no external deps)
@@ -194,10 +262,11 @@ class ArmIK:
             pos_err = target_pos - T_cur[:3, 3]
             err_pos = float(np.linalg.norm(pos_err))
             if err_pos < self.tol_pos_m:
+                full_error = _pose_error(T_des, T_cur)
                 return q, {
                     "success": True,
                     "error_pos_m": err_pos,
-                    "error_rot_rad": 0.0,
+                    "error_rot_rad": float(np.linalg.norm(full_error[3:])),
                     "iterations": iteration,
                 }
 
@@ -212,10 +281,11 @@ class ArmIK:
 
         T_cur = self._fk.compute_arm(q)
         err_pos = float(np.linalg.norm(target_pos - T_cur[:3, 3]))
+        full_error = _pose_error(T_des, T_cur)
         return None, {
             "success": False,
             "error_pos_m": err_pos,
-            "error_rot_rad": 0.0,
+            "error_rot_rad": float(np.linalg.norm(full_error[3:])),
             "iterations": self.max_iter,
         }
 
@@ -240,10 +310,12 @@ class ArmIK:
     # ------------------------------------------------------------------
     def extract_arm_q(self, q_full: np.ndarray) -> np.ndarray:
         """Extract 7-element arm-only q from 30-element full joint array."""
+        q_full = _finite_vector(q_full, 30, "q_full")
         return q_full[self._joint_indices].copy()
 
     def inject_arm_q(self, q_full: np.ndarray, q_arm: np.ndarray) -> np.ndarray:
         """Write 7-element q_arm back into q_full at correct indices."""
-        q_out = q_full.copy()
+        q_out = _finite_vector(q_full, 30, "q_full").copy()
+        q_arm = _finite_vector(q_arm, 7, "q_arm")
         q_out[self._joint_indices] = q_arm
         return q_out

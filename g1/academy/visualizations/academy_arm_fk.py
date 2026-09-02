@@ -115,7 +115,10 @@ def _T_from_xyz_rpy(xyz, rpy) -> np.ndarray:
 
 def _T_from_axis_q(axis, q: float) -> np.ndarray:
     """4×4 rotation about unit axis by angle q (Rodrigues formula)."""
-    ax, ay, az = float(axis[0]), float(axis[1]), float(axis[2])
+    ax, ay, az = _normalize_axis(axis)
+    q = float(q)
+    if not np.isfinite(q):
+        raise ValueError("rotation angle must be finite")
     K = np.array([[0.0, -az, ay], [az, 0.0, -ax], [-ay, ax, 0.0]], dtype=np.float64)
     R = np.eye(3, dtype=np.float64) + np.sin(q) * K + (1.0 - np.cos(q)) * (K @ K)
     T = np.eye(4, dtype=np.float64)
@@ -230,6 +233,26 @@ _USE_PIN = _try_load_pinocchio()
 # Public class
 # --------------------------------------------------------------------------
 
+def _finite_vector(values, expected_size: int, name: str) -> np.ndarray:
+    try:
+        vector = np.asarray(values, dtype=np.float64).reshape(-1)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a numeric vector") from exc
+    if vector.size != expected_size:
+        raise ValueError(f"{name} must contain exactly {expected_size} values")
+    if not np.all(np.isfinite(vector)):
+        raise ValueError(f"{name} must contain only finite values")
+    return vector
+
+
+def _normalize_axis(axis) -> np.ndarray:
+    vector = _finite_vector(axis, 3, "rotation axis")
+    norm = float(np.linalg.norm(vector))
+    if norm <= 1e-12:
+        raise ValueError("rotation axis must be non-zero")
+    return vector / norm
+
+
 class ArmFK:
     """
     Step 4: Compute T_base_hand from joint state angles.
@@ -251,6 +274,12 @@ class ArmFK:
             _LEFT_SHOULDER_IN_BASE if arm == "left" else _RIGHT_SHOULDER_IN_BASE
         )
 
+        if backend not in {"auto", "urdf", "pinocchio", "dh"}:
+            raise ValueError("backend must be 'auto', 'urdf', 'pinocchio', or 'dh'")
+        if backend == "pinocchio" and (not _USE_PIN or arm not in _pin_ee_frame_id):
+            raise RuntimeError(
+                f"Pinocchio backend is unavailable for the {arm} arm in this environment"
+            )
         if backend == "auto":
             if _USE_PIN and arm in _pin_ee_frame_id:
                 self._backend = "pinocchio"
@@ -270,6 +299,7 @@ class ArmFK:
         Returns:
             T: 4×4 homogeneous transform T_base_hand
         """
+        q_full = _finite_vector(q_full, 30, "q_full")
         q_arm = q_full[self.joint_indices]
         if self._backend == "pinocchio":
             return self._fk_pin(q_full)
@@ -279,6 +309,7 @@ class ArmFK:
 
     def compute_arm(self, q_arm: np.ndarray) -> np.ndarray:
         """Compute from a 7-element arm-only joint vector."""
+        q_arm = _finite_vector(q_arm, 7, "q_arm")
         if self._backend == "urdf":
             return _fk_urdf(q_arm, self.arm)
         if self._backend == "pinocchio":
@@ -292,6 +323,9 @@ class ArmFK:
         Backend-independent (always uses the exact URDF chain) — intended
         for cheap collision-proxy points (elbow/wrist), not for IK targets.
         """
+        q_arm = _finite_vector(q_arm, 7, "q_arm")
+        if isinstance(n_joints, bool) or not isinstance(n_joints, int) or not 0 <= n_joints <= 7:
+            raise ValueError("n_joints must be an integer between 0 and 7")
         return _fk_urdf_partial(q_arm, self.arm, n_joints)
 
     # ------------------------------------------------------------------
@@ -301,6 +335,8 @@ class ArmFK:
     # ------------------------------------------------------------------
     @staticmethod
     def joint_limits(arm: str = "right") -> List[Tuple[float, float]]:
+        if arm not in JOINT_LIMITS:
+            raise ValueError("arm must be 'left' or 'right'")
         return JOINT_LIMITS[arm]
 
     @staticmethod
@@ -312,7 +348,12 @@ class ArmFK:
         q_full = np.zeros(30, dtype=np.float64)
         for name, data in joints.items():
             if "index" in data:
-                idx = data["index"]
+                try:
+                    idx = int(data["index"])
+                    position = float(data.get("position", 0.0))
+                except (TypeError, ValueError):
+                    continue
                 if 0 <= idx < 30:
-                    q_full[idx] = data.get("position", 0.0)
+                    if np.isfinite(position):
+                        q_full[idx] = position
         return fk, q_full
