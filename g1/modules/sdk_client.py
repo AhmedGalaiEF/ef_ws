@@ -3125,11 +3125,16 @@ class Robot:
             thread.join(timeout=max(0.0, float(join_timeout)))
         self._usb_controller_thread = None
 
-    def walk_mode(self) -> None:
+    def walk(self, waist_locked: bool = False) -> None:
+        """Enter walk mode, optionally using the waist-locked FSM."""
         if hasattr(self._client, "SetFsmId"):
-            self._client.SetFsmId(501)
+            self._client.SetFsmId(500 if waist_locked else 501)
             return
         raise AttributeError("Current locomotion client does not support FSM mode setting API.")
+
+    def walk_mode(self, waist_locked: bool = False) -> None:
+        """Backward-compatible alias for :meth:`walk`."""
+        self.walk(waist_locked=waist_locked)
 
     def run_mode(self) -> None:
         if hasattr(self._client, "SetFsmId"):
