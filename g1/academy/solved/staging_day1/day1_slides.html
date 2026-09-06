@@ -977,4 +977,16 @@ def get_battery():
 <div class="slide-body">
 </div>
 </div>
-</section></div></body></html>
+</section></div>
+<div class="controls"><button id="btn-prev">&#8592;</button><span class="counter" id="counter"></span><button id="btn-next">&#8594;</button></div>
+<script>
+(() => {
+  const slides = Array.from(document.querySelectorAll('.slide')); let index = 0;
+  const render = () => { slides.forEach((s, i) => s.classList.toggle('active', i === index)); document.getElementById('counter').textContent = `${index + 1} / ${slides.length}`; };
+  document.getElementById('btn-prev').onclick = () => { index = Math.max(0, index - 1); render(); };
+  document.getElementById('btn-next').onclick = () => { index = Math.min(slides.length - 1, index + 1); render(); };
+  window.addEventListener('keydown', e => { if (['ArrowRight', ' ', 'PageDown'].includes(e.key)) { index = Math.min(slides.length - 1, index + 1); render(); e.preventDefault(); } if (['ArrowLeft', 'PageUp'].includes(e.key)) { index = Math.max(0, index - 1); render(); e.preventDefault(); } });
+  render();
+})();
+</script>
+</body></html>

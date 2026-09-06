@@ -68,7 +68,23 @@ head = re.search(r'(?s)\A(.*?</head>)', source)
 sections = re.findall(r'(?s)<section class="slide.*?</section>', source)
 first, last = int(sys.argv[3]), int(sys.argv[4])
 if not head or len(sections) <= last: raise SystemExit('Could not extract day slides')
-page = '<!DOCTYPE html>\n<html lang="en">\n' + head.group(1) + '\n<body><div class="deck">' + '\n'.join(sections[first:last+1]) + '</div></body></html>\n'
+deck = '\n'.join(sections[first:last+1])
+page = '''<!DOCTYPE html>
+<html lang="en">
+%s
+<body><div class="deck">%s</div>
+<div class="controls"><button id="btn-prev">&#8592;</button><span class="counter" id="counter"></span><button id="btn-next">&#8594;</button></div>
+<script>
+(() => {
+  const slides = Array.from(document.querySelectorAll('.slide')); let index = 0;
+  const render = () => { slides.forEach((s, i) => s.classList.toggle('active', i === index)); document.getElementById('counter').textContent = `${index + 1} / ${slides.length}`; };
+  document.getElementById('btn-prev').onclick = () => { index = Math.max(0, index - 1); render(); };
+  document.getElementById('btn-next').onclick = () => { index = Math.min(slides.length - 1, index + 1); render(); };
+  window.addEventListener('keydown', e => { if (['ArrowRight', ' ', 'PageDown'].includes(e.key)) { index = Math.min(slides.length - 1, index + 1); render(); e.preventDefault(); } if (['ArrowLeft', 'PageUp'].includes(e.key)) { index = Math.max(0, index - 1); render(); e.preventDefault(); } });
+  render();
+})();
+</script></body></html>
+''' % (head.group(1), deck)
 Path(sys.argv[2]).write_text(page, encoding='utf-8')
 PY
   chown -R "$user:$user" "$destination"
