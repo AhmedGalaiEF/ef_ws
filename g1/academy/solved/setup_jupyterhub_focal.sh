@@ -74,6 +74,14 @@ c.Authenticator.allowed_users = {${allowed_users}}
 c.Authenticator.admin_users = {'${ADMIN_USER}'}
 c.LocalAuthenticator.create_system_users = False
 c.Spawner.cmd = ['${HUB_ROOT}/venv/bin/jupyterhub-singleuser']
+# The Hub itself runs in a minimal venv. Prefer each participant's kernel
+# specs (not the Hub venv's built-in python3), so existing notebooks whose
+# metadata says "python3" use the Unitree SDK2 runtime installed per user.
+c.Spawner.environment = {'JUPYTER_PREFER_ENV_PATH': '0'}
+# JupyterLab's HTML viewer renders local HTML in a sandboxed frame with an
+# opaque origin. Allow that viewer to load the academy deck's embedded/media
+# assets; authentication and the Hub user allowlist still protect the server.
+c.Spawner.args = ['--ServerApp.default_kernel_name=python3', '--ServerApp.allow_origin=*']
 c.Spawner.default_url = '/lab'
 c.JupyterHub.proxy_cmd = ['${proxy_bin}']
 c.JupyterHub.shutdown_on_logout = False

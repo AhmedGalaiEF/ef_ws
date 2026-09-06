@@ -47,6 +47,15 @@ for ((i = 1; i <= NUM_USERS; i++)); do
   sdk_dir="$home_dir/unitree_sdk2_python"
   rsync -a --delete --exclude=.git "$REF_SDK/" "$sdk_dir/"
 
+  # The SDK's interface configuration otherwise writes one shared,
+  # user-owned /tmp/cdds.LOG file.  Use a private trace file per account.
+  dds_log_dir="$home_dir/.cache/cyclonedds"
+  install -d -m 0700 "$dds_log_dir"
+  channel_config="$sdk_dir/unitree_sdk2py/core/channel_config.py"
+  [[ -f "$channel_config" ]] || { echo "Missing SDK channel config: $channel_config" >&2; exit 1; }
+  sed -i "s|/tmp/cdds\.LOG|$dds_log_dir/cdds.LOG|g" "$channel_config"
+  chown "$user:$user" "$dds_log_dir"
+
   cat >"$home_dir/.g1-unitree-env" <<EOF
 # Managed by provision_participants.sh.  The runtime is deliberately shared
 # read-only; this account owns the SDK source above and needs no sudo access.
