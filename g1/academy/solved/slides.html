@@ -1094,7 +1094,7 @@ def get_battery():
 </div>
 <h1 class="slide-title">Task &mdash; damp_mode, toggle_service/gait, toggle_custom_mode</h1>
 <div class="slide-body">
-<ol><li><code>damp_mode()</code> &mdash; <code>loco.SetFsmId(FSM_IDS["damp"])</code>.</li><li><code>toggle_service(name)</code> / <code>toggle_gait()</code> &mdash; flip based on the currently reported status/gait, always checking return codes.</li><li><code>toggle_custom_mode(mode_name, language, voice, headlight_color)</code> &mdash; first call: announce with Piper (Task 3), switch FSM, start a refresh thread for the headlight (Task 3). Second call (same or any name): stop the thread, join it, turn the light off, fall back to <code>damp_mode()</code>.</li></ol>
+<ol><li><code>damp_mode()</code> &mdash; <code>loco.SetFsmId(FSM_IDS["damp"])</code>.</li><li><code>toggle_service(name)</code> / <code>toggle_gait()</code> &mdash; flip based on the currently reported status/gait, always checking return codes.</li><li><code>toggle_custom_mode(mode_name, language, voice, headlight_color)</code> &mdash; announce with Piper and start a refresh thread for the headlight. <code>greet</code> is presentation-only: it must never switch FSM or damp on exit; motion-owning modes may use their explicit FSM and damp fallback.</li></ol>
 <div class="hint"><span class="hint-tag">Hint — where to start</span>Build toggle_custom_mode last — get damp_mode/toggle_service/toggle_gait working and manually tested first, since toggle_custom_mode's cleanup path depends on damp_mode already being correct.</div>
 </div>
 </div>
@@ -1152,7 +1152,7 @@ def _exit_custom_mode():
     if state[&quot;thread&quot;] is not None:
         state[&quot;stop&quot;].set(); state[&quot;thread&quot;].join()
     left = state[&quot;active&quot;]
-    damp_mode()                                          # always land in the safe fallback
+    if left != "greet": damp_mode()                     # greet must not alter FSM
     state.update(active=None, stop=None, thread=None)
     return {&quot;exited&quot;: left}
 
@@ -1163,7 +1163,7 @@ def toggle_custom_mode(mode_name, language=&quot;en&quot;, voice=None, headlight
         _exit_custom_mode()                               # a different mode was active -&gt; exit it first
     spec = _custom_modes[mode_name]
     say(spec[&quot;announce&quot;], language=language, voice=voice)  # Task 3
-    fsm_code = int(loco.SetFsmId(FSM_IDS[spec[&quot;fsm&quot;]]))
+    fsm_code = None if spec[&quot;fsm&quot;] is None else int(loco.SetFsmId(FSM_IDS[spec[&quot;fsm&quot;]]))
     rgb, stop_event = parse_color(headlight_color), threading.Event()
     def worker():
         while not stop_event.is_set():
@@ -1172,7 +1172,7 @@ def toggle_custom_mode(mode_name, language=&quot;en&quot;, voice=None, headlight
     thread = threading.Thread(target=worker, daemon=False); thread.start()
     _custom_mode_state.update(active=mode_name, stop=stop_event, thread=thread)
     return {&quot;mode&quot;: mode_name, &quot;fsm_code&quot;: fsm_code}</code></pre>
-<div class="note">Full reference: solved/task5_services_and_mode_switching.ipynb and solved/lib_solved.py "Task 5".</div>
+<div class="note"><code>greet</code> is the explicit presentation-only exception: its spec uses <code>fsm=None</code>, so entering and leaving it never changes robot mode. Full reference: solved/task5_services_and_mode_switching.ipynb and solved/lib_solved.py "Task 5".</div>
 </div>
 </div>
 </section>

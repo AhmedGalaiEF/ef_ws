@@ -389,7 +389,8 @@ def get_services():
 FSM_IDS = {"zero_torque": 0, "damp": 1, "prepare": 4, "walk": 500, "run": 802}
 _gait_override = None
 _custom_modes = {
-    "greet": {"fsm": "prepare", "announce": "Entering greet mode."},
+    # greet is presentation-only: never take ownership of the robot FSM.
+    "greet": {"fsm": None, "announce": "Entering greet mode."},
     "patrol": {"fsm": "walk", "announce": "Entering patrol mode."},
 }
 _custom_mode_state = {"active": None, "stop": None, "thread": None}
@@ -462,22 +463,23 @@ def _exit_custom_mode():
         state["stop"].set()
         state["thread"].join()
     left = state["active"]
-    damp_mode()
+    # Do not change FSM state while leaving presentation-only greet mode.
+    if left != "greet":
+        damp_mode()
     state.update(active=None, stop=None, thread=None)
     return {"exited": left}
 
 
 def toggle_custom_mode(mode_name, language="en", voice=None, headlight_color="green"):
-    """First call for a mode_name: announce it with Piper, switch the FSM, keep
-    refreshing headlight_color. Calling it again (same or any name): stop the
-    thread, turn the light off, and fall back to damp_mode()."""
+    """Announce a custom mode and hold its headlight. Motion-owning modes may
+    switch FSM; greet deliberately never does. Exiting greet only stops/off."""
     if _custom_mode_state["active"] == mode_name:
         return _exit_custom_mode()
     if _custom_mode_state["active"] is not None:
         _exit_custom_mode()
     spec = _custom_modes[mode_name]
     say(spec["announce"], language=language)
-    fsm_code = _rpc_code(_loco_client().SetFsmId(FSM_IDS[spec["fsm"]]))
+    fsm_code = None if spec["fsm"] is None else _rpc_code(_loco_client().SetFsmId(FSM_IDS[spec["fsm"]]))
     rgb = parse_color(headlight_color)
     stop_event = threading.Event()
 
