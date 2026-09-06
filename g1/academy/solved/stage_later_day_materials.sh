@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Stage a self-contained participant bundle for Day 2, 3, or 4.
+# Usage: sudo bash stage_later_day_materials.sh DAY_NUMBER
+
+day="${1:?Usage: sudo bash $0 DAY_NUMBER (2, 3, or 4)}"
+NUM_USERS="${NUM_USERS:-13}"
+USER_PREFIX="${USER_PREFIX:-teilnehmer}"
+SOLVED_DIR="$(cd "$(dirname "$0")" && pwd)"
+ACADEMY_DIR="$(cd "$SOLVED_DIR/.." && pwd)"
+
+[[ "$(id -u)" -eq 0 ]] || { echo "Run as root: sudo bash $0 $day" >&2; exit 1; }
+case "$day" in
+  2) tasks=(5 6 7); first_slide=44; last_slide=65 ;;
+  3) tasks=(8 9 10 11); first_slide=66; last_slide=95 ;;
+  4) tasks=(12 13); first_slide=96; last_slide=109 ;;
+  *) echo "DAY_NUMBER must be 2, 3, or 4" >&2; exit 2 ;;
+esac
+
+notebooks=()
+for task in "${tasks[@]}"; do
+  match=("$SOLVED_DIR"/task"$task"_*.ipynb)
+  [[ -f "${match[0]}" ]] || { echo "Missing Task $task notebook" >&2; exit 1; }
+  notebooks+=("${match[0]}")
+done
+
+for ((i=1; i<=NUM_USERS; i++)); do
+  user="${USER_PREFIX}${i}"
+  home_dir="$(getent passwd "$user" | cut -d: -f6)"
+  [[ -n "$home_dir" ]] || { echo "Missing account: $user" >&2; exit 1; }
+  destination="$home_dir/academy/day_$day"
+  install -d -m 0755 "$destination"
+  rsync -a "${notebooks[@]}" \
+    "$ACADEMY_DIR/sdk_wrapper.py" "$ACADEMY_DIR/util.py" "$ACADEMY_DIR/slam_util.py" \
+    "$destination/"
+
+  # Later-day notebooks are exercises: preserve the task prose, but do not
+  # distribute their solved code cells. Imports stay visible as starting clues.
+  python3 - "$destination" "${notebooks[@]}" <<'PY'
+import json, re, sys
+from pathlib import Path
+dest = Path(sys.argv[1])
+for source in map(Path, sys.argv[2:]):
+    path = dest / source.name
+    nb = json.loads(path.read_text(encoding='utf-8'))
+    for cell in nb['cells']:
+        if cell.get('cell_type') != 'code':
+            continue
+        original = ''.join(cell.get('source', []))
+        imports = [line for line in original.splitlines() if re.match(r'^(?:from\s+\S+\s+import\s+|import\s+)', line)]
+        cell['source'] = imports + [
+            '', '# TODO: Implement this section using the preceding task description and day slides.',
+            '# Keep robot commands conservative; test observation/state code before actuation.',
+            'raise NotImplementedError("Complete this task section")',
+        ]
+        cell['source'] = [line + '\n' for line in cell['source']]
+        cell['outputs'] = []
+        cell['execution_count'] = None
+    path.write_text(json.dumps(nb, indent=1, ensure_ascii=False) + '\n', encoding='utf-8')
+PY
+
+  python3 - "$SOLVED_DIR/slides.html" "$destination/day${day}_slides.html" "$first_slide" "$last_slide" <<'PY'
+import re, sys
+from pathlib import Path
+source = Path(sys.argv[1]).read_text(encoding='utf-8')
+head = re.search(r'(?s)\A(.*?</head>)', source)
+sections = re.findall(r'(?s)<section class="slide.*?</section>', source)
+first, last = int(sys.argv[3]), int(sys.argv[4])
+if not head or len(sections) <= last: raise SystemExit('Could not extract day slides')
+page = '<!DOCTYPE html>\n<html lang="en">\n' + head.group(1) + '\n<body><div class="deck">' + '\n'.join(sections[first:last+1]) + '</div></body></html>\n'
+Path(sys.argv[2]).write_text(page, encoding='utf-8')
+PY
+  chown -R "$user:$user" "$destination"
+done
+echo "Staged Day $day materials for $NUM_USERS participants."
