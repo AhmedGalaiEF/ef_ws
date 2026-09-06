@@ -76,9 +76,17 @@ if head is None or len(day_one) != 44:
     raise SystemExit("Could not extract the expected 44 Day 1 slides")
 
 deck = "\n".join(day_one)
+# The source deck's script swaps placeholders for relative files at runtime.
+# Participant decks instead embed those images below, so retaining that script
+# would overwrite data URLs and trigger JupyterHub's sandbox-origin 403.
+head_html = re.sub(
+    r'(?s)<script>\s*// Replace illustrative placeholders with the cohort.*?</script>\s*',
+    '',
+    head.group(1),
+)
 page = f'''<!DOCTYPE html>
 <html lang="en">
-{head.group(1)}
+{head_html}
 <body>
 <div class="deck">{deck}</div>
 <div class="controls">
