@@ -48,6 +48,16 @@ if [[ "$(id -u)" -ne 0 ]]; then
   exit 1
 fi
 
+# Current TLJH deliberately requires Ubuntu 22.04+.  Keep the same entry
+# point usable on the Jetson's Ubuntu 20.04 by delegating to the compatible
+# PAM JupyterHub service beside this script.
+if [[ -r /etc/os-release ]]; then
+  . /etc/os-release
+  if [[ "${VERSION_ID:-}" == "20.04" ]]; then
+    exec /bin/bash "$(cd "$(dirname "$0")" && pwd)/setup_jupyterhub_focal.sh"
+  fi
+fi
+
 NUM_USERS="${NUM_USERS:-13}"
 USER_PREFIX="${USER_PREFIX:-teilnehmer}"
 ADMIN_USER="${ADMIN_USER:-unitree}"
