@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Provision the academy accounts without duplicating the 1.8 GB, tested
+# Unitree Python runtime.  Each participant owns their SDK checkout, shell
+# configuration and Jupyter kernel; the immutable runtime is shared read-only
+# from the unitree account.
+#
+# Usage: sudo ./provision_participants.sh
+
+NUM_USERS="${NUM_USERS:-13}"
+USER_PREFIX="${USER_PREFIX:-teilnehmer}"
+PASSWORD="${TEILNEHMER_PASSWORD:-academy2026}"
+REF_PY="${REF_PY:-/home/unitree/.guv/envs/unitree}"
+REF_SDK="${REF_SDK:-/home/unitree/unitree_sdk2_python}"
+CYCLONEDDS_HOME="${CYCLONEDDS_HOME:-/home/unitree/unitree_ros2/cyclonedds_ws/install/cyclonedds}"
+
+if [[ "$(id -u)" -ne 0 ]]; then
+  echo "Run as root: sudo $0" >&2
+  exit 1
+fi
+[[ "$NUM_USERS" =~ ^[1-9][0-9]*$ ]] && (( NUM_USERS <= 100 )) || { echo "NUM_USERS must be 1..100" >&2; exit 2; }
+[[ "$USER_PREFIX" =~ ^[a-z_][a-z0-9_-]*$ ]] || { echo "Unsafe USER_PREFIX" >&2; exit 2; }
+[[ -x "$REF_PY/bin/python" && -d "$REF_SDK/unitree_sdk2py" && -f "$CYCLONEDDS_HOME/lib/libddsc.so" ]] || {
+  echo "Reference SDK, Python runtime, or CycloneDDS install is missing." >&2
+  exit 1
+}
+
+# Refuse to provision a broken reference installation.
+LD_LIBRARY_PATH="$CYCLONEDDS_HOME/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+  PYTHONPATH="$REF_SDK" "$REF_PY/bin/python" -c 'import cyclonedds, unitree_sdk2py' || {
+  echo "Reference Python environment cannot import CycloneDDS and Unitree SDK2." >&2
+  exit 1
+}
+
+for ((i = 1; i <= NUM_USERS; i++)); do
+  user="${USER_PREFIX}${i}"
+  if ! id "$user" &>/dev/null; then
+    useradd --create-home --shell /bin/bash "$user"
+  fi
+  for group in sudo wheel admin; do
+    gpasswd --delete "$user" "$group" >/dev/null 2>&1 || true
+  done
+  echo "$user:$PASSWORD" | chpasswd
+
+  home_dir="$(getent passwd "$user" | cut -d: -f6)"
+  sdk_dir="$home_dir/unitree_sdk2_python"
+  rsync -a --delete --exclude=.git "$REF_SDK/" "$sdk_dir/"
+
+  cat >"$home_dir/.g1-unitree-env" <<EOF
+# Managed by provision_participants.sh.  The runtime is deliberately shared
+# read-only; this account owns the SDK source above and needs no sudo access.
+export UNITREE_SDK2_HOME="$sdk_dir"
+export CYCLONEDDS_HOME="$CYCLONEDDS_HOME"
+export CycloneDDS_ROOT="\$CYCLONEDDS_HOME"
+export PATH="$REF_PY/bin:\$CYCLONEDDS_HOME/bin:\${PATH}"
+export LD_LIBRARY_PATH="\$CYCLONEDDS_HOME/lib\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
+export CMAKE_PREFIX_PATH="\$CYCLONEDDS_HOME\${CMAKE_PREFIX_PATH:+:\$CMAKE_PREFIX_PATH}"
+export PKG_CONFIG_PATH="\$CYCLONEDDS_HOME/lib/pkgconfig\${PKG_CONFIG_PATH:+:\$PKG_CONFIG_PATH}"
+export PYTHONPATH="\$UNITREE_SDK2_HOME\${PYTHONPATH:+:\$PYTHONPATH}"
+EOF
+  touch "$home_dir/.bashrc"
+  grep -qF '.g1-unitree-env' "$home_dir/.bashrc" || printf '\n[ -f "$HOME/.g1-unitree-env" ] && source "$HOME/.g1-unitree-env"\n' >>"$home_dir/.bashrc"
+
+  kernel_dir="$home_dir/.local/share/jupyter/kernels/unitree_sdk2"
+  install -d -m 0755 "$kernel_dir"
+  cat >"$kernel_dir/kernel.json" <<EOF
+{
+  "argv": ["$REF_PY/bin/python", "-m", "ipykernel_launcher", "-f", "{connection_file}"],
+  "display_name": "Unitree SDK2 (g1 academy)",
+  "language": "python",
+  "env": {
+    "UNITREE_SDK2_HOME": "$sdk_dir",
+    "CYCLONEDDS_HOME": "$CYCLONEDDS_HOME",
+    "CycloneDDS_ROOT": "$CYCLONEDDS_HOME",
+    "LD_LIBRARY_PATH": "$CYCLONEDDS_HOME/lib",
+    "PYTHONPATH": "$sdk_dir"
+  }
+}
+EOF
+  chown -R "$user:$user" "$home_dir/unitree_sdk2_python" "$home_dir/.g1-unitree-env" "$home_dir/.bashrc" "$home_dir/.local"
+done
+
+echo "Provisioned $NUM_USERS accounts. Their Linux accounts have no sudo, wheel, or admin membership."

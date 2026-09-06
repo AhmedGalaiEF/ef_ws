@@ -128,10 +128,11 @@ else
 fi
 
 # --- 2. Authentication: PAM against existing Linux accounts -------------
-# TLJH defaults to PAMAuthenticator, which is what we want: it checks
-# system accounts directly, so teilnehmerN / academy2026 (from
-# reset_users.sh) works with no separate hub user database. Only accounts
-# explicitly allow-listed here may log in.
+# Select PAM explicitly rather than relying on a TLJH version default. It
+# checks the existing Linux accounts directly, so teilnehmerN / academy2026
+# (from provision_participants.sh) work with no separate Hub user database.
+# Only accounts explicitly allow-listed here may log in.
+tljh-config set auth.type jupyterhub.auth.PAMAuthenticator
 tljh-config add-item users.admin "$ADMIN_USER"
 for u in "${USERS[@]}"; do
   if id "$u" &>/dev/null; then
@@ -162,9 +163,10 @@ Allowed students: ${USERS[*]}
 Per-student limits: ${MEM_LIMIT} RAM, ${CPU_LIMIT} CPU core(s)
 Idle culling: after ${IDLE_TIMEOUT}s inactivity, checked every ${CULL_EVERY}s
 
-Each student's own "unitree_sdk2" kernel (registered by reset_users.sh
-against their cloned venv) will show up automatically in their kernel
-picker — no extra kernel configuration needed here.
+Each student's own "unitree_sdk2" kernel (registered by
+provision_participants.sh against the tested shared Unitree runtime) will
+show up automatically in their kernel picker — no extra kernel configuration
+is needed here.
 
 No robot-access arbitration is configured: multiple students' kernels can
 send commands to the physical robot concurrently. Coordinate turns
