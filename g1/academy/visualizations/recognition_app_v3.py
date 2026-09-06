@@ -2022,9 +2022,11 @@ def _run_walk() -> None:
             client = getattr(_CONTROL_ROBOT, "_client", None)
             if client is None or not hasattr(client, "SetFsmId"):
                 raise AttributeError("control robot has no walk_mode or SetFsmId")
-            client.SetFsmId(501)
+            # FSM 500, not 501: this academy's G1 units have the waist
+            # LOCKED (only WaistYaw free); 501 is the unlocked-waist id.
+            client.SetFsmId(500)
         with STATE.lock:
-            STATE.status_msg = "walk FSM 501 sent."
+            STATE.status_msg = "walk FSM 500 sent."
     except Exception as exc:
         with STATE.lock:
             STATE.status_msg = f"walk failed: {exc}"

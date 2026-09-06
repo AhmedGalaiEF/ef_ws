@@ -135,6 +135,11 @@
 
 <section id="fsm">
 <h2>1. FSM states (<code>LocoClient.SetFsmId</code>)</h2>
+<p class="lede"><b>Waist hardware note:</b> this academy's G1 units run with the waist <b>locked</b> (only
+<code>WaistYaw</code>, joint 12, is a free joint — <code>WaistRoll</code>/<code>WaistPitch</code>, joints 13/14, are
+absent/invalid on this variant; see §2). The walk/balanced-stand FSM id differs by waist configuration:
+<code>500</code> on waist-locked units (this academy — used by <code>FSM_IDS["walk"]</code>), <code>501</code> on
+waist-unlocked units (3 free waist DOF). Do not send <code>501</code> to this academy's hardware.</p>
 <p class="lede">The G1 locomotion controller is a finite-state machine selected by an integer FSM id. Academy
 code only exercises a safe subset; the wider repo shows a few additional ids seen on real
 firmware/dashboards. <code>get_state()</code> in <code>sdk_wrapper.py</code> reads the current id/mode via
@@ -151,8 +156,8 @@ in this repo).</p>
 <tr><td class="num">2</td><td><i>airborne</i> (unlabeled)</td><td>not used by the wrapper</td><td>Referenced as <code>fsm_2_airborne</code>/<code>fsm_2_squat_placeholder</code> in <code>dev/modules/sdk_client.py</code> — explicitly a placeholder, not a documented squat mode. <code>todo.txt</code>: “do not map an undocumented FSM ID.”</td><td><span class="badge b-caution">UNVERIFIED</span></td></tr>
 <tr><td class="num">3</td><td><code>sit</code></td><td>not in <code>sdk_wrapper.py</code>; present in <code>mode_control.py</code>/<code>dev_stand.py</code> as <code>Sit()</code></td><td>Dedicated sit-down FSM.</td><td><span class="badge b-repo">REPO</span></td></tr>
 <tr><td class="num">4</td><td><code>prepare</code></td><td><code>G1.prepare_mode()</code></td><td>Stand-up sequencing state between damp and walk.</td><td><span class="badge b-wrapper">WRAPPER</span></td></tr>
-<tr><td class="num">500</td><td><i>balanced stand (fallback)</i></td><td>not used by the wrapper</td><td><code>BalanceStand(0)</code> fallback / dev-mode <code>Start()</code> fallback path in <code>dev/modules/sdk_client.py</code> when those higher-level methods aren't available on the loaded SDK.</td><td><span class="badge b-repo">REPO</span></td></tr>
-<tr><td class="num">501</td><td><code>walk</code></td><td><code>G1.walk_mode()</code>, also the reported "balanced stand" state</td><td>Balanced-stand / locomotion-ready state; <code>toggle_gait()</code> continuous-move flag flips gait on top of this state.</td><td><span class="badge b-wrapper">WRAPPER</span></td></tr>
+<tr><td class="num">500</td><td><code>walk</code></td><td><code>G1.walk_mode()</code>, also the reported "balanced stand" state</td><td>Balanced-stand / locomotion-ready state on this academy's <b>waist-locked</b> G1 units (only <code>WaistYaw</code> is a free joint — see §2); <code>toggle_gait()</code> continuous-move flag flips gait on top of this state.</td><td><span class="badge b-wrapper">WRAPPER</span></td></tr>
+<tr><td class="num">501</td><td><i>walk (unlocked-waist variant)</i></td><td>not used by the wrapper</td><td>Same balanced-stand/walk state as <code>500</code>, but on G1 units with the waist <b>unlocked</b> (3 free waist DOF: <code>WaistYaw</code>/<code>WaistRoll</code>/<code>WaistPitch</code>). This academy's robots are waist-locked, so <code>FSM_IDS["walk"]</code> is <code>500</code> here, not <code>501</code>; do not send <code>501</code> to this hardware.</td><td><span class="badge b-repo">REPO</span></td></tr>
 <tr><td class="num">802</td><td><code>run</code></td><td><code>G1.run_mode()</code></td><td>Running gait FSM.</td><td><span class="badge b-wrapper">WRAPPER</span></td></tr>
 <tr><td class="num">812<span class="mono">*</span></td><td><code>climb</code></td><td>not in <code>sdk_wrapper.py</code>; <code>mode_control.py --climb-fsm-id</code> (default 812)</td><td>*Configurable, defaults to 812 / <code>G1_CLIMB_FSM_ID</code> — treat as a site-specific guess, not a documented id.</td><td><span class="badge b-caution">UNVERIFIED</span></td></tr>
 </tbody>

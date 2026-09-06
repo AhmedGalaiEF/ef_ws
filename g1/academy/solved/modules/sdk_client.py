@@ -3126,8 +3126,10 @@ class Robot:
         self._usb_controller_thread = None
 
     def walk_mode(self) -> None:
+        # FSM 500, not 501: this academy's G1 units have the waist LOCKED
+        # (only WaistYaw free); 501 is the unlocked 3-DOF-waist variant's id.
         if hasattr(self._client, "SetFsmId"):
-            self._client.SetFsmId(501)
+            self._client.SetFsmId(500)
             return
         raise AttributeError("Current locomotion client does not support FSM mode setting API.")
 

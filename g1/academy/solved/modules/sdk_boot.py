@@ -16,7 +16,10 @@ from dds_env import ensure_channel_factory_initialized, ensure_cyclonedds_enviro
 ensure_cyclonedds_environment()
 
 
-BALANCED_STAND_FSM_ID = 501
+# 500, not 501: this academy's G1 units have the waist LOCKED (only WaistYaw
+# free). FSM 501 is the balanced-stand/walk id on the unlocked 3-DOF waist
+# variant and does not apply here.
+BALANCED_STAND_FSM_ID = 500
 BALANCED_STAND_FSM_IDS = frozenset((BALANCED_STAND_FSM_ID,))
 
 

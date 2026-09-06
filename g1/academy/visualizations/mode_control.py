@@ -51,7 +51,10 @@ FSM_ZERO_TORQUE = 0
 FSM_DAMPING = 1
 FSM_SIT = 3
 FSM_PREPARE = 4
-FSM_WALK = 501
+# 500, not 501: this academy's G1 units have the waist LOCKED (only WaistYaw
+# free). FSM 501 is the balanced-stand/walk id on the unlocked 3-DOF waist
+# variant and does not apply here.
+FSM_WALK = 500
 FSM_RUN = 802
 DEFAULT_CLIMB_FSM = 812
 AI_MODE_NAME = "ai_sport"

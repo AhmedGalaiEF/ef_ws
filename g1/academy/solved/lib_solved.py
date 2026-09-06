@@ -382,7 +382,11 @@ def get_services():
 # Task 5 — services and mode switching
 # ======================================================================
 
-FSM_IDS = {"zero_torque": 0, "damp": 1, "prepare": 4, "walk": 501, "run": 802}
+# "walk" is 500, not 501: this academy's G1 units run with the waist LOCKED
+# (only WaistYaw is a free joint; WaistRoll/WaistPitch are absent/invalid —
+# see WAIST_JOINTS). FSM 501 is the balanced-stand/walk id for the unlocked
+# 3-DOF waist variant and is not valid on this hardware.
+FSM_IDS = {"zero_torque": 0, "damp": 1, "prepare": 4, "walk": 500, "run": 802}
 _gait_override = None
 _custom_modes = {
     "greet": {"fsm": "prepare", "announce": "Entering greet mode."},

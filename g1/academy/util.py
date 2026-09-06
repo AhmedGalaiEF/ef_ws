@@ -16,12 +16,16 @@ import wave
 from pathlib import Path
 from typing import Any
 
+# "walk" is 500, not 501: this academy's G1 units run with the waist LOCKED
+# (only WaistYaw is a free joint; WaistRoll/WaistPitch are absent/invalid —
+# see JOINT_GROUPS["waist"]). FSM 501 is the balanced-stand/walk id for the
+# unlocked 3-DOF waist variant and is not valid on this hardware.
 FSM_IDS = {
     "zero_torque": 0,
     "damp": 1,
     "sit": 3,
     "prepare": 4,
-    "walk": 501,
+    "walk": 500,
     "run": 802,
 }
 JOINT_GROUPS = {

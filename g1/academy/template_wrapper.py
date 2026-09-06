@@ -1,3 +1,31 @@
+"""G1 Academy -- fill-in-the-blank template for the `G1` wrapper class.
+
+This is `sdk_wrapper.py` with the participant-facing lessons removed: every
+module-level helper below `class G1` -- DDS pub/sub plumbing (`_Latest`,
+`ChannelPublisher`/`ChannelSubscriber` usage), math (`_rot_x/y/z`,
+`_fallback_arm_fk`, `_solve_position_shoulder_elbow`, ...), and the constraint/
+mapping dictionaries (`FSM_IDS`, `JOINT_GROUPS`-equivalents, `HAND_OPEN`/
+`HAND_CLOSED`, `HL_ARM_ACTIONS`, ...) -- is provided as-is, plus the native
+`unitree_sdk2py` imports. So is every `G1._foo()` private accessor (client
+factories like `_robot_state_client()`/`_motion_client()`, and cached-message
+getters like `_lowstate_msg()`/`_sport_msg()`): that plumbing lets you call
+your own methods without first reimplementing client setup.
+
+Every *public* `G1` method is still here in full, but its key line(s) -- the
+actual `unitree_sdk2py`/DDS call that is this method's lesson -- are commented
+out with a `# TODO(participant):` note above them. Uncomment (or rewrite) that
+line yourself; everything around it (docstring, error handling, loops) is the
+real, working reference code, so the method runs correctly once you fill in
+the blank. A method whose only content is that call needs a `pass` removed
+too -- Python doesn't allow an empty function body.
+
+Build bottom-up: e.g. `get_lowstate()` is one of the first blanks below
+`__init__`; once you've implemented it, methods later in the file
+(`get_state()`, `_current_q_mode()`, `get_imus()`, ...) already call it or
+`self._lowstate_msg()` for you -- you don't re-implement it twice. That's the
+pattern throughout: fill in one method, then treat it as a building block for
+the ones that follow, the same way sdk_wrapper.py's own methods do.
+"""
 import audioop
 import importlib
 import json
@@ -1018,18 +1046,27 @@ class G1:
         if isinstance(action, str):
             action = HL_ARM_ACTIONS[_normalize_action(action)]
         client = self._arm_action_client()
-        code = int(client.ExecuteAction(int(action)))
+        # TODO(participant): trigger the gesture via
+        # G1ArmActionClient.ExecuteAction(action_id).
+        # code = int(client.ExecuteAction(int(action)))
         if release_after_s is not None:
             time.sleep(max(0.0, float(release_after_s)))
-            release = int(client.ExecuteAction(HL_ARM_ACTIONS["release arm"]))
+            # TODO(participant): then release back to neutral via
+            # ExecuteAction(HL_ARM_ACTIONS["release arm"]).
+            # release = int(client.ExecuteAction(HL_ARM_ACTIONS["release arm"]))
             return release if code == 0 else code
         return code
 
     def get_state(self):
-        motion_code, motion_raw = self._motion_client().CheckMode()
+        # TODO(participant): ask MotionSwitcherClient which high-level
+        # service currently owns the motors.
+        # motion_code, motion_raw = self._motion_client().CheckMode()
         return {
-            "id": _rpc_get_int(self._client, ROBOT_API_ID_LOCO_GET_FSM_ID),
-            "mode": _rpc_get_int(self._client, ROBOT_API_ID_LOCO_GET_FSM_MODE),
+            # TODO(participant): read the current FSM id/mode via the raw RPC
+            # ids ROBOT_API_ID_LOCO_GET_FSM_ID / ROBOT_API_ID_LOCO_GET_FSM_MODE,
+            # using _rpc_get_int(self._client, api_id).
+            # "id": _rpc_get_int(self._client, ROBOT_API_ID_LOCO_GET_FSM_ID),
+            # "mode": _rpc_get_int(self._client, ROBOT_API_ID_LOCO_GET_FSM_MODE),
             "motion_mode": _mode_name(motion_raw),
             "motion_code": int(motion_code),
             "gait": self.get_gait(),
@@ -1044,7 +1081,9 @@ class G1:
         if not hasattr(client, "ServiceList"):
             rows = [{"name": name, "description": desc, "status": None, "protected": None} for name, desc in SERVICE_CATALOG.items()]
         else:
-            code, service_states = client.ServiceList()
+            # TODO(participant): list the registered services via
+            # RobotStateClient.ServiceList() -- returns (code, service_states).
+            # code, service_states = client.ServiceList()
             if int(code) != 0:
                 raise RuntimeError(f"ServiceList failed: {code}")
             rows = []
@@ -1069,7 +1108,9 @@ class G1:
         if row is None:
             raise ValueError(f"Unknown service: {service}")
         enabled = row.get("status") != 0
-        code = _result_code(self._robot_state_client().ServiceSwitch(row["name"], bool(enabled)))
+        # TODO(participant): flip the service on/off via
+        # RobotStateClient.ServiceSwitch(name, enabled).
+        # code = _result_code(self._robot_state_client().ServiceSwitch(row["name"], bool(enabled)))
         return {"name": row["name"], "previous_status": row.get("status"), "enabled": enabled, "code": code}
 
     def set_service(self, service, enabled):
@@ -1078,7 +1119,9 @@ class G1:
         row = self.get_service(service)
         if row is None:
             raise ValueError(f"Unknown service: {service}")
-        code = _result_code(self._robot_state_client().ServiceSwitch(row["name"], bool(enabled)))
+        # TODO(participant): set the service's on/off state via
+        # RobotStateClient.ServiceSwitch(name, enabled).
+        # code = _result_code(self._robot_state_client().ServiceSwitch(row["name"], bool(enabled)))
         return {"name": row["name"], "previous_status": row.get("status"), "enabled": bool(enabled), "code": code}
 
     def set_report_freq(self, interval, duration):
@@ -1086,31 +1129,48 @@ class G1:
         how long) the mainboard should push state reports."""
         client = self._robot_state_client()
         if hasattr(client, "SetReportFreq"):
-            return int(client.SetReportFreq(int(interval), int(duration)))
+            # TODO(participant): call the convenience method if the loaded
+            # SDK exposes it.
+            # return int(client.SetReportFreq(int(interval), int(duration)))
+            pass
         parameter = json.dumps({"interval": int(interval), "duration": int(duration)})
-        code, _data = client._Call(1002, parameter)
+        # TODO(participant): otherwise fall back to the raw RPC: api id 1002
+        # via Client._Call(api_id, json_payload).
+        # code, _data = client._Call(1002, parameter)
         return int(code)
 
     def zero_torque_mode(self):
-        return self._client.SetFsmId(FSM_IDS["zero_torque"])
+        # TODO(participant): switch the locomotion FSM state via LocoClient.
+        # return self._client.SetFsmId(FSM_IDS["zero_torque"])
+        pass
 
     def damp_mode(self):
-        return self._client.SetFsmId(FSM_IDS["damp"])
+        # TODO(participant): switch the locomotion FSM state via LocoClient.
+        # return self._client.SetFsmId(FSM_IDS["damp"])
+        pass
 
     def prepare_mode(self):
-        return self._client.SetFsmId(FSM_IDS["prepare"])
+        # TODO(participant): switch the locomotion FSM state via LocoClient.
+        # return self._client.SetFsmId(FSM_IDS["prepare"])
+        pass
 
     def walk_mode(self):
-        return self._client.SetFsmId(FSM_IDS["walk"])
+        # TODO(participant): switch the locomotion FSM state via LocoClient.
+        # return self._client.SetFsmId(FSM_IDS["walk"])
+        pass
 
     def run_mode(self):
-        return self._client.SetFsmId(FSM_IDS["run"])
+        # TODO(participant): switch the locomotion FSM state via LocoClient.
+        # return self._client.SetFsmId(FSM_IDS["run"])
+        pass
 
     def toggle_dev_mode(self):
         return self.toggle_service("ai_sport")
 
     def get_gait(self):
-        msg = self._sport_msg()
+        # TODO(participant): fetch the latest SportModeState_ message (the
+        # cached-latest helper is already provided -- see _sport_msg()).
+        # msg = self._sport_msg()
         if msg is None:
             return self._gait_override
         for key in ("gait_type", "gaitType", "gait"):
@@ -1130,7 +1190,10 @@ class G1:
             for method_name in ("SetBalanceMode", "SetGaitType"):
                 if hasattr(self._client, method_name):
                     try:
-                        code = _result_code(getattr(self._client, method_name)(1))
+                        # TODO(participant): call whichever gait-enable
+                        # method LocoClient exposes, with argument 1.
+                        # code = _result_code(getattr(self._client, method_name)(1))
+                        pass
                     except Exception:
                         continue
                     codes.append((method_name, code))
@@ -1140,19 +1203,27 @@ class G1:
         else:
             if hasattr(self._client, "BalanceStand"):
                 try:
-                    codes.append(("BalanceStand", _result_code(self._client.BalanceStand(0))))
+                    # TODO(participant): fall back to LocoClient.BalanceStand(0).
+                    # codes.append(("BalanceStand", _result_code(self._client.BalanceStand(0))))
+                    pass
                 except Exception:
                     pass
             for method_name in ("SetBalanceMode", "SetGaitType"):
                 if hasattr(self._client, method_name):
                     try:
-                        code = _result_code(getattr(self._client, method_name)(0))
+                        # TODO(participant): call whichever gait-disable
+                        # method LocoClient exposes, with argument 0.
+                        # code = _result_code(getattr(self._client, method_name)(0))
+                        pass
                     except Exception:
                         continue
                     codes.append((method_name, code))
             if hasattr(self._client, "SetFsmId"):
                 try:
-                    codes.append(("SetFsmId", _result_code(self._client.SetFsmId(FSM_IDS["walk"]))))
+                    # TODO(participant): last resort -- SetFsmId back to
+                    # FSM_IDS["walk"] (the balanced-stand/default-gait id).
+                    # codes.append(("SetFsmId", _result_code(self._client.SetFsmId(FSM_IDS["walk"]))))
+                    pass
                 except Exception:
                     pass
             if any(code == 0 for _, code in codes):
@@ -1161,19 +1232,32 @@ class G1:
         return {"gait": target, "codes": codes}
 
     def get_lowstate(self):
-        msg = self._lowstate_msg()
-        if msg is None:
-            return None
-        motors = list(getattr(msg, "motor_state", []) or [])
-        imu = getattr(msg, "imu_state", None)
-        return {
-            "timestamp": time.time(),
-            "joint_positions": [float(getattr(m, "q", 0.0)) for m in motors],
-            "joint_velocities": [float(getattr(m, "dq", 0.0)) for m in motors],
-            "joint_torques": [float(getattr(m, "tau_est", 0.0)) for m in motors],
-            "imu": None if imu is None else {"rpy": [float(imu.rpy[i]) for i in range(3)], "gyro": [float(imu.gyroscope[i]) for i in range(3)], "acc": [float(imu.accelerometer[i]) for i in range(3)]},
-            "raw": msg,
-        }
+        # TODO(participant): this is the reference building block most other
+        # methods below (_current_q_mode, get_imus, get_battery, ...) lean on
+        # via self._lowstate_msg() -- implement it first.
+        #
+        # 1. Fetch the latest cached rt/lowstate message: self._lowstate is
+        #    already a _Latest wrapping a ChannelSubscriber (see __init__),
+        #    so this is just `msg = self._lowstate_msg()`.
+        # 2. Return None if nothing has arrived yet.
+        # 3. Otherwise turn the raw LowState_ message into a plain dict:
+        #    - motor_state[i].q / .dq / .tau_est, one entry per joint
+        #    - imu_state.rpy / .gyroscope / .accelerometer (each length-3)
+        #
+        # msg = self._lowstate_msg()
+        # if msg is None:
+        #     return None
+        # motors = list(getattr(msg, "motor_state", []) or [])
+        # imu = getattr(msg, "imu_state", None)
+        # return {
+        #     "timestamp": time.time(),
+        #     "joint_positions": [float(getattr(m, "q", 0.0)) for m in motors],
+        #     "joint_velocities": [float(getattr(m, "dq", 0.0)) for m in motors],
+        #     "joint_torques": [float(getattr(m, "tau_est", 0.0)) for m in motors],
+        #     "imu": None if imu is None else {"rpy": [float(imu.rpy[i]) for i in range(3)], "gyro": [float(imu.gyroscope[i]) for i in range(3)], "acc": [float(imu.accelerometer[i]) for i in range(3)]},
+        #     "raw": msg,
+        # }
+        pass
 
     def say(self, text="", language="EN", volume=100):
         piper = os.environ.get("G1_PIPER_BIN") or os.environ.get("PIPER_BIN") or "piper"
@@ -1211,10 +1295,13 @@ class G1:
                 wf.setframerate(16000)
                 wf.writeframes(pcm)
             client = self._audio_client()
-            client.SetVolume(int(volume))
+            # TODO(participant): set playback volume via AudioClient.SetVolume().
+            # client.SetVolume(int(volume))
             with wave.open(str(robot_wav), "rb") as wf:
                 pcm = wf.readframes(wf.getnframes())
-            code, _ = client.PlayStream("sdk_wrapper_v3", "sdk-wrapper-v3", pcm)
+            # TODO(participant): stream the converted PCM to the robot via
+            # AudioClient.PlayStream(app_name, stream_id, pcm) -- returns (code, _).
+            # code, _ = client.PlayStream("sdk_wrapper_v3", "sdk-wrapper-v3", pcm)
             return int(code)
 
     def set_headlight(self, color="green", intensity=100, duration_s=3):
@@ -1223,7 +1310,8 @@ class G1:
         if self._headlight_thread is not None and self._headlight_thread.is_alive():
             self._headlight_stop.set()
             self._headlight_thread.join()
-        code = int(client.LedControl(*rgb))
+        # TODO(participant): set the headlight color via AudioClient.LedControl(r, g, b).
+        # code = int(client.LedControl(*rgb))
         if not _led_control_was_accepted(code) or float(duration_s) <= 0:
             return code
         self._headlight_stop = threading.Event()
@@ -1240,7 +1328,10 @@ class G1:
             ratio = float(i) / float(steps)
             fade = ratio * ratio * (3.0 - 2.0 * ratio)
             weight = 1.0 - fade
-            arm_sdk.write(positions, weight=weight, kp=30.0 * weight, kd=1.5 * weight, waist_kp={j: 480.0 * weight for j in WAIST_JOINTS}, waist_kd={j: 12.0 * weight for j in WAIST_JOINTS})
+            # TODO(participant): publish this frame on rt/arm_sdk via
+            # _ArmSdk.write(targets, weight=..., kp=..., kd=..., waist_kp=..., waist_kd=...)
+            # -- ramping weight 1->0 hands the arms back to the high-level controller.
+            # arm_sdk.write(positions, weight=weight, kp=30.0 * weight, kd=1.5 * weight, waist_kp={j: 480.0 * weight for j in WAIST_JOINTS}, waist_kd={j: 12.0 * weight for j in WAIST_JOINTS})
             time.sleep(dt)
         return {"final_arm_sdk_weight": 0.0, "joint_count": len(positions)}
 
@@ -1251,7 +1342,10 @@ class G1:
         dt = 1.0 / max(1.0, float(rate_hz))
         for i in range(steps + 1):
             weight = float(i) / float(steps)
-            arm_sdk.write(positions, weight=weight, kp=30.0, kd=1.5, waist_kp={j: 480.0 for j in WAIST_JOINTS}, waist_kd={j: 12.0 for j in WAIST_JOINTS})
+            # TODO(participant): publish this frame on rt/arm_sdk via
+            # _ArmSdk.write(targets, weight=..., kp=..., kd=..., waist_kp=..., waist_kd=...)
+            # -- ramping weight 0->1 takes ownership of the arm/waist joints.
+            # arm_sdk.write(positions, weight=weight, kp=30.0, kd=1.5, waist_kp={j: 480.0 for j in WAIST_JOINTS}, waist_kd={j: 12.0 for j in WAIST_JOINTS})
             time.sleep(dt)
         return {"final_arm_sdk_weight": 1.0, "joint_count": len(positions)}
 
@@ -1273,7 +1367,9 @@ class G1:
         for a true fire-and-forget send (one Move() RPC, returns
         immediately, no auto-stop): e.g. sending (0, 0, 0) to stop
         immediately shouldn't itself block for a couple of seconds first."""
-        code = int(self._client.Move(float(vx), float(vy), float(vyaw), continous_move=True) or 0)
+        # TODO(participant): send a continuous velocity command via
+        # LocoClient.Move(vx, vy, vyaw, continous_move=True).
+        # code = int(self._client.Move(float(vx), float(vy), float(vyaw), continous_move=True) or 0)
         if duration_s is None:
             return code
         try:
@@ -1284,8 +1380,12 @@ class G1:
 
     def loco_stop(self):
         if hasattr(self._client, "StopMove"):
-            return self._client.StopMove()
-        return self._client.Move(0.0, 0.0, 0.0, continous_move=False)
+            # TODO(participant): prefer the dedicated stop RPC when available.
+            # return self._client.StopMove()
+            pass
+        # TODO(participant): otherwise stop by sending a zero, non-continuous
+        # velocity command via LocoClient.Move(0, 0, 0, continous_move=False).
+        # return self._client.Move(0.0, 0.0, 0.0, continous_move=False)
 
     def get_rgbd(self):
         endpoints = ["tcp://0.0.0.0:5555", "tcp://127.0.0.1:5555", "tcp://localhost:5555"]
@@ -1321,7 +1421,10 @@ class G1:
         return None
 
     def get_point_cloud(self):
-        latest = self._latest_cloud_msg()
+        # TODO(participant): fetch the newest PointCloud2_ across every
+        # SLAM point-cloud topic (the cached-latest helper is already
+        # provided -- see _latest_cloud_msg()).
+        # latest = self._latest_cloud_msg()
         if latest is None:
             return []
         _, msg, _ = latest
@@ -1347,16 +1450,20 @@ class G1:
         return points
 
     def get_slam_info(self):
-        msg, _ = self._slam_info.get()
+        # TODO(participant): read the latest rt/slam_info String_ message
+        # (self._slam_info is a _Latest wrapping a ChannelSubscriber).
+        # msg, _ = self._slam_info.get()
         if msg is not None:
             return self._string_data(msg)
-        msg, _ = self._slam_key.get()
+        # TODO(participant): fall back to rt/slam_key_info the same way.
+        # msg, _ = self._slam_key.get()
         return None if msg is None else self._string_data(msg)
 
     def get_slam_key_info(self):
         """rt/slam_key_info specifically, unlike get_slam_info()'s
         info-falls-back-to-key merge -- lets a caller tell the two apart."""
-        msg, _ = self._slam_key.get()
+        # TODO(participant): read the latest rt/slam_key_info message.
+        # msg, _ = self._slam_key.get()
         return None if msg is None else self._string_data(msg)
 
     def move_ll_joint(self, joint_id, q, dq=0.0, kp=40.0, kd=1.0, tau=0.0, dev_mode=False):
@@ -1372,7 +1479,9 @@ class G1:
                 raise ValueError("dev_mode=False uses rt/arm_sdk and supports joints 12-28")
             pose = self._upper_body_pose()
             pose[joint_id] = float(q)
-            self._arm_sdk_client().write(pose, kp=float(kp), kd=float(kd), dq=float(dq), tau=float(tau), waist_kp={j: 480.0 for j in WAIST_JOINTS}, waist_kd={j: 12.0 for j in WAIST_JOINTS})
+            # TODO(participant): publish the updated pose on rt/arm_sdk via
+            # _ArmSdk.write(targets, kp=..., kd=..., waist_kp=..., waist_kd=...).
+            # self._arm_sdk_client().write(pose, kp=float(kp), kd=float(kd), dq=float(dq), tau=float(tau), waist_kp={j: 480.0 for j in WAIST_JOINTS}, waist_kd={j: 12.0 for j in WAIST_JOINTS})
             return {"joint_id": joint_id, "dev_mode": False, "topic": "rt/arm_sdk"}
         if joint_id not in LOWCMD_JOINTS:
             raise ValueError("dev_mode=True supports lowcmd body joints 0-28")
@@ -1382,11 +1491,16 @@ class G1:
         kd_all = [1,1,1,2,1,1,1,1,1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
         kp_all[joint_id] = float(kp)
         kd_all[joint_id] = float(kd)
-        self._lowcmd_client().write(q_all, mode_machine, kp=kp_all, kd=kd_all, dq=float(dq), tau=float(tau))
+        # TODO(participant): publish the whole-body command on rt/lowcmd via
+        # _LowCmd.write(q, mode_machine, kp=..., kd=...) -- only valid once
+        # AI Sport has released control (see enter_dev_mode()).
+        # self._lowcmd_client().write(q_all, mode_machine, kp=kp_all, kd=kd_all, dq=float(dq), tau=float(tau))
         return {"joint_id": joint_id, "dev_mode": True, "topic": "rt/lowcmd"}
 
     def get_odom(self):
-        msg = self._sport_msg()
+        # TODO(participant): prefer rt/odommodestate/rt/sportmodestate
+        # (whichever is newer -- see _sport_msg()).
+        # msg = self._sport_msg()
         if msg is not None:
             return {
                 "timestamp": time.time(),
@@ -1398,10 +1512,12 @@ class G1:
                 "gait": self.get_gait(),
                 "raw": msg,
             }
-        msg, ts = self._odom.get()
+        # TODO(participant): otherwise fall back to rt/odom.
+        # msg, ts = self._odom.get()
         if msg is not None:
             return {"timestamp": ts, "topic": "rt/odom", "pose": self._odom_pose(msg), "raw": msg}
-        msg, ts = self._slam_odom.get()
+        # TODO(participant): last resort, rt/unitree/slam_mapping/odom.
+        # msg, ts = self._slam_odom.get()
         if msg is not None:
             return {"timestamp": ts, "topic": "rt/unitree/slam_mapping/odom", "pose": self._odom_pose(msg), "raw": msg}
         return None
@@ -1412,11 +1528,14 @@ class G1:
         do not substitute one for the other, they're different frames. Meant
         as a last-resort SLAM pose fallback when neither rt/slam_info nor
         rt/slam_key_info have published a usable pose yet."""
-        msg, _ts = self._slam_odom.get()
+        # TODO(participant): read the latest rt/unitree/slam_mapping/odom message.
+        # msg, _ts = self._slam_odom.get()
         return None if msg is None else self._odom_pose(msg)
 
     def get_imus(self):
-        msg = self._lowstate_msg() or self._sport_msg()
+        # TODO(participant): prefer rt/lowstate's IMU, falling back to the
+        # sport-state one (both already-provided cached-latest helpers).
+        # msg = self._lowstate_msg() or self._sport_msg()
         if msg is None:
             return None
         imu = _read(msg, "imu_state")
@@ -1447,7 +1566,8 @@ class G1:
 
     def get_battery(self):
         for topic, latest in self._bms:
-            msg, ts = latest.get()
+            # TODO(participant): read this BMS topic's cached-latest message.
+            # msg, ts = latest.get()
             if msg is None or (time.time() - ts) > 3.0:
                 continue
             return {
@@ -1473,7 +1593,9 @@ class G1:
                     "bmsstate": [int(x) for x in list(getattr(msg, "bmsstate", []) or [])],
                 },
             }
-        msg = self._lowstate_msg()
+        # TODO(participant): no dedicated BMS topic published -- fall back
+        # to rt/lowstate's embedded bms_state/bit_flag/power_v/power_a.
+        # msg = self._lowstate_msg()
         if msg is None:
             return None
         bms = getattr(msg, "bms_state", None)
@@ -1505,7 +1627,9 @@ class G1:
         out = {}
         for side in sides:
             try:
-                self._dex3_hand(side).set_targets(HAND_OPEN[side], hold_s=hold_s, rate_hz=rate_hz, kp=1.5, kd=0.1, tau=0.03, ramp_s=ramp_s)
+                # TODO(participant): drive this hand's Dex3 fingers to the
+                # fully-open pose via _Dex3.set_targets(targets, ...).
+                # self._dex3_hand(side).set_targets(HAND_OPEN[side], hold_s=hold_s, rate_hz=rate_hz, kp=1.5, kd=0.1, tau=0.03, ramp_s=ramp_s)
                 out[side] = {"hand": side, "ok": True, "action": "open_dex3_hand"}
             except Exception as exc:
                 out[side] = self._hand_error(side, "open_dex3_hand", exc)
@@ -1516,7 +1640,9 @@ class G1:
         out = {}
         for side in sides:
             try:
-                self._dex3_hand(side).set_targets(HAND_CLOSED[side], hold_s=hold_s, rate_hz=rate_hz, kp=1.5, kd=0.1, tau=0.03, ramp_s=ramp_s)
+                # TODO(participant): drive this hand's Dex3 fingers to the
+                # fully-closed pose via _Dex3.set_targets(targets, ...).
+                # self._dex3_hand(side).set_targets(HAND_CLOSED[side], hold_s=hold_s, rate_hz=rate_hz, kp=1.5, kd=0.1, tau=0.03, ramp_s=ramp_s)
                 out[side] = {"hand": side, "ok": True, "action": "close_dex3_hand"}
             except Exception as exc:
                 out[side] = self._hand_error(side, "close_dex3_hand", exc)
@@ -1530,7 +1656,9 @@ class G1:
         for side in sides:
             try:
                 targets = [o + (c - o) * alpha for o, c in zip(HAND_OPEN[side], HAND_CLOSED[side])]
-                self._dex3_hand(side).set_targets(targets, hold_s=hold_s, rate_hz=rate_hz, kp=1.5, kd=0.1, tau=0.03, ramp_s=ramp_s)
+                # TODO(participant): drive this hand's Dex3 fingers to the
+                # interpolated grip pose via _Dex3.set_targets(targets, ...).
+                # self._dex3_hand(side).set_targets(targets, hold_s=hold_s, rate_hz=rate_hz, kp=1.5, kd=0.1, tau=0.03, ramp_s=ramp_s)
                 out[side] = {"hand": side, "ok": True, "action": "grip_dex3_hand", "percent": float(percent)}
             except Exception as exc:
                 out[side] = self._hand_error(side, "grip_dex3_hand", exc)
@@ -1541,7 +1669,9 @@ class G1:
         HAND_JOINT_NAMES for the order), ramped smoothly like open/close/
         grip -- for poses other than plain open/closed/a grip percentage."""
         side = _normalize_side(hand)
-        self._dex3_hand(side).set_targets(targets, hold_s=hold_s, rate_hz=rate_hz, kp=kp, kd=kd, tau=tau, ramp_s=ramp_s)
+        # TODO(participant): drive this hand's Dex3 fingers to an explicit
+        # 7-value pose via _Dex3.set_targets(targets, ...).
+        # self._dex3_hand(side).set_targets(targets, hold_s=hold_s, rate_hz=rate_hz, kp=kp, kd=kd, tau=tau, ramp_s=ramp_s)
         return {"hand": side, "ok": True, "action": "hand_pose"}
 
     def release_dex3_fingers(self, hand="both", hold_s=0.5, rate_hz=50.0, persistent=False):
@@ -1553,7 +1683,9 @@ class G1:
         out = {}
         for side in sides:
             try:
-                self._dex3_hand(side).release_fingers(hold_s=hold_s, rate_hz=rate_hz, persistent=persistent)
+                # TODO(participant): let this hand go backdrivable via
+                # _Dex3.release_fingers(hold_s=..., rate_hz=..., persistent=...).
+                # self._dex3_hand(side).release_fingers(hold_s=hold_s, rate_hz=rate_hz, persistent=persistent)
                 out[side] = {"hand": side, "ok": True, "action": "release_dex3_fingers"}
             except Exception as exc:
                 out[side] = self._hand_error(side, "release_dex3_fingers", exc)
@@ -1570,7 +1702,9 @@ class G1:
         out = {}
         for side in sides:
             try:
-                snap = self._dex3_hand(side).snapshot()
+                # TODO(participant): read this hand's Dex3 state via
+                # _Dex3.snapshot() (positions/velocities/torques/tactile).
+                # snap = self._dex3_hand(side).snapshot()
                 out[side] = self._hand_error(side, "get_dex3_hand_sensors") if snap is None else snap
             except Exception as exc:
                 out[side] = self._hand_error(side, "get_dex3_hand_sensors", exc)
@@ -1593,7 +1727,9 @@ class G1:
         for side in sides:
             try:
                 host, port, unit_id = INSPIRE_CONFIGS[side]
-                _modbus_move(host, port, unit_id, INSPIRE_OPEN)
+                # TODO(participant): send the fully-open register values over
+                # Modbus via _modbus_move(host, port, unit_id, values).
+                # _modbus_move(host, port, unit_id, INSPIRE_OPEN)
                 out[side] = {"hand": side, "ok": True, "action": "open_inspire_hand"}
             except Exception as exc:
                 out[side] = self._hand_error(side, "open_inspire_hand", exc)
@@ -1605,7 +1741,9 @@ class G1:
         for side in sides:
             try:
                 host, port, unit_id = INSPIRE_CONFIGS[side]
-                _modbus_move(host, port, unit_id, INSPIRE_CLOSE)
+                # TODO(participant): send the fully-closed register values over
+                # Modbus via _modbus_move(host, port, unit_id, values).
+                # _modbus_move(host, port, unit_id, INSPIRE_CLOSE)
                 out[side] = {"hand": side, "ok": True, "action": "close_inspire_hand"}
             except Exception as exc:
                 out[side] = self._hand_error(side, "close_inspire_hand", exc)
@@ -1613,13 +1751,17 @@ class G1:
 
     def start_mapping(self, slam_type="indoor"):
         self._initial_slam_pose = self._slam_pose()
-        code, raw = self._slam_client().start_mapping(slam_type)
+        # TODO(participant): kick off SLAM mapping via the slam_operate
+        # RPC service (api id 1801) -- see _SlamClient.start_mapping().
+        # code, raw = self._slam_client().start_mapping(slam_type)
         return {"code": code, "raw": raw}
 
     def stop_mapping(self, save_path=None):
         if save_path:
             self._slam_map_path = str(save_path)
-        code, raw = self._slam_client().stop_mapping(save_path)
+        # TODO(participant): stop SLAM mapping, optionally saving to
+        # save_path -- see _SlamClient.stop_mapping().
+        # code, raw = self._slam_client().stop_mapping(save_path)
         return {"code": code, "raw": raw}
 
     def relocate(self, map_path=None, pose=None):
@@ -1633,7 +1775,9 @@ class G1:
             self._slam_map_path = str(map_path)
         if pose is None:
             pose = self._slam_pose() or self._last_slam_pose or self._initial_slam_pose or (0.0, 0.0, 0.0)
-        code, resp = self._slam_client().init_pose(pose[0], pose[1], yaw=pose[2], address=self._slam_map_path)
+        # TODO(participant): relocalize against the saved map via
+        # _SlamClient.init_pose(x, y, yaw=..., address=map_path).
+        # code, resp = self._slam_client().init_pose(pose[0], pose[1], yaw=pose[2], address=self._slam_map_path)
         if int(code) == 0:
             self._last_slam_pose = pose
             self._initial_slam_pose = pose
@@ -1647,7 +1791,9 @@ class G1:
         """Single-shot nav to (x, y, yaw), without queuing (see navigate() for
         the queued/multi-point path). Does not wait for arrival -- pair with
         wait_for_arrival() if you need to block until reached."""
-        code, raw = self._slam_client().pose_nav(x, y, yaw=yaw)
+        # TODO(participant): send a single-shot nav target via
+        # _SlamClient.pose_nav(x, y, yaw=yaw).
+        # code, raw = self._slam_client().pose_nav(x, y, yaw=yaw)
         return {"code": code, "raw": raw}
 
     def wait_for_arrival(self, x, y, tolerance_m=0.35, timeout_s=120.0):
@@ -1658,11 +1804,13 @@ class G1:
         return self._wait_for_slam_arrival(x, y, tolerance_m=tolerance_m, timeout_s=timeout_s)
 
     def pause_nav(self):
-        code, raw = self._slam_client().pause_nav()
+        # TODO(participant): pause the active nav goal via _SlamClient.pause_nav().
+        # code, raw = self._slam_client().pause_nav()
         return {"code": code, "raw": raw}
 
     def resume_nav(self):
-        code, raw = self._slam_client().resume_nav()
+        # TODO(participant): resume the paused nav goal via _SlamClient.resume_nav().
+        # code, raw = self._slam_client().resume_nav()
         return {"code": code, "raw": raw}
 
     def add_map_pose(self):
@@ -1690,7 +1838,9 @@ class G1:
             raise RuntimeError("No path points queued")
         out = []
         for x, y, yaw in self._path_points:
-            code, raw = self._slam_client().pose_nav(x, y, yaw=yaw)
+            # TODO(participant): send this queued waypoint via
+            # _SlamClient.pose_nav(x, y, yaw=yaw).
+            # code, raw = self._slam_client().pose_nav(x, y, yaw=yaw)
             entry = {"target": (x, y, yaw), "code": code, "raw": raw}
             if int(code) == 0:
                 arrived, final_pose, notice = self._wait_for_slam_arrival(x, y)
@@ -1718,7 +1868,8 @@ class G1:
         seen = set()
         messages = []
         while True:
-            msg, ts = self._audio_msg.get()
+            # TODO(participant): read the latest rt/audio_msg message.
+            # msg, ts = self._audio_msg.get()
             raw = None if msg is None else self._string_data(msg)
             if raw:
                 key = (float(ts), raw)
@@ -1829,7 +1980,9 @@ class G1:
             frame = dict(current)
             for joint_id in joints:
                 frame[joint_id] = current[joint_id] + (target[joint_id] - current[joint_id]) * ramp
-            arm_sdk.write(frame, kp=30.0, kd=1.5, waist_kp={12: 200.0, 13: 200.0, 14: 480.0}, waist_kd={j: 12.0 for j in WAIST_JOINTS})
+            # TODO(participant): publish this ramped frame on rt/arm_sdk via
+            # _ArmSdk.write(targets, kp=..., kd=..., waist_kp=..., waist_kd=...).
+            # arm_sdk.write(frame, kp=30.0, kd=1.5, waist_kp={12: 200.0, 13: 200.0, 14: 480.0}, waist_kd={j: 12.0 for j in WAIST_JOINTS})
             time.sleep(1.0 / max(1.0, float(rate_hz)))
         final_T = _fallback_arm_fk(side, q_apply) if using_fallback else fk.compute_arm(q_apply)
         return {
@@ -1946,7 +2099,9 @@ class G1:
             frame = {j: start.get(j, q) + (q - start.get(j, q)) * smooth for j, q in target.items()}
             ramp = min(1.0, step / max(1, weight_ramp_steps))
             weight = start_weight + (1.0 - start_weight) * ramp if start_weight < 1.0 else 1.0
-            arm_sdk.write(frame, weight=weight, waist_kp=waist_kp, waist_kd=waist_kd)
+            # TODO(participant): publish this interpolated frame on
+            # rt/arm_sdk via _ArmSdk.write(targets, weight=..., waist_kp=..., waist_kd=...).
+            # arm_sdk.write(frame, weight=weight, waist_kp=waist_kp, waist_kd=waist_kd)
             time.sleep(duration_s / steps)
         return {"target": target, "steps": steps, "duration_s": duration_s}
 
@@ -2000,14 +2155,18 @@ class G1:
         within timeout_s."""
         client = self._motion_client()
         deadline = time.time() + max(0.0, float(timeout_s))
-        code, data = client.CheckMode()
+        # TODO(participant): check which mode currently owns the motors via
+        # MotionSwitcherClient.CheckMode() -- returns (code, data).
+        # code, data = client.CheckMode()
         previous = _mode_name(data)
         while int(code) == 0 and _mode_name(data):
-            client.ReleaseMode()
+            # TODO(participant): release that mode via MotionSwitcherClient.ReleaseMode().
+            # client.ReleaseMode()
             time.sleep(0.5)
             if time.time() > deadline:
                 raise TimeoutError("Timed out releasing MotionSwitcher mode.")
-            code, data = client.CheckMode()
+            # TODO(participant): re-check via MotionSwitcherClient.CheckMode().
+            # code, data = client.CheckMode()
         if int(code) != 0:
             raise RuntimeError(f"MotionSwitcher CheckMode failed: code={code} data={data}")
         return previous
@@ -2017,7 +2176,9 @@ class G1:
         any (a falsy previous_mode, e.g. "", is a no-op)."""
         if not previous_mode:
             return 0
-        code, _data = self._motion_client().SelectMode(previous_mode)
+        # TODO(participant): restore the previously-active mode via
+        # MotionSwitcherClient.SelectMode(mode_name).
+        # code, _data = self._motion_client().SelectMode(previous_mode)
         return int(code)
 
     def dev_mode_teach(self, name, duration_s=10.0, poll_s=0.02, stop_event=None):
@@ -2045,7 +2206,10 @@ class G1:
             if duration_s > 0.0 and elapsed >= duration_s:
                 break
             pose = self._upper_body_pose()
-            arm_sdk.write(pose, weight=1.0, kp=0.0, kd=0.0, waist_kp=zero_kp, waist_kd=zero_kp)
+            # TODO(participant): publish a zero-gain (backdrivable) frame on
+            # rt/arm_sdk via _ArmSdk.write(targets, weight=1.0, kp=0, kd=0, ...)
+            # so the arms can be moved freely while this records them.
+            # arm_sdk.write(pose, weight=1.0, kp=0.0, kd=0.0, waist_kp=zero_kp, waist_kd=zero_kp)
             timestamps.append(elapsed)
             samples.append([pose[j] for j in joints])
             time.sleep(max(0.001, float(poll_s)))
@@ -2057,8 +2221,10 @@ class G1:
         # Hold the final recorded pose at normal gains instead of leaving
         # rt/arm_sdk at zero stiffness once recording stops.
         final_pose = dict(zip(joints, samples[-1]))
-        arm_sdk.write(final_pose, weight=1.0, kp=30.0, kd=1.5,
-                       waist_kp={j: 480.0 for j in WAIST_JOINTS}, waist_kd={j: 12.0 for j in WAIST_JOINTS})
+        # TODO(participant): hold the final recorded pose at normal gains
+        # via _ArmSdk.write(targets, weight=1.0, kp=..., kd=..., ...).
+        # arm_sdk.write(final_pose, weight=1.0, kp=30.0, kd=1.5,
+        #                waist_kp={j: 480.0 for j in WAIST_JOINTS}, waist_kd={j: 12.0 for j in WAIST_JOINTS})
         return {"name": str(name), "sample_count": len(samples), "duration_s": timestamps[-1]}
 
     def dev_mode_repeat(self, name, speed=1.0, start_ramp_s=0.8, final_hold_s=0.8, kp=40.0, kd=1.0,
@@ -2086,7 +2252,9 @@ class G1:
             for step in range(1, ramp_steps + 1):
                 smooth = _smoothstep(step / ramp_steps)
                 frame = {j: start_pose.get(j, q) + (q - start_pose.get(j, q)) * smooth for j, q in first_targets.items()}
-                lowcmd.write(frame, mode_machine=mode_machine, kp=kp, kd=kd)
+                # TODO(participant): publish this ramp frame on rt/lowcmd via
+                # _ArmOnlyLowCmd.write(targets, mode_machine=..., kp=..., kd=...).
+                # lowcmd.write(frame, mode_machine=mode_machine, kp=kp, kd=kd)
                 time.sleep(1.0 / rate_hz)
 
             started = time.time()
@@ -2096,13 +2264,17 @@ class G1:
                 if elapsed > t_final:
                     break
                 row = _lerp_row(ts, qs, elapsed)
-                lowcmd.write({j: float(row[idx]) for idx, j in enumerate(joints)}, mode_machine=mode_machine, kp=kp, kd=kd)
+                # TODO(participant): publish this replayed frame on rt/lowcmd
+                # via _ArmOnlyLowCmd.write(targets, mode_machine=..., kp=..., kd=...).
+                # lowcmd.write({j: float(row[idx]) for idx, j in enumerate(joints)}, mode_machine=mode_machine, kp=kp, kd=kd)
                 time.sleep(1.0 / rate_hz)
 
             final_targets = {j: float(qs[-1][idx]) for idx, j in enumerate(joints)}
             hold_deadline = time.time() + max(0.0, float(final_hold_s))
             while time.time() < hold_deadline:
-                lowcmd.write(final_targets, mode_machine=mode_machine, kp=kp, kd=kd)
+                # TODO(participant): hold the final replayed frame on
+                # rt/lowcmd via _ArmOnlyLowCmd.write(targets, mode_machine=..., kp=..., kd=...).
+                # lowcmd.write(final_targets, mode_machine=mode_machine, kp=kp, kd=kd)
                 time.sleep(1.0 / rate_hz)
         finally:
             self.exit_dev_mode(previous_mode)
