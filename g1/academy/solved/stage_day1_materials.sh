@@ -49,6 +49,7 @@ for ((i=1; i<=NUM_USERS; i++)); do
     "$SOLVED_DIR/task3_say_and_headlight_helpers.ipynb" \
     "$SOLVED_DIR/task4_robot_state_observation.ipynb" \
     "$ACADEMY_DIR/sdk_wrapper.py" "$ACADEMY_DIR/util.py" \
+    "${INTRO_FILES[@]/#/$INTRO_DIR/}" \
     "$destination/"
 
   # Older bundles put a private 0700 imgs_real directory beside the deck.
@@ -96,9 +97,7 @@ head_html = re.sub(
     '',
     head.group(1),
 )
-page = f'''<!DOCTYPE html>
-<html lang="en">
-{head_html}
+page = f'''{head_html}
 <body>
 <div class="deck">{deck}</div>
 <div class="controls">

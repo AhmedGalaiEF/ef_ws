@@ -184,21 +184,20 @@ ul.compact li{margin:2px 0;}
 <a class="sub" href="#task4_robot_state_observation-get-rgbd">get_rgbd()</a>
 <a class="sub" href="#task4_robot_state_observation-get-services">get_services()</a>
 <div class="grp">Day 2 &mdash; Modes, Locomotion, SLAM</div>
-<a href="#task5_services_and_mode_switching">Task 5 — Services and Mode Switching</a>
-<a class="sub" href="#task5_services_and_mode_switching-native-mode-service-clients-damp-mode">Native mode/service clients + damp_mode()</a>
-<a class="sub" href="#task5_services_and_mode_switching-toggle-service-name-and-toggle-gait">toggle_service(name) and toggle_gait()</a>
-<a class="sub" href="#task5_services_and_mode_switching-say-set-headlight-compact-reuse">say/set_headlight (compact reuse)</a>
-<a class="sub" href="#task5_services_and_mode_switching-toggle-custom-mode-mode-name-language-vo">toggle_custom_mode(mode_name, language, voic</a>
-<a href="#task6_basic_locomotion">Task 6 — Basic Locomotion Helpers</a>
-<a class="sub" href="#task6_basic_locomotion-odometry-subscriber-native-lococlient">Odometry subscriber + native LocoClient</a>
+<a href="#task5_services_and_mode_switching">Task 5 — State, Services &amp; Mode Switching</a>
+<a class="sub" href="#task5_services_and_mode_switching-construct-the-wrapper">Construct the wrapper</a>
+<a class="sub" href="#task5_services_and_mode_switching-read-robot-state-get-lowstate-get-odom-g">Read robot state: get_lowstate/get_odom/get_</a>
+<a class="sub" href="#task5_services_and_mode_switching-list-and-toggle-services-get-service-tog">List and toggle services: get_service/toggle</a>
+<a class="sub" href="#task5_services_and_mode_switching-switch-modes-safely-damp-mode-prepare-mo">Switch modes safely: damp_mode/prepare_mode/</a>
+<a href="#task6_basic_locomotion">Task 6 — Locomotion with the Wrapper</a>
+<a class="sub" href="#task6_basic_locomotion-read-odometry-get-odom">Read odometry: get_odom()</a>
 <a class="sub" href="#task6_basic_locomotion-loco-move-vx-vy-vyaw-duration-s">loco_move(vx, vy, vyaw, duration_s)</a>
-<a class="sub" href="#task6_basic_locomotion-odom-move-target-dx-target-dy-target-dya">odom_move(target_dx, target_dy, target_dyaw)</a>
+<a class="sub" href="#task6_basic_locomotion-a-timed-multi-stop-path-walk-u-path-g1-o">A timed multi-stop path: walk_u_path(g1, on_</a>
 <a href="#task7_slam_operation_and_map_visualization">Task 7 — SLAM Operation and Map Visualization</a>
-<a class="sub" href="#task7_slam_operation_and_map_visualization-native-slamrpc-client-pose-parsing">Native SlamRpc client + pose parsing</a>
-<a class="sub" href="#task7_slam_operation_and_map_visualization-mapping-lifecycle-start-mapping-stop-map">Mapping lifecycle: start_mapping / stop_mapp</a>
-<a class="sub" href="#task7_slam_operation_and_map_visualization-add-point-point-name-remove-point-point-">add_point(point_name) / remove_point(point_n</a>
-<a class="sub" href="#task7_slam_operation_and_map_visualization-navigate-to-point-navigate-path">navigate_to_point / navigate_path</a>
-<a class="sub" href="#task7_slam_operation_and_map_visualization-view-map-capture-visualization-while-map">view_map(): capture visualization while mapp</a>
+<a class="sub" href="#task7_slam_operation_and_map_visualization-mapping-lifecycle-start-mapping-stop-map">Mapping lifecycle: start_mapping()/stop_mapp</a>
+<a class="sub" href="#task7_slam_operation_and_map_visualization-named-points-add-point-g1-name-remove-po">Named points: add_point(g1, name) / remove_p</a>
+<a class="sub" href="#task7_slam_operation_and_map_visualization-relocate-and-save-1-2-named-points">relocate() and save 1-2 named points</a>
+<a class="sub" href="#task7_slam_operation_and_map_visualization-navigate-to-a-saved-point-navigate-to-po">Navigate to a saved point: navigate_to_point</a>
 <div class="grp">Day 3 &mdash; Arms and Hands</div>
 <a href="#task8_hl_arm_gestures">Task 8 — High-Level Gestures, Teach/Repeat, Pose Interpolation</a>
 <a class="sub" href="#task8_hl_arm_gestures-high-level-gestures-via-g1armactionclien">High-level gestures via G1ArmActionClient</a>
@@ -725,258 +724,126 @@ knowledge/build reference: <a href="staging_day1/task4_robot_state_observation_i
 </section>
 
 <section class="notebook" id="task5_services_and_mode_switching">
-<h2>Task 5 — Services and Mode Switching <span class="badge b-repo">Day 2</span></h2>
+<h2>Task 5 — State, Services &amp; Mode Switching <span class="badge b-repo">Day 2</span></h2>
 <div class="file-row"><code>staging_day2/task5_services_and_mode_switching.ipynb</code> &middot;
 knowledge/build reference: <a href="staging_day2/task5_services_and_mode_switching_intro.html"><code>task5_services_and_mode_switching_intro.html</code></a></div>
-<p class="intro">A safe damp_mode, toggle_service/toggle_gait, and a composite toggle_custom_mode that announces itself with Piper and holds a headlight color.</p>
-<div class="note"><b>Note:</b> This notebook&#x27;s code cells are bare generic stubs (imports + one raise NotImplementedError) with no per-line hints -- unlike Day 1&#x27;s task1-4. The &#x27;old&#x27; column below is that same generic stub for every sub-task.</div>
+<p class="intro">Starting Day 2, tasks call the finished sdk_wrapper.G1 wrapper directly (like Task 1) instead of rebuilding native DDS clients: read robot state, list/toggle services, and step through FSM modes safely.</p>
+<div class="note"><b>Note:</b> This notebook&#x27;s code cells are bare generic stubs (imports + one raise NotImplementedError) with no per-line hints. The &#x27;old&#x27; column below is that same generic stub for every sub-task.</div>
 
-<div class="task" id="task5_services_and_mode_switching-native-mode-service-clients-damp-mode">
+<div class="task" id="task5_services_and_mode_switching-construct-the-wrapper">
 <div class="task-head">
-<h3>Native mode/service clients + damp_mode() <span class="stat"><span class="add">+14</span> <span class="del">-3</span></span></h3>
-<p class="desc">LocoClient changes locomotion FSM state; MotionSwitcherClient checks/releases the higher-level motion owner; RobotStateClient lists/switches services.</p>
+<h3>Construct the wrapper <span class="stat"><span class="add">+1</span> <span class="del">-3</span></span></h3>
+<p class="desc">One G1 instance owns the DDS ChannelFactory, every subscriber, and every SDK client -- construct exactly one per kernel, as in Task 1.</p>
 </div>
-<div class="diff-wrap"><pre class="diff"><span class="dl dl-ctx"><span class="dl-mark"> </span>from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient</span>
-<span class="dl dl-ctx"><span class="dl-mark"> </span>from unitree_sdk2py.comm.motion_switcher.motion_switcher_client import MotionSwitcherClient</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>try:</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    from unitree_sdk2py.b2.robot_state.robot_state_client import RobotStateClient</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>except ImportError:</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    from unitree_sdk2py.go2.robot_state.robot_state_client import RobotStateClient</span>
+<div class="diff-wrap"><pre class="diff"><span class="dl dl-ctx"><span class="dl-mark"> </span>import sys</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>sys.path.append(&quot;..&quot;)</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>from sdk_wrapper import G1</span>
 <span class="dl dl-ctx"><span class="dl-mark"> </span>&nbsp;</span>
 <span class="dl dl-del"><span class="dl-mark">-</span># TODO: Implement this section using the preceding task description and day slides.</span>
 <span class="dl dl-del"><span class="dl-mark">-</span># Keep robot commands conservative; test observation/state code before actuation.</span>
 <span class="dl dl-del"><span class="dl-mark">-</span>raise NotImplementedError(&quot;Complete this task section&quot;)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>FSM_IDS = {&quot;zero_torque&quot;: 0, &quot;damp&quot;: 1, &quot;prepare&quot;: 4, &quot;walk&quot;: 500, &quot;run&quot;: 802}</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>&nbsp;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>loco = LocoClient(); loco.SetTimeout(5.0); loco.Init()</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>switcher = MotionSwitcherClient(); switcher.SetTimeout(5.0); switcher.Init()</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>robot_state_client = RobotStateClient(); robot_state_client.SetTimeout(2.0); robot_state_client.Init()</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>&nbsp;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>def damp_mode():</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    return int(loco.SetFsmId(FSM_IDS[&quot;damp&quot;]))</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>&nbsp;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>damp_mode()</span></pre></div>
+<span class="dl dl-add"><span class="dl-mark">+</span>g1 = G1(iface=&quot;eth0&quot;, domain_id=0)</span></pre></div>
 </div>
-<div class="task" id="task5_services_and_mode_switching-toggle-service-name-and-toggle-gait">
+<div class="task" id="task5_services_and_mode_switching-read-robot-state-get-lowstate-get-odom-g">
 <div class="task-head">
-<h3>toggle_service(name) and toggle_gait() <span class="stat"><span class="add">+36</span> <span class="del">-3</span></span></h3>
-<p class="desc">toggle_service flips a named service on/off based on its current status; toggle_gait prefers SetBalanceMode/SetGaitType, falls back to BalanceStand/SetFsmId(&quot;walk&quot;).</p>
+<h3>Read robot state: get_lowstate/get_odom/get_battery/get_state <span class="stat"><span class="add">+5</span> <span class="del">-3</span></span></h3>
+<p class="desc">There is no separate get_mode() -- get_state() already returns the FSM id/mode/motion_mode/gait, plus battery, lowstate, services, and SLAM info in one call.</p>
 </div>
 <div class="diff-wrap"><pre class="diff"><span class="dl dl-del"><span class="dl-mark">-</span># TODO: Implement this section using the preceding task description and day slides.</span>
 <span class="dl dl-del"><span class="dl-mark">-</span># Keep robot commands conservative; test observation/state code before actuation.</span>
 <span class="dl dl-del"><span class="dl-mark">-</span>raise NotImplementedError(&quot;Complete this task section&quot;)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>def get_service(name):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    code, rows = robot_state_client.ServiceList()</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    if int(code) != 0:</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        raise RuntimeError(f&quot;ServiceList failed: {code}&quot;)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    for row in rows or []:</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        if str(getattr(row, &quot;name&quot;, &quot;&quot;)).strip().lower() == str(name).strip().lower():</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>            return row</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    return None</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>&nbsp;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>def toggle_service(name):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    row = get_service(name)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    if row is None:</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        raise ValueError(f&quot;Unknown service: {name}&quot;)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    enabled = getattr(row, &quot;status&quot;, 0) != 0</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    code = int(robot_state_client.ServiceSwitch(row.name, bool(enabled)))</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    return {&quot;name&quot;: row.name, &quot;enabled&quot;: enabled, &quot;code&quot;: code}</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>&nbsp;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>_gait_state = {&quot;gait&quot;: 0}</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>&nbsp;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>def toggle_gait():</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    target = 0 if _gait_state[&quot;gait&quot;] else 1</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    if target:</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        for method_name in (&quot;SetBalanceMode&quot;, &quot;SetGaitType&quot;):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>            if hasattr(loco, method_name):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>                code = int(getattr(loco, method_name)(1))</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>                if code == 0:</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>                    _gait_state[&quot;gait&quot;] = 1</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>                    return {&quot;gait&quot;: 1, &quot;method&quot;: method_name, &quot;code&quot;: code}</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    else:</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        if hasattr(loco, &quot;BalanceStand&quot;):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>            loco.BalanceStand(0)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        code = int(loco.SetFsmId(FSM_IDS[&quot;walk&quot;]))</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        if code == 0:</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>            _gait_state[&quot;gait&quot;] = 0</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>            return {&quot;gait&quot;: 0, &quot;method&quot;: &quot;SetFsmId(walk)&quot;, &quot;code&quot;: code}</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    return {&quot;gait&quot;: _gait_state[&quot;gait&quot;]}</span></pre></div>
+<span class="dl dl-add"><span class="dl-mark">+</span>battery = g1.get_battery()</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>print(&quot;battery:&quot;, battery.get(&quot;percentage&quot;))</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>print(&quot;odom:&quot;, g1.get_odom())</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>print(&quot;lowstate motors:&quot;, len(g1.get_lowstate()[&quot;motors&quot;]) if g1.get_lowstate() else None)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>print(&quot;state:&quot;, {k: g1.get_state()[k] for k in (&quot;id&quot;, &quot;mode&quot;, &quot;motion_mode&quot;)})</span></pre></div>
 </div>
-<div class="task" id="task5_services_and_mode_switching-say-set-headlight-compact-reuse">
+<div class="task" id="task5_services_and_mode_switching-list-and-toggle-services-get-service-tog">
 <div class="task-head">
-<h3>say/set_headlight (compact reuse) <span class="stat"><span class="add">+22</span> <span class="del">-3</span></span></h3>
-<p class="desc">Task 3 develops these in full; reproduced compactly here because toggle_custom_mode depends on both.</p>
-</div>
-<div class="diff-wrap"><pre class="diff"><span class="dl dl-ctx"><span class="dl-mark"> </span>import re, sys</span>
-<span class="dl dl-ctx"><span class="dl-mark"> </span>import threading</span>
-<span class="dl dl-ctx"><span class="dl-mark"> </span>from unitree_sdk2py.g1.audio.g1_audio_client import AudioClient</span>
-<span class="dl dl-ctx"><span class="dl-mark"> </span>from util import play_piper_text</span>
-<span class="dl dl-ctx"><span class="dl-mark"> </span>&nbsp;</span>
-<span class="dl dl-del"><span class="dl-mark">-</span># TODO: Implement this section using the preceding task description and day slides.</span>
-<span class="dl dl-del"><span class="dl-mark">-</span># Keep robot commands conservative; test observation/state code before actuation.</span>
-<span class="dl dl-del"><span class="dl-mark">-</span>raise NotImplementedError(&quot;Complete this task section&quot;)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>audio_client = AudioClient(); audio_client.SetTimeout(5.0); audio_client.Init()</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>&nbsp;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>def say(text, language=&quot;en&quot;, volume=100):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    return play_piper_text(audio_client, text, language=language, volume=volume)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>&nbsp;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>_NAMED_COLORS = {&quot;white&quot;: (255,255,255), &quot;red&quot;: (255,0,0), &quot;green&quot;: (0,255,0), &quot;blue&quot;: (0,0,255),</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>                  &quot;yellow&quot;: (255,255,0), &quot;cyan&quot;: (0,255,255), &quot;magenta&quot;: (255,0,255),</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>                  &quot;orange&quot;: (255,165,0), &quot;purple&quot;: (128,0,128), &quot;pink&quot;: (255,105,180)}</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>&nbsp;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>def parse_color(value):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    if isinstance(value, tuple) and len(value) == 3:</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        return tuple(int(max(0, min(255, v))) for v in value)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    value = str(value).strip().lower()</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    if value in _NAMED_COLORS:</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        return _NAMED_COLORS[value]</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    if re.fullmatch(r&quot;#?[0-9a-fA-F]{6}&quot;, value):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        value = value.lstrip(&quot;#&quot;)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        return (int(value[0:2],16), int(value[2:4],16), int(value[4:6],16))</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    raise ValueError(&quot;color must be a name or #RRGGBB&quot;)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>&nbsp;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>def set_headlight_once(rgb):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    return int(audio_client.LedControl(*rgb))</span></pre></div>
-</div>
-<div class="task" id="task5_services_and_mode_switching-toggle-custom-mode-mode-name-language-vo">
-<div class="task-head">
-<h3>toggle_custom_mode(mode_name, language, voice, headlight_color) <span class="stat"><span class="add">+32</span> <span class="del">-3</span></span></h3>
-<p class="desc">First call announces and starts a refresh thread; a second call (same or different name) cleanly exits: join thread, light off, damp_mode() fallback.</p>
+<h3>List and toggle services: get_service/toggle_service <span class="stat"><span class="add">+7</span> <span class="del">-3</span></span></h3>
+<p class="desc">get_service() with no args lists every service; toggle_service(name) flips one based on its current reported status.</p>
 </div>
 <div class="diff-wrap"><pre class="diff"><span class="dl dl-del"><span class="dl-mark">-</span># TODO: Implement this section using the preceding task description and day slides.</span>
 <span class="dl dl-del"><span class="dl-mark">-</span># Keep robot commands conservative; test observation/state code before actuation.</span>
 <span class="dl dl-del"><span class="dl-mark">-</span>raise NotImplementedError(&quot;Complete this task section&quot;)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>_custom_modes = {</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    &quot;greet&quot;: {&quot;fsm&quot;: None, &quot;announce&quot;: &quot;Hello, I am ready to help.&quot;},</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    &quot;patrol&quot;: {&quot;fsm&quot;: &quot;walk&quot;, &quot;announce&quot;: &quot;Starting patrol mode.&quot;},</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>}</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>_custom_mode_state = {&quot;active&quot;: None, &quot;stop&quot;: None, &quot;thread&quot;: None}</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>for row in g1.get_service():</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    print(row[&quot;name&quot;], row[&quot;status&quot;])</span>
 <span class="dl dl-add"><span class="dl-mark">+</span>&nbsp;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>def _exit_custom_mode():</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    state = _custom_mode_state</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    if state[&quot;thread&quot;] is not None:</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        state[&quot;stop&quot;].set(); state[&quot;thread&quot;].join()</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    left = state[&quot;active&quot;]</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    if left != &quot;greet&quot;:            # greet is presentation-only: never switch FSM on exit</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        damp_mode()</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    state.update(active=None, stop=None, thread=None)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    return {&quot;exited&quot;: left}</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>before = g1.get_service(&quot;vui_service&quot;)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>g1.toggle_service(&quot;vui_service&quot;)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>after = g1.get_service(&quot;vui_service&quot;)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>print(&quot;vui_service:&quot;, before[&quot;status&quot;], &quot;-&gt;&quot;, after[&quot;status&quot;])</span></pre></div>
+</div>
+<div class="task" id="task5_services_and_mode_switching-switch-modes-safely-damp-mode-prepare-mo">
+<div class="task-head">
+<h3>Switch modes safely: damp_mode/prepare_mode/walk_mode + toggle_dev_mode <span class="stat"><span class="add">+6</span> <span class="del">-3</span></span></h3>
+<p class="desc">Always step damp_mode() -&gt; prepare_mode() -&gt; walk_mode(), checking get_state() between steps -- never jump straight to run_mode(). toggle_dev_mode() flips the ai_sport service that several Day 3 low-level calls need.</p>
+</div>
+<div class="diff-wrap"><pre class="diff"><span class="dl dl-del"><span class="dl-mark">-</span># TODO: Implement this section using the preceding task description and day slides.</span>
+<span class="dl dl-del"><span class="dl-mark">-</span># Keep robot commands conservative; test observation/state code before actuation.</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>raise NotImplementedError(&quot;Complete this task section&quot;)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>g1.damp_mode();    print(&quot;fsm:&quot;, g1.get_state()[&quot;id&quot;])</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>g1.prepare_mode(); print(&quot;fsm:&quot;, g1.get_state()[&quot;id&quot;])</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>g1.walk_mode();    print(&quot;fsm:&quot;, g1.get_state()[&quot;id&quot;])</span>
 <span class="dl dl-add"><span class="dl-mark">+</span>&nbsp;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>def toggle_custom_mode(mode_name, language=&quot;en&quot;, voice=None, headlight_color=&quot;green&quot;):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    if _custom_mode_state[&quot;active&quot;] == mode_name:</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        return _exit_custom_mode()                       # same name again -&gt; exit</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    if _custom_mode_state[&quot;active&quot;] is not None:</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        _exit_custom_mode()                               # a different mode was active -&gt; exit it first</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    spec = _custom_modes[mode_name]</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    say(spec[&quot;announce&quot;], language=language)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    fsm_code = None if spec[&quot;fsm&quot;] is None else int(loco.SetFsmId(FSM_IDS[spec[&quot;fsm&quot;]]))</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    rgb, stop_event = parse_color(headlight_color), threading.Event()</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    def worker():</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        while not stop_event.is_set():</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>            set_headlight_once(rgb); stop_event.wait(0.2)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        set_headlight_once((0, 0, 0))</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    thread = threading.Thread(target=worker, daemon=False); thread.start()</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    _custom_mode_state.update(active=mode_name, stop=stop_event, thread=thread)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    return {&quot;mode&quot;: mode_name, &quot;fsm_code&quot;: fsm_code}</span></pre></div>
+<span class="dl dl-add"><span class="dl-mark">+</span>g1.toggle_dev_mode()</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>print(&quot;ai_sport:&quot;, g1.get_service(&quot;ai_sport&quot;))</span></pre></div>
 </div>
 </section>
 
 <section class="notebook" id="task6_basic_locomotion">
-<h2>Task 6 — Basic Locomotion Helpers <span class="badge b-repo">Day 2</span></h2>
+<h2>Task 6 — Locomotion with the Wrapper <span class="badge b-repo">Day 2</span></h2>
 <div class="file-row"><code>staging_day2/task6_basic_locomotion.ipynb</code> &middot;
 knowledge/build reference: <a href="staging_day2/task6_basic_locomotion_intro.html"><code>task6_basic_locomotion_intro.html</code></a></div>
-<p class="intro">loco_move: bounded-duration continuous velocity command, always stopped in finally. odom_move: one non-continuous relative move, closed-loop confirmed against real odometry.</p>
-<div class="note"><b>Note:</b> This notebook&#x27;s code cells are bare generic stubs -- no per-line hints.</div>
+<p class="intro">One call, loco_move(vx, vy, vyaw, duration_s), does the driving; the task is chaining a few into a reusable multi-stop &#x27;U&#x27; path.</p>
+<div class="note"><b>Note:</b> This notebook&#x27;s code cells are bare generic stubs (imports + one raise NotImplementedError) with no per-line hints. The &#x27;old&#x27; column below is that same generic stub for every sub-task.</div>
 
-<div class="task" id="task6_basic_locomotion-odometry-subscriber-native-lococlient">
+<div class="task" id="task6_basic_locomotion-read-odometry-get-odom">
 <div class="task-head">
-<h3>Odometry subscriber + native LocoClient <span class="stat"><span class="add">+22</span> <span class="del">-3</span></span></h3>
-
+<h3>Read odometry: get_odom() <span class="stat"><span class="add">+1</span> <span class="del">-3</span></span></h3>
+<p class="desc">Print the pose before and after any move so you have a baseline to compare against.</p>
 </div>
-<div class="diff-wrap"><pre class="diff"><span class="dl dl-ctx"><span class="dl-mark"> </span>import math</span>
-<span class="dl dl-ctx"><span class="dl-mark"> </span>import threading</span>
-<span class="dl dl-ctx"><span class="dl-mark"> </span>from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient</span>
-<span class="dl dl-ctx"><span class="dl-mark"> </span>from unitree_sdk2py.idl.unitree_go.msg.dds_ import SportModeState_</span>
-<span class="dl dl-ctx"><span class="dl-mark"> </span>&nbsp;</span>
-<span class="dl dl-del"><span class="dl-mark">-</span># TODO: Implement this section using the preceding task description and day slides.</span>
+<div class="diff-wrap"><pre class="diff"><span class="dl dl-del"><span class="dl-mark">-</span># TODO: Implement this section using the preceding task description and day slides.</span>
 <span class="dl dl-del"><span class="dl-mark">-</span># Keep robot commands conservative; test observation/state code before actuation.</span>
 <span class="dl dl-del"><span class="dl-mark">-</span>raise NotImplementedError(&quot;Complete this task section&quot;)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>class Latest:</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    def __init__(self, topic, message_type, queue_len=10):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        self.message = None; self.timestamp = 0.0</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        self.subscriber = ChannelSubscriber(topic, message_type)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        self.subscriber.Init(self._callback, queue_len)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    def _callback(self, message):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        self.message = message; self.timestamp = time.time()</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>&nbsp;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>odom_sub = Latest(&quot;rt/odommodestate&quot;, SportModeState_)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>loco = LocoClient(); loco.SetTimeout(5.0); loco.Init()</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>_locomotion_lock = threading.Lock()</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>&nbsp;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>def _odom_pose():</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    msg = odom_sub.message</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    if msg is None:</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        return None</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    return (float(msg.position[0]), float(msg.position[1]), float(msg.imu_state.rpy[2]))</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>&nbsp;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>def loco_stop():</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    if hasattr(loco, &quot;StopMove&quot;):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        return loco.StopMove()</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    return loco.Move(0.0, 0.0, 0.0, continous_move=False)</span></pre></div>
+<span class="dl dl-add"><span class="dl-mark">+</span>print(g1.get_odom())</span></pre></div>
 </div>
 <div class="task" id="task6_basic_locomotion-loco-move-vx-vy-vyaw-duration-s">
 <div class="task-head">
-<h3>loco_move(vx, vy, vyaw, duration_s) <span class="stat"><span class="add">+12</span> <span class="del">-3</span></span></h3>
-<p class="desc">Continuous Move, sleep, always loco_stop() in finally -- an exception mid-sleep can never leave the robot moving.</p>
+<h3>loco_move(vx, vy, vyaw, duration_s) <span class="stat"><span class="add">+4</span> <span class="del">-3</span></span></h3>
+<p class="desc">Sends a continuous velocity command and blocks for duration_s, then auto-calls loco_stop(). duration_s=None fires one Move() RPC and returns immediately, no auto-stop.</p>
 </div>
 <div class="diff-wrap"><pre class="diff"><span class="dl dl-del"><span class="dl-mark">-</span># TODO: Implement this section using the preceding task description and day slides.</span>
 <span class="dl dl-del"><span class="dl-mark">-</span># Keep robot commands conservative; test observation/state code before actuation.</span>
 <span class="dl dl-del"><span class="dl-mark">-</span>raise NotImplementedError(&quot;Complete this task section&quot;)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>def loco_move(vx, vy, vyaw, duration_s=2.0):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    if not _locomotion_lock.acquire(blocking=False):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        raise RuntimeError(&quot;Another locomotion command is already in progress.&quot;)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    try:</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        code = int(loco.Move(vx, vy, vyaw, continous_move=True) or 0)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        try:</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>            time.sleep(duration_s)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        finally:</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>            loco_stop()</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        return code</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    finally:</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        _locomotion_lock.release()</span></pre></div>
+<span class="dl dl-add"><span class="dl-mark">+</span>before = g1.get_odom()</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>g1.loco_move(vx=0.2, vy=0, vyaw=0, duration_s=2)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>after = g1.get_odom()</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>print(before, &quot;-&gt;&quot;, after)</span></pre></div>
 </div>
-<div class="task" id="task6_basic_locomotion-odom-move-target-dx-target-dy-target-dya">
+<div class="task" id="task6_basic_locomotion-a-timed-multi-stop-path-walk-u-path-g1-o">
 <div class="task-head">
-<h3>odom_move(target_dx, target_dy, target_dyaw) with closed-loop arrival <span class="stat"><span class="add">+24</span> <span class="del">-3</span></span></h3>
-<p class="desc">One non-continuous Move, then poll odometry until arrival, rejection, or timeout -- the RPC return code alone is not proof of arrival.</p>
+<h3>A timed multi-stop path: walk_u_path(g1, on_stop=None) <span class="stat"><span class="add">+12</span> <span class="del">-5</span></span></h3>
+<p class="desc">Chains loco_move() legs/turns to trace a U shape, calling on_stop(g1, i) at each of the 3 stop points -- the exact hook Day 3 Task 1 reuses to play a gesture at each stop.</p>
 </div>
-<div class="diff-wrap"><pre class="diff"><span class="dl dl-del"><span class="dl-mark">-</span># TODO: Implement this section using the preceding task description and day slides.</span>
-<span class="dl dl-del"><span class="dl-mark">-</span># Keep robot commands conservative; test observation/state code before actuation.</span>
-<span class="dl dl-del"><span class="dl-mark">-</span>raise NotImplementedError(&quot;Complete this task section&quot;)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>def odom_move(target_dx, target_dy, target_dyaw, pos_tol_m=0.05, yaw_tol_rad=0.05, timeout_s=15.0, poll_s=0.2):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    if not _locomotion_lock.acquire(blocking=False):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        raise RuntimeError(&quot;Another locomotion command is already in progress.&quot;)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    try:</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        start = _odom_pose()</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        if start is None:</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>            raise RuntimeError(&quot;No fresh odometry; cannot monitor arrival.&quot;)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        code = int(loco.Move(target_dx, target_dy, target_dyaw, continous_move=False) or 0)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        if code != 0:</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>            return {&quot;code&quot;: code, &quot;arrived&quot;: False, &quot;reason&quot;: &quot;move request rejected&quot;}</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        deadline = time.time() + timeout_s</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        while time.time() &lt; deadline:</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>            pose = _odom_pose()</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>            if pose is not None:</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>                dx, dy, dyaw = pose[0]-start[0], pose[1]-start[1], pose[2]-start[2]</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>                err_pos = ((target_dx-dx)**2 + (target_dy-dy)**2) ** 0.5</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>                err_yaw = abs(((target_dyaw-dyaw) + math.pi) % (2*math.pi) - math.pi)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>                if err_pos &lt;= pos_tol_m and err_yaw &lt;= yaw_tol_rad:</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>                    return {&quot;code&quot;: code, &quot;arrived&quot;: True, &quot;moved&quot;: (dx, dy, dyaw)}</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>            time.sleep(poll_s)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        loco_stop()</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        return {&quot;code&quot;: code, &quot;arrived&quot;: False, &quot;reason&quot;: &quot;timeout&quot;}</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    finally:</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        _locomotion_lock.release()</span></pre></div>
+<div class="diff-wrap"><pre class="diff"><span class="dl dl-ctx"><span class="dl-mark"> </span>def walk_u_path(g1, vx=0.15, vyaw=0.5, leg_s=2.0, turn_s=1.2, pause_s=1.0, on_stop=None):</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>    &quot;&quot;&quot;Drives an approximate U path as 3 timed legs with a turn between each.</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>    Calls on_stop(g1, stop_index) at each of the 3 stop points, if given -- this is</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>    the hook Day 3 Task 1 uses to play a different arm gesture at each stop.&quot;&quot;&quot;</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>    # TODO: chain loco_move() legs/turns below and call on_stop(g1, i) at each of the 3 stops.</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>    raise NotImplementedError(&quot;Complete this task section&quot;)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    legs = [(vx, 0.0, 0.0, leg_s), (0.0, 0.0, vyaw, turn_s),</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>            (vx, 0.0, 0.0, leg_s), (0.0, 0.0, vyaw, turn_s),</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>            (vx, 0.0, 0.0, leg_s)]</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    stop_index = 0</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    for i, (lvx, lvy, lvyaw, duration_s) in enumerate(legs):</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>        g1.loco_move(lvx, lvy, lvyaw, duration_s=duration_s)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>        if i % 2 == 0:  # after each straight leg, we are at a stop point</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>            if on_stop is not None:</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>                on_stop(g1, stop_index)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>            time.sleep(pause_s)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>            stop_index += 1</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    g1.loco_stop()</span></pre></div>
 </div>
 </section>
 
@@ -984,206 +851,69 @@ knowledge/build reference: <a href="staging_day2/task6_basic_locomotion_intro.ht
 <h2>Task 7 — SLAM Operation and Map Visualization <span class="badge b-repo">Day 2</span></h2>
 <div class="file-row"><code>staging_day2/task7_slam_operation_and_map_visualization.ipynb</code> &middot;
 knowledge/build reference: <a href="staging_day2/task7_slam_operation_and_map_visualization_intro.html"><code>task7_slam_operation_and_map_visualization_intro.html</code></a></div>
-<p class="intro">start_mapping/stop_mapping, relocate, add_point/remove_point, navigate_to_point, navigate_path, and view_map, natively over the same five verified RPC ids sdk_wrapper._SlamClient uses.</p>
-<div class="note"><b>Note:</b> This notebook&#x27;s code cells are bare generic stubs -- no per-line hints.</div>
+<p class="intro">The full SLAM lifecycle through sdk_wrapper.G1: build a map, save named points on it, navigate back to them -- and how to actually see the map while this is happening.</p>
+<div class="note"><b>Note:</b> This notebook&#x27;s code cells are bare generic stubs (imports + one raise NotImplementedError) with no per-line hints. The &#x27;old&#x27; column below is that same generic stub for every sub-task.</div>
 
-<div class="task" id="task7_slam_operation_and_map_visualization-native-slamrpc-client-pose-parsing">
-<div class="task-head">
-<h3>Native SlamRpc client + pose parsing <span class="stat"><span class="add">+54</span> <span class="del">-3</span></span></h3>
-<p class="desc">SlamRpc is a Client registered against API ids 1801/1802/1804/1102/1901. An all-zero parsed pose means &#x27;no valid pose yet&#x27;, not the origin.</p>
-</div>
-<div class="diff-wrap"><pre class="diff"><span class="dl dl-ctx"><span class="dl-mark"> </span>import json</span>
-<span class="dl dl-ctx"><span class="dl-mark"> </span>import math</span>
-<span class="dl dl-ctx"><span class="dl-mark"> </span>from unitree_sdk2py.idl.nav_msgs.msg.dds_ import Odometry_</span>
-<span class="dl dl-ctx"><span class="dl-mark"> </span>from unitree_sdk2py.idl.std_msgs.msg.dds_ import String_</span>
-<span class="dl dl-ctx"><span class="dl-mark"> </span>from unitree_sdk2py.rpc.client import Client</span>
-<span class="dl dl-ctx"><span class="dl-mark"> </span>&nbsp;</span>
-<span class="dl dl-del"><span class="dl-mark">-</span># TODO: Implement this section using the preceding task description and day slides.</span>
-<span class="dl dl-del"><span class="dl-mark">-</span># Keep robot commands conservative; test observation/state code before actuation.</span>
-<span class="dl dl-del"><span class="dl-mark">-</span>raise NotImplementedError(&quot;Complete this task section&quot;)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>class SlamRpc(Client):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    def __init__(self):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        super().__init__(&quot;slam_operate&quot;, False)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        for api_id in (1801, 1802, 1804, 1102, 1901):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>            self._RegistApi(api_id, 0)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        self._SetApiVerson(&quot;1.0.0.1&quot;)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>&nbsp;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    def _call_json(self, api_id, payload):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        code, data = self._Call(api_id, json.dumps(payload))</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        return int(code), data</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>&nbsp;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    def start_mapping(self, slam_type=&quot;indoor&quot;):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        return self._call_json(1801, {&quot;data&quot;: {&quot;slam_type&quot;: slam_type}})</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>&nbsp;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    def stop_mapping(self, save_path=None):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        return self._call_json(1802, {&quot;data&quot;: {&quot;address&quot;: save_path}}) if save_path else self._call_json(1901, {&quot;data&quot;: {}})</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>&nbsp;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    def init_pose(self, x, y, yaw=0.0, address=&quot;&quot;):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        qz, qw = math.sin(yaw / 2), math.cos(yaw / 2)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        return self._call_json(1804, {&quot;data&quot;: {&quot;x&quot;: x, &quot;y&quot;: y, &quot;z&quot;: 0.0, &quot;q_x&quot;: 0.0, &quot;q_y&quot;: 0.0, &quot;q_z&quot;: qz, &quot;q_w&quot;: qw, &quot;address&quot;: address}})</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>&nbsp;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    def pose_nav(self, x, y, yaw=0.0):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        qz, qw = math.sin(yaw / 2), math.cos(yaw / 2)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        return self._call_json(1102, {&quot;data&quot;: {&quot;targetPose&quot;: {&quot;x&quot;: x, &quot;y&quot;: y, &quot;z&quot;: 0.0, &quot;q_x&quot;: 0.0, &quot;q_y&quot;: 0.0, &quot;q_z&quot;: qz, &quot;q_w&quot;: qw}, &quot;mode&quot;: 1}})</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>&nbsp;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>slam_rpc = SlamRpc()</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>slam_rpc.SetTimeout(10.0)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>&nbsp;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>class Latest:</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    def __init__(self, topic, message_type, queue_len=10):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        self.message = None; self.timestamp = 0.0</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        self.subscriber = ChannelSubscriber(topic, message_type)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        self.subscriber.Init(self._callback, queue_len)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    def _callback(self, message):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        self.message = message; self.timestamp = time.time()</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>&nbsp;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>slam_info_sub = Latest(&quot;rt/slam_info&quot;, String_)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>slam_key_sub = Latest(&quot;rt/slam_key_info&quot;, String_)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>&nbsp;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>def current_pose():</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    for sub in (slam_info_sub, slam_key_sub):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        if sub.message is None:</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>            continue</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        try:</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>            cur = json.loads(sub.message.data)[&quot;data&quot;][&quot;currentPose&quot;]</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>            x, y = float(cur[&quot;x&quot;]), float(cur[&quot;y&quot;])</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>            qz, qw = float(cur.get(&quot;q_z&quot;, 0.0)), float(cur.get(&quot;q_w&quot;, 1.0))</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>            yaw = math.atan2(2*qw*qz, 1 - 2*qz*qz)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        except Exception:</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>            continue</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        if abs(x) &lt; 1e-5 and abs(y) &lt; 1e-5 and abs(yaw) &lt; 1e-5:</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>            continue</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        return (x, y, yaw)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    return None</span></pre></div>
-</div>
 <div class="task" id="task7_slam_operation_and_map_visualization-mapping-lifecycle-start-mapping-stop-map">
 <div class="task-head">
-<h3>Mapping lifecycle: start_mapping / stop_mapping / relocate <span class="stat"><span class="add">+16</span> <span class="del">-3</span></span></h3>
-<p class="desc">relocate requires a fresh pose -- navigation must never be trusted before a successful relocate against the saved map.</p>
+<h3>Mapping lifecycle: start_mapping()/stop_mapping() <span class="stat"><span class="add">+3</span> <span class="del">-3</span></span></h3>
+<p class="desc">Drive the robot around the space while mapping (reuse loco_move/walk_u_path from Task 6) so the LiDAR sees enough of the room before stop_mapping.</p>
 </div>
 <div class="diff-wrap"><pre class="diff"><span class="dl dl-del"><span class="dl-mark">-</span># TODO: Implement this section using the preceding task description and day slides.</span>
 <span class="dl dl-del"><span class="dl-mark">-</span># Keep robot commands conservative; test observation/state code before actuation.</span>
 <span class="dl dl-del"><span class="dl-mark">-</span>raise NotImplementedError(&quot;Complete this task section&quot;)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>_map_path = &quot;/home/unitree/test.pcd&quot;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>&nbsp;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>def start_mapping(slam_type=&quot;indoor&quot;):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    return slam_rpc.start_mapping(slam_type)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>&nbsp;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>def stop_mapping(save_path=None):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    global _map_path</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    if save_path:</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        _map_path = save_path</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    return slam_rpc.stop_mapping(save_path or _map_path)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>&nbsp;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>def relocate():</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    pose = current_pose()</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    if pose is None:</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        raise RuntimeError(&quot;No valid SLAM pose to relocate from.&quot;)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    return slam_rpc.init_pose(*pose, address=_map_path)</span></pre></div>
+<span class="dl dl-add"><span class="dl-mark">+</span>g1.start_mapping(slam_type=&quot;indoor&quot;)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>g1.loco_move(vx=0.15, vy=0, vyaw=0.4, duration_s=8)  # or call walk_u_path(g1) from Task 6</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>g1.stop_mapping(save_path=&quot;my_map&quot;)</span></pre></div>
 </div>
-<div class="task" id="task7_slam_operation_and_map_visualization-add-point-point-name-remove-point-point-">
+<div class="task" id="task7_slam_operation_and_map_visualization-named-points-add-point-g1-name-remove-po">
 <div class="task-head">
-<h3>add_point(point_name) / remove_point(point_name) <span class="stat"><span class="add">+23</span> <span class="del">-3</span></span></h3>
-<p class="desc">Named poses are captured from current_pose() and persisted to a small JSON file, only after relocation.</p>
+<h3>Named points: add_point(g1, name) / remove_point(name) <span class="stat"><span class="add">+9</span> <span class="del">-4</span></span></h3>
+<p class="desc">add_map_pose() only queues an unnamed pose for navigate(); to come back to a spot by name (what navigate_to_point() expects), maintain your own small JSON dict on disk, keyed by g1.get_slam_pose().</p>
 </div>
-<div class="diff-wrap"><pre class="diff"><span class="dl dl-ctx"><span class="dl-mark"> </span>import os</span>
+<div class="diff-wrap"><pre class="diff"><span class="dl dl-ctx"><span class="dl-mark"> </span>import json</span>
 <span class="dl dl-ctx"><span class="dl-mark"> </span>from pathlib import Path</span>
 <span class="dl dl-ctx"><span class="dl-mark"> </span>&nbsp;</span>
-<span class="dl dl-del"><span class="dl-mark">-</span># TODO: Implement this section using the preceding task description and day slides.</span>
-<span class="dl dl-del"><span class="dl-mark">-</span># Keep robot commands conservative; test observation/state code before actuation.</span>
-<span class="dl dl-del"><span class="dl-mark">-</span>raise NotImplementedError(&quot;Complete this task section&quot;)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>_points_path = Path(&quot;slam_points.json&quot;)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>&nbsp;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>def _load_points():</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    return json.loads(_points_path.read_text()) if _points_path.exists() else {}</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>&nbsp;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>def _save_points(points):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    tmp = _points_path.with_suffix(&quot;.tmp&quot;)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    tmp.write_text(json.dumps(points, indent=2))</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    os.replace(tmp, _points_path)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>&nbsp;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>def add_point(point_name):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    pose = current_pose()</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    if pose is None:</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        raise RuntimeError(&quot;No valid SLAM pose; relocate first.&quot;)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    points = _load_points()</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    points[point_name] = pose</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    _save_points(points)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    return pose</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>&nbsp;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>def remove_point(point_name):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    points = _load_points()</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    points.pop(point_name, None)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    _save_points(points)</span></pre></div>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>POINTS_PATH = &quot;slam_points.json&quot;</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>&nbsp;</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>def add_point(g1, name, points_path=POINTS_PATH):</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>    # TODO: read the existing points file (or start with {}), set points[name] = g1.get_slam_pose(), write it back.</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>    raise NotImplementedError(&quot;Complete this task section&quot;)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    path = Path(points_path)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    points = json.loads(path.read_text()) if path.exists() else {}</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    points[name] = list(g1.get_slam_pose())</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    path.write_text(json.dumps(points))</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    return points[name]</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>&nbsp;</span>
+<span class="dl dl-ctx"><span class="dl-mark"> </span>def remove_point(name, points_path=POINTS_PATH):</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>    # TODO: read the points file, delete the named entry if present, write it back.</span>
+<span class="dl dl-del"><span class="dl-mark">-</span>    raise NotImplementedError(&quot;Complete this task section&quot;)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    path = Path(points_path)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    points = json.loads(path.read_text()) if path.exists() else {}</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    points.pop(name, None)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>    path.write_text(json.dumps(points))</span></pre></div>
 </div>
-<div class="task" id="task7_slam_operation_and_map_visualization-navigate-to-point-navigate-path">
+<div class="task" id="task7_slam_operation_and_map_visualization-relocate-and-save-1-2-named-points">
 <div class="task-head">
-<h3>navigate_to_point / navigate_path <span class="stat"><span class="add">+12</span> <span class="del">-3</span></span></h3>
-<p class="desc">navigate_path refuses a silent point-by-point fallback; it requires a verified native_path_callback, or raises.</p>
+<h3>relocate() and save 1-2 named points <span class="stat"><span class="add">+2</span> <span class="del">-3</span></span></h3>
+<p class="desc">Relocalize once against the saved map, then walk to a spot and save it by name.</p>
 </div>
 <div class="diff-wrap"><pre class="diff"><span class="dl dl-del"><span class="dl-mark">-</span># TODO: Implement this section using the preceding task description and day slides.</span>
 <span class="dl dl-del"><span class="dl-mark">-</span># Keep robot commands conservative; test observation/state code before actuation.</span>
 <span class="dl dl-del"><span class="dl-mark">-</span>raise NotImplementedError(&quot;Complete this task section&quot;)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>def navigate_to_point(point_name):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    x, y, yaw = _load_points()[point_name]</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    return slam_rpc.pose_nav(x, y, yaw)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>&nbsp;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>def navigate_path(point_names, native_path_callback=None):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    if native_path_callback is None:</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        raise RuntimeError(</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>            &quot;No verified multi-point path RPC exists for this SDK/firmware. &quot;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>            &quot;Pass a verified native_path_callback -- do not silently loop navigate_to_point().&quot;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        )</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    points = _load_points()</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    return native_path_callback([points[name] for name in point_names])</span></pre></div>
+<span class="dl dl-add"><span class="dl-mark">+</span>g1.relocate()</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>add_point(g1, &quot;pickup&quot;)</span></pre></div>
 </div>
-<div class="task" id="task7_slam_operation_and_map_visualization-view-map-capture-visualization-while-map">
+<div class="task" id="task7_slam_operation_and_map_visualization-navigate-to-a-saved-point-navigate-to-po">
 <div class="task-head">
-<h3>view_map(): capture visualization while mapping is running <span class="stat"><span class="add">+35</span> <span class="del">-3</span></span></h3>
-<p class="desc">Subscribe to the live SLAM point-cloud topics and periodically save a 2-D scatter snapshot; view_map() returns the newest one.</p>
+<h3>Navigate to a saved point: navigate_to_point() <span class="stat"><span class="add">+2</span> <span class="del">-3</span></span></h3>
+<p class="desc">Reads the named pose, sends it, and blocks until arrival or timeout, returning code/arrived/pose/notice.</p>
 </div>
-<div class="diff-wrap"><pre class="diff"><span class="dl dl-ctx"><span class="dl-mark"> </span>import struct</span>
-<span class="dl dl-ctx"><span class="dl-mark"> </span>import matplotlib.pyplot as plt</span>
-<span class="dl dl-ctx"><span class="dl-mark"> </span>from unitree_sdk2py.idl.sensor_msgs.msg.dds_ import PointCloud2_</span>
-<span class="dl dl-ctx"><span class="dl-mark"> </span>&nbsp;</span>
-<span class="dl dl-del"><span class="dl-mark">-</span># TODO: Implement this section using the preceding task description and day slides.</span>
+<div class="diff-wrap"><pre class="diff"><span class="dl dl-del"><span class="dl-mark">-</span># TODO: Implement this section using the preceding task description and day slides.</span>
 <span class="dl dl-del"><span class="dl-mark">-</span># Keep robot commands conservative; test observation/state code before actuation.</span>
 <span class="dl dl-del"><span class="dl-mark">-</span>raise NotImplementedError(&quot;Complete this task section&quot;)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>SLAM_POINT_TOPICS = [</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    &quot;rt/unitree/slam_mapping/points&quot;,</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    &quot;rt/unitree/slam_relocation/points&quot;,</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    &quot;rt/unitree/slam_relocation/global_map&quot;,</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    &quot;rt/unitree/slam_relocation/web_points&quot;,</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>]</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>_cloud_subs = [(topic, Latest(topic, PointCloud2_)) for topic in SLAM_POINT_TOPICS]</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>_snapshots_dir = Path(&quot;slam_snapshots&quot;); _snapshots_dir.mkdir(exist_ok=True)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>&nbsp;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>def _decode_xy(msg):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    fields = {str(f.name).lower(): f for f in msg.fields}</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    x_off, y_off = fields[&quot;x&quot;].offset, fields[&quot;y&quot;].offset</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    point_step, width, height, raw = msg.point_step, msg.width, msg.height, bytes(msg.data)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    total = min(width * height, len(raw) // max(1, point_step))</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    xs, ys = [], []</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    for i in range(total):</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        base = i * point_step</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        xs.append(struct.unpack_from(&quot;&lt;f&quot;, raw, base + x_off)[0])</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        ys.append(struct.unpack_from(&quot;&lt;f&quot;, raw, base + y_off)[0])</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    return xs, ys</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>&nbsp;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>def capture_map_snapshot():</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    best = max(_cloud_subs, key=lambda pair: pair[1].timestamp)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    topic, latest = best</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    if latest.message is None:</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>        raise RuntimeError(&quot;No point-cloud message yet; check the SLAM/LiDAR topics are live.&quot;)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    xs, ys = _decode_xy(latest.message)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    plt.figure(figsize=(5, 5)); plt.scatter(xs, ys, s=1); plt.gca().set_aspect(&quot;equal&quot;)</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    path = _snapshots_dir / f&quot;snapshot_{int(time.time())}.png&quot;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    plt.savefig(path); plt.close()</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    return path</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>&nbsp;</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>def view_map():</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    snapshots = sorted(_snapshots_dir.glob(&quot;snapshot_*.png&quot;))</span>
-<span class="dl dl-add"><span class="dl-mark">+</span>    return snapshots[-1] if snapshots else None</span></pre></div>
+<span class="dl dl-add"><span class="dl-mark">+</span>result = g1.navigate_to_point(&quot;pickup&quot;)</span>
+<span class="dl dl-add"><span class="dl-mark">+</span>print(result)</span></pre></div>
 </div>
 </section>
 
