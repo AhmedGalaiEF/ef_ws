@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Task 10 Intro — End-Effector IK</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Pre-task knowledge and reference for Task 10 Intro — End-Effector IK.">
+<style>
+:root{
+  --bg:#f6f7f9; --panel:#ffffff; --ink:#1b1f27; --muted:#5b6472; --border:#dfe3ea;
+  --accent:#2454ff; --code-bg:#eef1f6; --zebra:#f9fafc;
+  --good:#0f7a3d; --good-bg:#e6f6ec;
+  --info:#1b5fd6; --info-bg:#e8f0fe;
+  --warn:#b5750a; --warn-bg:#fbf1de;
+  --caution:#c1272d; --caution-bg:#fdeaea;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#14171c; --panel:#1b1f27; --ink:#e7e9ee; --muted:#9aa3b2; --border:#2c313b;
+    --accent:#6f92ff; --code-bg:#232833; --zebra:#1f242e;
+    --good:#5fd38a; --good-bg:#123a24;
+    --info:#8fb0ff; --info-bg:#152548;
+    --warn:#e3ab53; --warn-bg:#3a2c10;
+    --caution:#ff8b8f; --caution-bg:#3a1616;
+  }
+}
+*{box-sizing:border-box;}
+body{margin:0; background:var(--bg); color:var(--ink);
+  font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+code, .mono, pre{font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;}
+code{background:var(--code-bg); padding:1px 5px; border-radius:4px;}
+pre code{background:none; padding:0;}
+a{color:var(--accent);}
+header.top{padding:26px clamp(16px,4vw,48px) 18px; border-bottom:1px solid var(--border); background:var(--panel);}
+.eyebrow{color:var(--muted); font-size:12.5px; text-transform:uppercase; letter-spacing:.05em; margin:0 0 6px;}
+header.top h1{margin:0 0 8px; font-size:1.55rem;}
+header.top p.lede{margin:4px 0; color:var(--muted); max-width:900px;}
+.badges{margin:10px 0 0; display:flex; flex-wrap:wrap; gap:8px;}
+.badge{display:inline-block; font-size:11px; font-weight:700; letter-spacing:.02em;
+  padding:3px 9px; border-radius:99px; white-space:nowrap;}
+.b-info{color:var(--info); background:var(--info-bg);}
+.b-good{color:var(--good); background:var(--good-bg);}
+.b-warn{color:var(--warn); background:var(--warn-bg);}
+.b-caution{color:var(--caution); background:var(--caution-bg);}
+.crumbs{margin:14px 0 0; font-size:12.5px;}
+.crumbs a{color:var(--muted); text-decoration:none; margin-right:4px;}
+.crumbs a:hover{color:var(--accent);}
+main{max-width:980px; margin:0 auto; padding:28px clamp(16px,4vw,48px) 90px;}
+h2{font-size:1.25rem; margin:38px 0 6px; padding-top:14px; border-top:3px solid var(--accent);}
+h2 .num{color:var(--muted); font-weight:600; margin-right:6px;}
+h3{font-size:1.02rem; margin:22px 0 6px;}
+p{margin:8px 0;}
+.card{border:1px solid var(--border); border-radius:12px; background:var(--panel); padding:16px 18px; margin:14px 0;}
+.card h4{margin:0 0 6px; font-size:.95rem;}
+.card.knowledge{border-left:4px solid var(--info);}
+.card.warn{border-left:4px solid var(--warn); background:var(--warn-bg);}
+.card.caution{border-left:4px solid var(--caution); background:var(--caution-bg);}
+.card.good{border-left:4px solid var(--good); background:var(--good-bg);}
+table{border-collapse:collapse; width:100%; margin:12px 0; font-size:13.5px;}
+th, td{border:1px solid var(--border); padding:6px 10px; text-align:left; vertical-align:top;}
+th{background:var(--code-bg);}
+tr:nth-child(even) td{background:var(--zebra);}
+pre.block{background:var(--code-bg); border:1px solid var(--border); border-radius:10px;
+  padding:12px 14px; overflow-x:auto; margin:10px 0;}
+.cell{border:1px solid var(--border); border-radius:10px; margin:12px 0; overflow:hidden;}
+.cell .cellhead{background:var(--code-bg); padding:6px 12px; font-size:12px; color:var(--muted);
+  border-bottom:1px solid var(--border); display:flex; justify-content:space-between;}
+.cell pre{margin:0; padding:12px 14px; overflow-x:auto;}
+.todo{color:var(--warn);}
+ul, ol{padding-left:22px;}
+li{margin:4px 0;}
+.stepgrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; margin:12px 0;}
+.step{border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-size:12.5px; background:var(--panel);}
+.step b{display:block; color:var(--accent); font-size:11px; text-transform:uppercase; letter-spacing:.04em;}
+.tocwrap{display:flex; flex-wrap:wrap; gap:6px; margin:10px 0 0;}
+.tocwrap a{font-size:12px; padding:4px 9px; border:1px solid var(--border); border-radius:99px;
+  text-decoration:none; color:var(--muted); background:var(--panel);}
+.tocwrap a:hover{color:var(--accent); border-color:var(--accent);}
+footer{padding:26px clamp(16px,4vw,48px) 60px; color:var(--muted); font-size:12.5px; border-top:1px solid var(--border);}
+footer a{color:var(--muted);}
+.navrow{display:flex; justify-content:space-between; gap:12px; margin-top:10px; flex-wrap:wrap;}
+</style>
+</head>
+<body>
+<header class="top">
+  <p class="eyebrow">Day 3 &middot; G1 Academy Bonus</p>
+  <h1>Task 10 &mdash; End-Effector IK Control + Teleoperation UI</h1>
+  <p class="lede">Builds a self-contained, position-only <code>ik_move_ee(hand, dx, dy, dz)</code> step function
+  from the G1 URDF arm geometry, then wraps it in a small Jupyter UI to teleoperate the end effector.
+  The one task in this course where you use an academy-supplied solver instead of hand-writing the math
+  &mdash; you are responsible for the increment/clamp/ramp discipline around it, not for deriving IK
+  yourself.</p>
+  <div class="badges">
+    <span class="badge b-info">Builds on: Task 8's current_upper_body_pose/write_arm_sdk_pose/release_arms/engage_arms and Task 9's FSM buttons</span>
+    <span class="badge b-good">New: fk_solver, ik_solver, ik_move_ee, current_palm_xyz, ik_increment</span>
+  </div>
+  <div class="card warn"><p><strong>This notebook is bare</strong> (generic <code>raise NotImplementedError</code>
+  stubs) &mdash; this page supplies what each section needs.</p></div>
+  <div class="tocwrap"><a href="../day_1/task1_sdkwrapper_usage_intro.html">T1</a><a href="../day_1/task2_necessary_dds_init_pubsub_intro.html">T2</a><a href="../day_1/task3_say_and_headlight_helpers_intro.html">T3</a><a href="../day_1/task4_robot_state_observation_intro.html">T4</a><a href="../day_2/task5_services_and_mode_switching_intro.html">T5</a><a href="../day_2/task6_basic_locomotion_intro.html">T6</a><a href="../day_2/task7_slam_operation_and_map_visualization_intro.html">T7</a><a href="task8_hl_arm_gestures_intro.html">T8</a><a href="task9_ll_control_intro.html">T9</a><a href="task10_ik_control_intro.html" style="border-color:var(--accent);color:var(--accent)">T10</a><a href="task11_dex3_gradual_gripping_intro.html">T11</a><a href="../day_4/task12_perception_and_pose_estimation_pipeline_intro.html">T12</a><a href="../day_4/task13_final_task_intro.html">T13</a></div>
+</header>
+<main>
+
+<h2><span class="num">&#167;1</span>Knowledge &mdash; the arm as a serial manipulator</h2>
+<div class="card knowledge">
+<p>Each arm is a 7-joint open kinematic chain from the shoulder to the palm.
+<code>hand_pose_navigation.arm_fk.ArmFK</code> computes <code>T_base_hand</code> from those 7 angles;
+<code>arm_ik.ArmIK</code> solves the inverse (target pose &rarr; joint angles) with damped least squares.</p>
+<table>
+<tr><th>Joint (arm-local)</th><th>Left limits (rad)</th><th>Right limits (rad)</th></tr>
+<tr><td>shoulder pitch</td><td>-3.089 .. 2.670</td><td>-2.670 .. 3.089</td></tr>
+<tr><td>shoulder roll</td><td>-1.571 .. 2.200</td><td>-2.200 .. 1.571</td></tr>
+<tr><td>shoulder yaw</td><td>&plusmn;2.182</td><td>&plusmn;2.182</td></tr>
+<tr><td>elbow</td><td>-1.047 .. 2.094</td><td>-1.047 .. 2.094</td></tr>
+<tr><td>wrist roll/pitch/yaw</td><td>&plusmn;1.972 / &plusmn;1.658 / &plusmn;1.658</td><td>&plusmn;1.972 / &plusmn;1.658 / &plusmn;1.658</td></tr>
+</table>
+<p>Chain: base &rarr; shoulder (q1 pitch, q2 roll, q3 yaw) &rarr; elbow (q4) &rarr; wrist (q5 roll, q6 pitch,
+q7 yaw) &rarr; palm/EE. Joint indices <code>15&ndash;21</code> are the left arm, <code>22&ndash;28</code> the
+right arm (see Task 9's index table), in that same shoulder&rarr;wrist order.</p>
+</div>
+
+<h2><span class="num">&#167;2</span>Knowledge &mdash; increment, clamp, ramp &mdash; never jump</h2>
+<div class="card knowledge">
+<p>The solver returns a joint <em>solution</em>, not a trajectory &mdash; clip the delta to
+<code>max_dq</code> and step to it at a bounded Cartesian speed (<code>max_speed</code>), exactly like
+Task 8's ease-curve interpolation.</p>
+<p>If <code>q_sol is None</code> (unreachable/no convergence), return
+<code>{"success": False, "ik": info}</code> and do <strong>not</strong> move &mdash; a failed solve must
+never fall through to a partial or garbage move.</p>
+<p>Flow: read current upper-body pose &rarr; FK: current q &rarr; current <code>T_base_hand</code> &rarr;
+offset target by <code>(dx, dy, dz)</code> &rarr; IK solve &rarr; <code>q_solution</code> &rarr; clip
+<code>|delta q| &lt;= max_dq</code> &rarr; ramp to target (eased steps @ <code>rate_hz</code>).
+<code>ik_move_ee(hand, dx, dy, dz)</code> is <strong>one call = one small step</strong>, not a teleport to
+the solved pose.</p>
+</div>
+
+<h2><span class="num">&#167;3</span>Cell 2 &mdash; shared setup</h2>
+<div class="cell"><div class="cellhead"><span>Cell 2 (code)</span><span class="todo">TODO &mdash; bare stub</span></div>
+<pre><code>import time
+from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelPublisher, ChannelSubscriber
+from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
+import sys
+from sdk_wrapper import ensure_channel_factory
+
+# TODO: Implement this section using the preceding task description and day slides.
+</code></pre></div>
+<pre class="block"><code>ensure_channel_factory(0, "eth0")</code></pre>
+
+<h2><span class="num">&#167;4</span>Task 1 &mdash; Cell 4 &mdash; reuse Task 8's helpers, and Dex3 basics</h2>
+<div class="cell"><div class="cellhead"><span>Cell 4 (code)</span><span class="todo">TODO &mdash; bare stub</span></div>
+<pre><code>from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_, unitree_hg_msg_dds__HandCmd_
+from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_, HandCmd_
+from unitree_sdk2py.utils.crc import CRC
+import sys
+from util import HAND_OPEN, HAND_CLOSED
+
+# TODO: Implement this section using the preceding task description and day slides.
+</code></pre></div>
+<p>Repeat Task 8's <code>current_upper_body_pose</code>/<code>write_arm_sdk_pose</code> (needed by
+<code>ik_move_ee</code> below) and add a minimal Dex3 open/close pair (needed by the teleop panel's
+open/close-hand buttons; Task 11 covers the tactile-aware version in depth):</p>
+<pre class="block"><code>WAIST_JOINTS = (12, 13, 14)
+LEFT_ARM_JOINTS = list(range(15, 22))
+RIGHT_ARM_JOINTS = list(range(22, 29))
+UPPER_BODY_JOINTS = list(WAIST_JOINTS) + LEFT_ARM_JOINTS + RIGHT_ARM_JOINTS
+
+class Latest:
+    def __init__(self, topic, message_type, queue_len=10):
+        self.message = None; self.timestamp = 0.0
+        self.subscriber = ChannelSubscriber(topic, message_type)
+        self.subscriber.Init(self._callback, queue_len)
+    def _callback(self, message):
+        self.message = message; self.timestamp = time.time()
+
+lowstate_sub = Latest("rt/lowstate", LowState_)
+
+def current_upper_body_pose(timeout_s=3.0):
+    deadline = time.time() + timeout_s
+    while time.time() &lt; deadline:
+        msg = lowstate_sub.message
+        if msg is not None:
+            return {j: float(msg.motor_state[j].q) for j in UPPER_BODY_JOINTS}
+        time.sleep(0.02)
+    raise TimeoutError("Timed out waiting for rt/lowstate")
+
+_crc = CRC()
+arm_sdk_pub = ChannelPublisher("rt/arm_sdk", LowCmd_); arm_sdk_pub.Init()
+
+def write_arm_sdk_pose(targets, weight=1.0, kp=30.0, kd=1.5, waist_kp=480.0, waist_kd=12.0):
+    msg = unitree_hg_msg_dds__LowCmd_(); msg.mode_pr = 0; msg.mode_machine = 0
+    msg.motor_cmd[29].q = max(0.0, min(1.0, weight))
+    for joint, q in targets.items():
+        cmd = msg.motor_cmd[int(joint)]
+        cmd.mode = 1; cmd.q = float(q); cmd.dq = 0.0; cmd.tau = 0.0
+        cmd.kp = waist_kp if int(joint) in WAIST_JOINTS else kp
+        cmd.kd = waist_kd if int(joint) in WAIST_JOINTS else kd
+    msg.crc = _crc.Crc(msg)
+    arm_sdk_pub.Write(msg)
+
+hand_pub = {"right": ChannelPublisher("rt/dex3/right/cmd", HandCmd_)}
+hand_pub["right"].Init()
+
+def write_hand(targets, side="right", kp=0.8, kd=0.05, tau=0.02):
+    msg = unitree_hg_msg_dds__HandCmd_()
+    for i, q in enumerate(targets):
+        cmd = msg.motor_cmd[i]
+        cmd.mode = (i & 0x0F) | (1 &lt;&lt; 4); cmd.q = float(q); cmd.dq = 0.0; cmd.tau = tau; cmd.kp = kp; cmd.kd = kd
+    hand_pub[side].Write(msg)
+
+def open_hand(side="right"): write_hand(HAND_OPEN[side], side=side)
+def close_hand(side="right"): write_hand(HAND_CLOSED[side], side=side)</code></pre>
+
+<h2><span class="num">&#167;5</span>Task 2 &mdash; Cells 6&ndash;7 &mdash; <code>ik_move_ee(hand, dx, dy, dz)</code></h2>
+<div class="cell"><div class="cellhead"><span>Cells 6, 7 (code)</span><span class="todo">TODO &mdash; bare stubs</span></div>
+<pre><code>import numpy as np
+
+# TODO: Implement this section using the preceding task description and day slides.
+</code></pre></div>
+<pre class="block"><code>import numpy as np
+from hand_pose_navigation.arm_fk import ArmFK
+from hand_pose_navigation.arm_ik import ArmIK
+
+_fk_cache, _ik_cache = {}, {}
+
+def fk_solver(side):
+    if side not in _fk_cache:
+        _fk_cache[side] = ArmFK(side, "urdf")
+    return _fk_cache[side]
+
+def ik_solver(side):
+    if side not in _ik_cache:
+        _ik_cache[side] = ArmIK(side, "dls", max_iter=24, tol_pos_m=0.005, tol_rot_rad=0.02)
+    return _ik_cache[side]
+
+def ik_move_ee(hand, dx=0.0, dy=0.0, dz=0.0, max_speed=0.25, max_dq=0.15, rate_hz=50.0):
+    side = "right" if str(hand).lower().startswith("r") else "left"
+    joints = RIGHT_ARM_JOINTS if side == "right" else LEFT_ARM_JOINTS
+    current = current_upper_body_pose()
+    q_init = np.array([current[j] for j in joints])
+    fk = fk_solver(side)
+    target_T = fk.compute_arm(q_init).copy()
+    target_T[0, 3] += dx
+    target_T[1, 3] += dy if side == "left" else -dy            # mirrored sign by side
+    target_T[2, 3] += dz
+    q_sol, info = ik_solver(side).solve(target_T, q_init=q_init)
+    if q_sol is None:
+        return {"success": False, "ik": info}                  # never move on a failed solve
+    delta = np.clip(np.asarray(q_sol) - q_init, -max_dq, max_dq)
+    target_q = q_init + delta
+    target = dict(current)
+    for i, j in enumerate(joints):
+        target[j] = float(target_q[i])
+    remaining = max(abs(target[j] - current[j]) for j in joints)
+    steps = max(1, int(np.ceil(remaining / max(1e-4, max_speed / rate_hz))))
+    for step in range(1, steps + 1):
+        smooth = _ease(step / steps)                            # same ease curve as Task 8
+        frame = {j: current[j] + (target[j]-current[j])*smooth for j in joints}
+        write_arm_sdk_pose({**current, **frame})
+        time.sleep(1.0 / rate_hz)
+    return {"success": True, "ik": info, "steps": steps}
+
+def _ease(ratio):
+    return ratio * ratio * (3 - 2 * ratio)
+
+def current_palm_xyz(hand="right"):
+    side = "right" if str(hand).lower().startswith("r") else "left"
+    joints = RIGHT_ARM_JOINTS if side == "right" else LEFT_ARM_JOINTS
+    current = current_upper_body_pose()
+    q = np.array([current[j] for j in joints])
+    return tuple(float(v) for v in fk_solver(side).compute_arm(q)[:3, 3])</code></pre>
+<p><strong>Hint:</strong> start with <code>dz</code> only (straight up/down) at a tiny step size (1&ndash;2
+cm) with the arm already in a safe, extended pose from Task 8 &mdash; vertical motion is the easiest offset
+to visually confirm is correct before trying X/Y.</p>
+
+<h2><span class="num">&#167;6</span>Task 3 &mdash; Cell 9 &mdash; FSM mode helper (for the panel below)</h2>
+<div class="cell"><div class="cellhead"><span>Cell 9 (code)</span><span class="todo">TODO &mdash; bare stub</span></div>
+<pre><code>from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
+
+# TODO: Implement this section using the preceding task description and day slides.
+</code></pre></div>
+<pre class="block"><code>FSM_IDS = {"zero_torque": 0, "damp": 1, "prepare": 4, "walk": 500, "run": 802}
+loco = LocoClient(); loco.SetTimeout(5.0); loco.Init()
+
+def set_fsm(name):
+    return int(loco.SetFsmId(FSM_IDS[name]))</code></pre>
+<div class="card warn"><p><strong>FSM <code>500</code>, not <code>501</code>, for <code>"walk"</code>:</strong>
+this academy's G1 units run with the waist <strong>locked</strong> (only <code>WaistYaw</code> is a free
+joint). FSM <code>501</code> is the balanced-stand/walk id for the unlocked 3-DOF-waist variant and does not
+apply here.</p></div>
+
+<h2><span class="num">&#167;7</span>Task 4 &mdash; Cell 11 &mdash; teleoperation panel</h2>
+<div class="cell"><div class="cellhead"><span>Cell 11 (code)</span><span class="todo">TODO &mdash; bare stub</span></div>
+<pre><code>import ipywidgets as widgets
+
+# TODO: Implement this section using the preceding task description and day slides.
+</code></pre></div>
+<p>One <code>ipywidgets</code> panel: a hand selector, a 3&times;2 jog grid for &plusmn;X/Y/Z (each button
+fires one small <code>ik_move_ee</code> step), the essential FSM buttons (<code>damp</code>/<code>prepare</code>/<code>walk</code>),
+<code>release_arms</code>/<code>engage_arms</code> for <code>rt/arm_sdk</code> ownership handoff, and
+<code>open_hand</code>/<code>close_hand</code>.</p>
+<pre class="block"><code>hand_select = widgets.ToggleButtons(options=["right", "left"], value="right", description="hand")
+step_m = 0.02
+
+def jog(axis, sign):
+    dx = dy = dz = 0.0
+    if axis == "x": dx = sign * step_m
+    if axis == "y": dy = sign * step_m
+    if axis == "z": dz = sign * step_m
+    return ik_move_ee(hand_select.value, dx=dx, dy=dy, dz=dz)
+
+jog_buttons = widgets.GridBox([
+    widgets.Button(description=f"{sign}{axis.upper()}") for axis in "xyz" for sign in ("+", "-")
+], layout=widgets.Layout(grid_template_columns="repeat(2, 80px)"))
+for btn, (axis, sign) in zip(jog_buttons.children, [(a, s) for a in "xyz" for s in (1, -1)]):
+    btn.on_click(lambda _b, axis=axis, sign=sign: jog(axis, sign))
+
+fsm_row = widgets.HBox([
+    widgets.Button(description="damp", button_style="warning"),
+    widgets.Button(description="prepare"),
+    widgets.Button(description="walk"),
+])
+fsm_row.children[0].on_click(lambda _b: set_fsm("damp"))
+fsm_row.children[1].on_click(lambda _b: set_fsm("prepare"))
+fsm_row.children[2].on_click(lambda _b: set_fsm("walk"))
+
+handoff_row = widgets.HBox([
+    widgets.Button(description="release_arms"),
+    widgets.Button(description="engage_arms"),
+])
+handoff_row.children[0].on_click(lambda _b: release_arms())
+handoff_row.children[1].on_click(lambda _b: engage_arms())
+
+hand_row = widgets.HBox([
+    widgets.Button(description="open_hand"),
+    widgets.Button(description="close_hand"),
+])
+hand_row.children[0].on_click(lambda _b: open_hand(hand_select.value))
+hand_row.children[1].on_click(lambda _b: close_hand(hand_select.value))
+
+widgets.VBox([hand_select, jog_buttons, fsm_row, handoff_row, hand_row])</code></pre>
+<div class="card warn"><p><code>release_arms</code>/<code>engage_arms</code> in this cell call Task 8's
+functions of the same name &mdash; import or paste them from that notebook/module if this notebook is
+running standalone.</p></div>
+
+<h2><span class="num">&#167;8</span>Extra cells 13&ndash;15 (optional)</h2>
+<p>The notebook has three additional empty code cells after the Safety note. They are not tied to a
+numbered task &mdash; use them to extend the panel (e.g. a live palm-position readout via
+<code>current_palm_xyz</code>, a "return to a saved pose" button using Task 8's
+<code>interpolate_to_ll_pose</code>, or a rotation jog using the full 6-element <code>ik_move_ee</code>
+increment). Leave them as-is (or delete them) if you have no extension to add.</p>
+
+<div class="card caution">
+  <h4>Safety</h4>
+  <p>Run no command cell until the subscriber state is fresh, controller ownership is known, the space is
+  clear, and a damp path is available. Code is not invoked automatically.</p>
+</div>
+
+</main>
+<footer>
+  <div class="navrow">
+    <span>Reference: <code>sdk_wrapper.G1.ik_move_ee</code>/<code>current_palm_xyz</code> &middot;
+    Notebook: <code>task10_ik_control.ipynb</code> &middot; Slides: <code>day3_slides.html</code> (slides 13&ndash;18)</span>
+    <span><a href="task9_ll_control_intro.html">&larr; Task 9</a> &middot;
+    <a href="task11_dex3_gradual_gripping_intro.html">Task 11 &rarr;</a></span>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Task 11 Intro — Dex3 Gradual Gripping</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Pre-task knowledge and reference for Task 11 Intro — Dex3 Gradual Gripping.">
+<style>
+:root{
+  --bg:#f6f7f9; --panel:#ffffff; --ink:#1b1f27; --muted:#5b6472; --border:#dfe3ea;
+  --accent:#2454ff; --code-bg:#eef1f6; --zebra:#f9fafc;
+  --good:#0f7a3d; --good-bg:#e6f6ec;
+  --info:#1b5fd6; --info-bg:#e8f0fe;
+  --warn:#b5750a; --warn-bg:#fbf1de;
+  --caution:#c1272d; --caution-bg:#fdeaea;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#14171c; --panel:#1b1f27; --ink:#e7e9ee; --muted:#9aa3b2; --border:#2c313b;
+    --accent:#6f92ff; --code-bg:#232833; --zebra:#1f242e;
+    --good:#5fd38a; --good-bg:#123a24;
+    --info:#8fb0ff; --info-bg:#152548;
+    --warn:#e3ab53; --warn-bg:#3a2c10;
+    --caution:#ff8b8f; --caution-bg:#3a1616;
+  }
+}
+*{box-sizing:border-box;}
+body{margin:0; background:var(--bg); color:var(--ink);
+  font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+code, .mono, pre{font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;}
+code{background:var(--code-bg); padding:1px 5px; border-radius:4px;}
+pre code{background:none; padding:0;}
+a{color:var(--accent);}
+header.top{padding:26px clamp(16px,4vw,48px) 18px; border-bottom:1px solid var(--border); background:var(--panel);}
+.eyebrow{color:var(--muted); font-size:12.5px; text-transform:uppercase; letter-spacing:.05em; margin:0 0 6px;}
+header.top h1{margin:0 0 8px; font-size:1.55rem;}
+header.top p.lede{margin:4px 0; color:var(--muted); max-width:900px;}
+.badges{margin:10px 0 0; display:flex; flex-wrap:wrap; gap:8px;}
+.badge{display:inline-block; font-size:11px; font-weight:700; letter-spacing:.02em;
+  padding:3px 9px; border-radius:99px; white-space:nowrap;}
+.b-info{color:var(--info); background:var(--info-bg);}
+.b-good{color:var(--good); background:var(--good-bg);}
+.b-warn{color:var(--warn); background:var(--warn-bg);}
+.b-caution{color:var(--caution); background:var(--caution-bg);}
+.crumbs{margin:14px 0 0; font-size:12.5px;}
+.crumbs a{color:var(--muted); text-decoration:none; margin-right:4px;}
+.crumbs a:hover{color:var(--accent);}
+main{max-width:980px; margin:0 auto; padding:28px clamp(16px,4vw,48px) 90px;}
+h2{font-size:1.25rem; margin:38px 0 6px; padding-top:14px; border-top:3px solid var(--accent);}
+h2 .num{color:var(--muted); font-weight:600; margin-right:6px;}
+h3{font-size:1.02rem; margin:22px 0 6px;}
+p{margin:8px 0;}
+.card{border:1px solid var(--border); border-radius:12px; background:var(--panel); padding:16px 18px; margin:14px 0;}
+.card h4{margin:0 0 6px; font-size:.95rem;}
+.card.knowledge{border-left:4px solid var(--info);}
+.card.warn{border-left:4px solid var(--warn); background:var(--warn-bg);}
+.card.caution{border-left:4px solid var(--caution); background:var(--caution-bg);}
+.card.good{border-left:4px solid var(--good); background:var(--good-bg);}
+table{border-collapse:collapse; width:100%; margin:12px 0; font-size:13.5px;}
+th, td{border:1px solid var(--border); padding:6px 10px; text-align:left; vertical-align:top;}
+th{background:var(--code-bg);}
+tr:nth-child(even) td{background:var(--zebra);}
+pre.block{background:var(--code-bg); border:1px solid var(--border); border-radius:10px;
+  padding:12px 14px; overflow-x:auto; margin:10px 0;}
+.cell{border:1px solid var(--border); border-radius:10px; margin:12px 0; overflow:hidden;}
+.cell .cellhead{background:var(--code-bg); padding:6px 12px; font-size:12px; color:var(--muted);
+  border-bottom:1px solid var(--border); display:flex; justify-content:space-between;}
+.cell pre{margin:0; padding:12px 14px; overflow-x:auto;}
+.todo{color:var(--warn);}
+ul, ol{padding-left:22px;}
+li{margin:4px 0;}
+.stepgrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; margin:12px 0;}
+.step{border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-size:12.5px; background:var(--panel);}
+.step b{display:block; color:var(--accent); font-size:11px; text-transform:uppercase; letter-spacing:.04em;}
+.tocwrap{display:flex; flex-wrap:wrap; gap:6px; margin:10px 0 0;}
+.tocwrap a{font-size:12px; padding:4px 9px; border:1px solid var(--border); border-radius:99px;
+  text-decoration:none; color:var(--muted); background:var(--panel);}
+.tocwrap a:hover{color:var(--accent); border-color:var(--accent);}
+footer{padding:26px clamp(16px,4vw,48px) 60px; color:var(--muted); font-size:12.5px; border-top:1px solid var(--border);}
+footer a{color:var(--muted);}
+.navrow{display:flex; justify-content:space-between; gap:12px; margin-top:10px; flex-wrap:wrap;}
+</style>
+</head>
+<body>
+<header class="top">
+  <p class="eyebrow">Day 3 &middot; G1 Academy Bonus</p>
+  <h1>Task 11 &mdash; Dex3 Gradual Gripping (baseline, close, and open)</h1>
+  <p class="lede">A Dex3 <code>HandCmd</code> message carries one motor command per hand joint; every
+  commanded joint needs control mode, target position, and conservative <code>dq</code>/<code>tau</code>/<code>kp</code>/<code>kd</code>.
+  This task measures an unloaded tactile noise baseline, then implements both directions of gradual motion
+  &mdash; <code>gradual_close</code> (stopping early on tactile contact) and <code>gradual_open</code>
+  (a graceful, symmetric release).</p>
+  <div class="badges">
+    <span class="badge b-info">Builds on: Task 2's Latest pattern (for HandState tactile data), Task 8's ease/step-interpolation idea applied to hand joints</span>
+    <span class="badge b-good">New: write_hand, tactile_samples, measure_baseline, gradual_close, gradual_open</span>
+  </div>
+  <div class="card warn"><p><strong>This notebook is bare</strong> (generic <code>raise NotImplementedError</code>
+  stubs) &mdash; this page supplies what each section needs. <code>util.HAND_OPEN</code>/<code>HAND_CLOSED</code>
+  already give you target arrays &mdash; this task is about the message format and the tactile-aware stop
+  condition, not the poses themselves.</p></div>
+  <div class="tocwrap"><a href="../day_1/task1_sdkwrapper_usage_intro.html">T1</a><a href="../day_1/task2_necessary_dds_init_pubsub_intro.html">T2</a><a href="../day_1/task3_say_and_headlight_helpers_intro.html">T3</a><a href="../day_1/task4_robot_state_observation_intro.html">T4</a><a href="../day_2/task5_services_and_mode_switching_intro.html">T5</a><a href="../day_2/task6_basic_locomotion_intro.html">T6</a><a href="../day_2/task7_slam_operation_and_map_visualization_intro.html">T7</a><a href="task8_hl_arm_gestures_intro.html">T8</a><a href="task9_ll_control_intro.html">T9</a><a href="task10_ik_control_intro.html">T10</a><a href="task11_dex3_gradual_gripping_intro.html" style="border-color:var(--accent);color:var(--accent)">T11</a><a href="../day_4/task12_perception_and_pose_estimation_pipeline_intro.html">T12</a><a href="../day_4/task13_final_task_intro.html">T13</a></div>
+</header>
+<main>
+
+<div class="card caution">
+  <h4>&#9888; Verify <code>HAND_OPEN</code>/<code>HAND_CLOSED</code> on your hand before trusting them</h4>
+  <p>The notebook's imports pull <code>HAND_OPEN</code>/<code>HAND_CLOSED</code> from
+  <code>util.py</code>. Those tables do <strong>not</strong> agree with the ones <code>sdk_wrapper.py</code>
+  actually uses at runtime (in <code>G1.open_dex3_hand</code>/<code>close_dex3_hand</code>/<code>HAND_MIN</code>/<code>HAND_MAX</code>):</p>
+  <ul>
+    <li><strong>Right hand</strong>, joints <code>thumb_1</code>/<code>thumb_2</code> (indices 1&ndash;2):
+    <code>util.py</code>'s OPEN/CLOSED values for these two joints are swapped relative to
+    <code>sdk_wrapper.py</code>'s computed <code>HAND_OPEN</code>/<code>HAND_CLOSED</code>.</li>
+    <li><strong>Left hand</strong>, joints <code>middle_0</code>/<code>middle_1</code>/<code>index_0</code>/<code>index_1</code>
+    (indices 3&ndash;6): same swap.</li>
+  </ul>
+  <p>Concretely: <code>util.HAND_CLOSED["right"] = [-0.0351, 0.742, 0.0, 1.57, 1.75, 1.57, 1.75]</code>, but
+  <code>sdk_wrapper.HAND_CLOSED["right"]</code> (derived from its own <code>HAND_MIN</code>/<code>HAND_MAX</code>
+  tables) is <code>[-0.0351, -1.05, -1.75, 1.57, 1.75, 1.57, 1.75]</code> &mdash; index 1/2 disagree.</p>
+  <p><strong>Before you write hand-closing code against a real hand:</strong> run <code>gradual_close</code>
+  at a very slow rate first and visually confirm the fingers actually curl toward closed, not open. If you
+  see the opposite of what you expect, use <code>sdk_wrapper.py</code>'s
+  <code>HAND_MIN</code>/<code>HAND_MAX</code>/<code>HAND_OPEN</code>/<code>HAND_CLOSED</code> tables instead
+  of <code>util.py</code>'s for the affected joints &mdash; they match what <code>sdk_wrapper.G1</code>'s own
+  hand methods send to the real robot. Flag this discrepancy to your instructor rather than silently picking
+  one table.</p>
+</div>
+
+<h2><span class="num">&#167;1</span>Knowledge &mdash; the Dex3 HandCmd message and joint range</h2>
+<div class="card knowledge">
+<p>7 joints per hand: <code>thumb_0, thumb_1, thumb_2, middle_0, middle_1, index_0, index_1</code>
+(3-DOF thumb + two 2-DOF fingers). Every commanded joint needs mode/q/dq/tau/kp/kd, same shape as Task 9's
+<code>rt/lowcmd</code>, just a different topic and a packed <code>mode</code> bit-field.</p>
+<table>
+<tr><th>Joint</th><th>Left range (rad)</th><th>Right range (rad)</th></tr>
+<tr><td>thumb_0 (fixed rotation)</td><td>-0.099 (neutral)</td><td>-0.035 (neutral)</td></tr>
+<tr><td>thumb_1 / thumb_2</td><td>-0.724..1.05 / 0..1.75</td><td>-1.05..0.742 / -1.75..0</td></tr>
+<tr><td>middle_0 / middle_1</td><td>-1.57..0 / -1.75..0</td><td>0..1.57 / 0..1.75</td></tr>
+<tr><td>index_0 / index_1</td><td>-1.57..0 / -1.75..0</td><td>0..1.57 / 0..1.75</td></tr>
+</table>
+<p><code>cmd.mode = (motor_index &amp; 0x0F) | (1 &lt;&lt; 4)</code> &mdash; low nibble selects the joint, bit 4
+enables it. Default gains <code>kp=0.8, kd=0.05, tau=0.02</code> (much softer than the body's
+<code>kp=40-100</code> &mdash; fingers need to comply, not fight contact).</p>
+</div>
+
+<h2><span class="num">&#167;2</span>Knowledge &mdash; calibrate the threshold, don't copy one</h2>
+<div class="card knowledge">
+<p><code>academy/todo.txt</code> is explicit: grasp-contact thresholds are empirical <strong>per installation
+and per object class</strong>, never a constant copied from another robot or a different Dex3 unit.</p>
+<p><code>gradual_close</code> interpolates in small steps and checks tactile pressure after every step
+&mdash; it stops the moment any sensor crosses <code>threshold</code>, not at the end of the ramp.
+<code>gradual_open</code> is deliberately <strong>not</strong> symmetric in behavior: no tactile early-stop,
+because opening should always be gentle rather than snapping &mdash; snapping open can drop a held object
+suddenly or shock the fingers against their end stops.</p>
+<p>Flow: <code>measure_baseline()</code> (no object, 2s) &rarr; note max/mean noise floor &rarr; supervised
+safe grasp, pick threshold above baseline &rarr; <code>gradual_close(threshold)</code> stops on contact.</p>
+</div>
+
+<h2><span class="num">&#167;3</span>Knowledge &mdash; assembly, services, and Inspire hands (context)</h2>
+<div class="card knowledge">
+<p>On-robot, the hand connects over the same internal bus the wrist publishes
+<code>rt/dex3/&lt;side&gt;/cmd</code>/<code>state</code> through &mdash; no separate IP or adapter needed
+once mounted. Off-robot (bench testing), Unitree's USB debug adapter lets a laptop talk to one hand
+directly.</p>
+<p>Dex3 hands register their own named services with <code>RobotStateClient</code>
+(<code>dex3_service_l</code>/<code>dex3_service_r</code>) &mdash; outside Task 4/5's
+<code>SERVICE_CATALOG</code>, but visible via <code>get_services()</code> and toggleable via
+<code>toggle_service(name)</code>, useful to confirm a hand's service is actually enabled before debugging a
+silent <code>HandState_</code> subscriber.</p>
+<p>Some G1 units ship <strong>Inspire</strong> 5-finger hands instead of Dex3 &mdash; controlled completely
+differently: raw Modbus TCP register writes (enable register 1004, preload registers 1522/1498, then 6
+target registers at 1486), own IP per hand (right <code>192.168.123.210:6000</code>, left
+<code>192.168.123.211:6000</code>), no DDS, no tactile read-back in this repo.</p>
+</div>
+
+<h2><span class="num">&#167;4</span>Cell 2 &mdash; shared setup</h2>
+<div class="cell"><div class="cellhead"><span>Cell 2 (code)</span><span class="todo">TODO &mdash; bare stub</span></div>
+<pre><code>import time
+from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelPublisher, ChannelSubscriber
+from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
+import sys
+from sdk_wrapper import ensure_channel_factory
+
+# TODO: Implement this section using the preceding task description and day slides.
+</code></pre></div>
+<pre class="block"><code>ensure_channel_factory(0, "eth0")</code></pre>
+
+<h2><span class="num">&#167;5</span>Task 1 &mdash; Cell 4 &mdash; tactile subscriber + hand publisher</h2>
+<div class="cell"><div class="cellhead"><span>Cell 4 (code)</span><span class="todo">TODO &mdash; bare stub</span></div>
+<pre><code>from unitree_sdk2py.idl.default import unitree_hg_msg_dds__HandCmd_
+from unitree_sdk2py.idl.unitree_hg.msg.dds_ import HandCmd_, HandState_
+import sys
+from util import HAND_JOINT_NAMES, HAND_OPEN, HAND_CLOSED
+
+# TODO: Implement this section using the preceding task description and day slides.
+</code></pre></div>
+<p><code>HandState_</code> exposes <code>motor_state</code> (per-joint q/dq/tau) and
+<code>press_sensor_state</code> (tactile pressure arrays).</p>
+<pre class="block"><code>class Latest:
+    def __init__(self, topic, message_type, queue_len=10):
+        self.message = None; self.timestamp = 0.0
+        self.subscriber = ChannelSubscriber(topic, message_type)
+        self.subscriber.Init(self._callback, queue_len)
+    def _callback(self, message):
+        self.message = message; self.timestamp = time.time()
+
+hand_pubs = {"right": ChannelPublisher("rt/dex3/right/cmd", HandCmd_)}
+hand_pubs["right"].Init()
+hand_state_subs = {"right": Latest("rt/dex3/right/state", HandState_, 20)}
+_last_hand_targets = {}
+
+def write_hand(targets, side="right", kp=0.8, kd=0.05, tau=0.02):
+    msg = unitree_hg_msg_dds__HandCmd_()
+    for i, q in enumerate(targets):
+        cmd = msg.motor_cmd[i]
+        cmd.mode = (i &amp; 0x0F) | (1 &lt;&lt; 4)
+        cmd.q = float(q); cmd.dq = 0.0; cmd.tau = tau; cmd.kp = kp; cmd.kd = kd
+    hand_pubs[side].Write(msg)
+    _last_hand_targets[side] = list(targets)              # gradual_open/close need their true starting pose
+
+def tactile_samples(side="right"):
+    msg = hand_state_subs[side].message
+    if msg is None:
+        return []
+    return [float(v) for sensor in msg.press_sensor_state for v in sensor.pressure]</code></pre>
+
+<h2><span class="num">&#167;6</span>Task 2 &mdash; Cell 6 &mdash; <code>measure_baseline()</code></h2>
+<div class="cell"><div class="cellhead"><span>Cell 6 (code)</span><span class="todo">TODO &mdash; bare stub</span></div>
+<pre><code># TODO: Implement this section using the preceding task description and day slides.
+</code></pre></div>
+<pre class="block"><code>def measure_baseline(side="right", duration_s=2.0):
+    samples = []
+    deadline = time.time() + duration_s
+    while time.time() &lt; deadline:
+        samples.extend(tactile_samples(side))
+        time.sleep(0.02)
+    if not samples:
+        raise RuntimeError("No tactile samples received; check the HandState_ subscriber.")
+    return {"max": max(samples), "mean": sum(samples) / len(samples), "n": len(samples)}
+
+# Run with nothing in the hand, then pick a threshold well above the reported "max".
+measure_baseline()</code></pre>
+
+<h2><span class="num">&#167;7</span>Task 3 &mdash; Cell 8 &mdash; <code>gradual_close(threshold, ...)</code></h2>
+<div class="cell"><div class="cellhead"><span>Cell 8 (code)</span><span class="todo">TODO &mdash; bare stub</span></div>
+<pre><code># TODO: Implement this section using the preceding task description and day slides.
+</code></pre></div>
+<pre class="block"><code>def gradual_close(threshold, side="right", steps=40, delay_s=0.05):
+    start = _last_hand_targets.get(side, HAND_OPEN[side])
+    for step in range(1, steps + 1):
+        a = step / steps
+        frame = [x + (y-x)*a for x, y in zip(start, HAND_CLOSED[side])]
+        write_hand(frame, side=side)
+        time.sleep(delay_s)
+        samples = tactile_samples(side)
+        if samples and max(samples) &gt;= threshold:               # stop the moment contact is felt
+            return {"contact": True, "step": step, "side": side}
+    return {"contact": False, "step": steps, "side": side}       # closed fully, never touched anything</code></pre>
+<p><strong>Hint:</strong> always run <code>measure_baseline()</code> fresh for the actual hand/installation
+you're testing on &mdash; never reuse a threshold value from a previous session or a different Dex3 unit.</p>
+
+<h2><span class="num">&#167;8</span>Task 4 &mdash; Cell 10 &mdash; <code>gradual_open(...)</code>: the graceful release</h2>
+<div class="cell"><div class="cellhead"><span>Cell 10 (code)</span><span class="todo">TODO &mdash; bare stub</span></div>
+<pre><code># TODO: Implement this section using the preceding task description and day slides.
+</code></pre></div>
+<p>Symmetric interpolation shape to <code>gradual_close</code>, but from the last-written targets (default
+<code>HAND_CLOSED[side]</code>) back to <code>HAND_OPEN[side]</code>, with <strong>no</strong> tactile
+early-stop &mdash; opening should just complete gently, not snap open on any condition.</p>
+<pre class="block"><code>def gradual_open(side="right", steps=40, delay_s=0.05):
+    start = _last_hand_targets.get(side, HAND_CLOSED[side])
+    for step in range(1, steps + 1):
+        a = step / steps
+        frame = [x + (y-x)*a for x, y in zip(start, HAND_OPEN[side])]
+        write_hand(frame, side=side)
+        time.sleep(delay_s)
+    return {"step": steps, "side": side}</code></pre>
+
+<div class="card caution">
+  <h4>Safety</h4>
+  <p>Never hardcode a contact threshold &mdash; it must come from <code>measure_baseline()</code> plus a
+  supervised safe-grasp calibration. Run no command cell until the subscriber state is fresh, controller
+  ownership is known, the space is clear, and a damp path is available.</p>
+</div>
+
+</main>
+<footer>
+  <div class="navrow">
+    <span>Reference: <code>sdk_wrapper._Dex3</code>/<code>G1.gradual_close</code>/<code>gradual_open</code> &middot;
+    Notebook: <code>task11_dex3_gradual_gripping.ipynb</code> &middot; Slides: <code>day3_slides.html</code> (slides 19&ndash;27)</span>
+    <span><a href="task10_ik_control_intro.html">&larr; Task 10</a> &middot;
+    <a href="../day_4/task12_perception_and_pose_estimation_pipeline_intro.html">Task 12 &rarr;</a></span>
+  </div>
+</footer>
+
+</body>
+</html>

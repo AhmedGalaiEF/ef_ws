@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Task 6 Intro — Basic Locomotion</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Pre-task knowledge and reference for Task 6 Intro — Basic Locomotion.">
+<style>
+:root{
+  --bg:#f6f7f9; --panel:#ffffff; --ink:#1b1f27; --muted:#5b6472; --border:#dfe3ea;
+  --accent:#2454ff; --code-bg:#eef1f6; --zebra:#f9fafc;
+  --good:#0f7a3d; --good-bg:#e6f6ec;
+  --info:#1b5fd6; --info-bg:#e8f0fe;
+  --warn:#b5750a; --warn-bg:#fbf1de;
+  --caution:#c1272d; --caution-bg:#fdeaea;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#14171c; --panel:#1b1f27; --ink:#e7e9ee; --muted:#9aa3b2; --border:#2c313b;
+    --accent:#6f92ff; --code-bg:#232833; --zebra:#1f242e;
+    --good:#5fd38a; --good-bg:#123a24;
+    --info:#8fb0ff; --info-bg:#152548;
+    --warn:#e3ab53; --warn-bg:#3a2c10;
+    --caution:#ff8b8f; --caution-bg:#3a1616;
+  }
+}
+*{box-sizing:border-box;}
+body{margin:0; background:var(--bg); color:var(--ink);
+  font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+code, .mono, pre{font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;}
+code{background:var(--code-bg); padding:1px 5px; border-radius:4px;}
+pre code{background:none; padding:0;}
+a{color:var(--accent);}
+header.top{padding:26px clamp(16px,4vw,48px) 18px; border-bottom:1px solid var(--border); background:var(--panel);}
+.eyebrow{color:var(--muted); font-size:12.5px; text-transform:uppercase; letter-spacing:.05em; margin:0 0 6px;}
+header.top h1{margin:0 0 8px; font-size:1.55rem;}
+header.top p.lede{margin:4px 0; color:var(--muted); max-width:900px;}
+.badges{margin:10px 0 0; display:flex; flex-wrap:wrap; gap:8px;}
+.badge{display:inline-block; font-size:11px; font-weight:700; letter-spacing:.02em;
+  padding:3px 9px; border-radius:99px; white-space:nowrap;}
+.b-info{color:var(--info); background:var(--info-bg);}
+.b-good{color:var(--good); background:var(--good-bg);}
+.b-warn{color:var(--warn); background:var(--warn-bg);}
+.b-caution{color:var(--caution); background:var(--caution-bg);}
+.crumbs{margin:14px 0 0; font-size:12.5px;}
+.crumbs a{color:var(--muted); text-decoration:none; margin-right:4px;}
+.crumbs a:hover{color:var(--accent);}
+main{max-width:980px; margin:0 auto; padding:28px clamp(16px,4vw,48px) 90px;}
+h2{font-size:1.25rem; margin:38px 0 6px; padding-top:14px; border-top:3px solid var(--accent);}
+h2 .num{color:var(--muted); font-weight:600; margin-right:6px;}
+h3{font-size:1.02rem; margin:22px 0 6px;}
+p{margin:8px 0;}
+.card{border:1px solid var(--border); border-radius:12px; background:var(--panel); padding:16px 18px; margin:14px 0;}
+.card h4{margin:0 0 6px; font-size:.95rem;}
+.card.knowledge{border-left:4px solid var(--info);}
+.card.warn{border-left:4px solid var(--warn); background:var(--warn-bg);}
+.card.caution{border-left:4px solid var(--caution); background:var(--caution-bg);}
+.card.good{border-left:4px solid var(--good); background:var(--good-bg);}
+table{border-collapse:collapse; width:100%; margin:12px 0; font-size:13.5px;}
+th, td{border:1px solid var(--border); padding:6px 10px; text-align:left; vertical-align:top;}
+th{background:var(--code-bg);}
+tr:nth-child(even) td{background:var(--zebra);}
+pre.block{background:var(--code-bg); border:1px solid var(--border); border-radius:10px;
+  padding:12px 14px; overflow-x:auto; margin:10px 0;}
+.cell{border:1px solid var(--border); border-radius:10px; margin:12px 0; overflow:hidden;}
+.cell .cellhead{background:var(--code-bg); padding:6px 12px; font-size:12px; color:var(--muted);
+  border-bottom:1px solid var(--border); display:flex; justify-content:space-between;}
+.cell pre{margin:0; padding:12px 14px; overflow-x:auto;}
+.todo{color:var(--warn);}
+ul, ol{padding-left:22px;}
+li{margin:4px 0;}
+.stepgrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; margin:12px 0;}
+.step{border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-size:12.5px; background:var(--panel);}
+.step b{display:block; color:var(--accent); font-size:11px; text-transform:uppercase; letter-spacing:.04em;}
+.tocwrap{display:flex; flex-wrap:wrap; gap:6px; margin:10px 0 0;}
+.tocwrap a{font-size:12px; padding:4px 9px; border:1px solid var(--border); border-radius:99px;
+  text-decoration:none; color:var(--muted); background:var(--panel);}
+.tocwrap a:hover{color:var(--accent); border-color:var(--accent);}
+footer{padding:26px clamp(16px,4vw,48px) 60px; color:var(--muted); font-size:12.5px; border-top:1px solid var(--border);}
+footer a{color:var(--muted);}
+.navrow{display:flex; justify-content:space-between; gap:12px; margin-top:10px; flex-wrap:wrap;}
+</style>
+</head>
+<body>
+<header class="top">
+  <p class="eyebrow">Day 2 &middot; G1 Academy Bonus</p>
+  <h1>Task 6 &mdash; Basic Locomotion Helpers</h1>
+  <p class="lede">Two locomotion helpers, both built on the native <code>LocoClient</code>:
+  <code>loco_move</code> runs a bounded-duration continuous velocity command and always stops in
+  <code>finally</code>; <code>odom_move</code> issues a single non-continuous relative move and closes the
+  loop on odometry to confirm arrival, instead of treating the RPC return code alone as proof of motion.
+  A simple lock prevents two locomotion commands from running concurrently.</p>
+  <div class="badges">
+    <span class="badge b-info">Builds on: Task 2's Latest/ensure_channel_factory, Task 4's odom-reading pattern (read directly here for closed-loop arrival)</span>
+    <span class="badge b-good">New: loco_move, odom_move, loco_stop</span>
+  </div>
+  <div class="card warn"><p><strong>This notebook is bare</strong> (generic <code>raise NotImplementedError</code>
+  stubs) &mdash; this page supplies what each section needs.</p></div>
+  <div class="tocwrap"><a href="../day_1/task1_sdkwrapper_usage_intro.html">T1</a><a href="../day_1/task2_necessary_dds_init_pubsub_intro.html">T2</a><a href="../day_1/task3_say_and_headlight_helpers_intro.html">T3</a><a href="../day_1/task4_robot_state_observation_intro.html">T4</a><a href="task5_services_and_mode_switching_intro.html">T5</a><a href="task6_basic_locomotion_intro.html" style="border-color:var(--accent);color:var(--accent)">T6</a><a href="task7_slam_operation_and_map_visualization_intro.html">T7</a><a href="../day_3/task8_hl_arm_gestures_intro.html">T8</a><a href="../day_3/task9_ll_control_intro.html">T9</a><a href="../day_3/task10_ik_control_intro.html">T10</a><a href="../day_3/task11_dex3_gradual_gripping_intro.html">T11</a><a href="../day_4/task12_perception_and_pose_estimation_pipeline_intro.html">T12</a><a href="../day_4/task13_final_task_intro.html">T13</a></div>
+</header>
+<main>
+
+<h2><span class="num">&#167;1</span>Knowledge &mdash; continuous vs. non-continuous Move</h2>
+<div class="card knowledge">
+<p><code>LocoClient.Move(vx, vy, vyaw, continous_move=...)</code> behaves differently depending on that flag,
+and <strong>neither</strong> mode tells you the robot actually arrived.</p>
+<table>
+<tr><th>Mode</th><th>Behavior</th><th>How this course confirms completion</th></tr>
+<tr><td><code>continous_move=True</code></td><td>keeps moving at that velocity until told otherwise</td><td><code>sleep(duration_s)</code> then always call <code>StopMove()</code>, even on exception (<code>finally</code>)</td></tr>
+<tr><td><code>continous_move=False</code></td><td>one relative-displacement request</td><td>poll odometry until observed displacement is within tolerance &mdash; the RPC return code alone is <strong>not</strong> proof of arrival</td></tr>
+</table>
+<p>Flow for <code>odom_move</code>: record start odom pose &rarr; send <code>Move()</code> (non-continuous)
+&rarr; poll odom pose until <code>|err| &lt; tol</code> &rarr; arrived/timeout &rarr; stop.</p>
+</div>
+
+<h2><span class="num">&#167;2</span>Knowledge &mdash; one lock, one command at a time</h2>
+<div class="card knowledge">
+<p>A simple non-blocking <code>threading.Lock()</code> (<code>acquire(blocking=False)</code>) guarantees
+only one locomotion command runs at a time &mdash; a second call while one is already sleeping/polling raises
+immediately instead of silently queueing behind it or racing it.</p>
+<p>Both helpers release the lock in <code>finally</code>, so an exception mid-command can never leave
+locomotion permanently "locked out".</p>
+<p>Yaw error uses a wrapped <code>((err + &pi;) % 2&pi;) - &pi;</code> comparison &mdash; naive subtraction
+breaks near the &plusmn;&pi; wraparound.</p>
+</div>
+
+<h2><span class="num">&#167;3</span>Cell 2 &mdash; shared setup</h2>
+<div class="cell"><div class="cellhead"><span>Cell 2 (code)</span><span class="todo">TODO &mdash; bare stub</span></div>
+<pre><code>import time
+from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelPublisher, ChannelSubscriber
+from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
+import sys
+from sdk_wrapper import ensure_channel_factory
+
+# TODO: Implement this section using the preceding task description and day slides.
+</code></pre></div>
+<pre class="block"><code>ensure_channel_factory(0, "eth0")</code></pre>
+
+<h2><span class="num">&#167;4</span>Task 1 &mdash; Cell 4 &mdash; odometry subscriber + native <code>LocoClient</code></h2>
+<div class="cell"><div class="cellhead"><span>Cell 4 (code)</span><span class="todo">TODO &mdash; bare stub</span></div>
+<pre><code>import math
+import threading
+from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
+from unitree_sdk2py.idl.unitree_go.msg.dds_ import SportModeState_
+
+# TODO: Implement this section using the preceding task description and day slides.
+</code></pre></div>
+<pre class="block"><code>class Latest:                      # Task 2's pattern, repeated for a self-contained notebook
+    def __init__(self, topic, message_type, queue_len=10):
+        self.message = None; self.timestamp = 0.0
+        self.subscriber = ChannelSubscriber(topic, message_type)
+        self.subscriber.Init(self._callback, queue_len)
+    def _callback(self, message):
+        self.message = message; self.timestamp = time.time()
+
+odom_sub = Latest("rt/odommodestate", SportModeState_)
+loco = LocoClient(); loco.SetTimeout(5.0); loco.Init()
+_locomotion_lock = threading.Lock()
+
+def _odom_pose():
+    msg = odom_sub.message
+    if msg is None:
+        return None
+    return (float(msg.position[0]), float(msg.position[1]), float(msg.imu_state.rpy[2]))
+
+def loco_stop():
+    if hasattr(loco, "StopMove"):
+        return loco.StopMove()
+    return loco.Move(0.0, 0.0, 0.0, continous_move=False)</code></pre>
+
+<h2><span class="num">&#167;5</span>Task 2 &mdash; Cell 6 &mdash; <code>loco_move(vx, vy, vyaw, duration_s)</code></h2>
+<div class="cell"><div class="cellhead"><span>Cell 6 (code)</span><span class="todo">TODO &mdash; bare stub</span></div>
+<pre><code># TODO: Implement this section using the preceding task description and day slides.
+</code></pre></div>
+<p>A continuous velocity command held for a fixed duration, always cancelled in <code>finally</code> &mdash;
+so an exception mid-sleep (kernel interrupt, timeout) can never leave the robot moving.</p>
+<pre class="block"><code>def loco_move(vx, vy, vyaw, duration_s=2.0):
+    if not _locomotion_lock.acquire(blocking=False):
+        raise RuntimeError("Another locomotion command is already in progress.")
+    try:
+        code = int(loco.Move(vx, vy, vyaw, continous_move=True) or 0)
+        try:
+            time.sleep(duration_s)
+        finally:
+            loco_stop()             # ALWAYS stop, even on exception mid-sleep
+        return code
+    finally:
+        _locomotion_lock.release()</code></pre>
+<p><strong>Hint:</strong> test with a tiny <code>vx</code> first (e.g. <code>0.03</code> m/s for 0.5s) in a
+clear space with a spotter &mdash; it's the simplest of the two helpers, and confirms your
+<code>LocoClient</code> is actually wired up before you build the closed-loop version.</p>
+
+<h2><span class="num">&#167;6</span>Task 3 &mdash; Cell 8 &mdash; <code>odom_move(...)</code> with closed-loop arrival</h2>
+<div class="cell"><div class="cellhead"><span>Cell 8 (code)</span><span class="todo">TODO &mdash; bare stub</span></div>
+<pre><code># TODO: Implement this section using the preceding task description and day slides.
+</code></pre></div>
+<p>Issue one non-continuous <code>Move</code> request for the relative displacement, then poll odometry
+until the <em>observed</em> displacement is within tolerance, the request was rejected, or
+<code>timeout_s</code> elapses.</p>
+<pre class="block"><code>def odom_move(target_dx, target_dy, target_dyaw, pos_tol_m=0.05, yaw_tol_rad=0.05, timeout_s=15.0, poll_s=0.2):
+    if not _locomotion_lock.acquire(blocking=False):
+        raise RuntimeError("Another locomotion command is already in progress.")
+    try:
+        start = _odom_pose()
+        if start is None:
+            raise RuntimeError("No fresh odometry; cannot monitor arrival.")
+        code = int(loco.Move(target_dx, target_dy, target_dyaw, continous_move=False) or 0)
+        if code != 0:
+            return {"code": code, "arrived": False, "reason": "move request rejected"}
+        deadline = time.time() + timeout_s
+        while time.time() &lt; deadline:
+            pose = _odom_pose()
+            if pose is not None:
+                dx, dy, dyaw = pose[0]-start[0], pose[1]-start[1], pose[2]-start[2]
+                err_pos = ((target_dx-dx)**2 + (target_dy-dy)**2) ** 0.5
+                err_yaw = abs(((target_dyaw-dyaw) + math.pi) % (2*math.pi) - math.pi)
+                if err_pos &lt;= pos_tol_m and err_yaw &lt;= yaw_tol_rad:
+                    return {"code": code, "arrived": True, "moved": (dx, dy, dyaw)}
+            time.sleep(poll_s)
+        loco_stop()
+        return {"code": code, "arrived": False, "reason": "timeout"}
+    finally:
+        _locomotion_lock.release()</code></pre>
+<p>The RPC return code alone is <strong>never</strong> proof of arrival for <code>odom_move</code> &mdash;
+only the polled odometry comparison counts.</p>
+
+<div class="card caution">
+  <h4>Safety</h4>
+  <p>Run no command cell until the subscriber state is fresh, controller ownership is known, the space is
+  clear, and a damp path is available. Code is not invoked automatically.</p>
+</div>
+
+</main>
+<footer>
+  <div class="navrow">
+    <span>Reference: <code>sdk_wrapper.G1.loco_move</code>/<code>loco_stop</code> &middot;
+    Notebook: <code>task6_basic_locomotion.ipynb</code> &middot; Slides: <code>day2_slides.html</code> (slides 8&ndash;13)</span>
+    <span><a href="task5_services_and_mode_switching_intro.html">&larr; Task 5</a> &middot;
+    <a href="task7_slam_operation_and_map_visualization_intro.html">Task 7 &rarr;</a></span>
+  </div>
+</footer>
+
+</body>
+</html>

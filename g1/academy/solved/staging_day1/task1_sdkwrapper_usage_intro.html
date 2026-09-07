@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Task 1 Intro — Using sdk_wrapper.G1</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Pre-task knowledge and reference for Task 1 Intro — Using sdk_wrapper.G1.">
+<style>
+:root{
+  --bg:#f6f7f9; --panel:#ffffff; --ink:#1b1f27; --muted:#5b6472; --border:#dfe3ea;
+  --accent:#2454ff; --code-bg:#eef1f6; --zebra:#f9fafc;
+  --good:#0f7a3d; --good-bg:#e6f6ec;
+  --info:#1b5fd6; --info-bg:#e8f0fe;
+  --warn:#b5750a; --warn-bg:#fbf1de;
+  --caution:#c1272d; --caution-bg:#fdeaea;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#14171c; --panel:#1b1f27; --ink:#e7e9ee; --muted:#9aa3b2; --border:#2c313b;
+    --accent:#6f92ff; --code-bg:#232833; --zebra:#1f242e;
+    --good:#5fd38a; --good-bg:#123a24;
+    --info:#8fb0ff; --info-bg:#152548;
+    --warn:#e3ab53; --warn-bg:#3a2c10;
+    --caution:#ff8b8f; --caution-bg:#3a1616;
+  }
+}
+*{box-sizing:border-box;}
+body{margin:0; background:var(--bg); color:var(--ink);
+  font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+code, .mono, pre{font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;}
+code{background:var(--code-bg); padding:1px 5px; border-radius:4px;}
+pre code{background:none; padding:0;}
+a{color:var(--accent);}
+header.top{padding:26px clamp(16px,4vw,48px) 18px; border-bottom:1px solid var(--border); background:var(--panel);}
+.eyebrow{color:var(--muted); font-size:12.5px; text-transform:uppercase; letter-spacing:.05em; margin:0 0 6px;}
+header.top h1{margin:0 0 8px; font-size:1.55rem;}
+header.top p.lede{margin:4px 0; color:var(--muted); max-width:900px;}
+.badges{margin:10px 0 0; display:flex; flex-wrap:wrap; gap:8px;}
+.badge{display:inline-block; font-size:11px; font-weight:700; letter-spacing:.02em;
+  padding:3px 9px; border-radius:99px; white-space:nowrap;}
+.b-info{color:var(--info); background:var(--info-bg);}
+.b-good{color:var(--good); background:var(--good-bg);}
+.b-warn{color:var(--warn); background:var(--warn-bg);}
+.b-caution{color:var(--caution); background:var(--caution-bg);}
+.crumbs{margin:14px 0 0; font-size:12.5px;}
+.crumbs a{color:var(--muted); text-decoration:none; margin-right:4px;}
+.crumbs a:hover{color:var(--accent);}
+main{max-width:980px; margin:0 auto; padding:28px clamp(16px,4vw,48px) 90px;}
+h2{font-size:1.25rem; margin:38px 0 6px; padding-top:14px; border-top:3px solid var(--accent);}
+h2 .num{color:var(--muted); font-weight:600; margin-right:6px;}
+h3{font-size:1.02rem; margin:22px 0 6px;}
+p{margin:8px 0;}
+.card{border:1px solid var(--border); border-radius:12px; background:var(--panel); padding:16px 18px; margin:14px 0;}
+.card h4{margin:0 0 6px; font-size:.95rem;}
+.card.knowledge{border-left:4px solid var(--info);}
+.card.warn{border-left:4px solid var(--warn); background:var(--warn-bg);}
+.card.caution{border-left:4px solid var(--caution); background:var(--caution-bg);}
+.card.good{border-left:4px solid var(--good); background:var(--good-bg);}
+table{border-collapse:collapse; width:100%; margin:12px 0; font-size:13.5px;}
+th, td{border:1px solid var(--border); padding:6px 10px; text-align:left; vertical-align:top;}
+th{background:var(--code-bg);}
+tr:nth-child(even) td{background:var(--zebra);}
+pre.block{background:var(--code-bg); border:1px solid var(--border); border-radius:10px;
+  padding:12px 14px; overflow-x:auto; margin:10px 0;}
+.cell{border:1px solid var(--border); border-radius:10px; margin:12px 0; overflow:hidden;}
+.cell .cellhead{background:var(--code-bg); padding:6px 12px; font-size:12px; color:var(--muted);
+  border-bottom:1px solid var(--border); display:flex; justify-content:space-between;}
+.cell pre{margin:0; padding:12px 14px; overflow-x:auto;}
+.todo{color:var(--warn);}
+ul, ol{padding-left:22px;}
+li{margin:4px 0;}
+.stepgrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; margin:12px 0;}
+.step{border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-size:12.5px; background:var(--panel);}
+.step b{display:block; color:var(--accent); font-size:11px; text-transform:uppercase; letter-spacing:.04em;}
+.tocwrap{display:flex; flex-wrap:wrap; gap:6px; margin:10px 0 0;}
+.tocwrap a{font-size:12px; padding:4px 9px; border:1px solid var(--border); border-radius:99px;
+  text-decoration:none; color:var(--muted); background:var(--panel);}
+.tocwrap a:hover{color:var(--accent); border-color:var(--accent);}
+footer{padding:26px clamp(16px,4vw,48px) 60px; color:var(--muted); font-size:12.5px; border-top:1px solid var(--border);}
+footer a{color:var(--muted);}
+.navrow{display:flex; justify-content:space-between; gap:12px; margin-top:10px; flex-wrap:wrap;}
+</style>
+</head>
+<body>
+<header class="top">
+  <p class="eyebrow">Day 1 &middot; G1 Academy Bonus</p>
+  <h1>Task 1 &mdash; Using <code>sdk_wrapper.G1</code></h1>
+  <p class="lede">A 15-minute warm-up. You are not building anything native yet &mdash; you are treating the
+  <em>finished</em> wrapper as a black box so you have a concrete target to rebuild, piece by piece, in
+  Tasks 2&ndash;13. By Task 13 you will have reconstructed enough of <code>G1</code> from scratch to know
+  exactly what these two calls do underneath.</p>
+  <div class="badges">
+    <span class="badge b-info">Builds on: nothing yet</span>
+    <span class="badge b-good">New: none &mdash; usage only</span>
+  </div>
+  <div class="tocwrap"><a href="task1_sdkwrapper_usage_intro.html" style="border-color:var(--accent);color:var(--accent)">T1</a><a href="task2_necessary_dds_init_pubsub_intro.html">T2</a><a href="task3_say_and_headlight_helpers_intro.html">T3</a><a href="task4_robot_state_observation_intro.html">T4</a><a href="../day_2/task5_services_and_mode_switching_intro.html">T5</a><a href="../day_2/task6_basic_locomotion_intro.html">T6</a><a href="../day_2/task7_slam_operation_and_map_visualization_intro.html">T7</a><a href="../day_3/task8_hl_arm_gestures_intro.html">T8</a><a href="../day_3/task9_ll_control_intro.html">T9</a><a href="../day_3/task10_ik_control_intro.html">T10</a><a href="../day_3/task11_dex3_gradual_gripping_intro.html">T11</a><a href="../day_4/task12_perception_and_pose_estimation_pipeline_intro.html">T12</a><a href="../day_4/task13_final_task_intro.html">T13</a></div>
+</header>
+<main>
+
+<h2><span class="num">&#167;1</span>What you already have</h2>
+<p><code>sdk_wrapper.py</code>'s <code>G1</code> class is the finished, working wrapper this entire course
+reconstructs one native piece at a time. <code>G1.__init__</code> already calls the module-level
+<code>_ensure_factory</code> guard for you, so you do <strong>not</strong> need your own
+<code>ChannelFactoryInitialize</code> guard when working through <code>sdk_wrapper</code> &mdash; that guard
+is exactly what you build from scratch in Task 2.</p>
+<div class="card warn">
+  <h4>One instance per kernel</h4>
+  <p><code>G1.__init__</code> still only tolerates one <code>(domain_id, iface)</code> pair per process
+  (it calls <code>_ensure_factory(domain_id, iface)</code> once). Construct exactly one <code>G1</code> per
+  kernel, and restart the kernel before pointing it at a different interface or domain &mdash; a second
+  construction with different settings raises <code>RuntimeError</code>.</p>
+</div>
+
+<h2><span class="num">&#167;2</span>Cell 3 &mdash; construct the wrapper</h2>
+<p>The notebook cell you need to fill in:</p>
+<div class="cell"><div class="cellhead"><span>Cell 3 (code)</span><span class="todo">TODO</span></div>
+<pre><code>import sys
+sys.path.append("..")
+from sdk_wrapper import G1
+
+# TODO: Construct exactly one G1 for this kernel using eth0 and DDS domain 0.
+g1 = None
+</code></pre></div>
+<p>What to write instead of <code>g1 = None</code>:</p>
+<pre class="block"><code>g1 = G1(iface="eth0", domain_id=0)</code></pre>
+<p>That single line is doing a lot underneath &mdash; it initializes the DDS factory, constructs a
+<code>LocoClient</code>, and lazily wires up every subscriber the class will need (lowstate, odometry, SLAM,
+battery, audio, ...). None of the request/response clients (audio, arm action, video, SLAM, robot-state,
+motion-switcher) are constructed yet &mdash; they are built lazily the first time a method that needs them
+is called (see <code>_audio_client()</code>, <code>_arm_action_client()</code>, etc. in
+<code>sdk_wrapper.py</code>).</p>
+
+<h2><span class="num">&#167;3</span>Cell 5 &mdash; <code>g1.say(text, language="EN", volume=100)</code></h2>
+<div class="card knowledge">
+  <h4>What it does underneath</h4>
+  <p><code>say</code> synthesizes <code>text</code> with Piper (a local TTS engine), converts the resulting
+  WAV to mono / 16-bit / 16 kHz PCM, and streams it through <code>AudioClient.PlayStream</code>.
+  <code>language</code> accepts the short codes documented in <code>sdk_wrapper._PIPER_VOICES</code>
+  (<code>en</code>, <code>de</code>, <code>fr</code>, <code>es</code>, <code>ar</code>, plus a few
+  long-form aliases like <code>"english"</code>). It raises <code>ValueError</code> for an unsupported
+  language and <code>FileNotFoundError</code> if the matching Piper voice model is not installed.</p>
+</div>
+<div class="cell"><div class="cellhead"><span>Cell 5 (code)</span><span class="todo">TODO</span></div>
+<pre><code># TODO: Ask g1 to say a short English sentence at volume 80.
+code = None
+print("say() return code:", code)
+</code></pre></div>
+<pre class="block"><code>code = g1.say("G1 academy ready.", language="EN", volume=80)
+print("say() return code:", code)</code></pre>
+<p><code>code</code> is the integer RPC return code from <code>AudioClient.PlayStream</code> &mdash; <code>0</code>
+means accepted.</p>
+
+<h2><span class="num">&#167;4</span>Cell 7 &mdash; <code>g1.set_headlight(color="green", intensity=100, duration_s=3)</code></h2>
+<div class="card knowledge">
+  <h4>What it does underneath</h4>
+  <p><code>color</code> accepts a name (<code>"green"</code>), a <code>#RRGGBB</code> hex string, or an
+  <code>"R,G,B"</code> string; <code>intensity</code> (0&ndash;100) scales brightness before the color is
+  sent. If <code>duration_s &gt; 0</code>, <code>G1</code> starts a background thread that keeps refreshing
+  <code>AudioClient.LedControl</code> with that color every 0.2s until the duration elapses; a
+  <strong>new</strong> call to <code>set_headlight</code> cancels and joins any thread still running from a
+  previous call before starting its own, so repeated calls are last-call-wins.
+  <code>duration_s &lt;= 0</code> sends a single <code>LedControl</code> call and returns immediately (no
+  thread).</p>
+</div>
+<div class="cell"><div class="cellhead"><span>Cell 7 (code)</span><span class="todo">TODO</span></div>
+<pre><code># TODO: Set the headlight yellow at 100% intensity for 30 seconds.
+code = None
+print("set_headlight() return code:", code)
+</code></pre></div>
+<pre class="block"><code>code = g1.set_headlight(color="yellow", intensity=100, duration_s=30)
+print("set_headlight() return code:", code)</code></pre>
+
+<h2><span class="num">&#167;5</span>Where this goes from here</h2>
+<p><code>g1</code> exposes far more than these two calls: <code>get_state</code>/<code>get_lowstate</code>/
+<code>get_odom</code>/<code>get_battery</code>/<code>get_slam_info</code>/<code>get_service</code>,
+<code>damp_mode</code>/<code>prepare_mode</code>/<code>walk_mode</code>/<code>run_mode</code>,
+<code>toggle_service</code>/<code>toggle_gait</code>, <code>release_arms</code>/<code>engage_arms</code>,
+<code>loco_move</code>/<code>loco_stop</code>, <code>move_ll_joint</code>,
+<code>open_dex3_hand</code>/<code>close_dex3_hand</code>, <code>start_mapping</code>/<code>stop_mapping</code>/
+<code>relocate</code>/<code>navigate</code>, <code>clap</code>/<code>face_wave</code>/<code>shake_hand</code>,
+and <code>ik_move_ee</code>/<code>extend_arm</code>. Tasks 2&ndash;13 rebuild each of these pieces natively,
+one lesson at a time, until you could have written <code>sdk_wrapper.py</code> yourself. Task 2 starts with
+the very first piece: the DDS init guard <code>G1.__init__</code> already did for you here.</p>
+
+<div class="card caution">
+  <h4>Safety</h4>
+  <p>Run no command cell until the subscriber state is fresh, controller ownership is known, the space is
+  clear, and a damp path is available. Code is not invoked automatically.</p>
+</div>
+
+</main>
+<footer>
+  <div class="navrow">
+    <span>Reference: <code>sdk_wrapper.py</code> (<code>G1</code> class) &middot; Notebook:
+    <code>task1_sdkwrapper_usage.ipynb</code> &middot; Slides: <code>day1_slides.html</code> (slides 16&ndash;17, 21)</span>
+    <span><a href="task2_necessary_dds_init_pubsub_intro.html">Next: Task 2 &rarr;</a></span>
+  </div>
+</footer>
+
+</body>
+</html>

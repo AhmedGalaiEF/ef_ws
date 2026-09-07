@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Task 5 Intro — Services and Mode Switching</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Pre-task knowledge and reference for Task 5 Intro — Services and Mode Switching.">
+<style>
+:root{
+  --bg:#f6f7f9; --panel:#ffffff; --ink:#1b1f27; --muted:#5b6472; --border:#dfe3ea;
+  --accent:#2454ff; --code-bg:#eef1f6; --zebra:#f9fafc;
+  --good:#0f7a3d; --good-bg:#e6f6ec;
+  --info:#1b5fd6; --info-bg:#e8f0fe;
+  --warn:#b5750a; --warn-bg:#fbf1de;
+  --caution:#c1272d; --caution-bg:#fdeaea;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#14171c; --panel:#1b1f27; --ink:#e7e9ee; --muted:#9aa3b2; --border:#2c313b;
+    --accent:#6f92ff; --code-bg:#232833; --zebra:#1f242e;
+    --good:#5fd38a; --good-bg:#123a24;
+    --info:#8fb0ff; --info-bg:#152548;
+    --warn:#e3ab53; --warn-bg:#3a2c10;
+    --caution:#ff8b8f; --caution-bg:#3a1616;
+  }
+}
+*{box-sizing:border-box;}
+body{margin:0; background:var(--bg); color:var(--ink);
+  font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+code, .mono, pre{font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;}
+code{background:var(--code-bg); padding:1px 5px; border-radius:4px;}
+pre code{background:none; padding:0;}
+a{color:var(--accent);}
+header.top{padding:26px clamp(16px,4vw,48px) 18px; border-bottom:1px solid var(--border); background:var(--panel);}
+.eyebrow{color:var(--muted); font-size:12.5px; text-transform:uppercase; letter-spacing:.05em; margin:0 0 6px;}
+header.top h1{margin:0 0 8px; font-size:1.55rem;}
+header.top p.lede{margin:4px 0; color:var(--muted); max-width:900px;}
+.badges{margin:10px 0 0; display:flex; flex-wrap:wrap; gap:8px;}
+.badge{display:inline-block; font-size:11px; font-weight:700; letter-spacing:.02em;
+  padding:3px 9px; border-radius:99px; white-space:nowrap;}
+.b-info{color:var(--info); background:var(--info-bg);}
+.b-good{color:var(--good); background:var(--good-bg);}
+.b-warn{color:var(--warn); background:var(--warn-bg);}
+.b-caution{color:var(--caution); background:var(--caution-bg);}
+.crumbs{margin:14px 0 0; font-size:12.5px;}
+.crumbs a{color:var(--muted); text-decoration:none; margin-right:4px;}
+.crumbs a:hover{color:var(--accent);}
+main{max-width:980px; margin:0 auto; padding:28px clamp(16px,4vw,48px) 90px;}
+h2{font-size:1.25rem; margin:38px 0 6px; padding-top:14px; border-top:3px solid var(--accent);}
+h2 .num{color:var(--muted); font-weight:600; margin-right:6px;}
+h3{font-size:1.02rem; margin:22px 0 6px;}
+p{margin:8px 0;}
+.card{border:1px solid var(--border); border-radius:12px; background:var(--panel); padding:16px 18px; margin:14px 0;}
+.card h4{margin:0 0 6px; font-size:.95rem;}
+.card.knowledge{border-left:4px solid var(--info);}
+.card.warn{border-left:4px solid var(--warn); background:var(--warn-bg);}
+.card.caution{border-left:4px solid var(--caution); background:var(--caution-bg);}
+.card.good{border-left:4px solid var(--good); background:var(--good-bg);}
+table{border-collapse:collapse; width:100%; margin:12px 0; font-size:13.5px;}
+th, td{border:1px solid var(--border); padding:6px 10px; text-align:left; vertical-align:top;}
+th{background:var(--code-bg);}
+tr:nth-child(even) td{background:var(--zebra);}
+pre.block{background:var(--code-bg); border:1px solid var(--border); border-radius:10px;
+  padding:12px 14px; overflow-x:auto; margin:10px 0;}
+.cell{border:1px solid var(--border); border-radius:10px; margin:12px 0; overflow:hidden;}
+.cell .cellhead{background:var(--code-bg); padding:6px 12px; font-size:12px; color:var(--muted);
+  border-bottom:1px solid var(--border); display:flex; justify-content:space-between;}
+.cell pre{margin:0; padding:12px 14px; overflow-x:auto;}
+.todo{color:var(--warn);}
+ul, ol{padding-left:22px;}
+li{margin:4px 0;}
+.stepgrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; margin:12px 0;}
+.step{border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-size:12.5px; background:var(--panel);}
+.step b{display:block; color:var(--accent); font-size:11px; text-transform:uppercase; letter-spacing:.04em;}
+.tocwrap{display:flex; flex-wrap:wrap; gap:6px; margin:10px 0 0;}
+.tocwrap a{font-size:12px; padding:4px 9px; border:1px solid var(--border); border-radius:99px;
+  text-decoration:none; color:var(--muted); background:var(--panel);}
+.tocwrap a:hover{color:var(--accent); border-color:var(--accent);}
+footer{padding:26px clamp(16px,4vw,48px) 60px; color:var(--muted); font-size:12.5px; border-top:1px solid var(--border);}
+footer a{color:var(--muted);}
+.navrow{display:flex; justify-content:space-between; gap:12px; margin-top:10px; flex-wrap:wrap;}
+</style>
+</head>
+<body>
+<header class="top">
+  <p class="eyebrow">Day 2 &middot; G1 Academy Bonus</p>
+  <h1>Task 5 &mdash; Services and Mode Switching</h1>
+  <p class="lede">Builds <code>notes.txt</code> section 3 end to end: a safe <code>damp_mode</code>,
+  <code>toggle_service</code>/<code>toggle_gait</code>, and a composite
+  <code>toggle_custom_mode(mode_name, language, voice, headlight_color)</code> that announces the mode with
+  Piper, keeps the headlight refreshed for as long as the mode is active, switches the FSM, and cleanly
+  unwinds &mdash; thread joined and a safe fallback mode &mdash; on exit.</p>
+  <div class="badges">
+    <span class="badge b-info">Builds on: Task 2's ensure_channel_factory/Latest, Task 3's say/set_headlight, Task 4's get_service-shaped ServiceList()</span>
+    <span class="badge b-good">New: damp_mode, toggle_service, toggle_gait, toggle_custom_mode</span>
+  </div>
+  <div class="card warn"><p><strong>This notebook is bare.</strong> Unlike Days 1's per-line TODOs, every
+  code cell here is just <code>raise NotImplementedError("Complete this task section")</code> under the
+  cell's imports. This page is the scaffolding the notebook doesn't give you &mdash; read the markdown cell
+  above each code cell in the notebook, then come back here for exactly what to write.</p></div>
+  <div class="tocwrap"><a href="../day_1/task1_sdkwrapper_usage_intro.html">T1</a><a href="../day_1/task2_necessary_dds_init_pubsub_intro.html">T2</a><a href="../day_1/task3_say_and_headlight_helpers_intro.html">T3</a><a href="../day_1/task4_robot_state_observation_intro.html">T4</a><a href="task5_services_and_mode_switching_intro.html" style="border-color:var(--accent);color:var(--accent)">T5</a><a href="task6_basic_locomotion_intro.html">T6</a><a href="task7_slam_operation_and_map_visualization_intro.html">T7</a><a href="../day_3/task8_hl_arm_gestures_intro.html">T8</a><a href="../day_3/task9_ll_control_intro.html">T9</a><a href="../day_3/task10_ik_control_intro.html">T10</a><a href="../day_3/task11_dex3_gradual_gripping_intro.html">T11</a><a href="../day_4/task12_perception_and_pose_estimation_pipeline_intro.html">T12</a><a href="../day_4/task13_final_task_intro.html">T13</a></div>
+</header>
+<main>
+
+<h2><span class="num">&#167;1</span>Knowledge &mdash; three separate control surfaces</h2>
+<div class="card knowledge">
+<p><code>LocoClient</code>, <code>MotionSwitcherClient</code>, and <code>RobotStateClient</code> answer three
+different questions &mdash; changing one does not resolve the others.</p>
+<table>
+<tr><th>Client</th><th>Answers</th><th>Used for</th></tr>
+<tr><td><code>LocoClient</code></td><td>"what FSM state is locomotion in?"</td><td><code>SetFsmId</code>, <code>Move</code>, <code>Damp</code></td></tr>
+<tr><td><code>MotionSwitcherClient</code></td><td>"which service currently owns the motors?"</td><td><code>CheckMode</code>, <code>SelectMode</code>, <code>ReleaseMode</code></td></tr>
+<tr><td><code>RobotStateClient</code></td><td>"which named services are registered/enabled?"</td><td><code>ServiceList</code>, <code>ServiceSwitch</code></td></tr>
+</table>
+</div>
+
+<h2><span class="num">&#167;2</span>Knowledge &mdash; the full FSM table</h2>
+<div class="card knowledge">
+<p>Do not invent an id beyond this table. This academy's G1 units run <strong>waist-locked</strong> (only
+<code>WaistYaw</code> is a free joint), so walk/balanced-stand is FSM <code>500</code>, not the
+waist-unlocked variant's <code>501</code>.</p>
+<table>
+<tr><th>ID</th><th>Name</th><th>Typical use</th></tr>
+<tr><td>0</td><td>Zero-Torque</td><td>motors off &mdash; safe to handle legs</td></tr>
+<tr><td>1</td><td>Damp</td><td>viscous damping only (soft) &mdash; default power-on, always-available fallback</td></tr>
+<tr><td>3</td><td>Sit</td><td>dog-sit posture</td></tr>
+<tr><td>4</td><td>Stand-up / prepare</td><td>firmware-defined stand, good after Damp</td></tr>
+<tr><td>500</td><td>Start / walk</td><td>balance controller &amp; gait planner (waist-locked units)</td></tr>
+<tr><td>802</td><td>Run</td><td>running gait</td></tr>
+</table>
+<p>This course's <code>FSM_IDS = {"zero_torque": 0, "damp": 1, "prepare": 4, "walk": 500, "run": 802}</code>
+covers the five you'll actually use.</p>
+<div class="card caution">
+<p><strong>Do not use id <code>2</code>, and do not trust ids <code>702</code>/<code>706</code> without
+independently verifying them.</strong> An earlier version of this page (and of
+<code>day2_slides.html</code>) listed <code>2</code> as &quot;Squat&quot; and <code>702</code>/<code>706</code>
+as confirmed stand-up transitions. <code>academy/mappings_and_constraints.html</code> &mdash; this repo's own
+audited FSM reference, cross-checked against <code>sdk_wrapper.py</code> and other academy scripts &mdash;
+traces id <code>2</code> to an unlabeled/&quot;airborne&quot; placeholder (<code>fsm_2_squat_placeholder</code> in
+dev code) and explicitly warns not to map an undocumented FSM id. Ids <code>702</code> and <code>706</code>
+do not appear in that reference at all. Treat only <code>0/1/3/4/500/802</code> as confirmed for this
+hardware.</p>
+</div>
+</div>
+
+<h2><span class="num">&#167;3</span>Knowledge &mdash; damp as the universal safe fallback</h2>
+<div class="card knowledge">
+<p><code>damp</code> (FSM id 1) is the one mode this course treats as always available: bounded joint
+damping, no locomotion authority. Call <code>damp_mode()</code> before an emergency stop, and before
+releasing controller ownership of any other publisher &mdash; it's the landing pad every controller handoff
+in this course falls back to.</p>
+<p><code>toggle_gait()</code> prefers <code>SetBalanceMode</code>/<code>SetGaitType</code> where the installed
+SDK exposes them, falling back to <code>BalanceStand</code>/<code>SetFsmId("walk")</code> &mdash; and always
+inspects the return code instead of assuming success.</p>
+</div>
+
+<h2><span class="num">&#167;4</span>Cell 2 &mdash; shared setup</h2>
+<div class="cell"><div class="cellhead"><span>Cell 2 (code)</span><span class="todo">TODO &mdash; bare stub</span></div>
+<pre><code>import time
+from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelPublisher, ChannelSubscriber
+from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
+import sys
+from sdk_wrapper import ensure_channel_factory
+
+# TODO: Implement this section using the preceding task description and day slides.
+</code></pre></div>
+<pre class="block"><code>ensure_channel_factory(0, "eth0")
+
+FSM_IDS = {"zero_torque": 0, "damp": 1, "prepare": 4, "walk": 500, "run": 802}</code></pre>
+
+<h2><span class="num">&#167;5</span>Task 1 &mdash; Cell 4 &mdash; native clients + <code>damp_mode()</code></h2>
+<div class="cell"><div class="cellhead"><span>Cell 4 (code)</span><span class="todo">TODO &mdash; bare stub</span></div>
+<pre><code>from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
+from unitree_sdk2py.comm.motion_switcher.motion_switcher_client import MotionSwitcherClient
+
+# TODO: Implement this section using the preceding task description and day slides.
+</code></pre></div>
+<pre class="block"><code>try:
+    from unitree_sdk2py.b2.robot_state.robot_state_client import RobotStateClient
+except ImportError:
+    from unitree_sdk2py.go2.robot_state.robot_state_client import RobotStateClient
+
+loco = LocoClient(); loco.SetTimeout(5.0); loco.Init()
+switcher = MotionSwitcherClient(); switcher.SetTimeout(5.0); switcher.Init()
+robot_state_client = RobotStateClient(); robot_state_client.SetTimeout(2.0); robot_state_client.Init()
+
+def damp_mode():
+    return int(loco.SetFsmId(FSM_IDS["damp"]))
+
+damp_mode()</code></pre>
+
+<h2><span class="num">&#167;6</span>Task 2 &mdash; Cells 6&ndash;8 &mdash; <code>toggle_service(name)</code> / <code>toggle_gait()</code></h2>
+<div class="cell"><div class="cellhead"><span>Cells 6, 7, 8 (code)</span><span class="todo">TODO &mdash; bare stubs</span></div>
+<pre><code># TODO: Implement this section using the preceding task description and day slides.
+</code></pre></div>
+<p><code>toggle_service</code> flips a named <code>RobotStateClient</code> service on/off based on its
+currently reported status.</p>
+<pre class="block"><code>def get_service(name):
+    code, rows = robot_state_client.ServiceList()
+    if int(code) != 0:
+        raise RuntimeError(f"ServiceList failed: {code}")
+    for row in rows or []:
+        if str(getattr(row, "name", "")).strip().lower() == str(name).strip().lower():
+            return row
+    return None
+
+def toggle_service(name):
+    row = get_service(name)
+    if row is None:
+        raise ValueError(f"Unknown service: {name}")
+    enabled = getattr(row, "status", 0) != 0
+    code = int(robot_state_client.ServiceSwitch(row.name, bool(enabled)))
+    return {"name": row.name, "enabled": enabled, "code": code}</code></pre>
+<p><code>toggle_gait</code> prefers <code>SetBalanceMode</code>/<code>SetGaitType</code> where exposed, falls
+back to <code>BalanceStand</code>/<code>SetFsmId("walk")</code>:</p>
+<pre class="block"><code>_gait_state = {"gait": 0}
+
+def toggle_gait():
+    target = 0 if _gait_state["gait"] else 1
+    if target:
+        for method_name in ("SetBalanceMode", "SetGaitType"):
+            if hasattr(loco, method_name):
+                code = int(getattr(loco, method_name)(1))
+                if code == 0:
+                    _gait_state["gait"] = 1
+                    return {"gait": 1, "method": method_name, "code": code}
+    else:
+        if hasattr(loco, "BalanceStand"):
+            loco.BalanceStand(0)
+        for method_name in ("SetBalanceMode", "SetGaitType"):
+            if hasattr(loco, method_name):
+                getattr(loco, method_name)(0)
+        code = int(loco.SetFsmId(FSM_IDS["walk"]))
+        if code == 0:
+            _gait_state["gait"] = 0
+            return {"gait": 0, "method": "SetFsmId(walk)", "code": code}
+    return {"gait": _gait_state["gait"]}</code></pre>
+
+<h2><span class="num">&#167;7</span>Task 3 &mdash; Cell 10 &mdash; <code>say</code>/<code>set_headlight</code> (compact reuse)</h2>
+<div class="cell"><div class="cellhead"><span>Cell 10 (code)</span><span class="todo">TODO &mdash; bare stub</span></div>
+<pre><code>import re, sys
+import threading
+from unitree_sdk2py.g1.audio.g1_audio_client import AudioClient
+from util import play_piper_text
+
+# TODO: Implement this section using the preceding task description and day slides.
+</code></pre></div>
+<p>Task 3 develops these in full; here they are reproduced compactly because <code>toggle_custom_mode</code>
+below depends on both.</p>
+<pre class="block"><code>audio_client = AudioClient(); audio_client.SetTimeout(5.0); audio_client.Init()
+
+def say(text, language="en", volume=100):
+    return play_piper_text(audio_client, text, language=language, volume=volume)
+
+_NAMED_COLORS = {"white": (255,255,255), "red": (255,0,0), "green": (0,255,0), "blue": (0,0,255),
+                  "yellow": (255,255,0), "cyan": (0,255,255), "magenta": (255,0,255),
+                  "orange": (255,165,0), "purple": (128,0,128), "pink": (255,105,180)}
+
+def parse_color(value):
+    if isinstance(value, tuple) and len(value) == 3:
+        return tuple(int(max(0, min(255, v))) for v in value)
+    value = str(value).strip().lower()
+    if value in _NAMED_COLORS:
+        return _NAMED_COLORS[value]
+    if re.fullmatch(r"#?[0-9a-fA-F]{6}", value):
+        value = value.lstrip("#")
+        return (int(value[0:2],16), int(value[2:4],16), int(value[4:6],16))
+    raise ValueError("color must be a name or #RRGGBB")
+
+def set_headlight_once(rgb):
+    return int(audio_client.LedControl(*rgb))</code></pre>
+
+<h2><span class="num">&#167;8</span>Task 4 &mdash; Cells 12&ndash;13 &mdash; <code>toggle_custom_mode(...)</code></h2>
+<div class="cell"><div class="cellhead"><span>Cells 12, 13 (code)</span><span class="todo">TODO &mdash; bare stubs</span></div>
+<pre><code># TODO: Implement this section using the preceding task description and day slides.
+</code></pre></div>
+<p>First call for a given <code>mode_name</code> announces it with Piper, switches the FSM, and starts a
+background thread that keeps refreshing the requested headlight color every 0.2s. Calling it again (same
+name, or any other name) cleanly exits: signal the thread, join it, turn the light off, and fall back to
+<code>damp_mode()</code> for a safe state transition. The interesting part is that entering and exiting use
+the <strong>same</strong> function name with no separate "stop" call &mdash; a state dict decides which
+branch runs.</p>
+<pre class="block"><code>_custom_modes = {
+    "greet": {"fsm": None, "announce": "Hello! I'm ready to help."},
+    "patrol": {"fsm": "walk", "announce": "Starting patrol mode."},
+}
+_custom_mode_state = {"active": None, "stop": None, "thread": None}
+
+def _exit_custom_mode():
+    state = _custom_mode_state
+    if state["thread"] is not None:
+        state["stop"].set(); state["thread"].join()
+    left = state["active"]
+    if left != "greet":            # greet is presentation-only: never switch FSM on exit
+        damp_mode()
+    state.update(active=None, stop=None, thread=None)
+    return {"exited": left}
+
+def toggle_custom_mode(mode_name, language="en", voice=None, headlight_color="green"):
+    if _custom_mode_state["active"] == mode_name:
+        return _exit_custom_mode()                       # same name again -> exit
+    if _custom_mode_state["active"] is not None:
+        _exit_custom_mode()                               # a different mode was active -> exit it first
+    spec = _custom_modes[mode_name]
+    say(spec["announce"], language=language)
+    fsm_code = None if spec["fsm"] is None else int(loco.SetFsmId(FSM_IDS[spec["fsm"]]))
+    rgb, stop_event = parse_color(headlight_color), threading.Event()
+    def worker():
+        while not stop_event.is_set():
+            set_headlight_once(rgb); stop_event.wait(0.2)
+        set_headlight_once((0, 0, 0))
+    thread = threading.Thread(target=worker, daemon=False); thread.start()
+    _custom_mode_state.update(active=mode_name, stop=stop_event, thread=thread)
+    return {"mode": mode_name, "fsm_code": fsm_code}</code></pre>
+<div class="card warn"><p><code>greet</code> is presentation-only: it must never switch FSM or damp on
+exit; motion-owning modes (like <code>patrol</code>) may use their explicit FSM and the damp fallback.</p></div>
+
+<p><strong>Hint:</strong> build <code>toggle_custom_mode</code> last &mdash; get
+<code>damp_mode</code>/<code>toggle_service</code>/<code>toggle_gait</code> working and manually tested
+first, since <code>toggle_custom_mode</code>'s cleanup path depends on <code>damp_mode</code> already being
+correct.</p>
+
+<div class="card caution">
+  <h4>Safety</h4>
+  <p>Run no command cell until the subscriber state is fresh, controller ownership is known, the space is
+  clear, and a damp path is available. Code is not invoked automatically.</p>
+</div>
+
+</main>
+<footer>
+  <div class="navrow">
+    <span>Reference: <code>sdk_wrapper.G1.damp_mode</code>/<code>toggle_service</code>/<code>toggle_gait</code> &middot;
+    Notebook: <code>task5_services_and_mode_switching.ipynb</code> &middot; Slides: <code>day2_slides.html</code> (slides 1&ndash;7)</span>
+    <span><a href="../day_1/task4_robot_state_observation_intro.html">&larr; Task 4</a> &middot;
+    <a href="task6_basic_locomotion_intro.html">Task 6 &rarr;</a></span>
+  </div>
+</footer>
+
+</body>
+</html>

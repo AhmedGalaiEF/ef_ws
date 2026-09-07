@@ -11,6 +11,15 @@ ACADEMY_DIR="$(cd "$SOLVED_DIR/.." && pwd)"
 DAY1_SLIDES_SOURCE="$SOLVED_DIR/slides.html"
 TEMPLATE_BUILDER="$SOLVED_DIR/make_day1_participant_templates.py"
 REAL_IMAGES_DIR="$SOLVED_DIR/imgs_real"
+# Per-task knowledge/reference pages (see staging_day1/) -- not part of the
+# older solved/*.ipynb + slides.html pipeline above, staged separately here.
+INTRO_DIR="$SOLVED_DIR/staging_day1"
+INTRO_FILES=(
+  "task1_sdkwrapper_usage_intro.html"
+  "task2_necessary_dds_init_pubsub_intro.html"
+  "task3_say_and_headlight_helpers_intro.html"
+  "task4_robot_state_observation_intro.html"
+)
 
 [[ "$(id -u)" -eq 0 ]] || { echo "Run as root: sudo bash $0" >&2; exit 1; }
 [[ "$NUM_USERS" =~ ^[1-9][0-9]*$ ]] && (( NUM_USERS <= 100 )) || { echo "NUM_USERS must be 1..100" >&2; exit 2; }
@@ -23,6 +32,9 @@ for source in \
   [[ -f "$source" ]] || { echo "Required Day 1 source is missing: $source" >&2; exit 1; }
 done
 [[ -d "$REAL_IMAGES_DIR" ]] || { echo "Required Day 1 image directory is missing: $REAL_IMAGES_DIR" >&2; exit 1; }
+for intro_file in "${INTRO_FILES[@]}"; do
+  [[ -f "$INTRO_DIR/$intro_file" ]] || { echo "Required Day 1 intro page is missing: $INTRO_DIR/$intro_file" >&2; exit 1; }
+done
 
 for ((i=1; i<=NUM_USERS; i++)); do
   user="${USER_PREFIX}${i}"

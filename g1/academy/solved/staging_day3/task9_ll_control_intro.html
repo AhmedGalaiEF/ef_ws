@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Task 9 Intro — Low-Level Joint Control</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Pre-task knowledge and reference for Task 9 Intro — Low-Level Joint Control.">
+<style>
+:root{
+  --bg:#f6f7f9; --panel:#ffffff; --ink:#1b1f27; --muted:#5b6472; --border:#dfe3ea;
+  --accent:#2454ff; --code-bg:#eef1f6; --zebra:#f9fafc;
+  --good:#0f7a3d; --good-bg:#e6f6ec;
+  --info:#1b5fd6; --info-bg:#e8f0fe;
+  --warn:#b5750a; --warn-bg:#fbf1de;
+  --caution:#c1272d; --caution-bg:#fdeaea;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#14171c; --panel:#1b1f27; --ink:#e7e9ee; --muted:#9aa3b2; --border:#2c313b;
+    --accent:#6f92ff; --code-bg:#232833; --zebra:#1f242e;
+    --good:#5fd38a; --good-bg:#123a24;
+    --info:#8fb0ff; --info-bg:#152548;
+    --warn:#e3ab53; --warn-bg:#3a2c10;
+    --caution:#ff8b8f; --caution-bg:#3a1616;
+  }
+}
+*{box-sizing:border-box;}
+body{margin:0; background:var(--bg); color:var(--ink);
+  font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+code, .mono, pre{font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;}
+code{background:var(--code-bg); padding:1px 5px; border-radius:4px;}
+pre code{background:none; padding:0;}
+a{color:var(--accent);}
+header.top{padding:26px clamp(16px,4vw,48px) 18px; border-bottom:1px solid var(--border); background:var(--panel);}
+.eyebrow{color:var(--muted); font-size:12.5px; text-transform:uppercase; letter-spacing:.05em; margin:0 0 6px;}
+header.top h1{margin:0 0 8px; font-size:1.55rem;}
+header.top p.lede{margin:4px 0; color:var(--muted); max-width:900px;}
+.badges{margin:10px 0 0; display:flex; flex-wrap:wrap; gap:8px;}
+.badge{display:inline-block; font-size:11px; font-weight:700; letter-spacing:.02em;
+  padding:3px 9px; border-radius:99px; white-space:nowrap;}
+.b-info{color:var(--info); background:var(--info-bg);}
+.b-good{color:var(--good); background:var(--good-bg);}
+.b-warn{color:var(--warn); background:var(--warn-bg);}
+.b-caution{color:var(--caution); background:var(--caution-bg);}
+.crumbs{margin:14px 0 0; font-size:12.5px;}
+.crumbs a{color:var(--muted); text-decoration:none; margin-right:4px;}
+.crumbs a:hover{color:var(--accent);}
+main{max-width:980px; margin:0 auto; padding:28px clamp(16px,4vw,48px) 90px;}
+h2{font-size:1.25rem; margin:38px 0 6px; padding-top:14px; border-top:3px solid var(--accent);}
+h2 .num{color:var(--muted); font-weight:600; margin-right:6px;}
+h3{font-size:1.02rem; margin:22px 0 6px;}
+p{margin:8px 0;}
+.card{border:1px solid var(--border); border-radius:12px; background:var(--panel); padding:16px 18px; margin:14px 0;}
+.card h4{margin:0 0 6px; font-size:.95rem;}
+.card.knowledge{border-left:4px solid var(--info);}
+.card.warn{border-left:4px solid var(--warn); background:var(--warn-bg);}
+.card.caution{border-left:4px solid var(--caution); background:var(--caution-bg);}
+.card.good{border-left:4px solid var(--good); background:var(--good-bg);}
+table{border-collapse:collapse; width:100%; margin:12px 0; font-size:13.5px;}
+th, td{border:1px solid var(--border); padding:6px 10px; text-align:left; vertical-align:top;}
+th{background:var(--code-bg);}
+tr:nth-child(even) td{background:var(--zebra);}
+pre.block{background:var(--code-bg); border:1px solid var(--border); border-radius:10px;
+  padding:12px 14px; overflow-x:auto; margin:10px 0;}
+.cell{border:1px solid var(--border); border-radius:10px; margin:12px 0; overflow:hidden;}
+.cell .cellhead{background:var(--code-bg); padding:6px 12px; font-size:12px; color:var(--muted);
+  border-bottom:1px solid var(--border); display:flex; justify-content:space-between;}
+.cell pre{margin:0; padding:12px 14px; overflow-x:auto;}
+.todo{color:var(--warn);}
+ul, ol{padding-left:22px;}
+li{margin:4px 0;}
+.stepgrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; margin:12px 0;}
+.step{border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-size:12.5px; background:var(--panel);}
+.step b{display:block; color:var(--accent); font-size:11px; text-transform:uppercase; letter-spacing:.04em;}
+.tocwrap{display:flex; flex-wrap:wrap; gap:6px; margin:10px 0 0;}
+.tocwrap a{font-size:12px; padding:4px 9px; border:1px solid var(--border); border-radius:99px;
+  text-decoration:none; color:var(--muted); background:var(--panel);}
+.tocwrap a:hover{color:var(--accent); border-color:var(--accent);}
+footer{padding:26px clamp(16px,4vw,48px) 60px; color:var(--muted); font-size:12.5px; border-top:1px solid var(--border);}
+footer a{color:var(--muted);}
+.navrow{display:flex; justify-content:space-between; gap:12px; margin-top:10px; flex-wrap:wrap;}
+</style>
+</head>
+<body>
+<header class="top">
+  <p class="eyebrow">Day 3 &middot; G1 Academy Bonus</p>
+  <h1>Task 9 &mdash; Low-Level Joint Control + q/dq/kp/kd/tau Visualizer</h1>
+  <p class="lede">Rebuilds the <code>rt/lowcmd</code> publisher lifecycle &mdash; message construction, CRC,
+  freshness checking, and a single-joint <code>move_ll_joint</code> helper &mdash; then (optionally) a small
+  Jupyter UI so you can <em>feel</em> what <code>q</code>, <code>dq</code>, <code>kp</code>, <code>kd</code>,
+  and <code>tau</code> each do.</p>
+  <div class="badges">
+    <span class="badge b-info">Builds on: Task 2's freshness pattern (generalized into require_fresh()), Task 8's current_upper_body_pose idea, applied here to the full 29-joint array</span>
+    <span class="badge b-good">New: LowCmdPublisher, require_fresh, current_q_mode, move_ll_joint</span>
+  </div>
+  <div class="card warn"><p><strong>This notebook is bare</strong> (generic <code>raise NotImplementedError</code>
+  stubs) &mdash; this page supplies what each section needs. This is the full <code>rt/lowcmd</code> path
+  (all 29 joints), as opposed to Task 8's arm/waist-only <code>rt/arm_sdk</code> path.</p></div>
+  <div class="tocwrap"><a href="../day_1/task1_sdkwrapper_usage_intro.html">T1</a><a href="../day_1/task2_necessary_dds_init_pubsub_intro.html">T2</a><a href="../day_1/task3_say_and_headlight_helpers_intro.html">T3</a><a href="../day_1/task4_robot_state_observation_intro.html">T4</a><a href="../day_2/task5_services_and_mode_switching_intro.html">T5</a><a href="../day_2/task6_basic_locomotion_intro.html">T6</a><a href="../day_2/task7_slam_operation_and_map_visualization_intro.html">T7</a><a href="task8_hl_arm_gestures_intro.html">T8</a><a href="task9_ll_control_intro.html" style="border-color:var(--accent);color:var(--accent)">T9</a><a href="task10_ik_control_intro.html">T10</a><a href="task11_dex3_gradual_gripping_intro.html">T11</a><a href="../day_4/task12_perception_and_pose_estimation_pipeline_intro.html">T12</a><a href="../day_4/task13_final_task_intro.html">T13</a></div>
+</header>
+<main>
+
+<h2><span class="num">&#167;1</span>Knowledge &mdash; the 29-joint index/gain table</h2>
+<div class="card knowledge">
+<p>Every <code>rt/lowcmd</code> write fills all 29 slots, each with its own default <code>kp</code>/<code>kd</code>
+&mdash; legs and waist-yaw get stiffer gains than arms.</p>
+<table>
+<tr><th>Index range</th><th>Group</th><th>Default kp</th><th>Default kd</th></tr>
+<tr><td>0&ndash;5</td><td>left leg (hip&times;3, knee, ankle&times;2)</td><td>60,60,60,<b>100</b>,40,40</td><td>1,1,1,<b>2</b>,1,1</td></tr>
+<tr><td>6&ndash;11</td><td>right leg</td><td>60,60,60,<b>100</b>,40,40</td><td>1,1,1,<b>2</b>,1,1</td></tr>
+<tr><td>12&ndash;14</td><td>waist (yaw, roll, pitch)</td><td>60,40,40</td><td>1,1,1</td></tr>
+<tr><td>15&ndash;21</td><td>left arm</td><td>40 (all)</td><td>1 (all)</td></tr>
+<tr><td>22&ndash;28</td><td>right arm</td><td>40 (all)</td><td>1 (all)</td></tr>
+</table>
+<p>Knee gets the highest kp/kd of any joint (100/2), since it does the most work holding the robot up.</p>
+</div>
+
+<h2><span class="num">&#167;2</span>Knowledge &mdash; what q/dq/kp/kd/tau actually do</h2>
+<div class="card knowledge">
+<p><code>kp</code>/<code>kd</code> act as a virtual spring/damper pulling the joint toward the commanded
+<code>q</code>/<code>dq</code>; <code>tau</code> is a feed-forward torque added on top.</p>
+<table>
+<tr><th>Setting</th><th>Behavior</th></tr>
+<tr><td>high <code>kp</code></td><td>tracks commanded position tighter, but stiffer and can overshoot</td></tr>
+<tr><td><code>kp=kd=0</code>, <code>tau</code> only</td><td>open-loop torque control &mdash; no position feedback at all</td></tr>
+<tr><td>stale/unset CRC</td><td>silently rejected by the firmware &mdash; always recompute <code>msg.crc</code> before every <code>Write()</code></td></tr>
+</table>
+<p>A single <code>LowCmd_</code> message is reused across writes; every call recomputes the CRC and re-fills
+all 29 <code>motor_cmd</code> slots, holding every joint except the one being moved at its last observed
+position.</p>
+</div>
+
+<h2><span class="num">&#167;3</span>Cell 2 &mdash; shared setup</h2>
+<div class="cell"><div class="cellhead"><span>Cell 2 (code)</span><span class="todo">TODO &mdash; bare stub</span></div>
+<pre><code>import sys
+from sdk_wrapper import G1, ensure_channel_factory
+
+# TODO: Implement this section using the preceding task description and day slides.
+</code></pre></div>
+<pre class="block"><code>ensure_channel_factory(0, "eth0")
+
+from unitree_sdk2py.core.channel import ChannelPublisher, ChannelSubscriber
+from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
+import time
+
+class Latest:
+    def __init__(self, topic, message_type, queue_len=10):
+        self.message = None; self.timestamp = 0.0
+        self.subscriber = ChannelSubscriber(topic, message_type)
+        self.subscriber.Init(self._callback, queue_len)
+    def _callback(self, message):
+        self.message = message; self.timestamp = time.time()
+    def fresh(self, max_age_s=0.5):
+        return self.message is not None and time.time() - self.timestamp &lt;= max_age_s
+
+lowstate_sub = Latest("rt/lowstate", LowState_)</code></pre>
+
+<h2><span class="num">&#167;4</span>Task 1 &mdash; Cell 4 &mdash; native <code>rt/lowcmd</code> publisher</h2>
+<div class="cell"><div class="cellhead"><span>Cell 4 (code)</span><span class="todo">TODO &mdash; bare stub</span></div>
+<pre><code># TODO: Implement this section using the preceding task description and day slides.
+</code></pre></div>
+<pre class="block"><code>from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
+from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_
+from unitree_sdk2py.utils.crc import CRC
+
+LOWCMD_JOINTS = list(range(0, 29))
+DEFAULT_KP = [60,60,60,100,40,40, 60,60,60,100,40,40, 60,40,40, 40,40,40,40,40,40,40, 40,40,40,40,40,40,40]
+DEFAULT_KD = [1,1,1,2,1,1, 1,1,1,2,1,1, 1,1,1, 1,1,1,1,1,1,1, 1,1,1,1,1,1,1]
+
+class LowCmdPublisher:
+    def __init__(self):
+        self.crc = CRC()
+        self.pub = ChannelPublisher("rt/lowcmd", LowCmd_); self.pub.Init()
+        self.msg = unitree_hg_msg_dds__LowCmd_(); self.msg.mode_pr = 0
+
+    def write(self, q, mode_machine, kp=None, kd=None, dq=0.0, tau=0.0):
+        self.msg.mode_machine = int(mode_machine)
+        kp, kd = kp or DEFAULT_KP, kd or DEFAULT_KD
+        for i in LOWCMD_JOINTS:
+            cmd = self.msg.motor_cmd[i]
+            cmd.mode = 1; cmd.q = float(q[i]); cmd.dq = dq; cmd.tau = tau
+            cmd.kp, cmd.kd = float(kp[i]), float(kd[i])
+        self.msg.crc = self.crc.Crc(self.msg)                # recompute every write
+        self.pub.Write(self.msg)
+
+lowcmd_pub = LowCmdPublisher()
+
+def require_fresh(sub, name, max_age_s=0.5):
+    if not sub.fresh(max_age_s):
+        raise RuntimeError(f"{name} is stale or absent; refusing to command from it.")</code></pre>
+
+<h2><span class="num">&#167;5</span>Task 2 &mdash; Cells 6&ndash;7 &mdash; <code>move_ll_joint(joint_id, q, dq, kp, kd, tau)</code></h2>
+<div class="cell"><div class="cellhead"><span>Cells 6, 7 (code)</span><span class="todo">TODO &mdash; bare stubs</span></div>
+<pre><code># TODO: Implement this section using the preceding task description and day slides.
+</code></pre></div>
+<p>Commands a single joint while holding every other joint at its currently observed position &mdash; the
+same pattern <code>sdk_wrapper.G1.move_ll_joint</code> uses for its <code>dev_mode=True</code> path.</p>
+<pre class="block"><code>def current_q_mode(timeout_s=3.0):
+    deadline = time.time() + timeout_s
+    while time.time() &lt; deadline:
+        msg = lowstate_sub.message
+        if msg is not None:
+            return [float(msg.motor_state[i].q) for i in LOWCMD_JOINTS], int(msg.mode_machine)
+        time.sleep(0.02)
+    raise TimeoutError("Timed out waiting for rt/lowstate")
+
+def move_ll_joint(joint_id, q, dq=0.0, kp=40.0, kd=1.0, tau=0.0):
+    require_fresh(lowstate_sub, "rt/lowstate")
+    q_all, mode_machine = current_q_mode()                     # everyone else holds position
+    kp_all, kd_all = list(DEFAULT_KP), list(DEFAULT_KD)
+    q_all[joint_id] = q; kp_all[joint_id] = kp; kd_all[joint_id] = kd
+    lowcmd_pub.write(q_all, mode_machine, kp=kp_all, kd=kd_all, dq=dq, tau=tau)</code></pre>
+<div class="card caution"><p><code>rt/lowcmd</code> only takes effect once the AI/sport service has stepped
+aside (see Task 8's controller-ownership rule, and <code>sdk_wrapper.G1.enter_dev_mode()</code>). Pick a
+low-stakes joint to experiment with first &mdash; a wrist or elbow joint (18, 19, 25, 26), never a leg joint
+while standing, and only ever a few centimeters/degrees of commanded delta at a time.</p></div>
+
+<h2><span class="num">&#167;6</span>Task 3 &mdash; Cell 9 &mdash; Jupyter UI: visualize q/dq/kp/kd/tau live</h2>
+<div class="cell"><div class="cellhead"><span>Cell 9 (code)</span><span class="todo">TODO &mdash; bare stub</span></div>
+<pre><code>import ipywidgets as widgets
+
+# TODO: Implement this section using the preceding task description and day slides.
+</code></pre></div>
+<p>Sliders pick a joint and target <code>q</code>/<code>dq</code>/<code>kp</code>/<code>kd</code>/<code>tau</code>.
+"Stream command" starts a background thread that keeps calling <code>move_ll_joint</code> at a fixed rate
+with the current slider values. "Capture &amp; plot 3s" samples the <em>measured</em>
+<code>q</code>/<code>dq</code>/<code>tau_est</code> for the selected joint for three seconds and plots each
+against its commanded target &mdash; the gap between the dashed commanded line and the measured trace is
+exactly the tracking error <code>kp</code>/<code>kd</code> are fighting to close.</p>
+<pre class="block"><code>import threading
+import matplotlib.pyplot as plt
+
+joint_dd = widgets.Dropdown(options=list(range(29)), value=25, description="joint")
+q_slider = widgets.FloatSlider(value=0.0, min=-1.5, max=1.5, step=0.01, description="q")
+kp_slider = widgets.FloatSlider(value=40.0, min=0.0, max=100.0, step=1.0, description="kp")
+kd_slider = widgets.FloatSlider(value=1.0, min=0.0, max=5.0, step=0.1, description="kd")
+tau_slider = widgets.FloatSlider(value=0.0, min=-2.0, max=2.0, step=0.05, description="tau")
+stream_btn = widgets.ToggleButton(description="Stream command")
+plot_btn = widgets.Button(description="Capture & plot 3s")
+out = widgets.Output()
+
+_stream_stop = None
+_stream_thread = None
+
+def _stream_loop(stop_event):
+    while not stop_event.is_set():
+        move_ll_joint(joint_dd.value, q_slider.value, kp=kp_slider.value, kd=kd_slider.value, tau=tau_slider.value)
+        time.sleep(0.02)
+
+def _on_stream_toggle(change):
+    global _stream_stop, _stream_thread
+    if change["new"]:
+        _stream_stop = threading.Event()
+        _stream_thread = threading.Thread(target=_stream_loop, args=(_stream_stop,), daemon=True)
+        _stream_thread.start()
+    elif _stream_stop is not None:
+        _stream_stop.set(); _stream_thread.join()
+
+stream_btn.observe(_on_stream_toggle, names="value")
+
+def _on_plot(_):
+    joint = joint_dd.value
+    ts, qs, dqs, taus = [], [], [], []
+    start = time.time()
+    while time.time() - start &lt; 3.0:
+        msg = lowstate_sub.message
+        if msg is not None:
+            ts.append(time.time() - start)
+            qs.append(float(msg.motor_state[joint].q))
+            dqs.append(float(msg.motor_state[joint].dq))
+            taus.append(float(msg.motor_state[joint].tau_est))
+        time.sleep(0.02)
+    with out:
+        out.clear_output(wait=True)
+        fig, axes = plt.subplots(3, 1, figsize=(6, 6))
+        axes[0].plot(ts, qs); axes[0].axhline(q_slider.value, ls="--"); axes[0].set_ylabel("q")
+        axes[1].plot(ts, dqs); axes[1].set_ylabel("dq")
+        axes[2].plot(ts, taus); axes[2].axhline(tau_slider.value, ls="--"); axes[2].set_ylabel("tau_est")
+        plt.show()
+
+plot_btn.on_click(_on_plot)
+widgets.VBox([joint_dd, q_slider, kp_slider, kd_slider, tau_slider,
+              widgets.HBox([stream_btn, plot_btn]), out])</code></pre>
+
+<div class="card caution">
+  <h4>Safety</h4>
+  <p>Never publish a <code>LowCmd_</code> without a freshly recomputed CRC, and never command a joint from a
+  stale or absent <code>rt/lowstate</code> snapshot. Run no command cell until the subscriber state is
+  fresh, controller ownership is known, the space is clear, and a damp path is available.</p>
+</div>
+
+</main>
+<footer>
+  <div class="navrow">
+    <span>Reference: <code>sdk_wrapper._LowCmd</code>/<code>G1.move_ll_joint</code> &middot;
+    Notebook: <code>task9_ll_control.ipynb</code> &middot; Slides: <code>day3_slides.html</code> (slides 7&ndash;12)</span>
+    <span><a href="task8_hl_arm_gestures_intro.html">&larr; Task 8</a> &middot;
+    <a href="task10_ik_control_intro.html">Task 10 &rarr;</a></span>
+  </div>
+</footer>
+
+</body>
+</html>

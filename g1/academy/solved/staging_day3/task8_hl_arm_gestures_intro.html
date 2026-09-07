@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Task 8 Intro — Gestures, Teach/Repeat</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Pre-task knowledge and reference for Task 8 Intro — Gestures, Teach/Repeat.">
+<style>
+:root{
+  --bg:#f6f7f9; --panel:#ffffff; --ink:#1b1f27; --muted:#5b6472; --border:#dfe3ea;
+  --accent:#2454ff; --code-bg:#eef1f6; --zebra:#f9fafc;
+  --good:#0f7a3d; --good-bg:#e6f6ec;
+  --info:#1b5fd6; --info-bg:#e8f0fe;
+  --warn:#b5750a; --warn-bg:#fbf1de;
+  --caution:#c1272d; --caution-bg:#fdeaea;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#14171c; --panel:#1b1f27; --ink:#e7e9ee; --muted:#9aa3b2; --border:#2c313b;
+    --accent:#6f92ff; --code-bg:#232833; --zebra:#1f242e;
+    --good:#5fd38a; --good-bg:#123a24;
+    --info:#8fb0ff; --info-bg:#152548;
+    --warn:#e3ab53; --warn-bg:#3a2c10;
+    --caution:#ff8b8f; --caution-bg:#3a1616;
+  }
+}
+*{box-sizing:border-box;}
+body{margin:0; background:var(--bg); color:var(--ink);
+  font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+code, .mono, pre{font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;}
+code{background:var(--code-bg); padding:1px 5px; border-radius:4px;}
+pre code{background:none; padding:0;}
+a{color:var(--accent);}
+header.top{padding:26px clamp(16px,4vw,48px) 18px; border-bottom:1px solid var(--border); background:var(--panel);}
+.eyebrow{color:var(--muted); font-size:12.5px; text-transform:uppercase; letter-spacing:.05em; margin:0 0 6px;}
+header.top h1{margin:0 0 8px; font-size:1.55rem;}
+header.top p.lede{margin:4px 0; color:var(--muted); max-width:900px;}
+.badges{margin:10px 0 0; display:flex; flex-wrap:wrap; gap:8px;}
+.badge{display:inline-block; font-size:11px; font-weight:700; letter-spacing:.02em;
+  padding:3px 9px; border-radius:99px; white-space:nowrap;}
+.b-info{color:var(--info); background:var(--info-bg);}
+.b-good{color:var(--good); background:var(--good-bg);}
+.b-warn{color:var(--warn); background:var(--warn-bg);}
+.b-caution{color:var(--caution); background:var(--caution-bg);}
+.crumbs{margin:14px 0 0; font-size:12.5px;}
+.crumbs a{color:var(--muted); text-decoration:none; margin-right:4px;}
+.crumbs a:hover{color:var(--accent);}
+main{max-width:980px; margin:0 auto; padding:28px clamp(16px,4vw,48px) 90px;}
+h2{font-size:1.25rem; margin:38px 0 6px; padding-top:14px; border-top:3px solid var(--accent);}
+h2 .num{color:var(--muted); font-weight:600; margin-right:6px;}
+h3{font-size:1.02rem; margin:22px 0 6px;}
+p{margin:8px 0;}
+.card{border:1px solid var(--border); border-radius:12px; background:var(--panel); padding:16px 18px; margin:14px 0;}
+.card h4{margin:0 0 6px; font-size:.95rem;}
+.card.knowledge{border-left:4px solid var(--info);}
+.card.warn{border-left:4px solid var(--warn); background:var(--warn-bg);}
+.card.caution{border-left:4px solid var(--caution); background:var(--caution-bg);}
+.card.good{border-left:4px solid var(--good); background:var(--good-bg);}
+table{border-collapse:collapse; width:100%; margin:12px 0; font-size:13.5px;}
+th, td{border:1px solid var(--border); padding:6px 10px; text-align:left; vertical-align:top;}
+th{background:var(--code-bg);}
+tr:nth-child(even) td{background:var(--zebra);}
+pre.block{background:var(--code-bg); border:1px solid var(--border); border-radius:10px;
+  padding:12px 14px; overflow-x:auto; margin:10px 0;}
+.cell{border:1px solid var(--border); border-radius:10px; margin:12px 0; overflow:hidden;}
+.cell .cellhead{background:var(--code-bg); padding:6px 12px; font-size:12px; color:var(--muted);
+  border-bottom:1px solid var(--border); display:flex; justify-content:space-between;}
+.cell pre{margin:0; padding:12px 14px; overflow-x:auto;}
+.todo{color:var(--warn);}
+ul, ol{padding-left:22px;}
+li{margin:4px 0;}
+.stepgrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; margin:12px 0;}
+.step{border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-size:12.5px; background:var(--panel);}
+.step b{display:block; color:var(--accent); font-size:11px; text-transform:uppercase; letter-spacing:.04em;}
+.tocwrap{display:flex; flex-wrap:wrap; gap:6px; margin:10px 0 0;}
+.tocwrap a{font-size:12px; padding:4px 9px; border:1px solid var(--border); border-radius:99px;
+  text-decoration:none; color:var(--muted); background:var(--panel);}
+.tocwrap a:hover{color:var(--accent); border-color:var(--accent);}
+footer{padding:26px clamp(16px,4vw,48px) 60px; color:var(--muted); font-size:12.5px; border-top:1px solid var(--border);}
+footer a{color:var(--muted);}
+.navrow{display:flex; justify-content:space-between; gap:12px; margin-top:10px; flex-wrap:wrap;}
+</style>
+</head>
+<body>
+<header class="top">
+  <p class="eyebrow">Day 3 &middot; G1 Academy Bonus</p>
+  <h1>Task 8 &mdash; High-Level Gestures, Teach/Repeat, Pose Interpolation</h1>
+  <p class="lede">The biggest single task in the course &mdash; and the one every remaining arm/hand task
+  depends on. Covers native high-level arm gestures through <code>G1ArmActionClient</code>, a
+  controller-ownership-safe path onto <code>rt/arm_sdk</code> (<code>release_arms</code>/<code>engage_arms</code>),
+  and two general-purpose low-level pose helpers &mdash; <code>save_current_ll_pose</code>/<code>interpolate_to_ll_pose</code>
+  &mdash; built up into <code>teach</code>/<code>repeat</code> for recording and replaying new multi-waypoint
+  arm sequences.</p>
+  <div class="badges">
+    <span class="badge b-info">Builds on: Task 2's Latest/ensure_channel_factory for rt/lowstate</span>
+    <span class="badge b-good">New: exec_arm_action, current_upper_body_pose, write_arm_sdk_pose, release_arms, engage_arms, save_current_ll_pose, interpolate_to_ll_pose, teach, repeat</span>
+  </div>
+  <div class="card warn"><p><strong>This notebook is bare</strong> (generic <code>raise NotImplementedError</code>
+  stubs across 12 code cells) &mdash; this page supplies what each section needs. Every later arm task
+  (9, 10, 12, 13) builds directly on what you write here.</p></div>
+  <div class="tocwrap"><a href="../day_1/task1_sdkwrapper_usage_intro.html">T1</a><a href="../day_1/task2_necessary_dds_init_pubsub_intro.html">T2</a><a href="../day_1/task3_say_and_headlight_helpers_intro.html">T3</a><a href="../day_1/task4_robot_state_observation_intro.html">T4</a><a href="../day_2/task5_services_and_mode_switching_intro.html">T5</a><a href="../day_2/task6_basic_locomotion_intro.html">T6</a><a href="../day_2/task7_slam_operation_and_map_visualization_intro.html">T7</a><a href="task8_hl_arm_gestures_intro.html" style="border-color:var(--accent);color:var(--accent)">T8</a><a href="task9_ll_control_intro.html">T9</a><a href="task10_ik_control_intro.html">T10</a><a href="task11_dex3_gradual_gripping_intro.html">T11</a><a href="../day_4/task12_perception_and_pose_estimation_pipeline_intro.html">T12</a><a href="../day_4/task13_final_task_intro.html">T13</a></div>
+</header>
+<main>
+
+<h2><span class="num">&#167;1</span>Knowledge &mdash; two arm control paths, never both at once</h2>
+<div class="card knowledge">
+<p><code>G1ArmActionClient.ExecuteAction(action_id)</code> triggers a documented, firmware-baked gesture. It
+must <strong>never</strong> run concurrently with a low-level <code>rt/arm_sdk</code> command stream &mdash;
+finish or release one before starting the other.</p>
+<table>
+<tr><th>Gesture</th><th>Action id</th></tr>
+<tr><td>release arm</td><td>99</td></tr>
+<tr><td>clap</td><td>17</td></tr>
+<tr><td>face wave</td><td>25</td></tr>
+<tr><td>high wave</td><td>26</td></tr>
+<tr><td>shake hand</td><td>27 (2s auto-release)</td></tr>
+<tr><td>hug</td><td>19 (2s auto-release)</td></tr>
+</table>
+<p>Pick one lane at a time: <code>G1ArmActionClient.ExecuteAction(id)</code> <em>OR</em> ramp
+<code>rt/arm_sdk</code> weight 0&rarr;1 to own the arm, then ramp 1&rarr;0 (<code>release_arms</code>) &mdash;
+this course's controller-ownership rule, restated for the arm.</p>
+</div>
+
+<h2><span class="num">&#167;2</span>Knowledge &mdash; the arm_sdk weight byte and gains</h2>
+<div class="card knowledge">
+<p>Every low-level write below fills a complete <code>LowCmd_</code> frame, including
+<code>motor_cmd[29].q</code> &mdash; not a real joint, but the <em>weight</em> that arbitrates between the
+default controller and this publisher.</p>
+<table>
+<tr><th><code>motor_cmd[29].q</code></th><th>Meaning</th></tr>
+<tr><td>0.0</td><td>released &mdash; default controller owns the arm/waist joints</td></tr>
+<tr><td>1.0</td><td>this publisher fully owns the arm/waist joints</td></tr>
+<tr><td>0 &lt; w &lt; 1</td><td>mid-handoff &mdash; only valid while release_arms/engage_arms is actively ramping</td></tr>
+</table>
+<p><code>release_arms</code>/<code>engage_arms</code> ramp that weight on an <strong>ease curve</strong>
+(<code>3t&sup2;-2t&sup3;</code>, not linear) from 1&rarr;0 or 0&rarr;1 &mdash; run <code>release_arms()</code>
+before this publisher stops owning <code>rt/arm_sdk</code>.</p>
+<p>Waist joints (12&ndash;14) get higher default gains (<code>kp=480, kd=12</code>) than the arm joints
+(<code>kp=30, kd=1.5</code>) &mdash; the waist needs to hold torso posture against gravity, the arm can be
+softer.</p>
+</div>
+
+<h2><span class="num">&#167;3</span>Cell 2 &mdash; shared setup</h2>
+<div class="cell"><div class="cellhead"><span>Cell 2 (code)</span><span class="todo">TODO &mdash; bare stub</span></div>
+<pre><code>import threading
+import time
+from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelPublisher, ChannelSubscriber
+from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
+import sys
+from sdk_wrapper import ensure_channel_factory
+
+# TODO: Implement this section using the preceding task description and day slides.
+</code></pre></div>
+<pre class="block"><code>ensure_channel_factory(0, "eth0")
+
+class Latest:
+    def __init__(self, topic, message_type, queue_len=10):
+        self.message = None; self.timestamp = 0.0
+        self.subscriber = ChannelSubscriber(topic, message_type)
+        self.subscriber.Init(self._callback, queue_len)
+    def _callback(self, message):
+        self.message = message; self.timestamp = time.time()
+
+lowstate_sub = Latest("rt/lowstate", LowState_)
+WAIST_JOINTS = (12, 13, 14)
+UPPER_BODY_JOINTS = list(WAIST_JOINTS) + list(range(15, 22)) + list(range(22, 29))</code></pre>
+
+<h2><span class="num">&#167;4</span>Task 1 &mdash; Cells 4&ndash;5 &mdash; high-level gestures via <code>G1ArmActionClient</code></h2>
+<div class="cell"><div class="cellhead"><span>Cells 4, 5 (code)</span><span class="todo">TODO &mdash; bare stubs</span></div>
+<pre><code>from unitree_sdk2py.g1.arm.g1_arm_action_client import G1ArmActionClient
+
+# TODO: Implement this section using the preceding task description and day slides.
+</code></pre></div>
+<pre class="block"><code>HL_ARM_ACTIONS = {"release arm": 99, "clap": 17, "face wave": 25, "high wave": 26,
+                   "shake hand": 27, "hug": 19}
+
+arm_action_client = G1ArmActionClient()
+arm_action_client.SetTimeout(10.0)
+arm_action_client.Init()
+
+def exec_arm_action(name, release_after_s=None):
+    code = int(arm_action_client.ExecuteAction(HL_ARM_ACTIONS[name]))
+    if release_after_s is not None:
+        time.sleep(release_after_s)
+        release = int(arm_action_client.ExecuteAction(HL_ARM_ACTIONS["release arm"]))
+        return release if code == 0 else code
+    return code
+
+# exec_arm_action("clap")</code></pre>
+
+<h2><span class="num">&#167;5</span>Task 2 &mdash; Cell 7 &mdash; upper-body pose read + <code>rt/arm_sdk</code> writer</h2>
+<div class="cell"><div class="cellhead"><span>Cell 7 (code)</span><span class="todo">TODO &mdash; bare stub</span></div>
+<pre><code>from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
+from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_
+from unitree_sdk2py.utils.crc import CRC
+
+# TODO: Implement this section using the preceding task description and day slides.
+</code></pre></div>
+<pre class="block"><code>def current_upper_body_pose(timeout_s=3.0):
+    deadline = time.time() + timeout_s
+    while time.time() &lt; deadline:
+        msg = lowstate_sub.message
+        if msg is not None:
+            return {j: float(msg.motor_state[j].q) for j in UPPER_BODY_JOINTS}
+        time.sleep(0.02)
+    raise TimeoutError("Timed out waiting for rt/lowstate")
+
+_crc = CRC()
+arm_sdk_pub = ChannelPublisher("rt/arm_sdk", LowCmd_); arm_sdk_pub.Init()
+
+def write_arm_sdk_pose(targets, weight=1.0, kp=30.0, kd=1.5, waist_kp=480.0, waist_kd=12.0):
+    msg = unitree_hg_msg_dds__LowCmd_(); msg.mode_pr = 0; msg.mode_machine = 0
+    msg.motor_cmd[29].q = max(0.0, min(1.0, weight))          # the arm_sdk enable/weight byte, not a joint
+    for joint, q in targets.items():
+        cmd = msg.motor_cmd[int(joint)]
+        cmd.mode = 1; cmd.q = float(q); cmd.dq = 0.0; cmd.tau = 0.0
+        cmd.kp = waist_kp if int(joint) in WAIST_JOINTS else kp
+        cmd.kd = waist_kd if int(joint) in WAIST_JOINTS else kd
+    msg.crc = _crc.Crc(msg)
+    arm_sdk_pub.Write(msg)</code></pre>
+
+<h2><span class="num">&#167;6</span>Task 3 &mdash; Cells 9&ndash;11 &mdash; <code>release_arms</code> / <code>engage_arms</code></h2>
+<div class="cell"><div class="cellhead"><span>Cells 9, 10, 11 (code)</span><span class="todo">TODO &mdash; bare stubs</span></div>
+<pre><code># TODO: Implement this section using the preceding task description and day slides.
+</code></pre></div>
+<p>Ramp the <code>arm_sdk</code> weight smoothly (an ease curve, not a step) from 1&rarr;0 to hand control
+back to the default controller, or 0&rarr;1 to take it &mdash; every low-level helper below must run this
+before/after it owns <code>rt/arm_sdk</code>.</p>
+<pre class="block"><code>def _ease(ratio):
+    return ratio * ratio * (3 - 2 * ratio)                    # smoothstep, not linear
+
+def release_arms(steps=150, rate_hz=50.0):
+    pose = current_upper_body_pose()
+    for i in range(steps + 1):
+        weight = 1.0 - _ease(i / steps)
+        write_arm_sdk_pose(pose, weight=weight, kp=30.0*weight, kd=1.5*weight,
+                            waist_kp=480.0*weight, waist_kd=12.0*weight)
+        time.sleep(1.0 / rate_hz)
+    return {"final_weight": 0.0}
+
+def engage_arms(steps=50, rate_hz=50.0):
+    pose = current_upper_body_pose()
+    for i in range(steps + 1):
+        weight = i / steps                                    # no ease needed on the way in
+        write_arm_sdk_pose(pose, weight=weight)
+        time.sleep(1.0 / rate_hz)
+    return {"final_weight": 1.0}</code></pre>
+<p><strong>Hint:</strong> build and test <code>release_arms()</code>/<code>engage_arms()</code> before
+anything else here &mdash; every other low-level arm helper in this course (Tasks 9, 10, 12, 13) assumes you
+can already safely hand <code>arm_sdk</code> ownership back and forth.</p>
+
+<h2><span class="num">&#167;7</span>Task 4 &mdash; Cells 13&ndash;16 &mdash; <code>save_current_ll_pose</code> / <code>interpolate_to_ll_pose</code></h2>
+<div class="cell"><div class="cellhead"><span>Cells 13, 14, 15, 16 (code)</span><span class="todo">TODO &mdash; bare stubs</span></div>
+<pre><code>import json
+from pathlib import Path
+
+# TODO: Implement this section using the preceding task description and day slides.
+</code></pre></div>
+<p>Capture the current pose under a name (persisted to JSON so it survives a kernel restart), and smoothly
+interpolate from wherever the arm currently is to a saved (or literal) pose using the same ease curve.</p>
+<pre class="block"><code>_ll_pose_path = Path("ll_poses.json")
+
+def _load_ll_poses():
+    return json.loads(_ll_pose_path.read_text()) if _ll_pose_path.exists() else {}
+
+def save_current_ll_pose(name):
+    pose = current_upper_body_pose()
+    poses = _load_ll_poses()
+    poses[str(name)] = pose
+    _ll_pose_path.write_text(json.dumps(poses, indent=2))
+    return pose
+
+def interpolate_to_ll_pose(name_or_pose, duration_s=4.0, steps=150):
+    if isinstance(name_or_pose, str):
+        target = {int(j): float(q) for j, q in _load_ll_poses()[name_or_pose].items()}
+    else:
+        target = {int(j): float(q) for j, q in name_or_pose.items()}
+    start = current_upper_body_pose()
+    for step in range(1, steps + 1):
+        smooth = _ease(step / steps)
+        frame = {j: start.get(j, q) + (q - start.get(j, q)) * smooth for j, q in target.items()}
+        write_arm_sdk_pose(frame)
+        time.sleep(duration_s / steps)
+    return {"target": target, "steps": steps}</code></pre>
+
+<h2><span class="num">&#167;8</span>Task 5 &mdash; Cells 18&ndash;20 &mdash; <code>teach</code> / <code>repeat</code></h2>
+<div class="cell"><div class="cellhead"><span>Cells 18, 19, 20 (code)</span><span class="todo">TODO &mdash; bare stubs</span></div>
+<pre><code># TODO: Implement this section using the preceding task description and day slides.
+</code></pre></div>
+<p><code>teach</code> appends the current pose as the next waypoint of a named, persisted sequence &mdash; call
+it repeatedly (physically moving the arm, e.g. after <code>damp_mode()</code>, between calls) to build up a
+multi-waypoint motion. <code>repeat</code> plays every waypoint back in order via
+<code>interpolate_to_ll_pose</code>, so playback is exactly as smooth as any other low-level move here.</p>
+<pre class="block"><code>_sequence_path = Path("arm_sequences.json")
+
+def _load_sequences():
+    return json.loads(_sequence_path.read_text()) if _sequence_path.exists() else {}
+
+def teach(sequence_name, reset=False):
+    sequences = _load_sequences()
+    if reset or sequence_name not in sequences:
+        sequences[sequence_name] = []
+    sequences[sequence_name].append(current_upper_body_pose())
+    _sequence_path.write_text(json.dumps(sequences, indent=2))
+    return len(sequences[sequence_name])
+
+def repeat(sequence_name, waypoint_duration_s=3.0, steps_per_waypoint=100):
+    waypoints = _load_sequences()[sequence_name]
+    for waypoint in waypoints:
+        interpolate_to_ll_pose(waypoint, duration_s=waypoint_duration_s, steps=steps_per_waypoint)
+    return {"sequence": sequence_name, "waypoints": len(waypoints)}</code></pre>
+
+<div class="card caution">
+  <h4>Safety</h4>
+  <p>Never run a high-level <code>exec_arm_action</code> call concurrently with an active
+  <code>rt/arm_sdk</code> write loop. Run no command cell until the subscriber state is fresh, controller
+  ownership is known, the space is clear, and a damp path is available. Code is not invoked automatically.</p>
+</div>
+
+</main>
+<footer>
+  <div class="navrow">
+    <span>Reference: <code>sdk_wrapper.G1.release_arms</code>/<code>engage_arms</code>/<code>teach</code>/<code>repeat</code>/<code>interpolate_to_pose</code> &middot;
+    Notebook: <code>task8_hl_arm_gestures.ipynb</code> &middot; Slides: <code>day3_slides.html</code> (slides 1&ndash;6)</span>
+    <span><a href="../day_2/task7_slam_operation_and_map_visualization_intro.html">&larr; Task 7</a> &middot;
+    <a href="task9_ll_control_intro.html">Task 9 &rarr;</a></span>
+  </div>
+</footer>
+
+</body>
+</html>
