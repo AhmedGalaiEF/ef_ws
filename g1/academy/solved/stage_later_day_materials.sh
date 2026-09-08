@@ -25,13 +25,23 @@ for task in "${tasks[@]}"; do
   notebooks+=("${match[0]}")
 done
 
+# Per-task knowledge/reference pages (see staging_dayN/) -- not part of the
+# solved/*.ipynb + slides.html pipeline above, staged separately here.
+STAGING_DIR="$SOLVED_DIR/staging_day$day"
+intros=()
+for task in "${tasks[@]}"; do
+  match=("$STAGING_DIR"/task"$task"_*_intro.html)
+  [[ -f "${match[0]}" ]] || { echo "Missing Task $task intro page in $STAGING_DIR" >&2; exit 1; }
+  intros+=("${match[0]}")
+done
+
 for ((i=1; i<=NUM_USERS; i++)); do
   user="${USER_PREFIX}${i}"
   home_dir="$(getent passwd "$user" | cut -d: -f6)"
   [[ -n "$home_dir" ]] || { echo "Missing account: $user" >&2; exit 1; }
   destination="$home_dir/academy/day_$day"
   install -d -m 0755 "$destination"
-  rsync -a "${notebooks[@]}" \
+  rsync -a "${notebooks[@]}" "${intros[@]}" \
     "$ACADEMY_DIR/sdk_wrapper.py" "$ACADEMY_DIR/util.py" "$ACADEMY_DIR/slam_util.py" \
     "$destination/"
 
@@ -69,9 +79,7 @@ sections = re.findall(r'(?s)<section class="slide.*?</section>', source)
 first, last = int(sys.argv[3]), int(sys.argv[4])
 if not head or len(sections) <= last: raise SystemExit('Could not extract day slides')
 deck = '\n'.join(sections[first:last+1])
-page = '''<!DOCTYPE html>
-<html lang="en">
-%s
+page = '''%s
 <body><div class="deck">%s</div>
 <div class="controls"><button id="btn-prev">&#8592;</button><span class="counter" id="counter"></span><button id="btn-next">&#8594;</button></div>
 <script>

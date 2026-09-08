@@ -2,9 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Task 7 Intro — SLAM Operation</title>
+<title>Task 7 Intro — SLAM Operation &amp; Map Visualization</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Pre-task knowledge and reference for Task 7 Intro — SLAM Operation.">
+<meta name="description" content="Pre-task knowledge and reference for Task 7 Intro — SLAM operation and map visualization with sdk_wrapper.G1.">
 <style>
 :root{
   --bg:#f6f7f9; --panel:#ffffff; --ink:#1b1f27; --muted:#5b6472; --border:#dfe3ea;
@@ -81,262 +81,116 @@ footer a{color:var(--muted);}
 .navrow{display:flex; justify-content:space-between; gap:12px; margin-top:10px; flex-wrap:wrap;}
 </style>
 </head>
+
 <body>
 <header class="top">
   <p class="eyebrow">Day 2 &middot; G1 Academy Bonus</p>
   <h1>Task 7 &mdash; SLAM Operation and Map Visualization</h1>
-  <p class="lede">Rebuilds the operational SLAM surface natively: <code>start_mapping</code>/<code>stop_mapping</code>,
-  <code>relocate</code>, <code>add_point</code>/<code>remove_point</code>, <code>navigate_to_point</code>,
-  <code>navigate_path</code>, and <code>view_map</code>. The deployed/verified RPC operations are mapping
-  start/stop, relocate (<code>init_pose</code>), and single-pose navigation &mdash; the same IDs
-  <code>sdk_wrapper._SlamClient</code> and <code>slam_util.SlamRpc</code> use.</p>
+  <p class="lede">The full SLAM lifecycle through <code>sdk_wrapper.G1</code>: build a map, save named points on
+  it, navigate back to them &mdash; and how to actually see the map while this is happening.</p>
   <div class="badges">
-    <span class="badge b-info">Builds on: Task 2's ensure_channel_factory/Latest, the generic RPC Client pattern</span>
-    <span class="badge b-good">New: SlamRpc, current_pose, start_mapping, stop_mapping, relocate, add_point, remove_point, navigate_to_point, navigate_path, capture_map_snapshot, view_map</span>
+    <span class="badge b-info">Builds on: Task 6's <code>loco_move</code>/<code>walk_u_path</code> to drive around while mapping</span>
+    <span class="badge b-good">Wrapper methods: start_mapping, stop_mapping, relocate, get_slam_pose, add_map_pose, navigate_to_point, pause_nav, resume_nav</span>
   </div>
-  <div class="card warn"><p><strong>This notebook is bare</strong> (generic <code>raise NotImplementedError</code>
-  stubs across 8 code cells) &mdash; this page supplies what each section needs.</p></div>
+  <div class="card good"><p><strong>Use Codex/AI here.</strong> Every method below is a finished, documented method on <code>sdk_wrapper.G1</code>. If a cell is not obvious, paste the method signature (or the matching line from <code>wrapper_cheatsheet.html</code>) into Codex and ask it to write the cell, then read what it produced before running it against the robot.</p></div>
   <div class="tocwrap"><a href="../day_1/task1_sdkwrapper_usage_intro.html">T1</a><a href="../day_1/task2_necessary_dds_init_pubsub_intro.html">T2</a><a href="../day_1/task3_say_and_headlight_helpers_intro.html">T3</a><a href="../day_1/task4_robot_state_observation_intro.html">T4</a><a href="task5_services_and_mode_switching_intro.html">T5</a><a href="task6_basic_locomotion_intro.html">T6</a><a href="task7_slam_operation_and_map_visualization_intro.html" style="border-color:var(--accent);color:var(--accent)">T7</a><a href="../day_3/task8_hl_arm_gestures_intro.html">T8</a><a href="../day_3/task9_ll_control_intro.html">T9</a><a href="../day_3/task10_ik_control_intro.html">T10</a><a href="../day_3/task11_dex3_gradual_gripping_intro.html">T11</a><a href="../day_4/task12_perception_and_pose_estimation_pipeline_intro.html">T12</a><a href="../day_4/task13_final_task_intro.html">T13</a></div>
 </header>
 <main>
 
-<h2><span class="num">&#167;1</span>Knowledge &mdash; the SLAM RPC API ids</h2>
+<h2><span class="num">&#167;1</span>Knowledge &mdash; the mapping lifecycle</h2>
 <div class="card knowledge">
-<p><code>SlamRpc</code> is a <code>unitree_sdk2py.rpc.client.Client</code> registered against five documented
-API ids on the <code>"slam_operate"</code> service.</p>
 <table>
-<tr><th>API id</th><th>Operation</th></tr>
-<tr><td>1801</td><td>start mapping</td></tr>
-<tr><td>1802 / 1901</td><td>stop mapping (with / without a save path)</td></tr>
-<tr><td>1804</td><td>relocate / init-pose</td></tr>
-<tr><td>1102</td><td>single-pose navigation</td></tr>
+<tr><th>Call</th><th>Does</th></tr>
+<tr><td><code>g1.start_mapping(slam_type="indoor")</code></td><td>starts building a map from the LiDAR</td></tr>
+<tr><td><code>g1.stop_mapping(save_path=...)</code></td><td>finishes and saves the map</td></tr>
+<tr><td><code>g1.relocate(map_path=..., pose=...)</code></td><td>relocalizes against a saved map at <code>(x, y, yaw)</code> &mdash; do this once after loading a map, before navigating anywhere on it</td></tr>
+<tr><td><code>g1.get_slam_pose()</code></td><td>the last known <code>(x, y, yaw)</code> on the current map, or <code>None</code></td></tr>
 </table>
-<p>An all-zero parsed pose means "no valid pose yet", <strong>not</strong> "robot at the origin" &mdash;
-treat it as absent, the same convention <code>sdk_wrapper._parse_slam_pose</code> uses. (Error codes worth
-knowing if you see them: <code>501</code> = lacking lidar/IMU data; <code>509</code> = relocation confidence
-too low.)</p>
+<p>Drive the robot around the space while mapping (reuse <code>loco_move</code>/<code>walk_u_path</code> from
+Task 6) so the LiDAR sees enough of the room before you call <code>stop_mapping</code>.</p>
 </div>
 
-<h2><span class="num">&#167;2</span>Knowledge &mdash; SLAM lifecycle and the map-visualization gap</h2>
+<h2><span class="num">&#167;2</span>Knowledge &mdash; named points and navigation</h2>
 <div class="card knowledge">
-<p>Once a map is saved on the mainboard it may no longer be accessible for visualization &mdash; so
-<code>view_map()</code> does <strong>not</strong> read the saved file. Instead,
-<code>capture_map_snapshot()</code> saves a 2-D scatter PNG from the live point-cloud topics
-<em>while mapping is running</em>, and <code>view_map()</code> just returns the newest one.</p>
-<p>Lifecycle: <code>start_mapping()</code> &rarr; move robot, capture snapshots &rarr;
-<code>stop_mapping()</code> (saves to mainboard) &rarr; <code>relocate()</code> (needs a fresh pose) &rarr;
-<code>add_point(name)</code> &times;N &rarr; <code>navigate_to_point(name)</code>. Named points only make
-sense after a successful relocate &mdash; never persist a point captured before localization is valid.</p>
-<p><code>navigate_path</code> deliberately <strong>refuses</strong> a silent point-by-point fallback: pass a
-verified <code>native_path_callback</code> once one exists for this SDK/firmware, or it raises (see
-<code>academy/todo.txt</code>) &mdash; this is a documented limitation, not something to quietly work
-around.</p>
+<p><code>g1.add_map_pose()</code> appends the current SLAM pose to the wrapper's own path queue (consumed by
+<code>g1.navigate()</code>), but does not name it. To come back to a spot <em>by name</em> later, save it
+yourself &mdash; a tiny JSON dict of <code>{name: [x, y, yaw]}</code> on disk, keyed off
+<code>g1.get_slam_pose()</code>. That is exactly what <code>g1.navigate_to_point(point_name,
+points_path="slam_points.json")</code> expects to read.</p>
+<table>
+<tr><th>Call</th><th>Does</th></tr>
+<tr><td><code>g1.navigate_to_point(name, points_path=..., timeout_s=120.0)</code></td><td>reads the named pose, sends it, blocks until arrival or timeout</td></tr>
+<tr><td><code>g1.pause_nav()</code> / <code>g1.resume_nav()</code></td><td>interrupt / continue an in-progress navigation</td></tr>
+<tr><td><code>g1.loco_stop()</code></td><td>immediate full stop, including mid-navigation</td></tr>
+</table>
 </div>
 
-<h2><span class="num">&#167;3</span>Cell 2 &mdash; shared setup</h2>
-<div class="cell"><div class="cellhead"><span>Cell 2 (code)</span><span class="todo">TODO &mdash; bare stub</span></div>
-<pre><code>import time
-from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelPublisher, ChannelSubscriber
-from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
-import sys
-from sdk_wrapper import ensure_channel_factory
+<h2><span class="num">&#167;3</span>Cell 2 &mdash; setup</h2>
+<div class="cell"><div class="cellhead"><span>Cell 2 (code)</span></div>
+<pre><code>import sys
+sys.path.append("..")
+from sdk_wrapper import G1
 
-# TODO: Implement this section using the preceding task description and day slides.
-</code></pre></div>
-<pre class="block"><code>ensure_channel_factory(0, "eth0")</code></pre>
+g1 = G1(iface="eth0", domain_id=0)</code></pre></div>
 
-<h2><span class="num">&#167;4</span>Task 1 &mdash; Cells 4&ndash;6 &mdash; <code>SlamRpc</code> client + pose parsing</h2>
-<div class="cell"><div class="cellhead"><span>Cells 4, 5, 6 (code)</span><span class="todo">TODO &mdash; bare stubs</span></div>
+<h2><span class="num">&#167;4</span>Task 1 &mdash; mapping lifecycle</h2>
+<div class="cell"><div class="cellhead"><span>Cell (code)</span><span class="todo">TODO</span></div>
+<pre><code># TODO: start_mapping(), drive around a bit with loco_move(), then stop_mapping(save_path="my_map").
+raise NotImplementedError("Complete this task section")</code></pre></div>
+<pre class="block"><code>g1.start_mapping(slam_type="indoor")
+g1.loco_move(vx=0.15, vy=0, vyaw=0.4, duration_s=8)  # or call walk_u_path(g1) from Task 6
+g1.stop_mapping(save_path="my_map")</code></pre>
+
+<h2><span class="num">&#167;5</span>Task 2 &mdash; relocalize and save named points</h2>
+<div class="cell"><div class="cellhead"><span>Cell (code)</span><span class="todo">TODO</span></div>
 <pre><code>import json
-import math
-from unitree_sdk2py.idl.nav_msgs.msg.dds_ import Odometry_
-from unitree_sdk2py.idl.std_msgs.msg.dds_ import String_
-from unitree_sdk2py.rpc.client import Client
-
-# TODO: Implement this section using the preceding task description and day slides.
-</code></pre></div>
-<pre class="block"><code>class SlamRpc(Client):
-    def __init__(self):
-        super().__init__("slam_operate", False)
-        for api_id in (1801, 1802, 1804, 1102, 1901):
-            self._RegistApi(api_id, 0)
-        self._SetApiVerson("1.0.0.1")
-
-    def _call_json(self, api_id, payload):
-        code, data = self._Call(api_id, json.dumps(payload))
-        return int(code), data
-
-    def start_mapping(self, slam_type="indoor"):
-        return self._call_json(1801, {"data": {"slam_type": slam_type}})
-
-    def stop_mapping(self, save_path=None):
-        return self._call_json(1802, {"data": {"address": save_path}}) if save_path else self._call_json(1901, {"data": {}})
-
-    def init_pose(self, x, y, yaw=0.0, address=""):
-        qz, qw = math.sin(yaw / 2), math.cos(yaw / 2)
-        return self._call_json(1804, {"data": {"x": x, "y": y, "z": 0.0, "q_x": 0.0, "q_y": 0.0, "q_z": qz, "q_w": qw, "address": address}})
-
-    def pose_nav(self, x, y, yaw=0.0):
-        qz, qw = math.sin(yaw / 2), math.cos(yaw / 2)
-        return self._call_json(1102, {"data": {"targetPose": {"x": x, "y": y, "z": 0.0, "q_x": 0.0, "q_y": 0.0, "q_z": qz, "q_w": qw}, "mode": 1}})
-
-slam_rpc = SlamRpc()
-slam_rpc.SetTimeout(10.0)
-
-class Latest:                        # Task 2's pattern, repeated
-    def __init__(self, topic, message_type, queue_len=10):
-        self.message = None; self.timestamp = 0.0
-        self.subscriber = ChannelSubscriber(topic, message_type)
-        self.subscriber.Init(self._callback, queue_len)
-    def _callback(self, message):
-        self.message = message; self.timestamp = time.time()
-
-slam_info_sub = Latest("rt/slam_info", String_)
-slam_key_sub = Latest("rt/slam_key_info", String_)
-
-def current_pose():
-    for sub in (slam_info_sub, slam_key_sub):
-        if sub.message is None:
-            continue
-        try:
-            cur = json.loads(sub.message.data)["data"]["currentPose"]
-            x, y = float(cur["x"]), float(cur["y"])
-            qz, qw = float(cur.get("q_z", 0.0)), float(cur.get("q_w", 1.0))
-            yaw = math.atan2(2*qw*qz, 1 - 2*qz*qz)
-        except Exception:
-            continue
-        if abs(x) &lt; 1e-5 and abs(y) &lt; 1e-5 and abs(yaw) &lt; 1e-5:
-            continue                                    # all-zero -> no valid pose yet
-        return (x, y, yaw)
-    return None</code></pre>
-
-<h2><span class="num">&#167;5</span>Task 2 &mdash; Cells 8&ndash;11 &mdash; mapping lifecycle</h2>
-<div class="cell"><div class="cellhead"><span>Cells 8, 9, 10, 11 (code)</span><span class="todo">TODO &mdash; bare stubs</span></div>
-<pre><code># TODO: Implement this section using the preceding task description and day slides.
-</code></pre></div>
-<p>Start and stop bracket a mapping session; relocate requires a fresh pose &mdash; navigation must never be
-trusted before a successful relocate against the saved map.</p>
-<pre class="block"><code>_map_path = "/home/unitree/test.pcd"
-
-def start_mapping(slam_type="indoor"):
-    return slam_rpc.start_mapping(slam_type)
-
-def stop_mapping(save_path=None):
-    global _map_path
-    if save_path:
-        _map_path = save_path
-    return slam_rpc.stop_mapping(save_path or _map_path)
-
-def relocate():
-    pose = current_pose()
-    if pose is None:
-        raise RuntimeError("No valid SLAM pose to relocate from.")
-    return slam_rpc.init_pose(*pose, address=_map_path)</code></pre>
-
-<h2><span class="num">&#167;6</span>Task 3 &mdash; Cells 13&ndash;14 &mdash; <code>add_point</code> / <code>remove_point</code></h2>
-<div class="cell"><div class="cellhead"><span>Cells 13, 14 (code)</span><span class="todo">TODO &mdash; bare stubs</span></div>
-<pre><code>import os
 from pathlib import Path
 
-# TODO: Implement this section using the preceding task description and day slides.
-</code></pre></div>
-<p>Named poses are only meaningful once localization is valid, so they are captured from
-<code>current_pose()</code> (the live relocated pose) and persisted to a small JSON file, not kept only in
-memory.</p>
-<pre class="block"><code>_points_path = Path("slam_points.json")
+POINTS_PATH = "slam_points.json"
 
-def _load_points():
-    return json.loads(_points_path.read_text()) if _points_path.exists() else {}
+def add_point(g1, name, points_path=POINTS_PATH):
+    # TODO: read the existing points file (or start with {}), set points[name] = g1.get_slam_pose(), write it back.
+    raise NotImplementedError("Complete this task section")
 
-def _save_points(points):
-    tmp = _points_path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(points, indent=2))
-    os.replace(tmp, _points_path)
+def remove_point(name, points_path=POINTS_PATH):
+    # TODO: read the points file, delete the named entry if present, write it back.
+    raise NotImplementedError("Complete this task section")</code></pre></div>
+<pre class="block"><code>def add_point(g1, name, points_path="slam_points.json"):
+    path = Path(points_path)
+    points = json.loads(path.read_text()) if path.exists() else {}
+    points[name] = list(g1.get_slam_pose())
+    path.write_text(json.dumps(points))
+    return points[name]
 
-def add_point(point_name):
-    pose = current_pose()
-    if pose is None:
-        raise RuntimeError("No valid SLAM pose; relocate first.")
-    points = _load_points()
-    points[point_name] = pose
-    _save_points(points)
-    return pose
+def remove_point(name, points_path="slam_points.json"):
+    path = Path(points_path)
+    points = json.loads(path.read_text()) if path.exists() else {}
+    points.pop(name, None)
+    path.write_text(json.dumps(points))
 
-def remove_point(point_name):
-    points = _load_points()
-    points.pop(point_name, None)
-    _save_points(points)</code></pre>
+g1.relocate()
+add_point(g1, "pickup")</code></pre>
 
-<h2><span class="num">&#167;7</span>Task 4 &mdash; Cells 16&ndash;17 &mdash; <code>navigate_to_point</code> / <code>navigate_path</code></h2>
-<div class="cell"><div class="cellhead"><span>Cells 16, 17 (code)</span><span class="todo">TODO &mdash; bare stubs</span></div>
-<pre><code># TODO: Implement this section using the preceding task description and day slides.
-</code></pre></div>
-<pre class="block"><code>def navigate_to_point(point_name):
-    x, y, yaw = _load_points()[point_name]
-    return slam_rpc.pose_nav(x, y, yaw)
+<h2><span class="num">&#167;6</span>Task 3 &mdash; navigate to a saved point</h2>
+<div class="cell"><div class="cellhead"><span>Cell (code)</span><span class="todo">TODO</span></div>
+<pre><code># TODO: navigate_to_point() to one of the points you saved, printing the result dict (code/arrived/pose/notice).
+raise NotImplementedError("Complete this task section")</code></pre></div>
+<pre class="block"><code>result = g1.navigate_to_point("pickup")
+print(result)</code></pre>
 
-def navigate_path(point_names, native_path_callback=None):
-    if native_path_callback is None:
-        raise RuntimeError(
-            "No verified multi-point path RPC exists for this SDK/firmware. "
-            "Pass a verified native_path_callback, or call navigate_to_point() once per point "
-            "yourself if that sequential behavior is what you actually want."
-        )
-    points = _load_points()
-    return native_path_callback([points[name] for name in point_names])</code></pre>
-<div class="card warn"><p><code>navigate_path</code> must <strong>raise</strong>, not silently loop over
-<code>navigate_to_point</code>, when no <code>native_path_callback</code> is given &mdash; a quiet fallback
-would misrepresent an unverified capability as working.</p></div>
-
-<h2><span class="num">&#167;8</span>Task 5 &mdash; Cell 19 &mdash; <code>view_map()</code>: capture while mapping is running</h2>
-<div class="cell"><div class="cellhead"><span>Cell 19 (code)</span><span class="todo">TODO &mdash; bare stub</span></div>
-<pre><code>import struct
-import matplotlib.pyplot as plt
-from unitree_sdk2py.idl.sensor_msgs.msg.dds_ import PointCloud2_
-
-# TODO: Implement this section using the preceding task description and day slides.
-</code></pre></div>
-<p>Subscribe to the live SLAM point-cloud topics and periodically save a 2-D scatter snapshot to disk during
-mapping; <code>view_map()</code> just returns the newest saved snapshot.</p>
-<pre class="block"><code>SLAM_POINT_TOPICS = [
-    "rt/unitree/slam_mapping/points",
-    "rt/unitree/slam_relocation/points",
-    "rt/unitree/slam_relocation/global_map",
-    "rt/unitree/slam_relocation/web_points",
-]
-_cloud_subs = [(topic, Latest(topic, PointCloud2_)) for topic in SLAM_POINT_TOPICS]
-_snapshots_dir = Path("slam_snapshots"); _snapshots_dir.mkdir(exist_ok=True)
-
-def _decode_xy(msg):
-    fields = {str(f.name).lower(): f for f in msg.fields}
-    x_off, y_off = fields["x"].offset, fields["y"].offset
-    point_step, width, height, raw = msg.point_step, msg.width, msg.height, bytes(msg.data)
-    total = min(width * height, len(raw) // max(1, point_step))
-    xs, ys = [], []
-    for i in range(total):
-        base = i * point_step
-        xs.append(struct.unpack_from("&lt;f", raw, base + x_off)[0])
-        ys.append(struct.unpack_from("&lt;f", raw, base + y_off)[0])
-    return xs, ys
-
-def capture_map_snapshot():
-    best = max(_cloud_subs, key=lambda pair: pair[1].timestamp)
-    topic, latest = best
-    if latest.message is None:
-        raise RuntimeError("No point-cloud message yet; check the SLAM/LiDAR topics are live.")
-    xs, ys = _decode_xy(latest.message)
-    plt.figure(figsize=(5, 5)); plt.scatter(xs, ys, s=1); plt.gca().set_aspect("equal")
-    path = _snapshots_dir / f"snapshot_{int(time.time())}.png"
-    plt.savefig(path); plt.close()
-    return path
-
-def view_map():
-    snapshots = sorted(_snapshots_dir.glob("snapshot_*.png"))
-    return snapshots[-1] if snapshots else None</code></pre>
-<p><strong>Hint:</strong> run <code>start_mapping()</code> &rarr; walk the robot slowly around the room
-&rarr; call <code>capture_map_snapshot()</code> every few seconds &rarr; <code>stop_mapping()</code>. If
-<code>capture_map_snapshot()</code> ever raises "no point-cloud message yet", check
-<code>rt/utlidar/cloud_livox_mid360</code> is live before debugging your own code.</p>
+<h2><span class="num">&#167;7</span>Seeing the map</h2>
+<div class="card good">
+<p>Two ways to actually look at what SLAM is doing, neither of which you need to build from scratch:</p>
+<ul>
+<li><strong><code>academy/visualizations/slam_web_app.py</code></strong> &mdash; a small web app that shows the
+live map and robot pose in a browser while mapping/navigating. Run it directly, or paste it into Codex and ask
+for a trimmed-down version if you want to change what it shows.</li>
+<li><strong><code>academy/visualizations/zmp_viz.py</code></strong> &mdash; a <em>different</em> concept: not the
+SLAM map, but a live Zero Moment Point (ZMP) plot &mdash; whether the robot's support point stays inside its
+support polygon while it walks. Run it alongside a <code>loco_move()</code> to see the balance margin in real
+time; you are not expected to build ZMP estimation yourselves.</li>
+</ul>
+</div>
 
 <div class="card caution">
   <h4>Safety</h4>
@@ -347,9 +201,8 @@ def view_map():
 </main>
 <footer>
   <div class="navrow">
-    <span>Reference: <code>sdk_wrapper._SlamClient</code>/<code>G1.start_mapping</code>/<code>relocate</code>/<code>navigate</code>,
-    <code>slam_util.SlamRpc</code>/<code>SlamUtility</code> &middot; Notebook: <code>task7_slam_operation_and_map_visualization.ipynb</code>
-    &middot; Slides: <code>day2_slides.html</code> (slides 14&ndash;19)</span>
+    <span>Reference: <code>sdk_wrapper.G1.start_mapping</code>/<code>stop_mapping</code>/<code>relocate</code>/<code>navigate_to_point</code>/<code>pause_nav</code>/<code>resume_nav</code> &middot;
+    Notebook: <code>task7_slam_operation_and_map_visualization.ipynb</code> &middot; Slides: <code>day2_slides.html</code> (s58&ndash;s63)</span>
     <span><a href="task6_basic_locomotion_intro.html">&larr; Task 6</a> &middot;
     <a href="../day_3/task8_hl_arm_gestures_intro.html">Task 8 &rarr;</a></span>
   </div>

@@ -2,9 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Task 6 Intro — Basic Locomotion</title>
+<title>Task 6 Intro — Locomotion</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Pre-task knowledge and reference for Task 6 Intro — Basic Locomotion.">
+<meta name="description" content="Pre-task knowledge and reference for Task 6 Intro — locomotion with sdk_wrapper.G1.loco_move.">
 <style>
 :root{
   --bg:#f6f7f9; --panel:#ffffff; --ink:#1b1f27; --muted:#5b6472; --border:#dfe3ea;
@@ -81,148 +81,96 @@ footer a{color:var(--muted);}
 .navrow{display:flex; justify-content:space-between; gap:12px; margin-top:10px; flex-wrap:wrap;}
 </style>
 </head>
+
 <body>
 <header class="top">
   <p class="eyebrow">Day 2 &middot; G1 Academy Bonus</p>
-  <h1>Task 6 &mdash; Basic Locomotion Helpers</h1>
-  <p class="lede">Two locomotion helpers, both built on the native <code>LocoClient</code>:
-  <code>loco_move</code> runs a bounded-duration continuous velocity command and always stops in
-  <code>finally</code>; <code>odom_move</code> issues a single non-continuous relative move and closes the
-  loop on odometry to confirm arrival, instead of treating the RPC return code alone as proof of motion.
-  A simple lock prevents two locomotion commands from running concurrently.</p>
+  <h1>Task 6 &mdash; Locomotion with the Wrapper</h1>
+  <p class="lede"><code>g1.loco_move(vx, vy, vyaw, duration_s)</code> is the one call this whole task is about:
+  a timed velocity command. You will read odometry, drive a few timed segments, and assemble them into a simple
+  multi-stop "U" path that Day 3 reuses (adding an arm gesture at each stop).</p>
   <div class="badges">
-    <span class="badge b-info">Builds on: Task 2's Latest/ensure_channel_factory, Task 4's odom-reading pattern (read directly here for closed-loop arrival)</span>
-    <span class="badge b-good">New: loco_move, odom_move, loco_stop</span>
+    <span class="badge b-info">Builds on: Task 5's <code>get_odom()</code> and mode ladder (damp_mode/prepare_mode/walk_mode)</span>
+    <span class="badge b-good">Wrapper methods: loco_move, loco_stop</span>
   </div>
-  <div class="card warn"><p><strong>This notebook is bare</strong> (generic <code>raise NotImplementedError</code>
-  stubs) &mdash; this page supplies what each section needs.</p></div>
+  <div class="card good"><p><strong>Use Codex/AI here.</strong> Every method below is a finished, documented method on <code>sdk_wrapper.G1</code>. If a cell is not obvious, paste the method signature (or the matching line from <code>wrapper_cheatsheet.html</code>) into Codex and ask it to write the cell, then read what it produced before running it against the robot.</p></div>
   <div class="tocwrap"><a href="../day_1/task1_sdkwrapper_usage_intro.html">T1</a><a href="../day_1/task2_necessary_dds_init_pubsub_intro.html">T2</a><a href="../day_1/task3_say_and_headlight_helpers_intro.html">T3</a><a href="../day_1/task4_robot_state_observation_intro.html">T4</a><a href="task5_services_and_mode_switching_intro.html">T5</a><a href="task6_basic_locomotion_intro.html" style="border-color:var(--accent);color:var(--accent)">T6</a><a href="task7_slam_operation_and_map_visualization_intro.html">T7</a><a href="../day_3/task8_hl_arm_gestures_intro.html">T8</a><a href="../day_3/task9_ll_control_intro.html">T9</a><a href="../day_3/task10_ik_control_intro.html">T10</a><a href="../day_3/task11_dex3_gradual_gripping_intro.html">T11</a><a href="../day_4/task12_perception_and_pose_estimation_pipeline_intro.html">T12</a><a href="../day_4/task13_final_task_intro.html">T13</a></div>
 </header>
 <main>
 
-<h2><span class="num">&#167;1</span>Knowledge &mdash; continuous vs. non-continuous Move</h2>
+<h2><span class="num">&#167;1</span>Knowledge &mdash; loco_move's timing</h2>
 <div class="card knowledge">
-<p><code>LocoClient.Move(vx, vy, vyaw, continous_move=...)</code> behaves differently depending on that flag,
-and <strong>neither</strong> mode tells you the robot actually arrived.</p>
 <table>
-<tr><th>Mode</th><th>Behavior</th><th>How this course confirms completion</th></tr>
-<tr><td><code>continous_move=True</code></td><td>keeps moving at that velocity until told otherwise</td><td><code>sleep(duration_s)</code> then always call <code>StopMove()</code>, even on exception (<code>finally</code>)</td></tr>
-<tr><td><code>continous_move=False</code></td><td>one relative-displacement request</td><td>poll odometry until observed displacement is within tolerance &mdash; the RPC return code alone is <strong>not</strong> proof of arrival</td></tr>
+<tr><th>Call</th><th>Behavior</th></tr>
+<tr><td><code>loco_move(vx, vy, vyaw, duration_s=2)</code></td><td>drives for exactly <code>duration_s</code> seconds, then auto-stops (calls <code>loco_stop()</code> for you) &mdash; the common case</td></tr>
+<tr><td><code>loco_move(vx, vy, vyaw, duration_s=None)</code></td><td>fires one <code>Move()</code> RPC and returns immediately, no auto-stop &mdash; only use this when you are managing the stop yourself (e.g. sending <code>(0,0,0)</code> should not itself block)</td></tr>
+<tr><td><code>loco_stop()</code></td><td>stops immediately &mdash; call any time you need to bail out of a move early</td></tr>
 </table>
-<p>Flow for <code>odom_move</code>: record start odom pose &rarr; send <code>Move()</code> (non-continuous)
-&rarr; poll odom pose until <code>|err| &lt; tol</code> &rarr; arrived/timeout &rarr; stop.</p>
+<p><code>vx</code>/<code>vy</code> are in m/s (forward/strafe), <code>vyaw</code> in rad/s. Start small (e.g.
+0.15 m/s) with a spotter in a clear space.</p>
 </div>
 
-<h2><span class="num">&#167;2</span>Knowledge &mdash; one lock, one command at a time</h2>
+<h2><span class="num">&#167;2</span>Knowledge &mdash; chaining moves into a path</h2>
 <div class="card knowledge">
-<p>A simple non-blocking <code>threading.Lock()</code> (<code>acquire(blocking=False)</code>) guarantees
-only one locomotion command runs at a time &mdash; a second call while one is already sleeping/polling raises
-immediately instead of silently queueing behind it or racing it.</p>
-<p>Both helpers release the lock in <code>finally</code>, so an exception mid-command can never leave
-locomotion permanently "locked out".</p>
-<p>Yaw error uses a wrapped <code>((err + &pi;) % 2&pi;) - &pi;</code> comparison &mdash; naive subtraction
-breaks near the &plusmn;&pi; wraparound.</p>
+<ul>
+<li>A path is just several <code>loco_move(...)</code> calls back to back &mdash; forward, turn, forward, turn,
+forward traces an approximate "U" shape in 3 legs.</li>
+<li>Keep the stop points as data (a list), and let a small callback run at each stop &mdash; this is exactly the
+hook Day 3's Task 1 reuses to play a different arm gesture at each stop of the same U path.</li>
+<li><code>get_odom()</code> before and after each leg is your ground truth for how far the robot actually went
+&mdash; open-loop timing drifts.</li>
+</ul>
 </div>
 
-<h2><span class="num">&#167;3</span>Cell 2 &mdash; shared setup</h2>
-<div class="cell"><div class="cellhead"><span>Cell 2 (code)</span><span class="todo">TODO &mdash; bare stub</span></div>
-<pre><code>import time
-from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelPublisher, ChannelSubscriber
-from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
-import sys
-from sdk_wrapper import ensure_channel_factory
+<h2><span class="num">&#167;3</span>Cell 2 &mdash; setup</h2>
+<div class="cell"><div class="cellhead"><span>Cell 2 (code)</span></div>
+<pre><code>import sys
+import time
+sys.path.append("..")
+from sdk_wrapper import G1
 
-# TODO: Implement this section using the preceding task description and day slides.
-</code></pre></div>
-<pre class="block"><code>ensure_channel_factory(0, "eth0")</code></pre>
+g1 = G1(iface="eth0", domain_id=0)
+g1.damp_mode(); g1.prepare_mode(); g1.walk_mode()  # always step up through the modes before moving</code></pre></div>
 
-<h2><span class="num">&#167;4</span>Task 1 &mdash; Cell 4 &mdash; odometry subscriber + native <code>LocoClient</code></h2>
-<div class="cell"><div class="cellhead"><span>Cell 4 (code)</span><span class="todo">TODO &mdash; bare stub</span></div>
-<pre><code>import math
-import threading
-from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
-from unitree_sdk2py.idl.unitree_go.msg.dds_ import SportModeState_
+<h2><span class="num">&#167;4</span>Task 1 &mdash; read odometry</h2>
+<div class="cell"><div class="cellhead"><span>Cell (code)</span><span class="todo">TODO</span></div>
+<pre><code># TODO: call get_odom() and print the pose.
+raise NotImplementedError("Complete this task section")</code></pre></div>
+<pre class="block"><code>print(g1.get_odom())</code></pre>
 
-# TODO: Implement this section using the preceding task description and day slides.
-</code></pre></div>
-<pre class="block"><code>class Latest:                      # Task 2's pattern, repeated for a self-contained notebook
-    def __init__(self, topic, message_type, queue_len=10):
-        self.message = None; self.timestamp = 0.0
-        self.subscriber = ChannelSubscriber(topic, message_type)
-        self.subscriber.Init(self._callback, queue_len)
-    def _callback(self, message):
-        self.message = message; self.timestamp = time.time()
+<h2><span class="num">&#167;5</span>Task 2 &mdash; loco_move(vx, vy, vyaw, duration_s)</h2>
+<div class="cell"><div class="cellhead"><span>Cell (code)</span><span class="todo">TODO</span></div>
+<pre><code># TODO: drive forward briefly with loco_move(vx=0.2, vy=0, vyaw=0, duration_s=2), then read get_odom() again.
+raise NotImplementedError("Complete this task section")</code></pre></div>
+<pre class="block"><code>before = g1.get_odom()
+g1.loco_move(vx=0.2, vy=0, vyaw=0, duration_s=2)
+after = g1.get_odom()
+print(before, "->", after)</code></pre>
 
-odom_sub = Latest("rt/odommodestate", SportModeState_)
-loco = LocoClient(); loco.SetTimeout(5.0); loco.Init()
-_locomotion_lock = threading.Lock()
-
-def _odom_pose():
-    msg = odom_sub.message
-    if msg is None:
-        return None
-    return (float(msg.position[0]), float(msg.position[1]), float(msg.imu_state.rpy[2]))
-
-def loco_stop():
-    if hasattr(loco, "StopMove"):
-        return loco.StopMove()
-    return loco.Move(0.0, 0.0, 0.0, continous_move=False)</code></pre>
-
-<h2><span class="num">&#167;5</span>Task 2 &mdash; Cell 6 &mdash; <code>loco_move(vx, vy, vyaw, duration_s)</code></h2>
-<div class="cell"><div class="cellhead"><span>Cell 6 (code)</span><span class="todo">TODO &mdash; bare stub</span></div>
-<pre><code># TODO: Implement this section using the preceding task description and day slides.
-</code></pre></div>
-<p>A continuous velocity command held for a fixed duration, always cancelled in <code>finally</code> &mdash;
-so an exception mid-sleep (kernel interrupt, timeout) can never leave the robot moving.</p>
-<pre class="block"><code>def loco_move(vx, vy, vyaw, duration_s=2.0):
-    if not _locomotion_lock.acquire(blocking=False):
-        raise RuntimeError("Another locomotion command is already in progress.")
-    try:
-        code = int(loco.Move(vx, vy, vyaw, continous_move=True) or 0)
-        try:
-            time.sleep(duration_s)
-        finally:
-            loco_stop()             # ALWAYS stop, even on exception mid-sleep
-        return code
-    finally:
-        _locomotion_lock.release()</code></pre>
-<p><strong>Hint:</strong> test with a tiny <code>vx</code> first (e.g. <code>0.03</code> m/s for 0.5s) in a
-clear space with a spotter &mdash; it's the simplest of the two helpers, and confirms your
-<code>LocoClient</code> is actually wired up before you build the closed-loop version.</p>
-
-<h2><span class="num">&#167;6</span>Task 3 &mdash; Cell 8 &mdash; <code>odom_move(...)</code> with closed-loop arrival</h2>
-<div class="cell"><div class="cellhead"><span>Cell 8 (code)</span><span class="todo">TODO &mdash; bare stub</span></div>
-<pre><code># TODO: Implement this section using the preceding task description and day slides.
-</code></pre></div>
-<p>Issue one non-continuous <code>Move</code> request for the relative displacement, then poll odometry
-until the <em>observed</em> displacement is within tolerance, the request was rejected, or
-<code>timeout_s</code> elapses.</p>
-<pre class="block"><code>def odom_move(target_dx, target_dy, target_dyaw, pos_tol_m=0.05, yaw_tol_rad=0.05, timeout_s=15.0, poll_s=0.2):
-    if not _locomotion_lock.acquire(blocking=False):
-        raise RuntimeError("Another locomotion command is already in progress.")
-    try:
-        start = _odom_pose()
-        if start is None:
-            raise RuntimeError("No fresh odometry; cannot monitor arrival.")
-        code = int(loco.Move(target_dx, target_dy, target_dyaw, continous_move=False) or 0)
-        if code != 0:
-            return {"code": code, "arrived": False, "reason": "move request rejected"}
-        deadline = time.time() + timeout_s
-        while time.time() &lt; deadline:
-            pose = _odom_pose()
-            if pose is not None:
-                dx, dy, dyaw = pose[0]-start[0], pose[1]-start[1], pose[2]-start[2]
-                err_pos = ((target_dx-dx)**2 + (target_dy-dy)**2) ** 0.5
-                err_yaw = abs(((target_dyaw-dyaw) + math.pi) % (2*math.pi) - math.pi)
-                if err_pos &lt;= pos_tol_m and err_yaw &lt;= yaw_tol_rad:
-                    return {"code": code, "arrived": True, "moved": (dx, dy, dyaw)}
-            time.sleep(poll_s)
-        loco_stop()
-        return {"code": code, "arrived": False, "reason": "timeout"}
-    finally:
-        _locomotion_lock.release()</code></pre>
-<p>The RPC return code alone is <strong>never</strong> proof of arrival for <code>odom_move</code> &mdash;
-only the polled odometry comparison counts.</p>
+<h2><span class="num">&#167;6</span>Task 3 &mdash; a timed multi-stop path ("U" path)</h2>
+<div class="cell"><div class="cellhead"><span>Cell (code)</span><span class="todo">TODO</span></div>
+<pre><code>def walk_u_path(g1, vx=0.15, vyaw=0.5, leg_s=2.0, turn_s=1.2, pause_s=1.0, on_stop=None):
+    """Drives an approximate U path as 3 timed legs with a turn between each.
+    Calls on_stop(g1, stop_index) at each of the 3 stop points, if given -- this is
+    the hook Day 3 Task 1 uses to play a different arm gesture at each stop."""
+    # TODO: chain loco_move() legs/turns below and call on_stop(g1, i) at each of the 3 stops.
+    raise NotImplementedError("Complete this task section")</code></pre></div>
+<pre class="block"><code>def walk_u_path(g1, vx=0.15, vyaw=0.5, leg_s=2.0, turn_s=1.2, pause_s=1.0, on_stop=None):
+    legs = [(vx, 0.0, 0.0, leg_s), (0.0, 0.0, vyaw, turn_s),
+            (vx, 0.0, 0.0, leg_s), (0.0, 0.0, vyaw, turn_s),
+            (vx, 0.0, 0.0, leg_s)]
+    stop_index = 0
+    for i, (lvx, lvy, lvyaw, duration_s) in enumerate(legs):
+        g1.loco_move(lvx, lvy, lvyaw, duration_s=duration_s)
+        if i % 2 == 0:  # after each straight leg, we are at a stop point
+            if on_stop is not None:
+                on_stop(g1, stop_index)
+            time.sleep(pause_s)
+            stop_index += 1
+    g1.loco_stop()</code></pre>
+<div class="card good"><p><strong>Keep this helper around.</strong> Day 3's Task 1 imports/reuses
+<code>walk_u_path</code> unchanged and only supplies a new <code>on_stop</code> callback that plays a
+high-level arm gesture at each stop.</p></div>
 
 <div class="card caution">
   <h4>Safety</h4>
@@ -234,7 +182,7 @@ only the polled odometry comparison counts.</p>
 <footer>
   <div class="navrow">
     <span>Reference: <code>sdk_wrapper.G1.loco_move</code>/<code>loco_stop</code> &middot;
-    Notebook: <code>task6_basic_locomotion.ipynb</code> &middot; Slides: <code>day2_slides.html</code> (slides 8&ndash;13)</span>
+    Notebook: <code>task6_basic_locomotion.ipynb</code> &middot; Slides: <code>day2_slides.html</code> (s52&ndash;s57)</span>
     <span><a href="task5_services_and_mode_switching_intro.html">&larr; Task 5</a> &middot;
     <a href="task7_slam_operation_and_map_visualization_intro.html">Task 7 &rarr;</a></span>
   </div>
