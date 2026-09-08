@@ -48,6 +48,10 @@ for ((i=1; i<=NUM_USERS; i++)); do
     "$SOLVED_DIR/task2_necessary_dds_init_pubsub.ipynb" \
     "$SOLVED_DIR/task3_say_and_headlight_helpers.ipynb" \
     "$SOLVED_DIR/task4_robot_state_observation.ipynb" \
+    "$INTRO_DIR/task1_sdkwrapper_usage_intro.html" \
+    "$INTRO_DIR/task2_necessary_dds_init_pubsub_intro.html" \
+    "$INTRO_DIR/task3_say_and_headlight_helpers_intro.html" \
+    "$INTRO_DIR/task4_robot_state_observation_intro.html" \
     "$ACADEMY_DIR/sdk_wrapper.py" "$ACADEMY_DIR/util.py" \
     "$destination/"
 

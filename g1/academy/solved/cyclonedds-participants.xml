@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  CycloneDDS configuration for ROS 2 Foxy participant shells.
+
+  CycloneDDS 0.8 (the version shipped with Foxy) uses its legacy
+  NetworkInterfaceAddress setting.  The newer Interfaces/NetworkInterface
+  forms make rmw_cyclonedds_cpp fail before it can create a node.
+-->
+<CycloneDDS>
+  <Domain Id="any">
+    <General>
+      <NetworkInterfaceAddress>eth0</NetworkInterfaceAddress>
+      <AllowMulticast>spdp</AllowMulticast>
+    </General>
+  </Domain>
+</CycloneDDS>

@@ -14,6 +14,8 @@ PASSWORD="${TEILNEHMER_PASSWORD:-academy2026}"
 REF_PY="${REF_PY:-/home/unitree/.guv/envs/unitree}"
 REF_SDK="${REF_SDK:-/home/unitree/unitree_sdk2_python}"
 CYCLONEDDS_HOME="${CYCLONEDDS_HOME:-/home/unitree/unitree_ros2/cyclonedds_ws/install/cyclonedds}"
+ROS_SETUP="${ROS_SETUP:-/opt/ros/foxy/setup.bash}"
+CODEX_BIN="${CODEX_BIN:-/usr/local/bin/codex}"
 
 if [[ "$(id -u)" -ne 0 ]]; then
   echo "Run as root: sudo $0" >&2
@@ -21,8 +23,8 @@ if [[ "$(id -u)" -ne 0 ]]; then
 fi
 [[ "$NUM_USERS" =~ ^[1-9][0-9]*$ ]] && (( NUM_USERS <= 100 )) || { echo "NUM_USERS must be 1..100" >&2; exit 2; }
 [[ "$USER_PREFIX" =~ ^[a-z_][a-z0-9_-]*$ ]] || { echo "Unsafe USER_PREFIX" >&2; exit 2; }
-[[ -x "$REF_PY/bin/python" && -d "$REF_SDK/unitree_sdk2py" && -f "$CYCLONEDDS_HOME/lib/libddsc.so" ]] || {
-  echo "Reference SDK, Python runtime, or CycloneDDS install is missing." >&2
+[[ -x "$REF_PY/bin/python" && -d "$REF_SDK/unitree_sdk2py" && -f "$CYCLONEDDS_HOME/lib/libddsc.so" && -r "$ROS_SETUP" && -x "$CODEX_BIN" ]] || {
+  echo "Reference SDK, Python runtime, CycloneDDS, ROS 2, or Codex is missing." >&2
   exit 1
 }
 
@@ -67,6 +69,8 @@ export LD_LIBRARY_PATH="\$CYCLONEDDS_HOME/lib\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_P
 export CMAKE_PREFIX_PATH="\$CYCLONEDDS_HOME\${CMAKE_PREFIX_PATH:+:\$CMAKE_PREFIX_PATH}"
 export PKG_CONFIG_PATH="\$CYCLONEDDS_HOME/lib/pkgconfig\${PKG_CONFIG_PATH:+:\$PKG_CONFIG_PATH}"
 export PYTHONPATH="\$UNITREE_SDK2_HOME\${PYTHONPATH:+:\$PYTHONPATH}"
+# ROS 2's environment also sets AMENT_PREFIX_PATH and Python package paths.
+source "$ROS_SETUP"
 EOF
   touch "$home_dir/.bashrc"
   grep -qF '.g1-unitree-env' "$home_dir/.bashrc" || printf '\n[ -f "$HOME/.g1-unitree-env" ] && source "$HOME/.g1-unitree-env"\n' >>"$home_dir/.bashrc"
