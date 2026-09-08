@@ -451,7 +451,7 @@ class SlamWebState:
     def stop_slam(self) -> dict[str, Any]:
         self._task_cancel.set()  # abort any in-flight task sequence, mirrors
         # keyDemo.cpp's taskThreadStop() being called before stopNodeFun()
-        result = normalize_rpc(self.g1.stop_mapping())  # no path -> close_slam (1901)
+        result = normalize_rpc(self.g1.stop_mapping(save=False))  # no save -> close_slam (1901)
         with self._state_lock:
             self.slam_running = False
             self.relocation_ready = False

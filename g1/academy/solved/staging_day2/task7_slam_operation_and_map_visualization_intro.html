@@ -102,13 +102,13 @@ footer a{color:var(--muted);}
 <table>
 <tr><th>Call</th><th>Does</th></tr>
 <tr><td><code>g1.start_mapping(slam_type="indoor")</code></td><td>starts building a map from the LiDAR</td></tr>
-<tr><td><code>g1.stop_mapping(save_path=MAP_PATH)</code></td><td><strong>saves</strong> the map (the <code>end_mapping</code> RPC) so you can relocalize/navigate on it later. Use a full mainboard path, e.g. <code>/home/unitree/test.pcd</code> &mdash; a bare name like <code>"my_map"</code> returns <code>errorCode 12, "The directory is illegal."</code></td></tr>
-<tr><td><code>g1.stop_mapping()</code> (no path)</td><td><strong>closes</strong> SLAM (the <code>close_slam</code> RPC) <strong>without saving</strong> &mdash; an unsaved map is why <code>relocate()</code> later fails with <code>errorCode 509</code></td></tr>
-<tr><td><code>g1.relocate(map_path=MAP_PATH, pose=(x,y,yaw))</code></td><td>loads the saved map and relocalizes at the given pose &mdash; do this once after mapping, before navigating</td></tr>
+<tr><td><code>g1.stop_mapping()</code></td><td><strong>saves</strong> the map (the <code>end_mapping</code> RPC) to the path hardcoded in <code>sdk_wrapper</code> (<code>/home/unitree/test.pcd</code>), so you can relocalize/navigate on it later &mdash; no path argument needed</td></tr>
+<tr><td><code>g1.stop_mapping(save=False)</code></td><td><strong>closes</strong> SLAM (the <code>close_slam</code> RPC) <strong>without saving</strong> &mdash; only when you want to abort a mapping session</td></tr>
+<tr><td><code>g1.relocate()</code></td><td>loads that saved map and relocalizes &mdash; do this once after mapping, before navigating</td></tr>
 <tr><td><code>g1.get_slam_pose()</code></td><td>the last known <code>(x, y, yaw)</code> on the current map, or <code>None</code></td></tr>
 </table>
 <p>Build the map by driving the robot around the space <strong>with the hand-held remote controller</strong>
-(not <code>loco_move</code>) so the LiDAR sees the whole room, then save it with <code>stop_mapping(save_path=MAP_PATH)</code>.</p>
+(not <code>loco_move</code>) so the LiDAR sees the whole room, then save it with <code>stop_mapping()</code>.</p>
 </div>
 
 <h2><span class="num">&#167;2</span>Knowledge &mdash; named points and navigation</h2>
@@ -139,24 +139,23 @@ g1 = G1(iface="eth0", domain_id=0)</code></pre></div>
 controller</strong> &mdash; not from the notebook. <strong>Cell B</strong> saves the map. Keep them as two
 separate cells so the manual driving happens in between.</p>
 <div class="cell"><div class="cellhead"><span>Cell A (code) &mdash; start</span></div>
-<pre class="block"><code>MAP_PATH = "/home/unitree/test.pcd"  # a full path the mainboard can write; "my_map" -> errorCode 12
-g1.start_mapping(slam_type="indoor")</code></pre></div>
+<pre class="block"><code>g1.start_mapping(slam_type="indoor")</code></pre></div>
 <div class="card good"><p>🎮 <strong>Now drive the robot around the whole space with the hand-held remote</strong>, covering all
 the walls and returning near your starting point. Watch the map fill in (Task 4, or
 <code>slam_web_app.py</code>). When it looks complete, run Cell B.</p></div>
 <div class="cell"><div class="cellhead"><span>Cell B (code) &mdash; stop &amp; save</span></div>
-<pre class="block"><code>g1.stop_mapping(save_path=MAP_PATH)  # end_mapping: saves the map to MAP_PATH so relocate() can load it</code></pre></div>
+<pre class="block"><code>g1.stop_mapping()  # end_mapping: saves the map on the mainboard (path hardcoded in sdk_wrapper)</code></pre></div>
 
 <h2><span class="num">&#167;5</span>Task 2 &mdash; relocalize and save named points</h2>
-<p>Task 1 <strong>saved</strong> the map to <code>MAP_PATH</code>. Relocalize against it with
-<code>g1.relocate(map_path=MAP_PATH)</code>, then save named poses.</p>
+<p>Task 1 <strong>saved</strong> the map. Relocalize against it with <code>g1.relocate()</code> (no path
+needed &mdash; it uses the same hardcoded map path), then save named poses.</p>
 <div class="card warn">
 <p>If <code>relocate()</code> returns <code>errorCode 509, "The current location matching degree is low."</code>,
 the robot doesn't recognize where it is on the map &mdash; build a fuller map (drive the whole space with the
 remote) and stand in a mapped area before relocating.</p>
 </div>
 <div class="cell"><div class="cellhead"><span>Cell (code)</span><span class="todo">TODO</span></div>
-<pre><code># TODO: g1.relocate(map_path=MAP_PATH), then add_point(g1, "pickup") for each spot you drove to.
+<pre><code># TODO: g1.relocate(), then add_point(g1, "pickup") for each spot you drove to.
 raise NotImplementedError("Complete this task section")</code></pre></div>
 <pre class="block"><code>import json
 from pathlib import Path
@@ -174,7 +173,7 @@ def remove_point(name, points_path="slam_points.json"):
     points.pop(name, None)
     path.write_text(json.dumps(points))
 
-g1.relocate(map_path=MAP_PATH)
+g1.relocate()
 add_point(g1, "pickup")</code></pre>
 
 <h2><span class="num">&#167;6</span>Task 3 &mdash; navigate to a saved point</h2>
