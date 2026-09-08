@@ -124,11 +124,12 @@ footer a{color:var(--muted);}
 <code>basic_service</code>, <code>g1_arm_example</code>, <code>vui_service</code>, <code>unitree_slam</code>.</p>
 </div>
 <div class="card warn">
-<p><strong><code>ServiceList</code> can time out.</strong> <code>g1.get_service()</code> calls the mainboard's
-<code>ServiceList</code> RPC, which intermittently returns code <strong>3104 (RPC timeout)</strong> &mdash; the
-wrapper then raises <code>RuntimeError("ServiceList failed: 3104")</code>. It is transient, so wrap every
-service call (<code>get_service</code>/<code>set_service</code>/<code>toggle_service</code>) in a small
-retry loop rather than letting the first timeout abort the cell.</p>
+<p><strong><code>ServiceList</code> times out (code 3104) &mdash; raise the timeout once.</strong> Every service
+call (<code>get_service</code>/<code>set_service</code>/<code>toggle_service</code>/<code>toggle_dev_mode</code>),
+and <code>get_state()</code>, goes through the mainboard's <code>ServiceList</code> RPC, whose default
+<strong>2&nbsp;second</strong> timeout frequently returns <strong>3104 (RPC timeout)</strong>. Fix it with one
+line right after constructing <code>G1</code>: <code>g1._robot_state_client().SetTimeout(10.0)</code> &mdash;
+exactly what <code>academy/visualizations/service_view.py</code> does.</p>
 </div>
 
 <h2><span class="num">&#167;3</span>Knowledge &mdash; the full FSM table</h2>
@@ -163,80 +164,56 @@ time, checking <code>get_state()</code> between steps &mdash; never jump straigh
 need dev mode enabled first.</p>
 </div>
 
-<h2><span class="num">&#167;5</span>Cell 2 &mdash; construct the wrapper</h2>
+<h2><span class="num">&#167;5</span>Cell 2 &mdash; construct the wrapper (and make services reliable)</h2>
 <div class="cell"><div class="cellhead"><span>Cell 2 (code)</span></div>
 <pre><code>import sys
 sys.path.append("..")
 from sdk_wrapper import G1
 
-g1 = G1(iface="eth0", domain_id=0)</code></pre></div>
+g1 = G1(iface="eth0", domain_id=0)
+
+# robot_state's RPC timeout defaults to 2s and often times out (code 3104) on service
+# calls; raise it once, as academy/visualizations/service_view.py does.
+g1._robot_state_client().SetTimeout(10.0)</code></pre></div>
 
 <h2><span class="num">&#167;6</span>Task 1 &mdash; read robot state</h2>
 <div class="cell"><div class="cellhead"><span>Cell (code)</span><span class="todo">TODO</span></div>
-<pre><code># TODO: call get_lowstate(), get_odom(), get_battery(), and get_state(); print a short summary of each.
+<pre><code># TODO: call g1.get_lowstate(), g1.get_odom(), g1.get_battery(), and g1.get_state().
 raise NotImplementedError("Complete this task section")</code></pre></div>
-<pre class="block"><code>battery = g1.get_battery()
-print("battery:", battery.get("percentage"))
-print("odom:", g1.get_odom())
-print("state:", {k: g1.get_state()[k] for k in ("id", "mode", "motion_mode")})</code></pre>
+<pre class="block"><code>g1.get_lowstate()
+g1.get_odom()
+g1.get_battery()
+g1.get_state()</code></pre>
 
 <h2><span class="num">&#167;7</span>Task 2 &mdash; prove <code>vui_service</code> gates audio</h2>
 <p><code>vui_service</code> is the robot's <strong>Audio and Lighting Control Service</strong> &mdash;
-<code>say()</code> and <code>set_headlight()</code> both depend on it. Read its status
-(<code>0</code> = ON, non-zero = OFF), turn it <strong>off</strong>, call <code>say()</code> to show audio no
-longer works, then turn it <strong>back on</strong> and confirm <code>say()</code> works again. Use
-<code>set_service(name, enabled)</code> so the off&rarr;on sequence is deterministic, and wrap every service
-call in the retry loop from &#167;2 above (3104 timeouts).</p>
+<code>say()</code> and <code>set_headlight()</code> both depend on it. Turn it <strong>off</strong>, call
+<code>say()</code> (you will hear nothing), then turn it <strong>back on</strong> and <code>say()</code> again
+(audio works). <code>set_service(name, enabled)</code> sets an explicit on/off; <code>get_service(name)</code>
+reads status (<code>0</code> = ON, non-zero = OFF). The setup cell already raised the RPC timeout, so these
+calls don't fail with <code>3104</code>.</p>
 <div class="cell"><div class="cellhead"><span>Cell (code)</span><span class="todo">TODO</span></div>
-<pre><code># TODO:
-#   1. read g1.get_service("vui_service") and print its status (0 = ON, non-zero = OFF)
-#   2. turn it OFF:    g1.set_service("vui_service", False)   then wait a few seconds
-#   3. with it OFF, call g1.say("...") to show audio control no longer works
-#   4. turn it back ON: g1.set_service("vui_service", True)   then confirm g1.say("...") works again
+<pre><code># TODO: turn vui_service off with g1.set_service("vui_service", False), call g1.say("...")
+# (you should hear nothing), then turn it back on and g1.say("...") again.
 raise NotImplementedError("Complete this task section")</code></pre></div>
 <pre class="block"><code>import time
 
-def service_call_with_retry(fn, *args, retries=8, delay=2, **kwargs):
-    """ServiceList intermittently returns 3104 (RPC timeout); retry before giving up."""
-    for attempt in range(1, retries + 1):
-        try:
-            return fn(*args, **kwargs)
-        except RuntimeError as exc:
-            print(f"service call attempt {attempt}/{retries} failed: {exc}")
-            if attempt == retries:
-                raise
-            time.sleep(delay)
+g1.set_service("vui_service", False)   # turn the Audio & Lighting Control service off
+time.sleep(2)
+g1.say("You should not hear this while the voice service is off.")
 
-before = service_call_with_retry(g1.get_service, "vui_service")
-print("vui_service before:", before["status"])
-
-service_call_with_retry(g1.set_service, "vui_service", False)  # Audio & Lighting OFF
-time.sleep(3)
-off = service_call_with_retry(g1.get_service, "vui_service")
-print("vui_service now:", off["status"])
-
-print("say() with vui_service OFF (expect no audio):")
-try:
-    print("code:", g1.say("If you can hear this, the voice service is still on.", language="EN"))
-except Exception as exc:
-    print("say() failed as expected without vui_service:", exc)
-
-service_call_with_retry(g1.set_service, "vui_service", True)   # Audio & Lighting back ON
-time.sleep(3)
-after = service_call_with_retry(g1.get_service, "vui_service")
-print("say() with vui_service ON:", g1.say("Voice service restored.", language="EN"))
-print("vui_service:", before["status"], "->", off["status"], "->", after["status"])</code></pre>
+g1.set_service("vui_service", True)    # turn it back on
+time.sleep(2)
+g1.say("Voice service restored.")</code></pre>
 
 <h2><span class="num">&#167;8</span>Task 3 &mdash; step through modes safely</h2>
 <div class="cell"><div class="cellhead"><span>Cell (code)</span><span class="todo">TODO</span></div>
-<pre><code># TODO: step damp_mode() -> prepare_mode() -> walk_mode(), checking get_state() between each step.
+<pre><code># TODO: g1.damp_mode(), then g1.prepare_mode(), then g1.walk_mode(), then g1.toggle_dev_mode().
 raise NotImplementedError("Complete this task section")</code></pre></div>
-<pre class="block"><code>g1.damp_mode();    print("fsm:", g1.get_state()["id"])
-g1.prepare_mode(); print("fsm:", g1.get_state()["id"])
-g1.walk_mode();    print("fsm:", g1.get_state()["id"])
-
-g1.toggle_dev_mode()
-print("ai_sport:", g1.get_service("ai_sport"))</code></pre>
+<pre class="block"><code>g1.damp_mode()
+g1.prepare_mode()
+g1.walk_mode()
+g1.toggle_dev_mode()</code></pre>
 
 <h2><span class="num">&#167;9</span>Final part &mdash; build a mode-switching dashboard with Codex</h2>
 <div class="card good">

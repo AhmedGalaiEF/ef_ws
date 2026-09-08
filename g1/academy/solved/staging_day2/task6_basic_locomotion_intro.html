@@ -114,9 +114,10 @@ footer a{color:var(--muted);}
 <div class="card knowledge">
 <ul>
 <li>A path is just several <code>loco_move(...)</code> calls back to back &mdash; forward, turn, forward, turn,
-forward traces an approximate "U" shape in 3 legs.</li>
-<li>Keep the stop points as data (a list), and let a small callback run at each stop &mdash; this is exactly the
-hook Day 3's Task 1 reuses to play a different arm gesture at each stop of the same U path.</li>
+forward traces an approximate "U" shape in 3 legs, then a final <code>loco_stop()</code>.</li>
+<li>A forward leg is <code>loco_move(vx=0.2, vy=0, vyaw=0, duration_s=5)</code>; a turn is
+<code>loco_move(vx=0, vy=0, vyaw=vel_rot, duration_s=5)</code>, where <code>vel_rot</code> is the yaw rate that
+completes a quarter turn (<code>3.14/2</code> rad) in that time.</li>
 <li><code>get_odom()</code> before and after each leg is your ground truth for how far the robot actually went
 &mdash; open-loop timing drifts.</li>
 </ul>
@@ -130,47 +131,45 @@ sys.path.append("..")
 from sdk_wrapper import G1
 
 g1 = G1(iface="eth0", domain_id=0)
-g1.damp_mode(); g1.prepare_mode(); g1.walk_mode()  # always step up through the modes before moving</code></pre></div>
+
+# Always step up through the modes before moving.
+g1.damp_mode()
+g1.prepare_mode()
+g1.walk_mode()</code></pre></div>
 
 <h2><span class="num">&#167;4</span>Task 1 &mdash; read odometry</h2>
 <div class="cell"><div class="cellhead"><span>Cell (code)</span><span class="todo">TODO</span></div>
-<pre><code># TODO: call get_odom() and print the pose.
+<pre><code># TODO: call g1.get_odom().
 raise NotImplementedError("Complete this task section")</code></pre></div>
-<pre class="block"><code>print(g1.get_odom())</code></pre>
+<pre class="block"><code>g1.get_odom()</code></pre>
 
 <h2><span class="num">&#167;5</span>Task 2 &mdash; loco_move(vx, vy, vyaw, duration_s)</h2>
 <div class="cell"><div class="cellhead"><span>Cell (code)</span><span class="todo">TODO</span></div>
-<pre><code># TODO: drive forward briefly with loco_move(vx=0.2, vy=0, vyaw=0, duration_s=2), then read get_odom() again.
+<pre><code># TODO: drive forward briefly with g1.loco_move(vx=0.2, vy=0, vyaw=0, duration_s=2).
 raise NotImplementedError("Complete this task section")</code></pre></div>
-<pre class="block"><code>before = g1.get_odom()
-g1.loco_move(vx=0.2, vy=0, vyaw=0, duration_s=2)
-after = g1.get_odom()
-print(before, "->", after)</code></pre>
+<pre class="block"><code>g1.loco_move(vx=0.2, vy=0, vyaw=0, duration_s=2)</code></pre>
 
 <h2><span class="num">&#167;6</span>Task 3 &mdash; a timed multi-stop path ("U" path)</h2>
 <div class="cell"><div class="cellhead"><span>Cell (code)</span><span class="todo">TODO</span></div>
-<pre><code>def walk_u_path(g1, vx=0.15, vyaw=0.5, leg_s=2.0, turn_s=1.2, pause_s=1.0, on_stop=None):
-    """Drives an approximate U path as 3 timed legs with a turn between each.
-    Calls on_stop(g1, stop_index) at each of the 3 stop points, if given -- this is
-    the hook Day 3 Task 1 uses to play a different arm gesture at each stop."""
-    # TODO: chain loco_move() legs/turns below and call on_stop(g1, i) at each of the 3 stops.
+<pre><code>angle_rot = 3.14 / 2      # a quarter turn, in radians
+vel_rot = angle_rot / 5   # yaw rate that completes the turn in 5 seconds
+
+def walk_u_path():
+    # TODO: using the hints above, drive a "U" -- forward, turn, forward, turn, forward
+    # (five g1.loco_move(...) calls), then g1.loco_stop().
     raise NotImplementedError("Complete this task section")</code></pre></div>
-<pre class="block"><code>def walk_u_path(g1, vx=0.15, vyaw=0.5, leg_s=2.0, turn_s=1.2, pause_s=1.0, on_stop=None):
-    legs = [(vx, 0.0, 0.0, leg_s), (0.0, 0.0, vyaw, turn_s),
-            (vx, 0.0, 0.0, leg_s), (0.0, 0.0, vyaw, turn_s),
-            (vx, 0.0, 0.0, leg_s)]
-    stop_index = 0
-    for i, (lvx, lvy, lvyaw, duration_s) in enumerate(legs):
-        g1.loco_move(lvx, lvy, lvyaw, duration_s=duration_s)
-        if i % 2 == 0:  # after each straight leg, we are at a stop point
-            if on_stop is not None:
-                on_stop(g1, stop_index)
-            time.sleep(pause_s)
-            stop_index += 1
-    g1.loco_stop()</code></pre>
-<div class="card good"><p><strong>Keep this helper around.</strong> Day 3's Task 1 imports/reuses
-<code>walk_u_path</code> unchanged and only supplies a new <code>on_stop</code> callback that plays a
-high-level arm gesture at each stop.</p></div>
+<pre class="block"><code>angle_rot = 3.14 / 2      # a quarter turn, in radians
+vel_rot = angle_rot / 5   # yaw rate that completes the turn in 5 seconds
+
+def walk_u_path():
+    g1.loco_move(vx=0.2, vy=0, vyaw=0, duration_s=5)       # forward
+    g1.loco_move(vx=0, vy=0, vyaw=vel_rot, duration_s=5)   # turn
+    g1.loco_move(vx=0.2, vy=0, vyaw=0, duration_s=5)       # forward
+    g1.loco_move(vx=0, vy=0, vyaw=vel_rot, duration_s=5)   # turn
+    g1.loco_move(vx=0.2, vy=0, vyaw=0, duration_s=5)       # forward
+    g1.loco_stop()
+
+walk_u_path()</code></pre>
 
 <div class="card caution">
   <h4>Safety</h4>
