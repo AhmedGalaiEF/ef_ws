@@ -102,12 +102,13 @@ footer a{color:var(--muted);}
 <table>
 <tr><th>Call</th><th>Does</th></tr>
 <tr><td><code>g1.start_mapping(slam_type="indoor")</code></td><td>starts building a map from the LiDAR</td></tr>
-<tr><td><code>g1.stop_mapping(save_path=...)</code></td><td>finishes and saves the map</td></tr>
-<tr><td><code>g1.relocate(map_path=..., pose=...)</code></td><td>relocalizes against a saved map at <code>(x, y, yaw)</code> &mdash; do this once after loading a map, before navigating anywhere on it</td></tr>
+<tr><td><code>g1.stop_mapping(save_path=MAP_PATH)</code></td><td><strong>saves</strong> the map (the <code>end_mapping</code> RPC) so you can relocalize/navigate on it later. Use a full mainboard path, e.g. <code>/home/unitree/test.pcd</code> &mdash; a bare name like <code>"my_map"</code> returns <code>errorCode 12, "The directory is illegal."</code></td></tr>
+<tr><td><code>g1.stop_mapping()</code> (no path)</td><td><strong>closes</strong> SLAM (the <code>close_slam</code> RPC) <strong>without saving</strong> &mdash; an unsaved map is why <code>relocate()</code> later fails with <code>errorCode 509</code></td></tr>
+<tr><td><code>g1.relocate(map_path=MAP_PATH, pose=(x,y,yaw))</code></td><td>loads the saved map and relocalizes at the given pose &mdash; do this once after mapping, before navigating</td></tr>
 <tr><td><code>g1.get_slam_pose()</code></td><td>the last known <code>(x, y, yaw)</code> on the current map, or <code>None</code></td></tr>
 </table>
-<p>Drive the robot around the space while mapping (reuse <code>loco_move</code>/<code>walk_u_path</code> from
-Task 6) so the LiDAR sees enough of the room before you call <code>stop_mapping</code>.</p>
+<p>Build the map by driving the robot around the space <strong>with the hand-held remote controller</strong>
+(not <code>loco_move</code>) so the LiDAR sees the whole room, then save it with <code>stop_mapping(save_path=MAP_PATH)</code>.</p>
 </div>
 
 <h2><span class="num">&#167;2</span>Knowledge &mdash; named points and navigation</h2>
@@ -133,43 +134,89 @@ from sdk_wrapper import G1
 
 g1 = G1(iface="eth0", domain_id=0)</code></pre></div>
 
-<h2><span class="num">&#167;4</span>Task 1 &mdash; mapping lifecycle</h2>
-<div class="cell"><div class="cellhead"><span>Cell (code)</span><span class="todo">TODO</span></div>
-<pre><code># TODO: start_mapping(), drive around a bit with loco_move(), then stop_mapping(save_path="my_map").
-raise NotImplementedError("Complete this task section")</code></pre></div>
-<pre class="block"><code>g1.start_mapping(slam_type="indoor")
-g1.loco_move(vx=0.15, vy=0, vyaw=0.4, duration_s=8)  # or call walk_u_path(g1) from Task 6
-g1.stop_mapping(save_path="my_map")</code></pre>
+<h2><span class="num">&#167;4</span>Task 1 &mdash; build and save a map (two cells + remote driving)</h2>
+<p><strong>Cell A</strong> starts mapping. Then you drive the robot around the room <strong>with the remote
+controller</strong> &mdash; not from the notebook. <strong>Cell B</strong> saves the map. Keep them as two
+separate cells so the manual driving happens in between.</p>
+<div class="cell"><div class="cellhead"><span>Cell A (code) &mdash; start</span></div>
+<pre class="block"><code>MAP_PATH = "/home/unitree/test.pcd"  # a full path the mainboard can write; "my_map" -> errorCode 12
+g1.start_mapping(slam_type="indoor")</code></pre></div>
+<div class="card good"><p>🎮 <strong>Now drive the robot around the whole space with the hand-held remote</strong>, covering all
+the walls and returning near your starting point. Watch the map fill in (Task 4, or
+<code>slam_web_app.py</code>). When it looks complete, run Cell B.</p></div>
+<div class="cell"><div class="cellhead"><span>Cell B (code) &mdash; stop &amp; save</span></div>
+<pre class="block"><code>g1.stop_mapping(save_path=MAP_PATH)  # end_mapping: saves the map to MAP_PATH so relocate() can load it</code></pre></div>
 
 <h2><span class="num">&#167;5</span>Task 2 &mdash; relocalize and save named points</h2>
+<p>Task 1 <strong>saved</strong> the map to <code>MAP_PATH</code>; now relocalize against it, passing an explicit
+pose (as <code>slam_web_app.py</code> does) so it never silently relocates to <code>(0, 0, 0)</code>.</p>
+<div class="card warn">
+<p><strong>Failure codes you will see.</strong> <code>relocate()</code> returns <code>errorCode 3104</code>
+(transient RPC timeout &mdash; retry) or <code>errorCode 509, "The current location matching degree is low."</code>
+(the live scan does not match the saved map &mdash; stand the robot in a well-mapped area, near where you started
+mapping, and retry). Also, <code>g1.get_slam_pose()</code> is <code>None</code> until localization converges
+(<code>list(None)</code> is a <code>TypeError</code>), so poll for a valid pose before saving a point.</p>
+</div>
 <div class="cell"><div class="cellhead"><span>Cell (code)</span><span class="todo">TODO</span></div>
-<pre><code>import json
+<pre><code># TODO: relocate_with_retry(g1) and confirm code == 0 (3104 = RPC timeout;
+#       509 = low map match -> reposition the robot & retry). Then add_point(g1, "pickup")
+#       for each spot you drove to; get_slam_pose() is None until localized, so wait for it.
+raise NotImplementedError("Complete this task section")</code></pre></div>
+<pre class="block"><code>import json, time
 from pathlib import Path
 
 POINTS_PATH = "slam_points.json"
 
-def add_point(g1, name, points_path=POINTS_PATH):
-    # TODO: read the existing points file (or start with {}), set points[name] = g1.get_slam_pose(), write it back.
-    raise NotImplementedError("Complete this task section")
+def wait_for_slam_pose(g1, timeout_s=15, poll_s=0.5):
+    """Poll until SLAM reports a valid (x, y, yaw), or return None after timeout_s."""
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        pose = g1.get_slam_pose()
+        if pose is not None:
+            return pose
+        time.sleep(poll_s)
+    return None
 
-def remove_point(name, points_path=POINTS_PATH):
-    # TODO: read the points file, delete the named entry if present, write it back.
-    raise NotImplementedError("Complete this task section")</code></pre></div>
-<pre class="block"><code>def add_point(g1, name, points_path="slam_points.json"):
+def relocate_with_retry(g1, map_path=MAP_PATH, pose=None, retries=8, delay=2):
+    """Relocalize against the saved map with an explicit pose (like slam_web_app.py).
+    Surfaces 3104 (RPC timeout) and 509 (low map match)."""
+    for attempt in range(1, retries + 1):
+        current = pose or wait_for_slam_pose(g1)
+        if current is None:
+            print(f"relocate attempt {attempt}/{retries}: no SLAM pose yet")
+            time.sleep(delay); continue
+        result = g1.relocate(map_path=map_path, pose=tuple(current))
+        if result.get("code") == 0:
+            return result
+        try:
+            info = json.loads(result.get("raw") or "{}")
+        except Exception:
+            info = {}
+        hint = {509: " -- stand in a mapped area, near where you started mapping",
+                3104: " -- RPC timeout"}.get(info.get("errorCode"), "")
+        print(f"relocate attempt {attempt}/{retries}: errorCode={info.get('errorCode')} {info.get('info','')}{hint}")
+        if attempt == retries:
+            return result
+        time.sleep(delay)
+
+def add_point(g1, name, points_path=POINTS_PATH):
+    pose = wait_for_slam_pose(g1)
+    if pose is None:
+        raise RuntimeError("No SLAM pose yet -- relocate() must reach code 0 and localize first.")
     path = Path(points_path)
     points = json.loads(path.read_text()) if path.exists() else {}
-    points[name] = list(g1.get_slam_pose())
+    points[name] = list(pose)
     path.write_text(json.dumps(points))
     return points[name]
 
-def remove_point(name, points_path="slam_points.json"):
+def remove_point(name, points_path=POINTS_PATH):
     path = Path(points_path)
     points = json.loads(path.read_text()) if path.exists() else {}
     points.pop(name, None)
     path.write_text(json.dumps(points))
 
-g1.relocate()
-add_point(g1, "pickup")</code></pre>
+print("relocate:", relocate_with_retry(g1))
+print("pickup saved at:", add_point(g1, "pickup"))</code></pre>
 
 <h2><span class="num">&#167;6</span>Task 3 &mdash; navigate to a saved point</h2>
 <div class="cell"><div class="cellhead"><span>Cell (code)</span><span class="todo">TODO</span></div>

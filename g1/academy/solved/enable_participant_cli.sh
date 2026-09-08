@@ -13,6 +13,7 @@ ROS_SETUP="${ROS_SETUP:-/opt/ros/foxy/setup.bash}"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 CYCLONEDDS_URI="${CYCLONEDDS_URI:-$SCRIPT_DIR/cyclonedds-participants.xml}"
 UNITREE_ROS2_INSTALL="${UNITREE_ROS2_INSTALL:-/home/unitree/unitree_ros2/cyclonedds_ws/install}"
+UNITREE_ROS2_SETUP="${UNITREE_ROS2_SETUP:-$UNITREE_ROS2_INSTALL/setup.bash}"
 
 [[ "$(id -u)" -eq 0 ]] || { echo "Run as root: sudo bash $0" >&2; exit 1; }
 [[ "$NUM_USERS" =~ ^[1-9][0-9]*$ ]] && (( NUM_USERS <= 100 )) || { echo "NUM_USERS must be 1..100" >&2; exit 2; }
@@ -21,6 +22,10 @@ UNITREE_ROS2_INSTALL="${UNITREE_ROS2_INSTALL:-/home/unitree/unitree_ros2/cyclone
 [[ -r "$CYCLONEDDS_URI" ]] || { echo "CycloneDDS configuration is missing: $CYCLONEDDS_URI" >&2; exit 1; }
 [[ -f "$UNITREE_ROS2_INSTALL/unitree_go/lib/libunitree_go__python.so" ]] || {
   echo "Unitree ROS 2 type-support library is missing below: $UNITREE_ROS2_INSTALL" >&2
+  exit 1
+}
+[[ -r "$UNITREE_ROS2_SETUP" ]] || {
+  echo "Unitree ROS 2 workspace setup file is missing: $UNITREE_ROS2_SETUP" >&2
   exit 1
 }
 
@@ -42,16 +47,20 @@ for ((i = 1; i <= NUM_USERS; i++)); do
   sed -i '\|^# >>> academy CLI environment (managed) >>>$|,\|^# <<< academy CLI environment (managed) <<<$|d' "$env_file"
   cat >>"$env_file" <<EOF
 # >>> academy CLI environment (managed) >>>
-# ROS 2 must be sourced, not merely placed on PATH, so its Python and AMENT
-# paths are correct.  Set the RMW and DDS configuration explicitly: terminal
-# and Jupyter processes may otherwise inherit a stale CYCLONEDDS_URI.
+# ROS 2 must be sourced, not merely placed on PATH.  Source the *same
+# workspace setup as unitree*, not only /opt/ros/foxy: it adds unitree_go,
+# unitree_hg, unitree_api and the compatible CycloneDDS/RMW libraries.
+# Without it, commands which deserialize Unitree messages (for example
+# the ros2 topic echo /odommodestate command can load an incompatible
+# type-support stack and crash.
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 export CYCLONEDDS_URI="file://$CYCLONEDDS_URI"
 # Codex is available globally at $CODEX_BIN.
 source "$ROS_SETUP"
+source "$UNITREE_ROS2_SETUP"
 # Keep the native Unitree message type-support libraries discoverable even
-# when this shell was created with `su` and inherited an incomplete loader
-# path.  This enables commands such as `ros2 topic echo /odommodestate`.
+# when a shell inherited an incomplete loader path.  This intentionally
+# repeats the workspace order established above, matching unitree's shell.
 export LD_LIBRARY_PATH="$UNITREE_ROS2_INSTALL/unitree_hg/lib:$UNITREE_ROS2_INSTALL/unitree_go/lib:$UNITREE_ROS2_INSTALL/unitree_api/lib\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
 export PYTHONPATH="$UNITREE_ROS2_INSTALL/unitree_hg/lib/python3.8/site-packages:$UNITREE_ROS2_INSTALL/unitree_go/lib/python3.8/site-packages:$UNITREE_ROS2_INSTALL/unitree_api/lib/python3.8/site-packages\${PYTHONPATH:+:\$PYTHONPATH}"
 # <<< academy CLI environment (managed) <<<

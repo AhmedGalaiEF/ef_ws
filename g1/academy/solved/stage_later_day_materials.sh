@@ -18,16 +18,33 @@ case "$day" in
   *) echo "DAY_NUMBER must be 2, 3, or 4" >&2; exit 2 ;;
 esac
 
-notebooks=()
-for task in "${tasks[@]}"; do
-  match=("$SOLVED_DIR"/task"$task"_*.ipynb)
-  [[ -f "${match[0]}" ]] || { echo "Missing Task $task notebook" >&2; exit 1; }
-  notebooks+=("${match[0]}")
-done
-
 # Per-task knowledge/reference pages (see staging_dayN/) -- not part of the
 # solved/*.ipynb + slides.html pipeline above, staged separately here.
 STAGING_DIR="$SOLVED_DIR/staging_day$day"
+
+# Some days ship hand-authored, participant-ready notebooks in staging_day$day/
+# (the setup cell is intact and only the answer cells are stubbed). For those
+# days, copy the staged notebook verbatim; every other day falls back to
+# stripping the solved/ reference notebook into an exercise (see below).
+# VERBATIM_DAYS lists which days are already hand-authored this way.
+VERBATIM_DAYS="${VERBATIM_DAYS:-2}"
+verbatim_day=0
+for d in $VERBATIM_DAYS; do [[ "$d" == "$day" ]] && verbatim_day=1; done
+
+strip_notebooks=()    # solved/ references to strip into exercises at the destination
+verbatim_notebooks=() # staging_day$day/ participant notebooks copied as-is
+for task in "${tasks[@]}"; do
+  staged=("$STAGING_DIR"/task"$task"_*.ipynb)
+  solved_nb=("$SOLVED_DIR"/task"$task"_*.ipynb)
+  if (( verbatim_day )) && [[ -f "${staged[0]}" ]]; then
+    verbatim_notebooks+=("${staged[0]}")
+  elif [[ -f "${solved_nb[0]}" ]]; then
+    strip_notebooks+=("${solved_nb[0]}")
+  else
+    echo "Missing Task $task notebook (looked in $STAGING_DIR and $SOLVED_DIR)" >&2; exit 1
+  fi
+done
+
 intros=()
 for task in "${tasks[@]}"; do
   match=("$STAGING_DIR"/task"$task"_*_intro.html)
@@ -41,13 +58,19 @@ for ((i=1; i<=NUM_USERS; i++)); do
   [[ -n "$home_dir" ]] || { echo "Missing account: $user" >&2; exit 1; }
   destination="$home_dir/academy/day_$day"
   install -d -m 0755 "$destination"
-  rsync -a "${notebooks[@]}" "${intros[@]}" \
+  rsync -a \
+    ${strip_notebooks[@]+"${strip_notebooks[@]}"} \
+    ${verbatim_notebooks[@]+"${verbatim_notebooks[@]}"} \
+    "${intros[@]}" \
     "$ACADEMY_DIR/sdk_wrapper.py" "$ACADEMY_DIR/util.py" "$ACADEMY_DIR/slam_util.py" \
     "$destination/"
 
-  # Later-day notebooks are exercises: preserve the task prose, but do not
-  # distribute their solved code cells. Imports stay visible as starting clues.
-  python3 - "$destination" "${notebooks[@]}" <<'PY'
+  # Notebooks copied from staging_day$day/ are already participant-ready and are
+  # left untouched. Notebooks taken from solved/ are reference answers: strip
+  # their solved code cells into TODO exercises, preserving the task prose but
+  # not distributing solutions. Imports stay visible as starting clues.
+  if (( ${#strip_notebooks[@]} )); then
+  python3 - "$destination" "${strip_notebooks[@]}" <<'PY'
 import json, re, sys
 from pathlib import Path
 dest = Path(sys.argv[1])
@@ -69,6 +92,7 @@ for source in map(Path, sys.argv[2:]):
         cell['execution_count'] = None
     path.write_text(json.dumps(nb, indent=1, ensure_ascii=False) + '\n', encoding='utf-8')
 PY
+  fi
 
   python3 - "$SOLVED_DIR/slides.html" "$destination/day${day}_slides.html" "$first_slide" "$last_slide" <<'PY'
 import re, sys

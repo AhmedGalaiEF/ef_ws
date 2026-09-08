@@ -68,6 +68,7 @@ for ((i=1; i<=NUM_USERS; i++)); do
   wrapper="$bin_dir/academy-unitree-kernel"
   cat >"$wrapper" <<EOF
 #!/usr/bin/env bash
+[ -f "\$HOME/.g1-unitree-env" ] && source "\$HOME/.g1-unitree-env"
 [ -f "\$HOME/.academy-api.env" ] && source "\$HOME/.academy-api.env"
 [ -f "\$HOME/.academy-tools-env" ] && source "\$HOME/.academy-tools-env"
 exec "$REF_PY/bin/python" -m ipykernel_launcher "\$@"

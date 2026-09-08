@@ -123,6 +123,13 @@ footer a{color:var(--muted);}
 <p>See <code>mappings_and_constraints.html</code> &#167;7 for the full catalog: <code>ai_sport</code>,
 <code>basic_service</code>, <code>g1_arm_example</code>, <code>vui_service</code>, <code>unitree_slam</code>.</p>
 </div>
+<div class="card warn">
+<p><strong><code>ServiceList</code> can time out.</strong> <code>g1.get_service()</code> calls the mainboard's
+<code>ServiceList</code> RPC, which intermittently returns code <strong>3104 (RPC timeout)</strong> &mdash; the
+wrapper then raises <code>RuntimeError("ServiceList failed: 3104")</code>. It is transient, so wrap every
+service call (<code>get_service</code>/<code>set_service</code>/<code>toggle_service</code>) in a small
+retry loop rather than letting the first timeout abort the cell.</p>
+</div>
 
 <h2><span class="num">&#167;3</span>Knowledge &mdash; the full FSM table</h2>
 <div class="card knowledge">
@@ -173,17 +180,52 @@ print("battery:", battery.get("percentage"))
 print("odom:", g1.get_odom())
 print("state:", {k: g1.get_state()[k] for k in ("id", "mode", "motion_mode")})</code></pre>
 
-<h2><span class="num">&#167;7</span>Task 2 &mdash; list and toggle a service</h2>
+<h2><span class="num">&#167;7</span>Task 2 &mdash; prove <code>vui_service</code> gates audio</h2>
+<p><code>vui_service</code> is the robot's <strong>Audio and Lighting Control Service</strong> &mdash;
+<code>say()</code> and <code>set_headlight()</code> both depend on it. Read its status
+(<code>0</code> = ON, non-zero = OFF), turn it <strong>off</strong>, call <code>say()</code> to show audio no
+longer works, then turn it <strong>back on</strong> and confirm <code>say()</code> works again. Use
+<code>set_service(name, enabled)</code> so the off&rarr;on sequence is deterministic, and wrap every service
+call in the retry loop from &#167;2 above (3104 timeouts).</p>
 <div class="cell"><div class="cellhead"><span>Cell (code)</span><span class="todo">TODO</span></div>
-<pre><code># TODO: list all services, then toggle one (e.g. "vui_service") off and back on, printing the row before/after.
+<pre><code># TODO:
+#   1. read g1.get_service("vui_service") and print its status (0 = ON, non-zero = OFF)
+#   2. turn it OFF:    g1.set_service("vui_service", False)   then wait a few seconds
+#   3. with it OFF, call g1.say("...") to show audio control no longer works
+#   4. turn it back ON: g1.set_service("vui_service", True)   then confirm g1.say("...") works again
 raise NotImplementedError("Complete this task section")</code></pre></div>
-<pre class="block"><code>for row in g1.get_service():
-    print(row["name"], row["status"])
+<pre class="block"><code>import time
 
-before = g1.get_service("vui_service")
-g1.toggle_service("vui_service")
-after = g1.get_service("vui_service")
-print("vui_service:", before["status"], "->", after["status"])</code></pre>
+def service_call_with_retry(fn, *args, retries=8, delay=2, **kwargs):
+    """ServiceList intermittently returns 3104 (RPC timeout); retry before giving up."""
+    for attempt in range(1, retries + 1):
+        try:
+            return fn(*args, **kwargs)
+        except RuntimeError as exc:
+            print(f"service call attempt {attempt}/{retries} failed: {exc}")
+            if attempt == retries:
+                raise
+            time.sleep(delay)
+
+before = service_call_with_retry(g1.get_service, "vui_service")
+print("vui_service before:", before["status"])
+
+service_call_with_retry(g1.set_service, "vui_service", False)  # Audio & Lighting OFF
+time.sleep(3)
+off = service_call_with_retry(g1.get_service, "vui_service")
+print("vui_service now:", off["status"])
+
+print("say() with vui_service OFF (expect no audio):")
+try:
+    print("code:", g1.say("If you can hear this, the voice service is still on.", language="EN"))
+except Exception as exc:
+    print("say() failed as expected without vui_service:", exc)
+
+service_call_with_retry(g1.set_service, "vui_service", True)   # Audio & Lighting back ON
+time.sleep(3)
+after = service_call_with_retry(g1.get_service, "vui_service")
+print("say() with vui_service ON:", g1.say("Voice service restored.", language="EN"))
+print("vui_service:", before["status"], "->", off["status"], "->", after["status"])</code></pre>
 
 <h2><span class="num">&#167;8</span>Task 3 &mdash; step through modes safely</h2>
 <div class="cell"><div class="cellhead"><span>Cell (code)</span><span class="todo">TODO</span></div>
@@ -196,13 +238,35 @@ g1.walk_mode();    print("fsm:", g1.get_state()["id"])
 g1.toggle_dev_mode()
 print("ai_sport:", g1.get_service("ai_sport"))</code></pre>
 
-<h2><span class="num">&#167;9</span>Bonus &mdash; a live services dashboard, built with Codex</h2>
+<h2><span class="num">&#167;9</span>Final part &mdash; build a mode-switching dashboard with Codex</h2>
 <div class="card good">
-<p>Prompt Codex with <code>g1.get_service()</code>'s return shape and <code>g1.toggle_service(name)</code>'s
-signature and ask it to build a small live view: a polling loop or an <code>ipywidgets</code> panel that lists
-every service with its status and a button to toggle it. <code>academy/visualizations/mode_control.py</code> is a
-finished reference for the same idea applied to FSM modes instead of services &mdash; look at its Dash UI for
-inspiration. This is the same pattern Day 3's end-effector teleoperation dashboard (Task 3) reuses.</p>
+<p>You have now driven every FSM transition by hand. The last exercise is to wrap those same <code>g1</code>
+calls in a small web dashboard &mdash; <strong>not</strong> by writing it yourself, but by prompting Codex to
+build it against <code>sdk_wrapper.G1</code>. A finished reference already runs on this robot:
+<strong><code>academy/visualizations/mode_control.py</code>, the mode-control dashboard served on port
+<code>8051</code></strong>. Open it in your browser first to see the target &mdash; one button per mode, a live
+state line, and buttons that grey out when a transition would be unsafe &mdash; then have Codex produce your own
+version on a <em>different</em> port so the two don't clash.</p>
+<p><strong>Example prompt for Codex</strong> (adjust to taste; read the generated file before running it):</p>
+<pre class="block"><code>Using the G1 class in academy/sdk_wrapper.py, write a Dash + dash-bootstrap-components
+web app mode_switch_dashboard.py that mirrors academy/visualizations/mode_control.py
+(the mode-control dashboard already running on port 8051). Requirements:
+- Construct a single G1(iface="eth0", domain_id=0) instance at startup and reuse it for
+  every callback, guarded by a threading.Lock; never build more than one G1 per process.
+- One large button per FSM mode -- Zero Torque, Damp, Prepare, Walk, Run -- each calling
+  the matching wrapper method: g1.zero_torque_mode(), g1.damp_mode(), g1.prepare_mode(),
+  g1.walk_mode(), g1.run_mode(). Add a red Stop button wired to g1.loco_stop().
+- A once-per-second dcc.Interval callback that reads g1.get_state() and shows the live
+  id / mode / motion_mode / gait and battery soc in a status line, with the raw dict in
+  a &lt;pre&gt; block.
+- Enforce the safe mode ladder: always allow Damp; disable Walk/Run unless the current
+  mode is already prepare/walk/run. Wrap every robot call in try/except so one failed
+  RPC never kills the app, and show the error text in the status line.
+- Bind to host 0.0.0.0 on port 8052 (a new port, so it does not clash with the 8051
+  dashboard) and print the URL on startup.</code></pre>
+<p>Run it from a terminal with <code>python3 mode_switch_dashboard.py --port 8052</code> and open
+<code>http://&lt;robot-ip&gt;:8052</code>. This is the same Dash pattern Day 3's end-effector teleoperation
+dashboard (Task 3) reuses.</p>
 </div>
 
 <div class="card caution">

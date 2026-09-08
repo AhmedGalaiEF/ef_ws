@@ -53,6 +53,7 @@ for ((i=1; i<=NUM_USERS; i++)); do
   wrapper="$kernel_dir/launch-kernel.sh"
   cat >"$wrapper" <<EOF
 #!/usr/bin/env bash
+[ -f "\$HOME/.g1-unitree-env" ] && source "\$HOME/.g1-unitree-env"
 source "\$HOME/.academy-api.env"
 exec "$REF_PY/bin/python" -m ipykernel_launcher "\$@"
 EOF
